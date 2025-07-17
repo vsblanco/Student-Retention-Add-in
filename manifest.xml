@@ -2,7 +2,7 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <!-- A unique ID for your add-in. -->
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -34,7 +34,10 @@
           </GetStarted>
           <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
+            <!-- This creates a new custom tab in the Excel ribbon -->
+            <CustomTab id="Victor.RetentionTab">
+              <!-- Set the label for the new tab -->
+              <Label resid="RetentionTab.Label"/>
               <Group id="CommandsGroup">
                 <Label resid="CommandsGroup.Label"/>
                 <Icon>
@@ -59,7 +62,7 @@
                   </Action>
                 </Control>
               </Group>
-            </OfficeTab>
+            </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
       </Host>
@@ -78,11 +81,14 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
-        <bt:String id="CommandsGroup.Label" DefaultValue="Retention"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="Show Retention"/>
+        <!-- Label for the new custom tab -->
+        <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
+        <!-- Label for the group on the new tab -->
+        <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Show Taskpane"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the HOME tab and click the 'Show Retention' button to get started."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the new 'Retention' tab and click the 'Show Taskpane' button to get started."/>
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the retention taskpane."/>
       </bt:LongStrings>
     </Resources>
