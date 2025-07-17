@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>My First Excel Add-in</title>
+    <title>Student Retention Add-in</title>
 
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
@@ -24,10 +24,16 @@
 </head>
 <body class="p-4 bg-gray-50">
     <div class="flex flex-col h-full">
-        <h1 class="text-2xl font-semibold text-gray-800 mb-4">Cell Inserter</h1>
-        <p class="text-gray-600 mb-6">Select a cell in the worksheet and click the button below to insert text.</p>
+        <h1 class="text-2xl font-semibold text-gray-800 mb-4">Cell Actions</h1>
+        <p class="text-gray-600 mb-6">Select a cell and use the buttons below.</p>
         
-        <div class="flex-grow">
+        <div class="space-y-3">
+            <!-- Button to highlight the selected cell -->
+            <button id="highlight-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200">
+                Toggle Highlight
+            </button>
+
+            <!-- Original button to insert text -->
             <button id="insert-text-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
                 Insert "Hello Excel!"
             </button>
