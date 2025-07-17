@@ -45,12 +45,15 @@ async function onSelectionChange() {
             const headers = sheetValues[0];
             const rowData = sheetValues[lastSelectedRow];
 
-            // Find column indexes
-            const studentNameColIndex = headers.indexOf("StudentName");
-            const studentNumberColIndex = headers.indexOf("StudentNumber");
-            const programVersionColIndex = headers.indexOf("ProgramVersion");
-            const shiftColIndex = headers.indexOf("Shift");
-            const gradeColIndex = headers.indexOf("Grade");
+            // Create a case-insensitive map of headers for resilient searching.
+            const lowerCaseHeaders = headers.map(header => header.toLowerCase());
+
+            // Find column indexes using the case-insensitive map.
+            const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
+            const studentNumberColIndex = lowerCaseHeaders.indexOf("studentnumber");
+            const programVersionColIndex = lowerCaseHeaders.indexOf("programversion");
+            const shiftColIndex = lowerCaseHeaders.indexOf("shift");
+            const gradeColIndex = lowerCaseHeaders.indexOf("grade");
 
             // Get display elements
             const studentNameDisplay = document.getElementById("student-name-display");
@@ -79,7 +82,6 @@ async function onSelectionChange() {
             gradeDisplayBadge.className = 'w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl'; // Reset classes
             
             if (grade !== null && !isNaN(grade)) {
-                // Check if grade is a decimal (e.g., 0.85) or a whole number (e.g., 85)
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplayBadge.textContent = `${Math.round(gradePercent)}%`;
                 if (gradePercent >= 90) {
@@ -118,8 +120,11 @@ async function toggleHighlight(event) {
       await context.sync(); // SYNC 1: Get selection and header info
 
       const headers = headerRange.values[0];
-      const studentNameColIndex = headers.indexOf("StudentName");
-      const outreachColIndex = headers.indexOf("Outreach");
+      // Create a case-insensitive map of headers for resilient searching.
+      const lowerCaseHeaders = headers.map(header => header.toLowerCase());
+
+      const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
+      const outreachColIndex = lowerCaseHeaders.indexOf("outreach");
 
       if (studentNameColIndex === -1 || outreachColIndex === -1) {
         console.error("Could not find 'StudentName' and/or 'Outreach' columns.");
