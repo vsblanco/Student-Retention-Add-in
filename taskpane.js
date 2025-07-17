@@ -25,39 +25,39 @@ Office.onReady((info) => {
 /**
  * Handles the document selection change event.
  * If the user selects a new row, it updates the task pane with details from that row.
+ * This version is optimized to use a single `context.sync()` call for better performance.
  */
 async function onSelectionChange() {
     try {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
+            // Load the row index and the entire used range of the sheet in one batch.
             selectedRange.load("rowIndex");
+            const usedRange = context.workbook.worksheets.getActiveWorksheet().getUsedRange();
+            usedRange.load("values");
+
+            // Execute the batch request.
             await context.sync();
 
             // Only proceed if the row has actually changed.
             if (selectedRange.rowIndex === lastSelectedRow) {
                 return;
             }
+            // If the selected row is the header row, do nothing.
+            if (selectedRange.rowIndex === 0) {
+                return;
+            }
             lastSelectedRow = selectedRange.rowIndex;
 
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const headerRange = sheet.getUsedRange().getRow(0);
-            headerRange.load("values");
-            await context.sync();
-
-            const headers = headerRange.values[0];
-            const columnCount = headers.length;
+            const sheetValues = usedRange.values;
+            const headers = sheetValues[0];
+            const rowData = sheetValues[lastSelectedRow];
 
             // Find the column indexes for the data we need.
             const studentNameColIndex = headers.indexOf("StudentName");
             const studentNumberColIndex = headers.indexOf("StudentNumber");
             const programVersionColIndex = headers.indexOf("ProgramVersion");
             const shiftColIndex = headers.indexOf("Shift");
-
-            // Get the entire row of data to be more efficient.
-            const dataRowRange = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, columnCount);
-            dataRowRange.load("values");
-            await context.sync();
-            const rowData = dataRowRange.values[0];
 
             // Get the display elements from the DOM.
             const studentNameDisplay = document.getElementById("student-name-display");
@@ -79,10 +79,8 @@ async function onSelectionChange() {
             if (typeof programVersion === 'string' && programVersion !== 'N/A') {
                 const match = programVersion.match(/\d{4}/); // Find the first 4-digit number (e.g., a year)
                 if (match) {
-                    // If a year is found, take the substring that comes after it and trim any leading space.
                     programVersion = programVersion.substring(match.index + 4).trim();
                 }
-                // If no 4-digit number is found, the original programVersion string is used.
             }
             programVersionDisplay.textContent = programVersion || "N/A";
             
@@ -109,9 +107,10 @@ async function toggleHighlight(event) {
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
       const selectedRange = context.workbook.getSelectedRange();
-      selectedRange.load("rowIndex");
-      
       const headerRange = sheet.getUsedRange().getRow(0);
+      
+      // Load properties in a single batch.
+      selectedRange.load("rowIndex");
       headerRange.load("values");
       await context.sync();
 
