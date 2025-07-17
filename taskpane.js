@@ -24,7 +24,7 @@ Office.onReady((info) => {
 
 /**
  * Handles the document selection change event.
- * If the user selects a new row, it updates the task pane with the student's name from that row.
+ * If the user selects a new row, it updates the task pane with details from that row.
  */
 async function onSelectionChange() {
     try {
@@ -45,25 +45,42 @@ async function onSelectionChange() {
             await context.sync();
 
             const headers = headerRange.values[0];
+            const columnCount = headers.length;
+
+            // Find the column indexes for the data we need.
             const studentNameColIndex = headers.indexOf("StudentName");
+            const studentNumberColIndex = headers.indexOf("StudentNumber");
+            const programVersionColIndex = headers.indexOf("ProgramVersion");
+            const shiftColIndex = headers.indexOf("Shift");
 
-            const studentNameDisplay = document.getElementById("student-name-display");
-
-            // Check if the "StudentName" column exists.
-            if (studentNameColIndex === -1) {
-                studentNameDisplay.textContent = "N/A";
-                console.error("Could not find 'StudentName' column in the first row.");
-                return;
-            }
-
-            // Get the cell containing the student's name in the selected row.
-            const nameCell = sheet.getRangeByIndexes(lastSelectedRow, studentNameColIndex, 1, 1);
-            nameCell.load("values");
+            // Get the entire row of data to be more efficient.
+            const dataRowRange = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, columnCount);
+            dataRowRange.load("values");
             await context.sync();
+            const rowData = dataRowRange.values[0];
 
-            const studentName = nameCell.values[0][0];
-            studentNameDisplay.textContent = studentName || "Empty Cell"; // Display text if cell is empty
+            // Get the display elements from the DOM.
+            const studentNameDisplay = document.getElementById("student-name-display");
+            const studentNumberDisplay = document.getElementById("student-number-display");
+            const programVersionDisplay = document.getElementById("program-version-display");
+            const shiftDisplay = document.getElementById("shift-display");
+
+            // Update Student Name
+            const studentName = studentNameColIndex !== -1 ? rowData[studentNameColIndex] : "N/A";
+            studentNameDisplay.textContent = studentName || "Empty Cell";
             studentNameDisplay.title = studentName || "Empty Cell";
+
+            // Update Student Number
+            const studentNumber = studentNumberColIndex !== -1 ? rowData[studentNumberColIndex] : "N/A";
+            studentNumberDisplay.textContent = `Student #: ${studentNumber || 'N/A'}`;
+
+            // Update Program Version
+            const programVersion = programVersionColIndex !== -1 ? rowData[programVersionColIndex] : "N/A";
+            programVersionDisplay.textContent = programVersion || "N/A";
+            
+            // Update Shift
+            const shift = shiftColIndex !== -1 ? rowData[shiftColIndex] : "N/A";
+            shiftDisplay.textContent = shift || "N/A";
         });
     } catch (error) {
         console.error("Error in onSelectionChange: " + error);
