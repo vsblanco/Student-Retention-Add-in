@@ -23,15 +23,29 @@
     </style>
 </head>
 <body class="p-4 bg-gray-50">
-    <div class="flex flex-col h-full text-center">
-        <h1 class="text-lg font-semibold text-gray-700 mb-2">Selected Student</h1>
-        
-        <!-- This is where the student's name will be displayed -->
-        <div class="bg-white p-4 rounded-lg shadow-inner">
+    <div class="flex flex-col h-full">
+        <!-- Student Identity Section -->
+        <div class="bg-white p-4 rounded-lg shadow-inner text-center">
             <h2 id="student-name-display" class="text-3xl font-bold text-blue-600 truncate" title="Select a row">Select a row</h2>
+            <p id="student-number-display" class="text-md text-gray-500 mt-1">Student Number</p>
+        </div>
+
+        <!-- Program Details Section -->
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Program Details</h3>
+            <div class="bg-white p-4 rounded-lg shadow-inner space-y-3 text-sm">
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-gray-600">Program Version:</span>
+                    <span id="program-version-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-gray-600">Shift:</span>
+                    <span id="shift-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+                </div>
+            </div>
         </div>
         
-        <p class="text-gray-500 mt-4 text-sm">The name above will update automatically when you select a different row in the sheet.</p>
+        <p class="text-gray-500 mt-4 text-xs text-center">Details update automatically when you select a different row.</p>
 
         <div class="mt-auto text-center">
             <p class="text-xs text-gray-400">Powered by Office.js</p>
