@@ -74,8 +74,16 @@ async function onSelectionChange() {
             const studentNumber = studentNumberColIndex !== -1 ? rowData[studentNumberColIndex] : "N/A";
             studentNumberDisplay.textContent = `Student #: ${studentNumber || 'N/A'}`;
 
-            // Update Program Version
-            const programVersion = programVersionColIndex !== -1 ? rowData[programVersionColIndex] : "N/A";
+            // Update Program Version with advanced parsing
+            let programVersion = programVersionColIndex !== -1 ? rowData[programVersionColIndex] : "N/A";
+            if (typeof programVersion === 'string' && programVersion !== 'N/A') {
+                const match = programVersion.match(/\d{4}/); // Find the first 4-digit number (e.g., a year)
+                if (match) {
+                    // If a year is found, take the substring that comes after it and trim any leading space.
+                    programVersion = programVersion.substring(match.index + 4).trim();
+                }
+                // If no 4-digit number is found, the original programVersion string is used.
+            }
             programVersionDisplay.textContent = programVersion || "N/A";
             
             // Update Shift
