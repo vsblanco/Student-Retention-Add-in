@@ -24,10 +24,19 @@
 </head>
 <body class="p-4 bg-gray-50">
     <div class="flex flex-col h-full">
-        <!-- Student Identity Section -->
-        <div class="bg-white p-4 rounded-lg shadow-inner text-center">
-            <h2 id="student-name-display" class="text-3xl font-bold text-blue-600 truncate" title="Select a row">Select a row</h2>
-            <p id="student-number-display" class="text-md text-gray-500 mt-1">Student Number</p>
+        <!-- Student Identity Section with Grade -->
+        <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow-inner">
+            <div class="text-left flex-grow mr-4">
+                <h2 id="student-name-display" class="text-2xl font-bold text-blue-600 truncate" title="Select a row">Select a row</h2>
+                <p id="student-number-display" class="text-sm text-gray-500 mt-1">Student Number</p>
+            </div>
+            <!-- Stylized Grade Display Badge -->
+            <div class="flex-shrink-0 flex flex-col items-center">
+                <div id="grade-display-badge" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl bg-gray-400">
+                    N/A
+                </div>
+                <span class="text-xs text-gray-500 mt-1">Grade</span>
+            </div>
         </div>
 
         <!-- Program Details Section -->
@@ -46,10 +55,6 @@
         </div>
         
         <p class="text-gray-500 mt-4 text-xs text-center">Details update automatically when you select a different row.</p>
-
-        <div class="mt-auto text-center">
-            <p class="text-xs text-gray-400">Powered by Office.js</p>
-        </div>
     </div>
 </body>
 </html>
