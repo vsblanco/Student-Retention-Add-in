@@ -9,15 +9,24 @@ let importDialog = null; // Variable to hold the dialog object
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    setupTabs();
-    Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
-      if (result.status === Office.AsyncResultStatus.Failed) {
-        console.error("Failed to register selection change handler: " + result.error.message);
-      } else {
-        console.log("Selection change handler registered successfully.");
-      }
+    // The DOM is not guaranteed to be ready when Office.onReady fires.
+    // We will wait for the DOMContentLoaded event before running our setup code.
+    document.addEventListener("DOMContentLoaded", function() {
+        // Setup Tab functionality
+        setupTabs();
+        
+        // Register the event handler for selection changes.
+        Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
+          if (result.status === Office.AsyncResultStatus.Failed) {
+            console.error("Failed to register selection change handler: " + result.error.message);
+          } else {
+            console.log("Selection change handler registered successfully.");
+          }
+        });
+        
+        // Do an initial check on load.
+        onSelectionChange();
     });
-    onSelectionChange();
   }
 });
 
