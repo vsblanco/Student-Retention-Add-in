@@ -9,13 +9,11 @@ let importDialog = null; // Variable to hold the dialog object
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // The DOM is not guaranteed to be ready when Office.onReady fires.
+    // FIX: The DOM is not guaranteed to be ready when Office.onReady fires.
     // We will wait for the DOMContentLoaded event before running our setup code.
     document.addEventListener("DOMContentLoaded", function() {
-        // Setup Tab functionality
         setupTabs();
         
-        // Register the event handler for selection changes.
         Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
           if (result.status === Office.AsyncResultStatus.Failed) {
             console.error("Failed to register selection change handler: " + result.error.message);
@@ -24,7 +22,6 @@ Office.onReady((info) => {
           }
         });
         
-        // Do an initial check on load.
         onSelectionChange();
     });
   }
@@ -88,7 +85,7 @@ function parseCsvRow(row) {
  */
 async function processImport(arg) {
     const message = JSON.parse(arg.message);
-    const { fileName, data: arrayBuffer } = message;
+    const { fileName, data: dataUrl } = message;
     
     importDialog.close();
     importDialog = null;
@@ -96,19 +93,26 @@ async function processImport(arg) {
     let data = [];
 
     try {
+        // FIX: Convert the data URL from the dialog back into an ArrayBuffer
+        const base64String = dataUrl.substring(dataUrl.indexOf(',') + 1);
+        const binaryString = window.atob(base64String);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        const arrayBuffer = bytes.buffer;
+
         if (fileName.toLowerCase().endsWith('.csv')) {
-            // Convert ArrayBuffer to string for CSV parsing
-            const csvData = new TextDecoder("utf-8").decode(new Uint8Array(arrayBuffer));
+            const csvData = new TextDecoder("utf-8").decode(arrayBuffer);
             const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
             data = rows.map(row => parseCsvRow(row));
 
         } else if (fileName.toLowerCase().endsWith('.xlsx')) {
-            // Use ExcelJS to parse the .xlsx file
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.load(arrayBuffer);
             const worksheet = workbook.worksheets[0];
             worksheet.eachRow(row => {
-                // row.values is a sparse array, slice(1) to remove the empty first element
                 data.push(row.values.slice(1));
             });
         } else {
@@ -120,7 +124,6 @@ async function processImport(arg) {
             return;
         }
         
-        // Ensure data is a rectangular array for Excel import
         const numColumns = data[0].length;
         data = data.map(row => {
             while (row.length < numColumns) {
