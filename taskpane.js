@@ -140,6 +140,7 @@ async function onSelectionChange() {
             const studentIdDisplay = document.getElementById("student-id-display");
             const lastLdaDisplay = document.getElementById("last-lda-display");
             const daysOutDisplay = document.getElementById("days-out-display");
+            const daysOutStatBlock = document.getElementById("days-out-stat-block");
             const gradeDisplay = document.getElementById("grade-display");
             const gradeStatBlock = document.getElementById("grade-stat-block");
             const primaryPhoneDisplay = document.getElementById("primary-phone-display");
@@ -153,7 +154,6 @@ async function onSelectionChange() {
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
             statusBadge.textContent = (colIdx.status !== -1 ? rowData[colIdx.status] : "N/A") || "N/A";
             lastLdaDisplay.textContent = (colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : "N/A") || "N/A";
-            daysOutDisplay.textContent = (colIdx.daysOut !== -1 ? rowData[colIdx.daysOut] : "--") || "--";
             primaryPhoneDisplay.textContent = (colIdx.primaryPhone !== -1 ? rowData[colIdx.primaryPhone] : "N/A") || "N/A";
             otherPhoneDisplay.textContent = (colIdx.otherPhone !== -1 ? rowData[colIdx.otherPhone] : "N/A") || "N/A";
             studentEmailDisplay.textContent = (colIdx.studentEmail !== -1 ? rowData[colIdx.studentEmail] : "N/A") || "N/A";
@@ -163,6 +163,24 @@ async function onSelectionChange() {
             const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender]).toLowerCase() : "";
             studentAvatar.textContent = getInitials(studentName);
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
+
+            // Days Out logic
+            const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
+            daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
+            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg'; // Reset classes
+            if (daysOut !== null && !isNaN(daysOut)) {
+                if (daysOut >= 14) {
+                    daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
+                } else if (daysOut > 10) {
+                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
+                } else if (daysOut > 5) {
+                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
+                } else {
+                    daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
+                }
+            } else {
+                daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
+            }
 
             // Grade logic
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
