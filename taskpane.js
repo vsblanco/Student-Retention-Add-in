@@ -8,6 +8,9 @@ let lastSelectedRow = -1; // Variable to track the last selected row index
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
+    // Setup Tab functionality
+    setupTabs();
+    
     // Register the event handler for selection changes.
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -21,6 +24,34 @@ Office.onReady((info) => {
     onSelectionChange();
   }
 });
+
+/**
+ * Sets up the event listeners for the tabbed interface.
+ */
+function setupTabs() {
+    const tabDetails = document.getElementById("tab-details");
+    const tabHistory = document.getElementById("tab-history");
+    const panelDetails = document.getElementById("panel-details");
+    const panelHistory = document.getElementById("panel-history");
+
+    tabDetails.addEventListener("click", () => {
+        // Style tabs
+        tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
+        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+        // Show/hide panels
+        panelDetails.classList.remove("hidden");
+        panelHistory.classList.add("hidden");
+    });
+
+    tabHistory.addEventListener("click", () => {
+        // Style tabs
+        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
+        tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+        // Show/hide panels
+        panelHistory.classList.remove("hidden");
+        panelDetails.classList.add("hidden");
+    });
+}
 
 /**
  * Handles the document selection change event.
@@ -45,29 +76,24 @@ async function onSelectionChange() {
             const headers = sheetValues[0];
             const rowData = sheetValues[lastSelectedRow];
 
-            // Create a case-insensitive map of headers for resilient searching.
             const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
-            // Find column indexes using the case-insensitive map.
             const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
             const studentNumberColIndex = lowerCaseHeaders.indexOf("studentnumber");
             const programVersionColIndex = lowerCaseHeaders.indexOf("programversion");
             const shiftColIndex = lowerCaseHeaders.indexOf("shift");
             const gradeColIndex = lowerCaseHeaders.indexOf("grade");
 
-            // Get display elements
             const studentNameDisplay = document.getElementById("student-name-display");
             const studentNumberDisplay = document.getElementById("student-number-display");
             const programVersionDisplay = document.getElementById("program-version-display");
             const shiftDisplay = document.getElementById("shift-display");
             const gradeDisplayBadge = document.getElementById("grade-display-badge");
 
-            // Update DOM elements
             studentNameDisplay.textContent = (studentNameColIndex !== -1 ? rowData[studentNameColIndex] : "N/A") || "Empty Cell";
             studentNumberDisplay.textContent = `Student #: ${(studentNumberColIndex !== -1 ? rowData[studentNumberColIndex] : "N/A") || 'N/A'}`;
             shiftDisplay.textContent = (shiftColIndex !== -1 ? rowData[shiftColIndex] : "N/A") || "N/A";
 
-            // Update Program Version with parsing
             let programVersion = programVersionColIndex !== -1 ? rowData[programVersionColIndex] : "N/A";
             if (typeof programVersion === 'string' && programVersion !== 'N/A') {
                 const match = programVersion.match(/\d{4}/);
@@ -77,9 +103,8 @@ async function onSelectionChange() {
             }
             programVersionDisplay.textContent = programVersion || "N/A";
 
-            // Update and stylize Grade
             let grade = gradeColIndex !== -1 ? rowData[gradeColIndex] : null;
-            gradeDisplayBadge.className = 'w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl'; // Reset classes
+            gradeDisplayBadge.className = 'w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl';
             
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
@@ -117,10 +142,9 @@ async function toggleHighlight(event) {
       const headerRange = sheet.getUsedRange().getRow(0);
       headerRange.load("values");
       
-      await context.sync(); // SYNC 1: Get selection and header info
+      await context.sync();
 
       const headers = headerRange.values[0];
-      // Create a case-insensitive map of headers for resilient searching.
       const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
       const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
@@ -136,12 +160,12 @@ async function toggleHighlight(event) {
       const colCount = endCol - startCol + 1;
       const targetRowIndex = selectedRange.rowIndex;
 
-      if (targetRowIndex === 0) return; // Don't highlight the header row
+      if (targetRowIndex === 0) return;
 
       const highlightRange = sheet.getRangeByIndexes(targetRowIndex, startCol, 1, colCount);
       highlightRange.format.fill.load("color");
       
-      await context.sync(); // SYNC 2: Get color of the specific target range
+      await context.sync();
 
       if (highlightRange.format.fill.color === "#FFFF00") {
         highlightRange.format.fill.clear();
@@ -149,7 +173,7 @@ async function toggleHighlight(event) {
         highlightRange.format.fill.color = "yellow";
       }
 
-      await context.sync(); // SYNC 3: Apply the new format
+      await context.sync();
     });
   } catch (error) {
     console.error("Error in toggleHighlight: " + error);
