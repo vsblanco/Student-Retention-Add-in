@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Import CSV</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-4 flex flex-col items-center justify-center h-screen bg-gray-100">
+
+    <div class="w-full max-w-xs text-center">
+        <label for="csv-file-input" class="block text-sm font-medium text-gray-700 mb-2">Select a CSV file to import:</label>
+        
+        <input type="file" id="csv-file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+        
+        <button id="import-button" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400">
+            Import
+        </button>
+        <p id="status" class="text-xs text-gray-500 mt-2"></p>
+    </div>
+
+    <script>
+        Office.onReady(() => {
+            const fileInput = document.getElementById("csv-file-input");
+            const importButton = document.getElementById("import-button");
+            const status = document.getElementById("status");
+
+            importButton.disabled = true;
+
+            fileInput.addEventListener('change', () => {
+                importButton.disabled = fileInput.files.length === 0;
+            });
+
+            importButton.addEventListener('click', () => {
+                const file = fileInput.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(event) {
+                        const csvData = event.target.result;
+                        // Send the CSV data back to the main taskpane script
+                        Office.context.ui.messageParent(csvData);
+                    };
+                    
+                    reader.onerror = function() {
+                        status.textContent = "Error reading file.";
+                        console.error("File could not be read: " + reader.error.code);
+                    };
+                    
+                    status.textContent = "Reading file...";
+                    reader.readAsText(file);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
