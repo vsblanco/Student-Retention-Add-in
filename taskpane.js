@@ -113,7 +113,7 @@ async function onSelectionChange() {
                 status: ["status"],
                 lastLda: ["last lda", "lda"],
                 primaryPhone: ["primary phone", "phone"],
-                otherPhone: ["other phone", "cell phone", "cell","Otherphone"],
+                otherPhone: ["other phone", "cell phone", "cell","OtherPhone"],
                 studentEmail: ["student email", "school email","email"],
                 personalEmail: ["personal email", "otheremail"],
             };
