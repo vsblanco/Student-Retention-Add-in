@@ -43,11 +43,11 @@
                     const reader = new FileReader();
                     
                     reader.onload = function(event) {
-                        const fileData = event.target.result;
-                        // Send the file data and name back to the main script
+                        const dataUrl = event.target.result;
+                        // Send the file data (as a data URL) and name back to the main script
                         Office.context.ui.messageParent(JSON.stringify({
                             fileName: file.name,
-                            data: fileData
+                            data: dataUrl
                         }));
                     };
                     
@@ -57,8 +57,8 @@
                     };
                     
                     status.textContent = "Reading file...";
-                    // Read as ArrayBuffer for both CSV and XLSX
-                    reader.readAsArrayBuffer(file);
+                    // Read as a data URL to handle binary data like .xlsx correctly
+                    reader.readAsDataURL(file);
                 }
             });
         });
