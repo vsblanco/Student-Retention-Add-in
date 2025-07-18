@@ -64,6 +64,21 @@ function getInitials(name) {
     return name.substring(0, 2).toUpperCase();
 }
 
+/**
+ * Finds the index of a column by checking against a list of possible names.
+ * @param {string[]} headers - The array of lowercase header names from the sheet.
+ * @param {string[]} possibleNames - An array of possible lowercase names for the column.
+ * @returns {number} The index of the column, or -1 if not found.
+ */
+function findColumnIndex(headers, possibleNames) {
+    for (const name of possibleNames) {
+        const index = headers.indexOf(name);
+        if (index !== -1) {
+            return index;
+        }
+    }
+    return -1;
+}
 
 /**
  * Handles the document selection change event.
@@ -86,22 +101,36 @@ async function onSelectionChange() {
             const sheetValues = usedRange.values;
             const headers = sheetValues[0];
             const rowData = sheetValues[lastSelectedRow];
-
             const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
-            // Find all column indexes
+            // --- Configuration for flexible column names ---
+            const columnMappings = {
+                name: ["studentname", "student name"],
+                id: ["student id", "id"],
+                gender: ["gender"],
+                daysOut: ["days out", "daysout"],
+                grade: ["grade", "course grade"],
+                status: ["status"],
+                lastLda: ["last lda", "lda"],
+                primaryPhone: ["primary phone", "phone"],
+                otherPhone: ["other phone", "cell phone", "cell","Otherphone"],
+                studentEmail: ["student email", "school email","email"],
+                personalEmail: ["personal email", "otheremail"],
+            };
+
+            // Find all column indexes using the flexible mapping
             const colIdx = {
-                name: lowerCaseHeaders.indexOf("studentname"),
-                id: lowerCaseHeaders.indexOf("student id"), // Adjusted to common naming
-                gender: lowerCaseHeaders.indexOf("gender"),
-                daysOut: lowerCaseHeaders.indexOf("days out"),
-                grade: lowerCaseHeaders.indexOf("grade"),
-                status: lowerCaseHeaders.indexOf("status"),
-                lastLda: lowerCaseHeaders.indexOf("last lda"),
-                primaryPhone: lowerCaseHeaders.indexOf("primary phone"),
-                otherPhone: lowerCaseHeaders.indexOf("other phone"),
-                studentEmail: lowerCaseHeaders.indexOf("student email"),
-                personalEmail: lowerCaseHeaders.indexOf("personal email"),
+                name: findColumnIndex(lowerCaseHeaders, columnMappings.name),
+                id: findColumnIndex(lowerCaseHeaders, columnMappings.id),
+                gender: findColumnIndex(lowerCaseHeaders, columnMappings.gender),
+                daysOut: findColumnIndex(lowerCaseHeaders, columnMappings.daysOut),
+                grade: findColumnIndex(lowerCaseHeaders, columnMappings.grade),
+                status: findColumnIndex(lowerCaseHeaders, columnMappings.status),
+                lastLda: findColumnIndex(lowerCaseHeaders, columnMappings.lastLda),
+                primaryPhone: findColumnIndex(lowerCaseHeaders, columnMappings.primaryPhone),
+                otherPhone: findColumnIndex(lowerCaseHeaders, columnMappings.otherPhone),
+                studentEmail: findColumnIndex(lowerCaseHeaders, columnMappings.studentEmail),
+                personalEmail: findColumnIndex(lowerCaseHeaders, columnMappings.personalEmail),
             };
 
             // Get all display elements
@@ -133,13 +162,7 @@ async function onSelectionChange() {
             // Avatar logic
             const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender]).toLowerCase() : "";
             studentAvatar.textContent = getInitials(studentName);
-            if (gender === 'female') {
-                studentAvatar.style.backgroundColor = '#ec4899'; // Pink
-            } else if (gender === 'male') {
-                studentAvatar.style.backgroundColor = '#3b82f6'; // Blue
-            } else {
-                studentAvatar.style.backgroundColor = '#6b7280'; // Gray
-            }
+            studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
             // Grade logic
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
@@ -185,8 +208,8 @@ async function toggleHighlight(event) {
       const headers = headerRange.values[0];
       const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
-      const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
-      const outreachColIndex = lowerCaseHeaders.indexOf("outreach");
+      const studentNameColIndex = findColumnIndex(lowerCaseHeaders, ["studentname", "student name"]);
+      const outreachColIndex = findColumnIndex(lowerCaseHeaders, ["outreach"]);
 
       if (studentNameColIndex === -1 || outreachColIndex === -1) {
         console.error("Could not find 'StudentName' and/or 'Outreach' columns.");
