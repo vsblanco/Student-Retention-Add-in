@@ -8,10 +8,7 @@ let lastSelectedRow = -1; // Variable to track the last selected row index
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // Setup Tab functionality
     setupTabs();
-    
-    // Register the event handler for selection changes.
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
         console.error("Failed to register selection change handler: " + result.error.message);
@@ -19,8 +16,6 @@ Office.onReady((info) => {
         console.log("Selection change handler registered successfully.");
       }
     });
-    
-    // Do an initial check on load.
     onSelectionChange();
   }
 });
@@ -35,27 +30,43 @@ function setupTabs() {
     const panelHistory = document.getElementById("panel-history");
 
     tabDetails.addEventListener("click", () => {
-        // Style tabs
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
-        // Show/hide panels
         panelDetails.classList.remove("hidden");
         panelHistory.classList.add("hidden");
     });
 
     tabHistory.addEventListener("click", () => {
-        // Style tabs
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
-        // Show/hide panels
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
     });
 }
 
 /**
+ * Extracts initials from a name string. e.g., "Braddy, Diamond" -> "DB"
+ * @param {string} name The student's name.
+ * @returns {string} The initials.
+ */
+function getInitials(name) {
+    if (!name || typeof name !== 'string') return '--';
+    if (name.includes(',')) {
+        const parts = name.split(',').map(part => part.trim());
+        const lastName = parts[0];
+        const firstName = parts[1];
+        return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    }
+    const parts = name.split(' ').map(part => part.trim());
+    if (parts.length > 1) {
+        return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+
+/**
  * Handles the document selection change event.
- * If the user selects a new row, it updates the task pane with details from that row.
  */
 async function onSelectionChange() {
     try {
@@ -78,47 +89,74 @@ async function onSelectionChange() {
 
             const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
-            const studentNameColIndex = lowerCaseHeaders.indexOf("studentname");
-            const studentNumberColIndex = lowerCaseHeaders.indexOf("studentnumber");
-            const programVersionColIndex = lowerCaseHeaders.indexOf("programversion");
-            const shiftColIndex = lowerCaseHeaders.indexOf("shift");
-            const gradeColIndex = lowerCaseHeaders.indexOf("grade");
+            // Find all column indexes
+            const colIdx = {
+                name: lowerCaseHeaders.indexOf("studentname"),
+                id: lowerCaseHeaders.indexOf("student id"), // Adjusted to common naming
+                gender: lowerCaseHeaders.indexOf("gender"),
+                daysOut: lowerCaseHeaders.indexOf("days out"),
+                grade: lowerCaseHeaders.indexOf("grade"),
+                status: lowerCaseHeaders.indexOf("status"),
+                lastLda: lowerCaseHeaders.indexOf("last lda"),
+                primaryPhone: lowerCaseHeaders.indexOf("primary phone"),
+                otherPhone: lowerCaseHeaders.indexOf("other phone"),
+                studentEmail: lowerCaseHeaders.indexOf("student email"),
+                personalEmail: lowerCaseHeaders.indexOf("personal email"),
+            };
 
+            // Get all display elements
+            const studentAvatar = document.getElementById("student-avatar");
             const studentNameDisplay = document.getElementById("student-name-display");
-            const studentNumberDisplay = document.getElementById("student-number-display");
-            const programVersionDisplay = document.getElementById("program-version-display");
-            const shiftDisplay = document.getElementById("shift-display");
-            const gradeDisplayBadge = document.getElementById("grade-display-badge");
+            const statusBadge = document.getElementById("status-badge");
+            const studentIdDisplay = document.getElementById("student-id-display");
+            const lastLdaDisplay = document.getElementById("last-lda-display");
+            const daysOutDisplay = document.getElementById("days-out-display");
+            const gradeDisplay = document.getElementById("grade-display");
+            const gradeStatBlock = document.getElementById("grade-stat-block");
+            const primaryPhoneDisplay = document.getElementById("primary-phone-display");
+            const otherPhoneDisplay = document.getElementById("other-phone-display");
+            const studentEmailDisplay = document.getElementById("student-email-display");
+            const personalEmailDisplay = document.getElementById("personal-email-display");
 
-            studentNameDisplay.textContent = (studentNameColIndex !== -1 ? rowData[studentNameColIndex] : "N/A") || "Empty Cell";
-            studentNumberDisplay.textContent = `Student #: ${(studentNumberColIndex !== -1 ? rowData[studentNumberColIndex] : "N/A") || 'N/A'}`;
-            shiftDisplay.textContent = (shiftColIndex !== -1 ? rowData[shiftColIndex] : "N/A") || "N/A";
+            // Update UI
+            const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
+            studentNameDisplay.textContent = studentName || "N/A";
+            studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
+            statusBadge.textContent = (colIdx.status !== -1 ? rowData[colIdx.status] : "N/A") || "N/A";
+            lastLdaDisplay.textContent = (colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : "N/A") || "N/A";
+            daysOutDisplay.textContent = (colIdx.daysOut !== -1 ? rowData[colIdx.daysOut] : "--") || "--";
+            primaryPhoneDisplay.textContent = (colIdx.primaryPhone !== -1 ? rowData[colIdx.primaryPhone] : "N/A") || "N/A";
+            otherPhoneDisplay.textContent = (colIdx.otherPhone !== -1 ? rowData[colIdx.otherPhone] : "N/A") || "N/A";
+            studentEmailDisplay.textContent = (colIdx.studentEmail !== -1 ? rowData[colIdx.studentEmail] : "N/A") || "N/A";
+            personalEmailDisplay.textContent = (colIdx.personalEmail !== -1 ? rowData[colIdx.personalEmail] : "N/A") || "N/A";
 
-            let programVersion = programVersionColIndex !== -1 ? rowData[programVersionColIndex] : "N/A";
-            if (typeof programVersion === 'string' && programVersion !== 'N/A') {
-                const match = programVersion.match(/\d{4}/);
-                if (match) {
-                    programVersion = programVersion.substring(match.index + 4).trim();
-                }
+            // Avatar logic
+            const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender]).toLowerCase() : "";
+            studentAvatar.textContent = getInitials(studentName);
+            if (gender === 'female') {
+                studentAvatar.style.backgroundColor = '#ec4899'; // Pink
+            } else if (gender === 'male') {
+                studentAvatar.style.backgroundColor = '#3b82f6'; // Blue
+            } else {
+                studentAvatar.style.backgroundColor = '#6b7280'; // Gray
             }
-            programVersionDisplay.textContent = programVersion || "N/A";
 
-            let grade = gradeColIndex !== -1 ? rowData[gradeColIndex] : null;
-            gradeDisplayBadge.className = 'w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl';
-            
+            // Grade logic
+            let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
+            gradeStatBlock.className = 'flex-1 p-3 text-center rounded-lg'; // Reset classes
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
-                gradeDisplayBadge.textContent = `${Math.round(gradePercent)}%`;
+                gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
                 if (gradePercent >= 90) {
-                    gradeDisplayBadge.classList.add('bg-green-600');
+                    gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
                 } else if (gradePercent >= 70) {
-                    gradeDisplayBadge.classList.add('bg-yellow-500');
+                    gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
-                    gradeDisplayBadge.classList.add('bg-red-600');
+                    gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
                 }
             } else {
-                gradeDisplayBadge.textContent = 'N/A';
-                gradeDisplayBadge.classList.add('bg-gray-400');
+                gradeDisplay.textContent = 'N/A';
+                gradeStatBlock.classList.add('bg-gray-200', 'text-gray-800');
             }
         });
     } catch (error) {
