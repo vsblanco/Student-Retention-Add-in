@@ -4,25 +4,24 @@
  */
 
 let lastSelectedRow = -1; // Variable to track the last selected row index
-console.log("taskpane.js has loaded!")
+
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // The DOM is not guaranteed to be ready when Office.onReady fires.
-    // We will wait for the DOMContentLoaded event before running our setup code.
-    document.addEventListener("DOMContentLoaded", function() {
-        setupTabs();
-        
-        Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
-          if (result.status === Office.AsyncResultStatus.Failed) {
-            console.error("Failed to register selection change handler: " + result.error.message);
-          } else {
-            console.log("Selection change handler registered successfully.");
-          }
-        });
-        
-        onSelectionChange();
+    // By the time Office is ready, the DOM should be loaded as well,
+    // because we moved the script to the end of the body.
+    setupTabs();
+    
+    Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
+      if (result.status === Office.AsyncResultStatus.Failed) {
+        console.error("Failed to register selection change handler: " + result.error.message);
+      } else {
+        console.log("Selection change handler registered successfully.");
+      }
     });
+    
+    // Run initial check
+    onSelectionChange();
   }
 });
 
@@ -48,7 +47,6 @@ function setupTabs() {
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
     });
-  console.log("taskpane.js Table has loaded!")
 }
 
 /**
@@ -102,23 +100,22 @@ async function onSelectionChange() {
 
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             
-            // Get the header row, assuming it's the first row of the used range.
-            const headerRange = sheet.getUsedRange().getRow(0);
-            headerRange.load(["values", "rowIndex", "columnCount"]);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load(["rowIndex", "values"]);
             await context.sync();
 
-            // Exit if the selection is the header row itself, or any row above it.
-            if (selectedRange.rowIndex < headerRange.rowIndex + 1) {
+            if (selectedRange.rowIndex < usedRange.rowIndex) {
                 return;
             }
 
-            // Get the specific row that was selected.
-            const selectedRow = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, headerRange.columnCount);
-            selectedRow.load("values");
-            await context.sync();
+            const headers = usedRange.values[0];
+            const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
 
-            const headers = headerRange.values[0];
-            const rowData = selectedRow.values[0];
+            if (rowDataIndex < 0 || rowDataIndex >= usedRange.values.length) {
+                console.error("Selected row is outside the bounds of the used range data.");
+                return;
+            }
+            const rowData = usedRange.values[rowDataIndex];
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
