@@ -9,7 +9,7 @@ let importDialog = null; // Variable to hold the dialog object
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // FIX: The DOM is not guaranteed to be ready when Office.onReady fires.
+    // The DOM is not guaranteed to be ready when Office.onReady fires.
     // We will wait for the DOMContentLoaded event before running our setup code.
     document.addEventListener("DOMContentLoaded", function() {
         setupTabs();
@@ -93,7 +93,7 @@ async function processImport(arg) {
     let data = [];
 
     try {
-        // FIX: Convert the data URL from the dialog back into an ArrayBuffer
+        // Convert the data URL from the dialog back into an ArrayBuffer
         const base64String = dataUrl.substring(dataUrl.indexOf(',') + 1);
         const binaryString = window.atob(base64String);
         const len = binaryString.length;
@@ -214,16 +214,25 @@ async function onSelectionChange() {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
             selectedRange.load("rowIndex");
-            const usedRange = context.workbook.worksheets.getActiveWorksheet().getUsedRange();
-            usedRange.load("values");
             await context.sync();
 
-            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex === 0) return;
+            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex < 1) return;
             lastSelectedRow = selectedRange.rowIndex;
+            
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
 
-            const sheetValues = usedRange.values;
-            const headers = sheetValues[0];
-            const rowData = sheetValues[lastSelectedRow];
+            // Get the header row (assuming it's the first row of the used range)
+            const headerRange = sheet.getUsedRange().getRow(0);
+            headerRange.load(["values", "columnCount"]);
+            await context.sync();
+            
+            // Get the data for the currently selected row
+            const selectedRowRange = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, headerRange.columnCount);
+            selectedRowRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const rowData = selectedRowRange.values[0];
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
             const columnMappings = {
