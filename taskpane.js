@@ -4,7 +4,7 @@
  */
 
 let lastSelectedRow = -1; // Variable to track the last selected row index
-
+console.log("taskpane.js has loaded!")
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
@@ -48,6 +48,7 @@ function setupTabs() {
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
     });
+  console.log("taskpane.js Table has loaded!")
 }
 
 /**
