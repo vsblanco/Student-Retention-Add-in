@@ -54,18 +54,33 @@ async function processImport(arg) {
 
     // Basic CSV parsing. A more robust library might be needed for complex CSVs.
     const rows = csvData.split('\n').map(row => row.trim()).filter(row => row.length > 0);
-    const data = rows.map(row => row.split(','));
+    let data = rows.map(row => row.split(','));
 
     if (data.length === 0) {
         console.log("No data to import.");
         return;
     }
 
+    // --- FIX to prevent jagged arrays ---
+    // This ensures every row has the same number of columns as the header row.
+    const numColumns = data[0].length; // Get column count from header row.
+    data = data.map(row => {
+        // If a row is shorter than the header, pad it with empty strings.
+        while (row.length < numColumns) {
+            row.push("");
+        }
+        // If a row is longer, truncate it.
+        if (row.length > numColumns) {
+            return row.slice(0, numColumns);
+        }
+        return row;
+    });
+    // --- End of fix ---
+
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             // This will overwrite data in the sheet starting at A1.
-            // A more advanced implementation could ask the user for confirmation.
             const range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
             range.values = data;
             await context.sync();
