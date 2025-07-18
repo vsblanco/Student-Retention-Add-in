@@ -172,9 +172,11 @@ async function onSelectionChange() {
                 if (daysOut >= 14) {
                     daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
                 } else if (daysOut > 10) {
-                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
-                } else if (daysOut > 5) {
+                    // Swapped from orange to yellow
                     daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
+                } else if (daysOut > 5) {
+                    // Swapped from yellow to orange
+                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
                 } else {
                     daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
                 }
