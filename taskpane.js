@@ -22,7 +22,7 @@ Office.onReady((info) => {
 });
 
 /**
- * Opens a dialog for CSV import.
+ * Opens a dialog for data import.
  * @param {Office.AddinCommands.Event} event The event object passed from the ribbon button.
  */
 function openImportDialog(event) {
@@ -37,56 +37,101 @@ function openImportDialog(event) {
             }
             importDialog = asyncResult.value;
             importDialog.addEventHandler(Office.EventType.DialogMessageReceived, processImport);
-            // It's important to complete the event once the dialog is handling things.
             event.completed();
         }
     );
 }
 
 /**
- * Processes the CSV data received from the dialog.
+ * A robust CSV row parser that handles quoted fields.
+ * @param {string} row A single row from a CSV file.
+ * @returns {string[]} An array of cells.
+ */
+function parseCsvRow(row) {
+    const cells = [];
+    let inQuotes = false;
+    let cell = '';
+    for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+
+        if (char === '"') {
+            if (inQuotes && row[i+1] === '"') {
+                cell += '"';
+                i++; // Skip the next quote
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            cells.push(cell);
+            cell = '';
+        } else {
+            cell += char;
+        }
+    }
+    cells.push(cell); // Add the last cell
+    return cells;
+}
+
+
+/**
+ * Processes the data received from the dialog.
  * @param {object} arg The object containing the message from the dialog.
  */
 async function processImport(arg) {
-    const csvData = arg.message;
-    importDialog.close(); // Close the dialog once we have the data
+    const message = JSON.parse(arg.message);
+    const { fileName, data: arrayBuffer } = message;
+    
+    importDialog.close();
     importDialog = null;
 
-    // Basic CSV parsing. A more robust library might be needed for complex CSVs.
-    const rows = csvData.split('\n').map(row => row.trim()).filter(row => row.length > 0);
-    let data = rows.map(row => row.split(','));
-
-    if (data.length === 0) {
-        console.log("No data to import.");
-        return;
-    }
-
-    // --- FIX to prevent jagged arrays ---
-    // This ensures every row has the same number of columns as the header row.
-    const numColumns = data[0].length; // Get column count from header row.
-    data = data.map(row => {
-        // If a row is shorter than the header, pad it with empty strings.
-        while (row.length < numColumns) {
-            row.push("");
-        }
-        // If a row is longer, truncate it.
-        if (row.length > numColumns) {
-            return row.slice(0, numColumns);
-        }
-        return row;
-    });
-    // --- End of fix ---
+    let data = [];
 
     try {
+        if (fileName.toLowerCase().endsWith('.csv')) {
+            // Convert ArrayBuffer to string for CSV parsing
+            const csvData = new TextDecoder("utf-8").decode(new Uint8Array(arrayBuffer));
+            const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
+            data = rows.map(row => parseCsvRow(row));
+
+        } else if (fileName.toLowerCase().endsWith('.xlsx')) {
+            // Use ExcelJS to parse the .xlsx file
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(arrayBuffer);
+            const worksheet = workbook.worksheets[0];
+            worksheet.eachRow(row => {
+                // row.values is a sparse array, slice(1) to remove the empty first element
+                data.push(row.values.slice(1));
+            });
+        } else {
+            throw new Error("Unsupported file type.");
+        }
+
+        if (data.length === 0) {
+            console.log("No data to import.");
+            return;
+        }
+        
+        // Ensure data is a rectangular array for Excel import
+        const numColumns = data[0].length;
+        data = data.map(row => {
+            while (row.length < numColumns) {
+                row.push("");
+            }
+            if (row.length > numColumns) {
+                return row.slice(0, numColumns);
+            }
+            return row;
+        });
+
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getActiveWorksheet();
-            // This will overwrite data in the sheet starting at A1.
             const range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
             range.values = data;
             await context.sync();
         });
+
     } catch (error) {
-        console.error("Error writing data to sheet: " + error);
+        console.error("Error processing or writing data: " + error);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
@@ -167,7 +212,7 @@ async function onSelectionChange() {
             const sheetValues = usedRange.values;
             const headers = sheetValues[0];
             const rowData = sheetValues[lastSelectedRow];
-            const lowerCaseHeaders = headers.map(header => header.toLowerCase());
+            const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
             const columnMappings = {
                 name: ["studentname", "student name"],
@@ -221,7 +266,7 @@ async function onSelectionChange() {
             studentEmailDisplay.textContent = (colIdx.studentEmail !== -1 ? rowData[colIdx.studentEmail] : "N/A") || "N/A";
             personalEmailDisplay.textContent = (colIdx.personalEmail !== -1 ? rowData[colIdx.personalEmail] : "N/A") || "N/A";
 
-            const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender]).toLowerCase() : "";
+            const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender] || '').toLowerCase() : "";
             studentAvatar.textContent = getInitials(studentName);
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
@@ -283,7 +328,7 @@ async function toggleHighlight(event) {
       await context.sync();
 
       const headers = headerRange.values[0];
-      const lowerCaseHeaders = headers.map(header => header.toLowerCase());
+      const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
       const studentNameColIndex = findColumnIndex(lowerCaseHeaders, ["studentname", "student name"]);
       const outreachColIndex = findColumnIndex(lowerCaseHeaders, ["outreach"]);
 
