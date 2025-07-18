@@ -214,25 +214,33 @@ async function onSelectionChange() {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
             selectedRange.load("rowIndex");
+
+            const usedRange = context.workbook.worksheets.getActiveWorksheet().getUsedRange();
+            // Load the starting row index of the used range, and all its values.
+            usedRange.load(["rowIndex", "values"]);
+
             await context.sync();
 
-            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex < 1) return;
+            // Exit if the selection hasn't changed rows, or is above the data table.
+            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex < usedRange.rowIndex) {
+                return;
+            }
             lastSelectedRow = selectedRange.rowIndex;
-            
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
 
-            // Get the header row (assuming it's the first row of the used range)
-            const headerRange = sheet.getUsedRange().getRow(0);
-            headerRange.load(["values", "columnCount"]);
-            await context.sync();
+            const sheetValues = usedRange.values;
+            const headers = sheetValues[0];
             
-            // Get the data for the currently selected row
-            const selectedRowRange = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, headerRange.columnCount);
-            selectedRowRange.load("values");
-            await context.sync();
+            // FIX: Calculate the correct index for the rowData within the sheetValues array.
+            // This is the absolute selected row minus the starting row of the data.
+            const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
 
-            const headers = headerRange.values[0];
-            const rowData = selectedRowRange.values[0];
+            // Check if the calculated index is valid for the data we loaded.
+            if (rowDataIndex < 0 || rowDataIndex >= sheetValues.length) {
+                console.error("Selected row is outside the bounds of the used range data.");
+                return;
+            }
+            const rowData = sheetValues[rowDataIndex];
+            
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
             const columnMappings = {
