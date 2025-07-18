@@ -89,26 +89,32 @@ async function onSelectionChange() {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
             selectedRange.load("rowIndex");
-
-            const usedRange = context.workbook.worksheets.getActiveWorksheet().getUsedRange();
-            usedRange.load(["rowIndex", "values"]);
-
             await context.sync();
 
-            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex < usedRange.rowIndex) {
-                return;
+            if (selectedRange.rowIndex === lastSelectedRow) {
+                return; // No change, exit early.
             }
             lastSelectedRow = selectedRange.rowIndex;
 
-            const sheetValues = usedRange.values;
-            const headers = sheetValues[0];
-            const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            
+            // Get the header row, assuming it's the first row of the used range.
+            const headerRange = sheet.getUsedRange().getRow(0);
+            headerRange.load(["values", "rowIndex", "columnCount"]);
+            await context.sync();
 
-            if (rowDataIndex < 0 || rowDataIndex >= sheetValues.length) {
-                console.error("Selected row is outside the bounds of the used range data.");
+            // Exit if the selection is the header row itself, or any row above it.
+            if (selectedRange.rowIndex < headerRange.rowIndex + 1) {
                 return;
             }
-            const rowData = sheetValues[rowDataIndex];
+
+            // Get the specific row that was selected.
+            const selectedRow = sheet.getRangeByIndexes(lastSelectedRow, 0, 1, headerRange.columnCount);
+            selectedRow.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const rowData = selectedRow.values[0];
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
