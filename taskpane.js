@@ -4,6 +4,7 @@
  */
 
 let lastSelectedRow = -1; // Variable to track the last selected row index
+let importDialog = null; // Variable to hold the dialog object
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -19,6 +20,64 @@ Office.onReady((info) => {
     onSelectionChange();
   }
 });
+
+/**
+ * Opens a dialog for CSV import.
+ * @param {Office.AddinCommands.Event} event The event object passed from the ribbon button.
+ */
+function openImportDialog(event) {
+    Office.context.ui.displayDialogAsync(
+        'https://vsblanco.github.io/Student-Retention-Add-in/import-dialog.html',
+        { height: 25, width: 35, displayInIframe: true },
+        function (asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Dialog failed to open: " + asyncResult.error.message);
+                event.completed();
+                return;
+            }
+            importDialog = asyncResult.value;
+            importDialog.addEventHandler(Office.EventType.DialogMessageReceived, processImport);
+            // It's important to complete the event once the dialog is handling things.
+            event.completed();
+        }
+    );
+}
+
+/**
+ * Processes the CSV data received from the dialog.
+ * @param {object} arg The object containing the message from the dialog.
+ */
+async function processImport(arg) {
+    const csvData = arg.message;
+    importDialog.close(); // Close the dialog once we have the data
+    importDialog = null;
+
+    // Basic CSV parsing. A more robust library might be needed for complex CSVs.
+    const rows = csvData.split('\n').map(row => row.trim()).filter(row => row.length > 0);
+    const data = rows.map(row => row.split(','));
+
+    if (data.length === 0) {
+        console.log("No data to import.");
+        return;
+    }
+
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            // This will overwrite data in the sheet starting at A1.
+            // A more advanced implementation could ask the user for confirmation.
+            const range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
+            range.values = data;
+            await context.sync();
+        });
+    } catch (error) {
+        console.error("Error writing data to sheet: " + error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
 
 /**
  * Sets up the event listeners for the tabbed interface.
@@ -46,8 +105,6 @@ function setupTabs() {
 
 /**
  * Extracts initials from a name string. e.g., "Braddy, Diamond" -> "DB"
- * @param {string} name The student's name.
- * @returns {string} The initials.
  */
 function getInitials(name) {
     if (!name || typeof name !== 'string') return '--';
@@ -66,9 +123,6 @@ function getInitials(name) {
 
 /**
  * Finds the index of a column by checking against a list of possible names.
- * @param {string[]} headers - The array of lowercase header names from the sheet.
- * @param {string[]} possibleNames - An array of possible lowercase names for the column.
- * @returns {number} The index of the column, or -1 if not found.
  */
 function findColumnIndex(headers, possibleNames) {
     for (const name of possibleNames) {
@@ -90,12 +144,9 @@ async function onSelectionChange() {
             selectedRange.load("rowIndex");
             const usedRange = context.workbook.worksheets.getActiveWorksheet().getUsedRange();
             usedRange.load("values");
-
             await context.sync();
 
-            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex === 0) {
-                return;
-            }
+            if (selectedRange.rowIndex === lastSelectedRow || selectedRange.rowIndex === 0) return;
             lastSelectedRow = selectedRange.rowIndex;
 
             const sheetValues = usedRange.values;
@@ -103,7 +154,6 @@ async function onSelectionChange() {
             const rowData = sheetValues[lastSelectedRow];
             const lowerCaseHeaders = headers.map(header => header.toLowerCase());
 
-            // --- Configuration for flexible column names ---
             const columnMappings = {
                 name: ["studentname", "student name"],
                 id: ["student id", "id"],
@@ -118,7 +168,6 @@ async function onSelectionChange() {
                 personalEmail: ["personal email", "otheremail"],
             };
 
-            // Find all column indexes using the flexible mapping
             const colIdx = {
                 name: findColumnIndex(lowerCaseHeaders, columnMappings.name),
                 id: findColumnIndex(lowerCaseHeaders, columnMappings.id),
@@ -133,7 +182,6 @@ async function onSelectionChange() {
                 personalEmail: findColumnIndex(lowerCaseHeaders, columnMappings.personalEmail),
             };
 
-            // Get all display elements
             const studentAvatar = document.getElementById("student-avatar");
             const studentNameDisplay = document.getElementById("student-name-display");
             const statusBadge = document.getElementById("status-badge");
@@ -148,7 +196,6 @@ async function onSelectionChange() {
             const studentEmailDisplay = document.getElementById("student-email-display");
             const personalEmailDisplay = document.getElementById("personal-email-display");
 
-            // Update UI
             const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
             studentNameDisplay.textContent = studentName || "N/A";
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
@@ -159,24 +206,20 @@ async function onSelectionChange() {
             studentEmailDisplay.textContent = (colIdx.studentEmail !== -1 ? rowData[colIdx.studentEmail] : "N/A") || "N/A";
             personalEmailDisplay.textContent = (colIdx.personalEmail !== -1 ? rowData[colIdx.personalEmail] : "N/A") || "N/A";
 
-            // Avatar logic
             const gender = colIdx.gender !== -1 ? String(rowData[colIdx.gender]).toLowerCase() : "";
             studentAvatar.textContent = getInitials(studentName);
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
-            // Days Out logic
             const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
             daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
-            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg'; // Reset classes
+            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg';
             if (daysOut !== null && !isNaN(daysOut)) {
                 if (daysOut >= 14) {
                     daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
                 } else if (daysOut > 10) {
-                    // Swapped from orange to yellow
-                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
-                } else if (daysOut > 5) {
-                    // Swapped from yellow to orange
                     daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
+                } else if (daysOut > 5) {
+                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
                     daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
                 }
@@ -184,9 +227,8 @@ async function onSelectionChange() {
                 daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
             }
 
-            // Grade logic
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
-            gradeStatBlock.className = 'flex-1 p-3 text-center rounded-lg'; // Reset classes
+            gradeStatBlock.className = 'flex-1 p-3 text-center rounded-lg';
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
@@ -227,7 +269,6 @@ async function toggleHighlight(event) {
 
       const headers = headerRange.values[0];
       const lowerCaseHeaders = headers.map(header => header.toLowerCase());
-
       const studentNameColIndex = findColumnIndex(lowerCaseHeaders, ["studentname", "student name"]);
       const outreachColIndex = findColumnIndex(lowerCaseHeaders, ["outreach"]);
 
@@ -271,4 +312,5 @@ async function toggleHighlight(event) {
 // Register ribbon button commands
 if (typeof Office.actions !== 'undefined') {
   Office.actions.associate("toggleHighlight", toggleHighlight);
+  Office.actions.associate("openImportDialog", openImportDialog);
 }
