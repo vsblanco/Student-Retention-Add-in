@@ -2,7 +2,7 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <!-- A unique ID for your add-in. -->
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>1.1.0.0</Version>
+  <Version>1.2.0.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -43,6 +43,22 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
+                <!-- New Import CSV button -->
+                <Control xsi:type="Button" id="ImportCsvButton">
+                  <Label resid="ImportCsvButton.Label"/>
+                  <Supertip>
+                    <Title resid="ImportCsvButton.Label"/>
+                    <Description resid="ImportCsvButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openImportDialog</FunctionName>
+                  </Action>
+                </Control>
                 <!-- Button on the ribbon to toggle highlight -->
                 <Control xsi:type="Button" id="ContactedButton">
                   <Label resid="ContactedButton.Label"/>
@@ -55,7 +71,6 @@
                     <bt:Image size="32" resid="Icon.32x32"/>
                     <bt:Image size="80" resid="Icon.80x80"/>
                   </Icon>
-                  <!-- This action executes a JavaScript function -->
                   <Action xsi:type="ExecuteFunction">
                     <FunctionName>toggleHighlight</FunctionName>
                   </Action>
@@ -100,11 +115,13 @@
         <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
         <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
+        <bt:String id="ImportCsvButton.Label" DefaultValue="Import CSV"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student details pane."/>
         <bt:String id="ContactedButton.Tooltip" DefaultValue="Toggles a yellow highlight on the selected student row to mark as contacted."/>
+        <bt:String id="ImportCsvButton.Tooltip" DefaultValue="Import student data from a CSV file into the active sheet."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
