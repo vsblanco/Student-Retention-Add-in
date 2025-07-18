@@ -88,8 +88,11 @@ async function onSelectionChange() {
     try {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
-            selectedRange.load("rowIndex");
+            selectedRange.load(["rowIndex", "address"]);
             await context.sync();
+
+            // DEBUG LOG 1: Log the selected cell address and row index.
+            console.log(`Selection changed. Selected cell: ${selectedRange.address}, Row index: ${selectedRange.rowIndex}`);
 
             if (selectedRange.rowIndex === lastSelectedRow) {
                 return; // No change, exit early.
@@ -161,6 +164,10 @@ async function onSelectionChange() {
             const personalEmailDisplay = document.getElementById("personal-email-display");
 
             const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
+            
+            // DEBUG LOG 2: Log the student name that was found.
+            console.log(`Student Name found for row ${lastSelectedRow}: ${studentName || 'N/A'}`);
+
             studentNameDisplay.textContent = studentName || "N/A";
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
             statusBadge.textContent = (colIdx.status !== -1 ? rowData[colIdx.status] : "N/A") || "N/A";
