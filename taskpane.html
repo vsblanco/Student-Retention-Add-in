@@ -22,39 +22,59 @@
         }
     </style>
 </head>
-<body class="p-4 bg-gray-50">
-    <div class="flex flex-col h-full">
-        <!-- Student Identity Section with Grade -->
-        <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow-inner">
-            <div class="text-left flex-grow mr-4">
-                <h2 id="student-name-display" class="text-2xl font-bold text-blue-600 truncate" title="Select a row">Select a row</h2>
-                <p id="student-number-display" class="text-sm text-gray-500 mt-1">Student Number</p>
-            </div>
-            <!-- Stylized Grade Display Badge -->
-            <div class="flex-shrink-0 flex flex-col items-center">
-                <div id="grade-display-badge" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl bg-gray-400">
-                    N/A
-                </div>
-                <span class="text-xs text-gray-500 mt-1">Grade</span>
-            </div>
+<body class="bg-gray-50">
+    <div class="p-4">
+        <!-- Tab Navigation -->
+        <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                <button id="tab-details" type="button" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600" aria-current="page">
+                    Student Details
+                </button>
+                <button id="tab-history" type="button" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    Student History
+                </button>
+            </nav>
         </div>
 
-        <!-- Program Details Section -->
-        <div class="mt-6">
-            <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Program Details</h3>
-            <div class="bg-white p-4 rounded-lg shadow-inner space-y-3 text-sm">
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-gray-600">Program Version:</span>
-                    <span id="program-version-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+        <!-- Tab Content Panels -->
+        <div class="pt-5">
+            <!-- Student Details Panel -->
+            <div id="panel-details">
+                <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow-inner">
+                    <div class="text-left flex-grow mr-4">
+                        <h2 id="student-name-display" class="text-2xl font-bold text-blue-600 truncate" title="Select a row">Select a row</h2>
+                        <p id="student-number-display" class="text-sm text-gray-500 mt-1">Student Number</p>
+                    </div>
+                    <div class="flex-shrink-0 flex flex-col items-center">
+                        <div id="grade-display-badge" class="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl bg-gray-400">
+                            N/A
+                        </div>
+                        <span class="text-xs text-gray-500 mt-1">Grade</span>
+                    </div>
                 </div>
-                <div class="flex justify-between items-center">
-                    <span class="font-semibold text-gray-600">Shift:</span>
-                    <span id="shift-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+
+                <div class="mt-6">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-2 text-center">Program Details</h3>
+                    <div class="bg-white p-4 rounded-lg shadow-inner space-y-3 text-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-600">Program Version:</span>
+                            <span id="program-version-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-semibold text-gray-600">Shift:</span>
+                            <span id="shift-display" class="text-gray-800 font-medium bg-gray-100 px-2 py-1 rounded">N/A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Student History Panel (Initially Hidden) -->
+            <div id="panel-history" class="hidden">
+                <div class="text-center py-10">
+                    <p class="text-gray-500">Student history features will be shown here.</p>
                 </div>
             </div>
         </div>
-        
-        <p class="text-gray-500 mt-4 text-xs text-center">Details update automatically when you select a different row.</p>
     </div>
 </body>
 </html>
