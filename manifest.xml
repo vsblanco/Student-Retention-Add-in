@@ -2,7 +2,7 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <!-- A unique ID for your add-in. -->
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>1.3.0.0</Version>
+  <Version>1.4.0.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -32,6 +32,7 @@
             <Description resid="GetStarted.Description"/>
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
+          <!-- This now points to the new commands.html file -->
           <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
@@ -43,7 +44,6 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <!-- Renamed from ImportCsvButton to ImportDataButton -->
                 <Control xsi:type="Button" id="ImportDataButton">
                   <Label resid="ImportDataButton.Label"/>
                   <Supertip>
@@ -59,7 +59,6 @@
                     <FunctionName>openImportDialog</FunctionName>
                   </Action>
                 </Control>
-                <!-- Button on the ribbon to toggle highlight -->
                 <Control xsi:type="Button" id="ContactedButton">
                   <Label resid="ContactedButton.Label"/>
                   <Supertip>
@@ -75,7 +74,6 @@
                     <FunctionName>toggleHighlight</FunctionName>
                   </Action>
                 </Control>
-                <!-- Button to open the taskpane -->
                 <Control xsi:type="Button" id="TaskpaneButton">
                   <Label resid="TaskpaneButton.Label"/>
                   <Supertip>
@@ -106,7 +104,8 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane.html"/>
+        <!-- This now points to the new commands.html file -->
+        <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
