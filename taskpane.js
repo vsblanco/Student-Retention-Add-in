@@ -131,7 +131,7 @@ async function onSelectionChange() {
 
             const columnMappings = {
                 name: ["studentname", "student name"],
-                id: ["student id", "id"],
+                id: ["student id", "StudentNumber","Student Identifier"],
                 gender: ["gender"],
                 daysOut: ["days out", "daysout"],
                 grade: ["grade", "course grade"],
