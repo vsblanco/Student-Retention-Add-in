@@ -136,11 +136,15 @@ async function cacheAssignedColors() {
 
             // Start from 1 to skip header
             for (let i = 1; i < values.length; i++) {
-                const name = values[i][0];
-                if (name && !newColorMap[name]) {
-                    const cellColor = colors[i][0];
-                     if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
-                        newColorMap[name] = cellColor;
+                // Check if the row and cell value exist
+                if (values[i] && values[i][0]) {
+                    const name = values[i][0];
+                    // Check if the corresponding color row exists
+                    if (name && !newColorMap[name] && colors[i]) {
+                        const cellColor = colors[i][0];
+                         if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                            newColorMap[name] = cellColor;
+                        }
                     }
                 }
             }
