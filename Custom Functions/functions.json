@@ -1,0 +1,32 @@
+{
+  "functions": [
+    {
+      "id": "LDA",
+      "name": "LDA",
+      "description": "Displays a given date, but shows today's date if the cell is green.",
+      "helpUrl": "https://github.com/vsblanco/Student-Retention-Add-in",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "inputDate",
+          "description": "The date value from a cell.",
+          "type": "number",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "invocation",
+          "description": "The invocation object from Excel.",
+          "type": "any",
+          "dimensionality": "scalar",
+          "optional": true
+        }
+      ],
+      "options": {
+        "requiresAddress": true
+      }
+    }
+  ]
+}
