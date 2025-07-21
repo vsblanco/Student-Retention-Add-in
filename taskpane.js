@@ -5,6 +5,7 @@
 
 let lastSelectedRow = -1; // Variable to track the last selected row index
 let currentStudentId = null; // Variable to store the currently selected student's ID
+let currentStudentName = null; // Variable to store the currently selected student's name
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -13,6 +14,12 @@ Office.onReady((info) => {
     // because we moved the script to the end of the body.
     setupTabs();
     
+    // Add event listener for the new comment button
+    const submitButton = document.getElementById("submit-comment-button");
+    if (submitButton) {
+        submitButton.addEventListener("click", submitNewComment);
+    }
+
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
         console.error("Failed to register selection change handler: " + result.error.message);
@@ -34,6 +41,7 @@ function setupTabs() {
     const tabHistory = document.getElementById("tab-history");
     const panelDetails = document.getElementById("panel-details");
     const panelHistory = document.getElementById("panel-history");
+    const submitButton = document.getElementById("submit-comment-button");
 
     tabDetails.addEventListener("click", () => {
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
@@ -48,6 +56,11 @@ function setupTabs() {
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
         
+        // Enable or disable submit button based on whether a student is selected
+        if (submitButton) {
+            submitButton.disabled = !currentStudentId;
+        }
+
         // Fetch and display history when the tab is clicked
         if (currentStudentId) {
             displayStudentHistory(currentStudentId);
@@ -100,11 +113,8 @@ async function onSelectionChange() {
             selectedRange.load(["rowIndex", "address"]);
             await context.sync();
 
-            // DEBUG LOG 1: Log the selected cell address and row index.
-            console.log(`Selection changed. Selected cell: ${selectedRange.address}, Row index: ${selectedRange.rowIndex}`);
-
             if (selectedRange.rowIndex === lastSelectedRow) {
-                return; // No change, exit early.
+                return; 
             }
             lastSelectedRow = selectedRange.rowIndex;
 
@@ -115,6 +125,8 @@ async function onSelectionChange() {
             await context.sync();
 
             if (selectedRange.rowIndex < usedRange.rowIndex) {
+                currentStudentId = null;
+                currentStudentName = null;
                 return;
             }
 
@@ -123,6 +135,8 @@ async function onSelectionChange() {
 
             if (rowDataIndex < 0 || rowDataIndex >= usedRange.values.length) {
                 console.error("Selected row is outside the bounds of the used range data.");
+                currentStudentId = null;
+                currentStudentName = null;
                 return;
             }
             const rowData = usedRange.values[rowDataIndex];
@@ -131,14 +145,14 @@ async function onSelectionChange() {
 
             const columnMappings = {
                 name: ["studentname", "student name"],
-                id: ["student id", "StudentNumber","Student Identifier"],
+                id: ["studentnumber", "student identifier"],
                 gender: ["gender"],
                 daysOut: ["days out", "daysout"],
                 grade: ["grade", "course grade"],
                 status: ["status"],
                 lastLda: ["last lda", "lda"],
                 primaryPhone: ["primary phone", "phone"],
-                otherPhone: ["other phone", "cell phone", "cell","OtherPhone"],
+                otherPhone: ["other phone", "cell phone", "cell","otherphone"],
                 studentEmail: ["student email", "school email","email"],
                 personalEmail: ["personal email", "otheremail"],
             };
@@ -173,9 +187,6 @@ async function onSelectionChange() {
 
             const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
             
-            // DEBUG LOG 2: Log the student name that was found.
-            console.log(`Student Name found for row ${lastSelectedRow}: ${studentName || 'N/A'}`);
-
             studentNameDisplay.textContent = studentName || "N/A";
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
             statusBadge.textContent = (colIdx.status !== -1 ? rowData[colIdx.status] : "N/A") || "N/A";
@@ -224,17 +235,21 @@ async function onSelectionChange() {
             }
             
             const studentId = colIdx.id !== -1 ? rowData[colIdx.id] : null;
-            // Store the current student ID to be used by the history tab
             currentStudentId = studentId;
+            currentStudentName = studentName;
 
-            // If the history panel is already visible, refresh it
+            const submitButton = document.getElementById('submit-comment-button');
+            if (submitButton) {
+                submitButton.disabled = !currentStudentId;
+            }
+
             const panelHistory = document.getElementById("panel-history");
             if (!panelHistory.classList.contains("hidden")) {
                 if (currentStudentId) {
                     displayStudentHistory(currentStudentId);
                 } else {
                     const historyContent = document.getElementById("history-content");
-                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
+                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student Number in the selected row.</p>';
                 }
             }
         });
@@ -247,7 +262,7 @@ async function onSelectionChange() {
 }
 
 /**
- * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
+ * Fetches and displays the comment history for a given student Number from the "Student History" sheet.
  */
 async function displayStudentHistory(studentId) {
     const historyContent = document.getElementById("history-content");
@@ -262,26 +277,23 @@ async function displayStudentHistory(studentId) {
 
             const historyData = historyRange.values;
             const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
-
-            // Find the column indexes for Student Id and Comment based on the image provided
-            const idColIdx = historyHeaders.indexOf("student id");
+            
+            const idColIdx = findColumnIndex(historyHeaders, ["studentnumber", "student identifier"]);
             const commentColIdx = historyHeaders.indexOf("comment");
             const tagColIdx = historyHeaders.indexOf("tag");
             const timestampColIdx = historyHeaders.indexOf("timestamp");
 
             if (idColIdx === -1 || commentColIdx === -1) {
-                historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Id" and "Comment" columns.</p>';
+                historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
                 return;
             }
 
             const comments = [];
-            // Start from 1 to skip the header row
             for (let i = 1; i < historyData.length; i++) {
                 const row = historyData[i];
-                // Compare studentId as a string to handle potential number/string mismatches from Excel
                 if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
                     const commentText = row[commentColIdx];
-                    if (commentText && String(commentText).trim() !== "") { // Only add if comment is not empty
+                    if (commentText && String(commentText).trim() !== "") {
                         comments.push({
                             text: commentText,
                             tag: tagColIdx !== -1 ? row[tagColIdx] : null,
@@ -292,7 +304,6 @@ async function displayStudentHistory(studentId) {
             }
             
             if (comments.length > 0) {
-                // Reverse the comments to show the most recent entries first
                 let html = '<ul class="space-y-4">';
                 comments.reverse().forEach(comment => {
                     html += `
@@ -305,10 +316,9 @@ async function displayStudentHistory(studentId) {
                         }
                         if (comment.timestamp) {
                            let dateText = comment.timestamp;
-                           // Check if it's an Excel date number and convert it
                            if (!isNaN(dateText) && dateText > 25569) {
                                const date = new Date((dateText - 25569) * 86400 * 1000);
-                               dateText = date.toLocaleDateString();
+                               dateText = date.toLocaleString();
                            }
                            html += `<span>${dateText}</span>`;
                         }
@@ -329,5 +339,90 @@ async function displayStudentHistory(studentId) {
             historyContent.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p>`;
             console.error("Error in displayStudentHistory: " + error);
         }
+    }
+}
+
+/**
+ * Submits a new comment to the "Student History" sheet.
+ */
+async function submitNewComment() {
+    const commentInput = document.getElementById("new-comment-input");
+    const statusDisplay = document.getElementById("comment-status");
+    const commentText = commentInput.value.trim();
+
+    if (!currentStudentId) {
+        statusDisplay.textContent = "Please select a student first.";
+        return;
+    }
+    if (commentText === "") {
+        statusDisplay.textContent = "Comment cannot be empty.";
+        return;
+    }
+
+    statusDisplay.textContent = "Submitting...";
+
+    try {
+        await Excel.run(async (context) => {
+            const historySheet = context.workbook.worksheets.getItem("Student History");
+            const historyRange = historySheet.getUsedRange();
+            historyRange.load(["rowCount", "values"]);
+            await context.sync();
+
+            const newRowIndex = historyRange.rowCount;
+            const headers = historyRange.values[0].map(h => String(h || '').toLowerCase());
+
+            const idCol = findColumnIndex(headers, ["studentnumber", "student identifier"]);
+            const studentCol = headers.indexOf("student");
+            const createdByCol = headers.indexOf("created by");
+            const tagCol = headers.indexOf("tag");
+            const timestampCol = headers.indexOf("timestamp");
+            const commentCol = headers.indexOf("comment");
+
+            if (idCol === -1 || commentCol === -1) {
+                statusDisplay.textContent = "History sheet is missing required columns.";
+                return;
+            }
+            
+            // Create an array with the correct number of columns
+            const newRowData = new Array(headers.length).fill("");
+            
+            // Populate the data based on found column indices
+            newRowData[idCol] = currentStudentId;
+            if (studentCol !== -1) newRowData[studentCol] = currentStudentName;
+            if (createdByCol !== -1) newRowData[createdByCol] = "Victor Blanco"; // As per your name
+            if (tagCol !== -1) newRowData[tagCol] = "Comment";
+            if (timestampCol !== -1) {
+                const now = new Date();
+                // Convert JS date to Excel date number
+                newRowData[timestampCol] = (now.getTime() / 86400000) + 25569;
+            }
+            newRowData[commentCol] = commentText;
+
+            const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, headers.length);
+            newRowRange.values = [newRowData];
+            
+            // Auto-fit columns for better readability
+            historySheet.getUsedRange().getEntireColumn().format.autofitColumns();
+            
+            await context.sync();
+        });
+
+        commentInput.value = "";
+        statusDisplay.textContent = "Comment added successfully!";
+        // Refresh the history view
+        await displayStudentHistory(currentStudentId);
+
+        // Clear the status message after a few seconds
+        setTimeout(() => {
+            statusDisplay.textContent = "";
+        }, 3000);
+
+    } catch (error) {
+        if (error.code === 'ItemNotFound') {
+            statusDisplay.textContent = 'Error: "Student History" sheet not found.';
+        } else {
+            statusDisplay.textContent = `Error: ${error.message}`;
+        }
+        console.error("Error in submitNewComment: " + error);
     }
 }
