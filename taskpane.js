@@ -4,6 +4,7 @@
  */
 
 let lastSelectedRow = -1; // Variable to track the last selected row index
+let currentStudentId = null; // Variable to store the currently selected student's ID
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -46,8 +47,17 @@ function setupTabs() {
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
+        
+        // Fetch and display history when the tab is clicked
+        if (currentStudentId) {
+            displayStudentHistory(currentStudentId);
+        } else {
+            const historyContent = document.getElementById("history-content");
+            historyContent.innerHTML = '<p class="text-gray-500">Select a student row to see their history.</p>';
+        }
     });
 }
+
 
 /**
  * Extracts initials from a name string. e.g., "Braddy, Diamond" -> "DB"
@@ -212,11 +222,112 @@ async function onSelectionChange() {
                 gradeDisplay.textContent = 'N/A';
                 gradeStatBlock.classList.add('bg-gray-200', 'text-gray-800');
             }
+            
+            const studentId = colIdx.id !== -1 ? rowData[colIdx.id] : null;
+            // Store the current student ID to be used by the history tab
+            currentStudentId = studentId;
+
+            // If the history panel is already visible, refresh it
+            const panelHistory = document.getElementById("panel-history");
+            if (!panelHistory.classList.contains("hidden")) {
+                if (currentStudentId) {
+                    displayStudentHistory(currentStudentId);
+                } else {
+                    const historyContent = document.getElementById("history-content");
+                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
+                }
+            }
         });
     } catch (error) {
         console.error("Error in onSelectionChange: " + error);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
+/**
+ * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
+ */
+async function displayStudentHistory(studentId) {
+    const historyContent = document.getElementById("history-content");
+    historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
+
+    try {
+        await Excel.run(async (context) => {
+            const historySheet = context.workbook.worksheets.getItem("Student History");
+            const historyRange = historySheet.getUsedRange();
+            historyRange.load("values");
+            await context.sync();
+
+            const historyData = historyRange.values;
+            const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
+
+            // Find the column indexes for Student Id and Comment based on the image provided
+            const idColIdx = historyHeaders.indexOf("student id");
+            const commentColIdx = historyHeaders.indexOf("comment");
+            const tagColIdx = historyHeaders.indexOf("tag");
+            const timestampColIdx = historyHeaders.indexOf("timestamp");
+
+            if (idColIdx === -1 || commentColIdx === -1) {
+                historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Id" and "Comment" columns.</p>';
+                return;
+            }
+
+            const comments = [];
+            // Start from 1 to skip the header row
+            for (let i = 1; i < historyData.length; i++) {
+                const row = historyData[i];
+                // Compare studentId as a string to handle potential number/string mismatches from Excel
+                if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
+                    const commentText = row[commentColIdx];
+                    if (commentText && String(commentText).trim() !== "") { // Only add if comment is not empty
+                        comments.push({
+                            text: commentText,
+                            tag: tagColIdx !== -1 ? row[tagColIdx] : null,
+                            timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null
+                        });
+                    }
+                }
+            }
+            
+            if (comments.length > 0) {
+                // Reverse the comments to show the most recent entries first
+                let html = '<ul class="space-y-4">';
+                comments.reverse().forEach(comment => {
+                    html += `
+                        <li class="p-3 bg-gray-100 rounded-lg shadow-sm">
+                            <p class="text-sm text-gray-800">${comment.text}</p>`;
+                    if (comment.tag || comment.timestamp) {
+                        html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
+                        if (comment.tag) {
+                            html += `<span class="px-2 py-0.5 font-semibold text-blue-800 bg-blue-100 rounded-full">${comment.tag}</span>`;
+                        }
+                        if (comment.timestamp) {
+                           let dateText = comment.timestamp;
+                           // Check if it's an Excel date number and convert it
+                           if (!isNaN(dateText) && dateText > 25569) {
+                               const date = new Date((dateText - 25569) * 86400 * 1000);
+                               dateText = date.toLocaleDateString();
+                           }
+                           html += `<span>${dateText}</span>`;
+                        }
+                        html += `</div>`;
+                    }
+                    html += `</li>`;
+                });
+                html += '</ul>';
+                historyContent.innerHTML = html;
+            } else {
+                historyContent.innerHTML = '<p class="text-gray-500">No history found for this student.</p>';
+            }
+        });
+    } catch (error) {
+        if (error.code === 'ItemNotFound') {
+            historyContent.innerHTML = '<p class="text-orange-500 font-semibold">A worksheet named "Student History" was not found.</p>';
+        } else {
+            historyContent.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p>`;
+            console.error("Error in displayStudentHistory: " + error);
         }
     }
 }
