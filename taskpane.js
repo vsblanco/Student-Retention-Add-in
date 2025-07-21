@@ -145,7 +145,7 @@ async function onSelectionChange() {
 
             const columnMappings = {
                 name: ["studentname", "student name"],
-                id: ["studentnumber", "student identifier"],
+                id: ["student id", "studentnumber", "student identifier"],
                 gender: ["gender"],
                 daysOut: ["days out", "daysout"],
                 grade: ["grade", "course grade"],
@@ -249,7 +249,7 @@ async function onSelectionChange() {
                     displayStudentHistory(currentStudentId);
                 } else {
                     const historyContent = document.getElementById("history-content");
-                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student Number in the selected row.</p>';
+                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
                 }
             }
         });
@@ -262,7 +262,7 @@ async function onSelectionChange() {
 }
 
 /**
- * Fetches and displays the comment history for a given student Number from the "Student History" sheet.
+ * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
  */
 async function displayStudentHistory(studentId) {
     const historyContent = document.getElementById("history-content");
@@ -278,10 +278,11 @@ async function displayStudentHistory(studentId) {
             const historyData = historyRange.values;
             const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
             
-            const idColIdx = findColumnIndex(historyHeaders, ["studentnumber", "student identifier"]);
+            const idColIdx = findColumnIndex(historyHeaders, ["student id", "student identifier"]);
             const commentColIdx = historyHeaders.indexOf("comment");
             const tagColIdx = historyHeaders.indexOf("tag");
             const timestampColIdx = historyHeaders.indexOf("timestamp");
+            const createdByColIdx = historyHeaders.indexOf("created by");
 
             if (idColIdx === -1 || commentColIdx === -1) {
                 historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
@@ -297,7 +298,8 @@ async function displayStudentHistory(studentId) {
                         comments.push({
                             text: commentText,
                             tag: tagColIdx !== -1 ? row[tagColIdx] : null,
-                            timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null
+                            timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
+                            createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown'
                         });
                     }
                 }
@@ -309,21 +311,28 @@ async function displayStudentHistory(studentId) {
                     html += `
                         <li class="p-3 bg-gray-100 rounded-lg shadow-sm">
                             <p class="text-sm text-gray-800">${comment.text}</p>`;
-                    if (comment.tag || comment.timestamp) {
-                        html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
-                        if (comment.tag) {
-                            html += `<span class="px-2 py-0.5 font-semibold text-blue-800 bg-blue-100 rounded-full">${comment.tag}</span>`;
-                        }
-                        if (comment.timestamp) {
-                           let dateText = comment.timestamp;
-                           if (!isNaN(dateText) && dateText > 25569) {
-                               const date = new Date((dateText - 25569) * 86400 * 1000);
-                               dateText = date.toLocaleString();
-                           }
-                           html += `<span>${dateText}</span>`;
-                        }
-                        html += `</div>`;
+                    
+                    html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
+                    html += `<div>`; // Left side container
+                    if (comment.tag) {
+                        html += `<span class="px-2 py-0.5 font-semibold text-blue-800 bg-blue-100 rounded-full mr-2">${comment.tag}</span>`;
                     }
+                    html += `<span class="font-medium">${comment.createdBy}</span>`;
+                    html += `</div>`; // End left side
+
+                    let dateText;
+                    if (comment.timestamp) {
+                       dateText = comment.timestamp;
+                       if (!isNaN(dateText) && dateText > 25569) {
+                           const date = new Date((dateText - 25569) * 86400 * 1000);
+                           dateText = date.toLocaleString();
+                       }
+                    } else {
+                        dateText = 'Unknown Time';
+                    }
+                    html += `<span>${dateText}</span>`;
+                    
+                    html += `</div>`;
                     html += `</li>`;
                 });
                 html += '</ul>';
@@ -371,7 +380,7 @@ async function submitNewComment() {
             const newRowIndex = historyRange.rowCount;
             const headers = historyRange.values[0].map(h => String(h || '').toLowerCase());
 
-            const idCol = findColumnIndex(headers, ["studentnumber", "student identifier"]);
+            const idCol = findColumnIndex(headers, ["student id", "student identifier"]);
             const studentCol = headers.indexOf("student");
             const createdByCol = headers.indexOf("created by");
             const tagCol = headers.indexOf("tag");
