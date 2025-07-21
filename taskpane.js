@@ -108,6 +108,39 @@ function findColumnIndex(headers, possibleNames) {
 }
 
 /**
+ * Converts an Excel date serial number to a formatted string (e.g., "June 1st, 2025").
+ * @param {number} excelDate The Excel date serial number.
+ * @returns {string} The formatted date string or "N/A".
+ */
+function formatExcelDate(excelDate) {
+    if (isNaN(excelDate) || excelDate === null || excelDate === "") {
+        return "N/A";
+    }
+    // Excel's epoch starts on 1900-01-01, but it incorrectly thinks 1900 is a leap year.
+    // The JavaScript epoch starts on 1970-01-01. The difference is 25569 days.
+    const date = new Date((excelDate - 25569) * 86400 * 1000);
+    
+    if (isNaN(date.getTime())) {
+        return "N/A";
+    }
+
+    const day = date.getDate();
+    const year = date.getFullYear();
+    const month = date.toLocaleString('default', { month: 'long' });
+
+    let daySuffix = 'th';
+    if (day === 1 || day === 21 || day === 31) {
+        daySuffix = 'st';
+    } else if (day === 2 || day === 22) {
+        daySuffix = 'nd';
+    } else if (day === 3 || day === 23) {
+        daySuffix = 'rd';
+    }
+
+    return `${month} ${day}${daySuffix}, ${year}`;
+}
+
+/**
  * Scans the "Assigned" column and caches the fill color for each unique person.
  */
 async function cacheAssignedColors() {
@@ -246,7 +279,10 @@ async function onSelectionChange() {
             
             studentNameDisplay.textContent = studentName || "N/A";
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
-            lastLdaDisplay.textContent = (colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : "N/A") || "N/A";
+            
+            const lastLdaValue = colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : null;
+            lastLdaDisplay.textContent = formatExcelDate(lastLdaValue);
+
             primaryPhoneDisplay.textContent = (colIdx.primaryPhone !== -1 ? rowData[colIdx.primaryPhone] : "N/A") || "N/A";
             otherPhoneDisplay.textContent = (colIdx.otherPhone !== -1 ? rowData[colIdx.otherPhone] : "N/A") || "N/A";
             studentEmailDisplay.textContent = (colIdx.studentEmail !== -1 ? rowData[colIdx.studentEmail] : "N/A") || "N/A";
