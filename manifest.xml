@@ -2,7 +2,7 @@
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <!-- A unique ID for your add-in. -->
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>1.4.0.0</Version>
+  <Version>1.5.0.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -18,6 +18,11 @@
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="CustomFunctions" />
+    </Sets>
+  </Requirements>
   <DefaultSettings>
     <!-- URL for your taskpane. -->
     <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane.html"/>
@@ -32,8 +37,12 @@
             <Description resid="GetStarted.Description"/>
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
-          <!-- This now points to the new commands.html file -->
+          
+          <!-- Function file for ribbon commands -->
           <FunctionFile resid="Commands.Url"/>
+          <!-- Function file for custom functions -->
+          <FunctionFile resid="Functions.Url"/>
+
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
               <Label resid="RetentionTab.Label"/>
@@ -93,6 +102,21 @@
               </Group>
             </CustomTab>
           </ExtensionPoint>
+          
+          <!-- Custom Functions Extension Point -->
+          <ExtensionPoint xsi:type="CustomFunctions">
+            <Script>
+              <SourceLocation resid="Functions.Script.Url"/>
+            </Script>
+            <Page>
+              <SourceLocation resid="Functions.Url"/>
+            </Page>
+            <Metadata>
+              <SourceLocation resid="Functions.Metadata.Url"/>
+            </Metadata>
+            <Namespace resid="Functions.Namespace"/>
+          </ExtensionPoint>
+
         </DesktopFormFactor>
       </Host>
     </Hosts>
@@ -104,9 +128,11 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
-        <!-- This now points to the new commands.html file -->
         <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane.html"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/functions.html"/>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/functions.js"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/functions.json"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -115,6 +141,7 @@
         <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
         <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
+        <bt:String id="Functions.Namespace" DefaultValue="RETENTION"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
