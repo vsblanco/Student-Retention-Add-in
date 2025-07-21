@@ -7,6 +7,7 @@ let lastSelectedRow = -1; // Variable to track the last selected row index
 let currentStudentId = null; // Variable to store the currently selected student's ID
 let currentStudentName = null; // Variable to store the currently selected student's name
 let currentGradebookLink = null; // Variable to store the gradebook link
+let assignedColorMap = {}; // To cache colors for assigned people
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -30,8 +31,9 @@ Office.onReady((info) => {
       }
     });
     
-    // Run initial check
+    // Run initial check and cache the colors
     onSelectionChange();
+    cacheAssignedColors();
   }
 });
 
@@ -104,6 +106,52 @@ function findColumnIndex(headers, possibleNames) {
     }
     return -1;
 }
+
+/**
+ * Scans the "Assigned" column and caches the fill color for each unique person.
+ */
+async function cacheAssignedColors() {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values");
+            await context.sync();
+
+            const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
+            const assignedColIdx = findColumnIndex(headers, ["assigned"]);
+
+            if (assignedColIdx === -1) {
+                console.log("Could not find 'Assigned' column to cache colors.");
+                return;
+            }
+
+            const assignedColumnRange = usedRange.getColumn(assignedColIdx);
+            assignedColumnRange.load("values, format/fill/color");
+            await context.sync();
+            
+            const newColorMap = {};
+            const values = assignedColumnRange.values;
+            const colors = assignedColumnRange.format.fill.color;
+
+            // Start from 1 to skip header
+            for (let i = 1; i < values.length; i++) {
+                const name = values[i][0];
+                if (name && !newColorMap[name]) {
+                    const cellColor = colors[i][0];
+                     if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                        newColorMap[name] = cellColor;
+                    }
+                }
+            }
+            assignedColorMap = newColorMap;
+            console.log("Assigned colors cached:", assignedColorMap);
+        });
+    } catch (error) {
+        console.error("Error caching assigned colors: " + error);
+    }
+}
+
 
 /**
  * Handles the document selection change event.
@@ -258,12 +306,9 @@ async function onSelectionChange() {
                 const assignedTo = rowData[colIdx.assigned];
                 assignedToBadge.textContent = assignedTo || "Unassigned";
 
-                const assignedCell = sheet.getRangeByIndexes(lastSelectedRow, colIdx.assigned, 1, 1);
-                assignedCell.load("format/fill/color");
-                await context.sync();
+                const cellColor = assignedColorMap[assignedTo]; // Use the cache
 
-                const cellColor = assignedCell.format.fill.color;
-                if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                if (cellColor) {
                     assignedToBadge.style.backgroundColor = cellColor;
                     // Simple brightness check to determine text color
                     const r = parseInt(cellColor.substr(1, 2), 16);
