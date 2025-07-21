@@ -6,6 +6,7 @@
 let lastSelectedRow = -1; // Variable to track the last selected row index
 let currentStudentId = null; // Variable to store the currently selected student's ID
 let currentStudentName = null; // Variable to store the currently selected student's name
+let currentGradebookLink = null; // Variable to store the gradebook link
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -13,6 +14,7 @@ Office.onReady((info) => {
     // By the time Office is ready, the DOM should be loaded as well.
     setupTabs();
     setupCopyHandlers(); // Set up the copy-to-clipboard functionality
+    setupGradebookLinkHandler(); // Set up the gradebook link handler
     
     // Add event listener for the new comment button
     const submitButton = document.getElementById("submit-comment-button");
@@ -111,18 +113,17 @@ async function onSelectionChange() {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
             selectedRange.load(["rowIndex", "address"]);
+            
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const usedRange = sheet.getUsedRange();
+            usedRange.load(["rowIndex", "values"]);
+            
             await context.sync();
 
             if (selectedRange.rowIndex === lastSelectedRow) {
                 return; 
             }
             lastSelectedRow = selectedRange.rowIndex;
-
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            
-            const usedRange = sheet.getUsedRange();
-            usedRange.load(["rowIndex", "values"]);
-            await context.sync();
 
             if (selectedRange.rowIndex < usedRange.rowIndex) {
                 currentStudentId = null;
@@ -150,11 +151,13 @@ async function onSelectionChange() {
                 daysOut: ["days out", "daysout"],
                 grade: ["grade", "course grade"],
                 status: ["status"],
+                assigned: ["assigned"],
                 lastLda: ["last lda", "lda"],
                 primaryPhone: ["primary phone", "phone"],
                 otherPhone: ["other phone", "cell phone", "cell","otherphone"],
                 studentEmail: ["student email", "school email","email"],
                 personalEmail: ["personal email", "otheremail"],
+                gradeBook: ["grade book", "gradebook"]
             };
 
             const colIdx = {
@@ -164,16 +167,18 @@ async function onSelectionChange() {
                 daysOut: findColumnIndex(lowerCaseHeaders, columnMappings.daysOut),
                 grade: findColumnIndex(lowerCaseHeaders, columnMappings.grade),
                 status: findColumnIndex(lowerCaseHeaders, columnMappings.status),
+                assigned: findColumnIndex(lowerCaseHeaders, columnMappings.assigned),
                 lastLda: findColumnIndex(lowerCaseHeaders, columnMappings.lastLda),
                 primaryPhone: findColumnIndex(lowerCaseHeaders, columnMappings.primaryPhone),
                 otherPhone: findColumnIndex(lowerCaseHeaders, columnMappings.otherPhone),
                 studentEmail: findColumnIndex(lowerCaseHeaders, columnMappings.studentEmail),
                 personalEmail: findColumnIndex(lowerCaseHeaders, columnMappings.personalEmail),
+                gradeBook: findColumnIndex(lowerCaseHeaders, columnMappings.gradeBook)
             };
 
             const studentAvatar = document.getElementById("student-avatar");
             const studentNameDisplay = document.getElementById("student-name-display");
-            const statusBadge = document.getElementById("status-badge");
+            const assignedToBadge = document.getElementById("assigned-to-badge");
             const studentIdDisplay = document.getElementById("student-id-display");
             const lastLdaDisplay = document.getElementById("last-lda-display");
             const daysOutDisplay = document.getElementById("days-out-display");
@@ -189,7 +194,6 @@ async function onSelectionChange() {
             
             studentNameDisplay.textContent = studentName || "N/A";
             studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
-            statusBadge.textContent = (colIdx.status !== -1 ? rowData[colIdx.status] : "N/A") || "N/A";
             lastLdaDisplay.textContent = (colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : "N/A") || "N/A";
             primaryPhoneDisplay.textContent = (colIdx.primaryPhone !== -1 ? rowData[colIdx.primaryPhone] : "N/A") || "N/A";
             otherPhoneDisplay.textContent = (colIdx.otherPhone !== -1 ? rowData[colIdx.otherPhone] : "N/A") || "N/A";
@@ -202,7 +206,7 @@ async function onSelectionChange() {
 
             const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
             daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
-            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg';
+            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
             if (daysOut !== null && !isNaN(daysOut)) {
                 if (daysOut >= 14) {
                     daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
@@ -218,7 +222,7 @@ async function onSelectionChange() {
             }
 
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
-            gradeStatBlock.className = 'flex-1 p-3 text-center rounded-lg';
+            gradeStatBlock.className = 'flex-1 p-3 text-center rounded-lg transition-colors duration-150';
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
@@ -237,6 +241,45 @@ async function onSelectionChange() {
             const studentId = colIdx.id !== -1 ? rowData[colIdx.id] : null;
             currentStudentId = studentId;
             currentStudentName = studentName;
+
+            const gradeBookLink = colIdx.gradeBook !== -1 ? rowData[colIdx.gradeBook] : null;
+            if (gradeBookLink && (String(gradeBookLink).startsWith('http://') || String(gradeBookLink).startsWith('https://'))) {
+                currentGradebookLink = gradeBookLink;
+                gradeStatBlock.classList.add('cursor-pointer', 'hover:bg-gray-300');
+                gradeStatBlock.title = 'Click to open Grade Book';
+            } else {
+                currentGradebookLink = null;
+                gradeStatBlock.classList.remove('cursor-pointer', 'hover:bg-gray-300');
+                gradeStatBlock.title = '';
+            }
+
+            // Handle Assigned To badge
+            if (colIdx.assigned !== -1) {
+                const assignedTo = rowData[colIdx.assigned];
+                assignedToBadge.textContent = assignedTo || "Unassigned";
+
+                const assignedCell = sheet.getRangeByIndexes(lastSelectedRow, colIdx.assigned, 1, 1);
+                assignedCell.load("format/fill/color");
+                await context.sync();
+
+                const cellColor = assignedCell.format.fill.color;
+                if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                    assignedToBadge.style.backgroundColor = cellColor;
+                    // Simple brightness check to determine text color
+                    const r = parseInt(cellColor.substr(1, 2), 16);
+                    const g = parseInt(cellColor.substr(3, 2), 16);
+                    const b = parseInt(cellColor.substr(5, 2), 16);
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                    assignedToBadge.style.color = brightness > 125 ? 'black' : 'white';
+                } else {
+                    assignedToBadge.style.backgroundColor = '#e5e7eb'; // Tailwind gray-200
+                    assignedToBadge.style.color = '#1f2937'; // Tailwind gray-800
+                }
+            } else {
+                assignedToBadge.textContent = "Unassigned";
+                assignedToBadge.style.backgroundColor = '#e5e7eb';
+                assignedToBadge.style.color = '#1f2937';
+            }
 
             const submitButton = document.getElementById('submit-comment-button');
             if (submitButton) {
@@ -316,6 +359,20 @@ function setupCopyHandlers() {
             });
         }
     });
+}
+
+/**
+ * Sets up the click event listener for the gradebook link.
+ */
+function setupGradebookLinkHandler() {
+    const gradeStatBlock = document.getElementById("grade-stat-block");
+    if (gradeStatBlock) {
+        gradeStatBlock.addEventListener('click', () => {
+            if (currentGradebookLink) {
+                window.open(currentGradebookLink, '_blank');
+            }
+        });
+    }
 }
 
 /**
