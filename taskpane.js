@@ -10,9 +10,9 @@ let currentStudentName = null; // Variable to store the currently selected stude
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // By the time Office is ready, the DOM should be loaded as well,
-    // because we moved the script to the end of the body.
+    // By the time Office is ready, the DOM should be loaded as well.
     setupTabs();
+    setupCopyHandlers(); // Set up the copy-to-clipboard functionality
     
     // Add event listener for the new comment button
     const submitButton = document.getElementById("submit-comment-button");
@@ -259,6 +259,63 @@ async function onSelectionChange() {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
     }
+}
+
+/**
+ * Copies text to the clipboard and provides user feedback.
+ * @param {string} text The text to copy.
+ * @param {HTMLElement} triggerElement The element that triggered the copy action.
+ */
+function copyToClipboard(text, triggerElement) {
+    if (!text || text === "N/A") {
+        return; // Don't copy placeholder text
+    }
+
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "absolute";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.select();
+    try {
+        document.execCommand('copy');
+        const feedbackEl = triggerElement.querySelector('.copy-feedback');
+        if (feedbackEl) {
+            // Hide all other feedback elements first
+            document.querySelectorAll('.copy-feedback').forEach(el => el.classList.add('hidden'));
+            feedbackEl.classList.remove('hidden');
+            setTimeout(() => {
+                feedbackEl.classList.add('hidden');
+            }, 2000);
+        }
+    } catch (err) {
+        console.error('Failed to copy text: ', err);
+    }
+    document.body.removeChild(textArea);
+}
+
+/**
+ * Sets up click event listeners for contact information to enable copy-to-clipboard.
+ */
+function setupCopyHandlers() {
+    const contactInfoIds = [
+        'copy-primary-phone',
+        'copy-other-phone',
+        'copy-student-email',
+        'copy-personal-email'
+    ];
+
+    contactInfoIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('click', () => {
+                const displayEl = el.querySelector('.font-semibold');
+                if (displayEl) {
+                    copyToClipboard(displayEl.textContent, el);
+                }
+            });
+        }
+    });
 }
 
 /**
