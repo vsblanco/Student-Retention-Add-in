@@ -3,6 +3,12 @@
  * It is loaded by commands.html, which is specified as the FunctionFile in the manifest.
  */
 
+const CONSTANTS = {
+    // Column Header Names
+    STUDENT_NAME_COLS: ["studentname", "student name"],
+    OUTREACH_COLS: ["outreach"]
+};
+
 let importDialog = null;
 
 Office.onReady((info) => {
@@ -155,8 +161,8 @@ async function toggleHighlight(event) {
 
       const headers = usedRange.values[0];
       const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
-      const studentNameColIndex = findColumnIndex(lowerCaseHeaders, ["studentname", "student name"]);
-      const outreachColIndex = findColumnIndex(lowerCaseHeaders, ["outreach"]);
+      const studentNameColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.STUDENT_NAME_COLS);
+      const outreachColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.OUTREACH_COLS);
 
       if (studentNameColIndex === -1 || outreachColIndex === -1) {
         console.error("Could not find 'StudentName' and/or 'Outreach' columns.");
