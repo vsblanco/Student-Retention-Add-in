@@ -123,11 +123,14 @@ async function handleFileSelected(message) {
                 }
             });
         }
+        
+        const isGradeFile = fileName.toLowerCase().includes('grade');
+        console.log(`File name "${fileName}" contains "grade": ${isGradeFile}`);
 
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
-                canUpdateMaster: (hasStudentIdCol || hasStudentNumberCol) && hasMasterListSheet,
-                canUpdateGrades: hasStudentIdCol && hasMasterListSheet && hasCourseIdCol && hasStudentNameCol
+                canUpdateMaster: !isGradeFile && (hasStudentIdCol || hasStudentNumberCol) && hasMasterListSheet,
+                canUpdateGrades: isGradeFile && hasStudentIdCol && hasMasterListSheet && hasCourseIdCol && hasStudentNameCol
             }));
         }
     } catch (error) {
