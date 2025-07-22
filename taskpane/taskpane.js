@@ -333,7 +333,7 @@ async function onSelectionChange() {
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
             // Check for green highlight on the row
-            const cellColor = rowColors[colIdx.name];
+            const cellColor = rowColors ? rowColors[colIdx.name] : null;
             let isGreen = false;
             if (cellColor && cellColor.startsWith('#')) {
                 const r = parseInt(cellColor.substr(1, 2), 16);
