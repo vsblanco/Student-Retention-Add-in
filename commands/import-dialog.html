@@ -19,49 +19,98 @@
         
         <input type="file" id="file-input" accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
         
-        <button id="import-button" class="mt-4 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400">
-            Import
-        </button>
+        <div id="button-container" class="mt-4 space-y-2">
+            <button id="import-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400">
+                Import to Active Sheet
+            </button>
+            <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
+                Update Master List
+            </button>
+        </div>
         <p id="status" class="text-xs text-gray-500 mt-2"></p>
     </div>
 
     <script>
+        let selectedFile = null;
+
         Office.onReady(() => {
-            // Debug log to confirm the import dialog HTML file is loaded.
             console.log("Import dialog HTML page loaded successfully.");
 
             const fileInput = document.getElementById("file-input");
             const importButton = document.getElementById("import-button");
+            const updateButton = document.getElementById("update-master-list-button");
             const status = document.getElementById("status");
 
+            // Disable buttons initially
             importButton.disabled = true;
+            updateButton.disabled = true;
 
+            // Listen for file selection
             fileInput.addEventListener('change', () => {
-                importButton.disabled = fileInput.files.length === 0;
-            });
-
-            importButton.addEventListener('click', () => {
-                const file = fileInput.files[0];
-                if (file) {
-                    const reader = new FileReader();
+                if (fileInput.files.length > 0) {
+                    selectedFile = fileInput.files[0];
+                    importButton.disabled = false;
+                    status.textContent = "Checking file...";
                     
+                    // Read file and send to parent for checks
+                    const reader = new FileReader();
                     reader.onload = function(event) {
-                        const dataUrl = event.target.result;
-                        // Send the file data (as a data URL) and name back to the main script
                         Office.context.ui.messageParent(JSON.stringify({
-                            fileName: file.name,
-                            data: dataUrl
+                            type: 'fileSelected',
+                            fileName: selectedFile.name,
+                            data: event.target.result
                         }));
                     };
-                    
-                    reader.onerror = function() {
-                        status.textContent = "Error reading file.";
-                        console.error("File could not be read: " + reader.error.code);
+                    reader.readAsDataURL(selectedFile);
+                } else {
+                    selectedFile = null;
+                    importButton.disabled = true;
+                    updateButton.classList.add('hidden');
+                    updateButton.disabled = true;
+                }
+            });
+
+            // Listen for messages from the parent (commands.js)
+            Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
+                const message = JSON.parse(arg.message);
+                if (message.canUpdateMaster) {
+                    status.textContent = "Ready to import.";
+                    updateButton.classList.remove('hidden');
+                    updateButton.disabled = false;
+                } else {
+                    status.textContent = "Ready to import. 'Master List' update not available.";
+                }
+            });
+            
+            // Handle simple import
+            importButton.addEventListener('click', () => {
+                if (selectedFile) {
+                    status.textContent = "Importing...";
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: 'simpleImport',
+                            fileName: selectedFile.name,
+                            data: event.target.result
+                        }));
                     };
-                    
-                    status.textContent = "Reading file...";
-                    // Read as a data URL to handle binary data like .xlsx correctly
-                    reader.readAsDataURL(file);
+                    reader.readAsDataURL(selectedFile);
+                }
+            });
+
+            // Handle master list update
+            updateButton.addEventListener('click', () => {
+                if (selectedFile) {
+                    status.textContent = "Updating Master List...";
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: 'updateMaster',
+                            fileName: selectedFile.name,
+                            data: event.target.result
+                        }));
+                    };
+                    reader.readAsDataURL(selectedFile);
                 }
             });
         });
