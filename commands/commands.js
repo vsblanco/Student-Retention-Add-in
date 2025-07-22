@@ -80,6 +80,7 @@ async function processImportMessage(arg) {
  */
 async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
+    console.log(`[DEBUG] File selected: ${fileName}`);
     let hasStudentIdCol = false;
     let hasStudentNumberCol = false;
     let hasMasterListSheet = false;
@@ -100,18 +101,21 @@ async function handleFileSelected(message) {
             const worksheet = workbook.addWorksheet('sheet1');
             worksheet.addRows(data);
         }
+        console.log("[DEBUG] File parsed with ExcelJS.");
 
         const worksheet = workbook.worksheets[0];
         const headers = [];
         worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
             headers.push(String(cell.value || '').toLowerCase());
         });
+        console.log("[DEBUG] Parsed headers:", headers);
         
         hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
         hasStudentNumberCol = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS) !== -1;
         hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
         hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
         hasCurrentScoreCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.currentScore) !== -1;
+        console.log(`[DEBUG] Column checks: hasStudentIdCol=${hasStudentIdCol}, hasStudentNumberCol=${hasStudentNumberCol}, hasCourseIdCol=${hasCourseIdCol}, hasStudentNameCol=${hasStudentNameCol}, hasCurrentScoreCol=${hasCurrentScoreCol}`);
 
         if (hasStudentIdCol || hasStudentNameCol || hasStudentNumberCol) {
             await Excel.run(async (context) => {
@@ -125,19 +129,45 @@ async function handleFileSelected(message) {
                 }
             });
         }
+        console.log(`[DEBUG] 'Master List' sheet exists: ${hasMasterListSheet}`);
         
-        // Detect file type based on columns present, not filename.
         const isGradeFile = hasStudentIdCol && hasCourseIdCol && hasStudentNameCol && hasCurrentScoreCol;
-        console.log(`File is detected as a grade file: ${isGradeFile}`);
+        const isMasterFile = (hasStudentIdCol || hasStudentNumberCol) && !isGradeFile;
+        console.log(`[DEBUG] File type detection: isGradeFile=${isGradeFile}, isMasterFile=${isMasterFile}`);
+
+        let statusMessage = "";
+        let canUpdateGrades = false;
+        let canUpdateMaster = false;
+
+        if (!hasMasterListSheet) {
+            statusMessage = "'Master List' sheet not found in this workbook.";
+        } else if (isGradeFile) {
+            statusMessage = "Ready to update grades.";
+            canUpdateGrades = true;
+        } else if (isMasterFile) {
+            statusMessage = "Ready to update Master List.";
+            canUpdateMaster = true;
+        } else {
+            statusMessage = "File not compatible. Missing required columns.";
+        }
+        console.log(`[DEBUG] Final status: message='${statusMessage}', canUpdateGrades=${canUpdateGrades}, canUpdateMaster=${canUpdateMaster}`);
 
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
-                canUpdateMaster: !isGradeFile && (hasStudentIdCol || hasStudentNumberCol) && hasMasterListSheet,
-                canUpdateGrades: isGradeFile && hasMasterListSheet
+                canUpdateMaster: canUpdateMaster,
+                canUpdateGrades: canUpdateGrades,
+                status: statusMessage
             }));
         }
     } catch (error) {
         console.error("Error during file check:", error);
+        if (importDialog) {
+            importDialog.messageChild(JSON.stringify({ 
+                canUpdateMaster: false,
+                canUpdateGrades: false,
+                status: `Error: ${error.message}`
+            }));
+        }
     }
 }
 
