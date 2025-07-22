@@ -40,8 +40,6 @@
           
           <!-- Function file for ribbon commands -->
           <FunctionFile resid="Commands.Url"/>
-          <!-- Function file for custom functions -->
-          <FunctionFile resid="Functions.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
