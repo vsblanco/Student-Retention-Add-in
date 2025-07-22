@@ -254,7 +254,8 @@ async function onSelectionChange() {
             
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            usedRange.load(["rowIndex", "values"]);
+            // Load formulas to detect hyperlinks
+            usedRange.load(["rowIndex", "values", "formulas"]);
             
             await context.sync();
 
@@ -279,6 +280,7 @@ async function onSelectionChange() {
                 return;
             }
             const rowData = usedRange.values[rowDataIndex];
+            const rowFormulas = usedRange.formulas[rowDataIndex];
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
@@ -367,15 +369,27 @@ async function onSelectionChange() {
             currentStudentId = studentId;
             currentStudentName = studentName;
 
-            const gradeBookLink = colIdx.gradeBook !== -1 ? rowData[colIdx.gradeBook] : null;
-            if (gradeBookLink && (String(gradeBookLink).startsWith('http://') || String(gradeBookLink).startsWith('https://'))) {
-                currentGradebookLink = gradeBookLink;
+            // Check for hyperlink formula first
+            const gradeBookFormula = (colIdx.gradeBook !== -1 && rowFormulas) ? rowFormulas[colIdx.gradeBook] : null;
+            const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
+            const match = gradeBookFormula ? String(gradeBookFormula).match(hyperlinkRegex) : null;
+
+            if (match && match[1]) {
+                currentGradebookLink = match[1];
                 gradeStatBlock.classList.add('cursor-pointer', 'hover:bg-gray-300');
                 gradeStatBlock.title = 'Click to open Grade Book';
             } else {
-                currentGradebookLink = null;
-                gradeStatBlock.classList.remove('cursor-pointer', 'hover:bg-gray-300');
-                gradeStatBlock.title = '';
+                // Fallback for plain text URLs
+                const gradeBookValue = colIdx.gradeBook !== -1 ? rowData[colIdx.gradeBook] : null;
+                if (gradeBookValue && (String(gradeBookValue).startsWith('http://') || String(gradeBookValue).startsWith('https://'))) {
+                    currentGradebookLink = gradeBookValue;
+                    gradeStatBlock.classList.add('cursor-pointer', 'hover:bg-gray-300');
+                    gradeStatBlock.title = 'Click to open Grade Book';
+                } else {
+                    currentGradebookLink = null;
+                    gradeStatBlock.classList.remove('cursor-pointer', 'hover:bg-gray-300');
+                    gradeStatBlock.title = '';
+                }
             }
 
             // Handle Assigned To badge
