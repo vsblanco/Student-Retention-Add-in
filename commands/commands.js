@@ -136,14 +136,40 @@ async function handleUpdateMaster(message) {
         importDialog.close();
     }
     try {
-        // 1. Fetch and parse Template.xlsx
-        const templateResponse = await fetch(CONSTANTS.TEMPLATE_URL);
-        if (!templateResponse.ok) throw new Error('Failed to fetch Template.xlsx');
-        const templateArrayBuffer = await templateResponse.arrayBuffer();
-        const templateWorkbook = new ExcelJS.Workbook();
-        await templateWorkbook.xlsx.load(templateArrayBuffer);
-        const templateWorksheet = templateWorkbook.worksheets[0];
-        const templateHeaders = (templateWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
+        let templateHeaders;
+
+        // 1. Fetch and parse Template.xlsx, with a fallback to the Master List headers
+        try {
+            const templateResponse = await fetch(CONSTANTS.TEMPLATE_URL);
+            if (!templateResponse.ok) throw new Error('Failed to fetch Template.xlsx');
+            const templateArrayBuffer = await templateResponse.arrayBuffer();
+            const templateWorkbook = new ExcelJS.Workbook();
+            await templateWorkbook.xlsx.load(templateArrayBuffer);
+            const templateWorksheet = templateWorkbook.worksheets[0];
+            templateHeaders = (templateWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
+            if (templateHeaders.length === 0) {
+                throw new Error("Template.xlsx is empty or has no headers.");
+            }
+        } catch (templateError) {
+            console.error("Could not load or parse Template.xlsx. Falling back to 'Master List' headers. Error:", templateError);
+            
+            // Fallback: Use headers from the existing "Master List" sheet
+            await Excel.run(async (context) => {
+                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+                const headerRange = sheet.getRange("A1").getResizedRange(0, 50).getUsedRange(true); // Get first row, up to 51 columns
+                headerRange.load("values");
+                await context.sync();
+                if (headerRange.values && headerRange.values.length > 0 && headerRange.values[0].some(h => h)) {
+                    templateHeaders = headerRange.values[0].map(h => String(h || ''));
+                } else {
+                    throw new Error("'Master List' sheet is empty and Template.xlsx could not be loaded. Please ensure one of them has headers.");
+                }
+            });
+        }
+
+        if (!templateHeaders || templateHeaders.length === 0) {
+            throw new Error("Could not determine template headers from Template.xlsx or Master List.");
+        }
 
         // 2. Parse user's uploaded file
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
@@ -151,26 +177,36 @@ async function handleUpdateMaster(message) {
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
             await userWorkbook.xlsx.load(userArrayBuffer);
         } else {
-             const csvData = new TextDecoder("utf-8").decode(userArrayBuffer);
+            const csvData = new TextDecoder("utf-8").decode(userArrayBuffer);
             const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
             const data = rows.map(row => parseCsvRow(row));
             const worksheet = userWorkbook.addWorksheet('sheet1');
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
+        const userHeaderRow = userWorksheet.getRow(1);
+        const userHeaders = [];
+        userHeaderRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            userHeaders[colNumber - 1] = cell.value ? String(cell.value) : '';
+        });
+
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
-                userData.push(row.values.slice(1));
+                const rowData = [];
+                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                    rowData[colNumber - 1] = cell.value;
+                });
+                userData.push(rowData);
             }
         });
 
         // 3. Create column mapping
         const lowerCaseUserHeaders = userHeaders.map(h => h.toLowerCase());
-        const colMapping = templateHeaders.map(templateHeader => 
-            lowerCaseUserHeaders.indexOf(templateHeader.toLowerCase())
-        );
+        const colMapping = templateHeaders.map(templateHeader => {
+            if (!templateHeader) return -1;
+            return lowerCaseUserHeaders.indexOf(templateHeader.toLowerCase());
+        });
 
         // 4. Create final data array based on template
         const finalData = [templateHeaders];
