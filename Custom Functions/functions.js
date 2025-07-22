@@ -1,6 +1,9 @@
 /**
  * This file contains the custom functions for the add-in.
+ * It includes logging to help with debugging.
  */
+
+console.log("Custom functions script loaded successfully.");
 
 /**
  * Displays a given date, but shows today's date if the cell is green.
@@ -10,8 +13,10 @@
  * @returns {Promise<number>} A promise that resolves to the date to be displayed.
  */
 async function lda(inputDate, invocation) {
+  console.log("LDA function started.");
   // Get the address of the cell that invoked the function
   const address = invocation.address;
+  console.log("Function invoked for cell: " + address);
   let cellColor;
 
   try {
@@ -22,6 +27,7 @@ async function lda(inputDate, invocation) {
       range.load("format/fill/color");
       await context.sync();
       cellColor = range.format.fill.color;
+      console.log("Cell color found: " + cellColor);
     });
 
     // Check if the color is a shade of green (you can adjust this logic)
@@ -31,15 +37,22 @@ async function lda(inputDate, invocation) {
       const g = parseInt(cellColor.substr(3, 2), 16);
       const b = parseInt(cellColor.substr(5, 2), 16);
       if (g > r && g > b) {
+        const today = excelDate(new Date());
+        console.log("Cell is green. Returning today's date: " + today);
         // Return today's date as an Excel date serial number
-        return excelDate(new Date());
+        return today;
       }
     }
 
     // If not green, or no color, return the original date
+    console.log("Cell is not green. Returning original date: " + inputDate);
     return inputDate;
 
   } catch (error) {
+    console.error("Error in LDA function: " + error.message);
+    if (error instanceof OfficeExtension.Error) {
+        console.error("Debug info: " + JSON.stringify(error.debugInfo));
+    }
     return new CustomFunctions.Error(CustomFunctions.ErrorCode.invalidValue, "Could not check cell color.");
   }
 }
@@ -55,3 +68,4 @@ function excelDate(date) {
 
 // Register the custom function with Excel
 CustomFunctions.associate("LDA", lda);
+console.log("Custom function LDA associated.");
