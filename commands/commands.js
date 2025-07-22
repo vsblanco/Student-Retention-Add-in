@@ -4,10 +4,13 @@
  */
 
 const CONSTANTS = {
-    // Column Header Names
+    // NOTE: "Student ID" and "Student Number" are treated as distinct values.
+    // "Student ID" refers to the Canvas ID, used for creating gradebook links.
+    // "Student Number" (and "Student Identifier") refers to the internal school ID.
     STUDENT_NAME_COLS: ["studentname", "student name"],
     OUTREACH_COLS: ["outreach"],
-    STUDENT_ID_COLS: ["student id", "studentnumber", "student identifier"],
+    STUDENT_ID_COLS: ["student id"],
+    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
     MASTER_LIST_SHEET: "Master List",
     TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx',
     COLUMN_MAPPINGS: {
@@ -78,6 +81,7 @@ async function processImportMessage(arg) {
 async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
     let hasStudentIdCol = false;
+    let hasStudentNumberCol = false;
     let hasMasterListSheet = false;
     let hasCourseIdCol = false;
     let hasStudentNameCol = false;
@@ -103,10 +107,11 @@ async function handleFileSelected(message) {
         });
         
         hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
+        hasStudentNumberCol = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS) !== -1;
         hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
         hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
 
-        if (hasStudentIdCol || hasStudentNameCol) {
+        if (hasStudentIdCol || hasStudentNameCol || hasStudentNumberCol) {
             await Excel.run(async (context) => {
                 const sheetNames = context.workbook.worksheets.load("items/name");
                 await context.sync();
@@ -121,7 +126,7 @@ async function handleFileSelected(message) {
 
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
-                canUpdateMaster: hasStudentIdCol && hasMasterListSheet,
+                canUpdateMaster: (hasStudentIdCol || hasStudentNumberCol) && hasMasterListSheet,
                 canUpdateGrades: hasStudentIdCol && hasMasterListSheet && hasCourseIdCol && hasStudentNameCol
             }));
         }
