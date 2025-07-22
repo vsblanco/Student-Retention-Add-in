@@ -7,7 +7,7 @@ const CONSTANTS = {
     // NOTE: "Student ID" and "Student Number" are treated as distinct values.
     // "Student ID" refers to the Canvas ID, used for creating gradebook links.
     // "Student Number" (and "Student Identifier") refers to the internal school ID.
-    STUDENT_NAME_COLS: ["studentname", "student name"],
+    STUDENT_NAME_COLS: ["studentname", "student name","student"],
     OUTREACH_COLS: ["outreach"],
     STUDENT_ID_COLS: ["student id"],
     STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
