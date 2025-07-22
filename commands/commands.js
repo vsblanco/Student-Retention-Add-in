@@ -151,7 +151,10 @@ async function handleUpdateMaster(message) {
             const templateWorkbook = new ExcelJS.Workbook();
             await templateWorkbook.xlsx.load(templateArrayBuffer);
             const templateWorksheet = templateWorkbook.worksheets[0];
-            templateHeaders = (templateWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
+            templateHeaders = [];
+            templateWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
+                templateHeaders.push(String(cell.value || ''));
+            });
             if (templateHeaders.length === 0) {
                 throw new Error("Template.xlsx is empty or has no headers.");
             }
@@ -370,6 +373,7 @@ async function handleUpdateGrades(message) {
 
             const masterData = usedRange.values;
             let updatedCount = 0;
+            const matchedStudentsLog = [];
 
             console.log(`Iterating through ${masterData.length - 1} rows in 'Master List' to find matches...`);
             // Start from 1 to skip header
@@ -385,16 +389,24 @@ async function handleUpdateGrades(message) {
                     const gradeCell = sheet.getRangeByIndexes(i, masterGradeCol, 1, 1);
                     const gradebookCell = sheet.getRangeByIndexes(i, masterGradebookCol, 1, 1);
                     
-                    gradeCell.values = [[importedData.grade]];
-                    
-                    const gradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
-                    gradebookCell.values = [[gradebookLink]];
-                    
-                    console.log(`Updating row ${i + 1} for student: ${masterStudentName}`);
+                    const newGrade = importedData.grade;
+                    const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
+
+                    gradeCell.values = [[newGrade]];
+                    gradebookCell.values = [[newGradebookLink]];
+
+                    matchedStudentsLog.push({
+                        student: masterStudentName,
+                        grade: newGrade,
+                        gradebookLink: newGradebookLink
+                    });
                 }
             }
             
-            console.log(`Found and updated ${updatedCount} matching students.`);
+            console.log(`Found and will update ${updatedCount} matching students.`);
+            console.log("Matched students and their new data:");
+            console.table(matchedStudentsLog);
+
             if (updatedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
