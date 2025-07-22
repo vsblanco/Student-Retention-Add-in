@@ -434,7 +434,8 @@ async function handleUpdateGrades(message) {
                     const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
 
                     gradeCell.values = [[newGrade]];
-                    gradebookCell.values = [[newGradebookLink]];
+                    gradebookCell.values = [["Gradebook"]];
+                    gradebookCell.hyperlink = { address: newGradebookLink };
 
                     matchedStudentsLog.push({
                         student: masterStudentName,
