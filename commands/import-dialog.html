@@ -23,8 +23,11 @@
             <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Master List
             </button>
+            <button id="update-grades-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
+                Update Grades
+            </button>
         </div>
-        <p id="status" class="text-xs text-gray-500 mt-2"></p>
+        <p id="status" class="text-xs text-gray-500 mt-2 h-4"></p>
     </div>
 
     <script>
@@ -34,17 +37,21 @@
             console.log("Import dialog HTML page loaded successfully.");
 
             const fileInput = document.getElementById("file-input");
-            const updateButton = document.getElementById("update-master-list-button");
+            const updateMasterButton = document.getElementById("update-master-list-button");
+            const updateGradesButton = document.getElementById("update-grades-button");
             const status = document.getElementById("status");
 
-            // Disable button initially
-            updateButton.disabled = true;
+            // Disable buttons initially
+            updateMasterButton.disabled = true;
+            updateGradesButton.disabled = true;
 
             // Listen for file selection
             fileInput.addEventListener('change', () => {
-                // Hide button on new file selection until it's validated
-                updateButton.classList.add('hidden');
-                updateButton.disabled = true;
+                // Hide buttons on new file selection until it's validated
+                updateMasterButton.classList.add('hidden');
+                updateGradesButton.classList.add('hidden');
+                updateMasterButton.disabled = true;
+                updateGradesButton.disabled = true;
 
                 if (fileInput.files.length > 0) {
                     selectedFile = fileInput.files[0];
@@ -69,26 +76,51 @@
             // Listen for messages from the parent (commands.js)
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
+                status.textContent = message.status || "";
+
                 if (message.canUpdateMaster) {
-                    status.textContent = "Ready to update Master List.";
-                    updateButton.classList.remove('hidden');
-                    updateButton.disabled = false;
+                    updateMasterButton.classList.remove('hidden');
+                    updateMasterButton.disabled = false;
                 } else {
-                    status.textContent = "File not compatible or 'Master List' not found.";
-                    updateButton.disabled = true;
-                    updateButton.classList.add('hidden');
+                    updateMasterButton.classList.add('hidden');
+                    updateMasterButton.disabled = true;
+                }
+
+                if (message.canUpdateGrades) {
+                    updateGradesButton.classList.remove('hidden');
+                    updateGradesButton.disabled = false;
+                } else {
+                    updateGradesButton.classList.add('hidden');
+                    updateGradesButton.disabled = true;
                 }
             });
 
             // Handle master list update
-            updateButton.addEventListener('click', () => {
+            updateMasterButton.addEventListener('click', () => {
                 if (selectedFile) {
                     status.textContent = "Updating Master List...";
-                    updateButton.disabled = true; // Prevent double-clicks
+                    updateMasterButton.disabled = true; // Prevent double-clicks
                     const reader = new FileReader();
                     reader.onload = function(event) {
                         Office.context.ui.messageParent(JSON.stringify({
                             type: 'updateMaster',
+                            fileName: selectedFile.name,
+                            data: event.target.result
+                        }));
+                    };
+                    reader.readAsDataURL(selectedFile);
+                }
+            });
+
+            // Handle grades update
+            updateGradesButton.addEventListener('click', () => {
+                if (selectedFile) {
+                    status.textContent = "Updating grades...";
+                    updateGradesButton.disabled = true; // Prevent double-clicks
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: 'updateGrades',
                             fileName: selectedFile.name,
                             data: event.target.result
                         }));
