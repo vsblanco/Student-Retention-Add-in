@@ -42,7 +42,7 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <!-- Function file for ribbon commands should also point to the shared runtime HTML -->
+          <!-- Function file for ribbon commands must also point to the shared runtime HTML -->
           <FunctionFile resid="Functions.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
