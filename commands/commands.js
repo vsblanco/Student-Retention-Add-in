@@ -14,6 +14,7 @@ const CONSTANTS = {
     MASTER_LIST_SHEET: "Master List",
     TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx',
     COLUMN_MAPPINGS: {
+        course: ["course"],
         courseId: ["course id"],
         currentScore: ["current score", "grade"],
         grade: ["grade", "course grade"],
@@ -372,15 +373,22 @@ async function handleUpdateGrades(message) {
         const userStudentIdCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_ID_COLS);
         const userCourseIdCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseId);
         const userGradeCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.currentScore);
+        const userCourseCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.course);
 
-        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1 || userStudentNameCol === -1) {
-            throw new Error("Imported file is missing one of the required columns: Student Name, Student ID, Course ID, or Current Score/Grade.");
+        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1 || userStudentNameCol === -1 || userCourseCol === -1) {
+            throw new Error("Imported file is missing one of the required columns: Student Name, Student ID, Course, Course ID, or Current Score/Grade.");
         }
         console.log("Found required columns in the imported file.");
 
-        // 3. Create a map of student data from the imported file, keyed by normalized name
+        // 3. Create a map of student data from the imported file, keyed by normalized name, filtering out CAPV courses
         const studentDataMap = new Map();
         userData.forEach(row => {
+            const courseName = row[userCourseCol] ? String(row[userCourseCol]) : '';
+            if (courseName.toUpperCase().includes('CAPV')) {
+                console.log(`[DEBUG] Skipping row for CAPV course: ${courseName}`);
+                return; // Skip this row
+            }
+
             const studentName = row[userStudentNameCol];
             if (studentName) {
                 const normalized = normalizeName(studentName);
@@ -391,7 +399,7 @@ async function handleUpdateGrades(message) {
                 });
             }
         });
-        console.log(`Created a map of ${studentDataMap.size} students from the imported file.`);
+        console.log(`Created a map of ${studentDataMap.size} students from the imported file after filtering.`);
 
         // 4. Update the "Master List" sheet
         await Excel.run(async (context) => {
