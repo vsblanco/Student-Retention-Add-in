@@ -128,9 +128,9 @@
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
         <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane.html"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/Custom%20Functions/functions.html"/>
-        <bt:Url id="Functions.Script.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/Custom%20Functions/functions.js"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/Custom%20Functions/functions.json"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/CustomFunctions/functions.html"/>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/CustomFunctions/functions.js"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/CustomFunctions/functions.json"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
