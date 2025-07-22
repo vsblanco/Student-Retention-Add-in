@@ -156,11 +156,12 @@ async function handleUpdateMaster(message) {
             // Fallback: Use headers from the existing "Master List" sheet
             await Excel.run(async (context) => {
                 const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                const headerRange = sheet.getRange("A1").getResizedRange(0, 50).getUsedRange(true); // Get first row, up to 51 columns
-                headerRange.load("values");
+                const usedRange = sheet.getUsedRange(true);
+                usedRange.load("values, rowCount");
                 await context.sync();
-                if (headerRange.values && headerRange.values.length > 0 && headerRange.values[0].some(h => h)) {
-                    templateHeaders = headerRange.values[0].map(h => String(h || ''));
+
+                if (usedRange.rowCount > 0 && usedRange.values && usedRange.values[0].some(h => h)) {
+                    templateHeaders = usedRange.values[0].map(h => String(h || ''));
                 } else {
                     throw new Error("'Master List' sheet is empty and Template.xlsx could not be loaded. Please ensure one of them has headers.");
                 }
