@@ -20,7 +20,7 @@
         <input type="file" id="file-input" accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
         
         <div id="button-container" class="mt-4 space-y-2">
-            <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200">
+            <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Master List
             </button>
         </div>
@@ -42,6 +42,10 @@
 
             // Listen for file selection
             fileInput.addEventListener('change', () => {
+                // Hide button on new file selection until it's validated
+                updateButton.classList.add('hidden');
+                updateButton.disabled = true;
+
                 if (fileInput.files.length > 0) {
                     selectedFile = fileInput.files[0];
                     status.textContent = "Checking file...";
@@ -58,7 +62,6 @@
                     reader.readAsDataURL(selectedFile);
                 } else {
                     selectedFile = null;
-                    updateButton.disabled = true;
                     status.textContent = "";
                 }
             });
@@ -68,10 +71,12 @@
                 const message = JSON.parse(arg.message);
                 if (message.canUpdateMaster) {
                     status.textContent = "Ready to update Master List.";
+                    updateButton.classList.remove('hidden');
                     updateButton.disabled = false;
                 } else {
                     status.textContent = "File not compatible or 'Master List' not found.";
                     updateButton.disabled = true;
+                    updateButton.classList.add('hidden');
                 }
             });
 
@@ -79,6 +84,7 @@
             updateButton.addEventListener('click', () => {
                 if (selectedFile) {
                     status.textContent = "Updating Master List...";
+                    updateButton.disabled = true; // Prevent double-clicks
                     const reader = new FileReader();
                     reader.onload = function(event) {
                         Office.context.ui.messageParent(JSON.stringify({
