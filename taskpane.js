@@ -3,6 +3,59 @@
  * It is loaded by taskpane.html.
  */
 
+const CONSTANTS = {
+    // UI Element IDs
+    TAB_DETAILS: "tab-details",
+    TAB_HISTORY: "tab-history",
+    PANEL_DETAILS: "panel-details",
+    PANEL_HISTORY: "panel-history",
+    SUBMIT_COMMENT_BUTTON: "submit-comment-button",
+    NEW_COMMENT_INPUT: "new-comment-input",
+    COMMENT_STATUS: "comment-status",
+    HISTORY_CONTENT: "history-content",
+    STUDENT_AVATAR: "student-avatar",
+    STUDENT_NAME_DISPLAY: "student-name-display",
+    ASSIGNED_TO_BADGE: "assigned-to-badge",
+    STUDENT_ID_DISPLAY: "student-id-display",
+    LAST_LDA_DISPLAY: "last-lda-display",
+    DAYS_OUT_DISPLAY: "days-out-display",
+    DAYS_OUT_STAT_BLOCK: "days-out-stat-block",
+    GRADE_DISPLAY: "grade-display",
+    GRADE_STAT_BLOCK: "grade-stat-block",
+    PRIMARY_PHONE_DISPLAY: "primary-phone-display",
+    OTHER_PHONE_DISPLAY: "other-phone-display",
+    STUDENT_EMAIL_DISPLAY: "student-email-display",
+    PERSONAL_EMAIL_DISPLAY: "personal-email-display",
+    COPY_PRIMARY_PHONE: "copy-primary-phone",
+    COPY_OTHER_PHONE: "copy-other-phone",
+    COPY_STUDENT_EMAIL: "copy-student-email",
+    COPY_PERSONAL_EMAIL: "copy-personal-email",
+
+    // Sheet and Column Names
+    HISTORY_SHEET: "Student History",
+    COLUMN_MAPPINGS: {
+        name: ["studentname", "student name"],
+        id: ["student id", "studentnumber", "student identifier"],
+        gender: ["gender"],
+        daysOut: ["days out", "daysout"],
+        grade: ["grade", "course grade"],
+        status: ["status"],
+        assigned: ["assigned"],
+        lastLda: ["last lda", "lda"],
+        primaryPhone: ["primary phone", "phone"],
+        otherPhone: ["other phone", "cell phone", "cell", "otherphone"],
+        studentEmail: ["student email", "school email", "email"],
+        personalEmail: ["personal email", "otheremail"],
+        gradeBook: ["grade book", "gradebook"],
+        comment: "comment",
+        tag: "tag",
+        timestamp: "timestamp",
+        createdBy: "created by",
+        student: "student"
+    }
+};
+
+
 let lastSelectedRow = -1; // Variable to track the last selected row index
 let currentStudentId = null; // Variable to store the currently selected student's ID
 let currentStudentName = null; // Variable to store the currently selected student's name
@@ -18,7 +71,7 @@ Office.onReady((info) => {
     setupGradebookLinkHandler(); // Set up the gradebook link handler
     
     // Add event listener for the new comment button
-    const submitButton = document.getElementById("submit-comment-button");
+    const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
     if (submitButton) {
         submitButton.addEventListener("click", submitNewComment);
     }
@@ -41,11 +94,11 @@ Office.onReady((info) => {
  * Sets up the event listeners for the tabbed interface.
  */
 function setupTabs() {
-    const tabDetails = document.getElementById("tab-details");
-    const tabHistory = document.getElementById("tab-history");
-    const panelDetails = document.getElementById("panel-details");
-    const panelHistory = document.getElementById("panel-history");
-    const submitButton = document.getElementById("submit-comment-button");
+    const tabDetails = document.getElementById(CONSTANTS.TAB_DETAILS);
+    const tabHistory = document.getElementById(CONSTANTS.TAB_HISTORY);
+    const panelDetails = document.getElementById(CONSTANTS.PANEL_DETAILS);
+    const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
+    const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
 
     tabDetails.addEventListener("click", () => {
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
@@ -69,7 +122,7 @@ function setupTabs() {
         if (currentStudentId) {
             displayStudentHistory(currentStudentId);
         } else {
-            const historyContent = document.getElementById("history-content");
+            const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
             historyContent.innerHTML = '<p class="text-gray-500">Select a student row to see their history.</p>';
         }
     });
@@ -152,7 +205,7 @@ async function cacheAssignedColors() {
             await context.sync();
 
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
-            const assignedColIdx = findColumnIndex(headers, ["assigned"]);
+            const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
 
             if (assignedColIdx === -1) {
                 console.log("Could not find 'Assigned' column to cache colors.");
@@ -229,51 +282,35 @@ async function onSelectionChange() {
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
-            const columnMappings = {
-                name: ["studentname", "student name"],
-                id: ["student id", "studentnumber", "student identifier"],
-                gender: ["gender"],
-                daysOut: ["days out", "daysout"],
-                grade: ["grade", "course grade"],
-                status: ["status"],
-                assigned: ["assigned"],
-                lastLda: ["last lda", "lda"],
-                primaryPhone: ["primary phone", "phone"],
-                otherPhone: ["other phone", "cell phone", "cell","otherphone"],
-                studentEmail: ["student email", "school email","email"],
-                personalEmail: ["personal email", "otheremail"],
-                gradeBook: ["grade book", "gradebook"]
-            };
-
             const colIdx = {
-                name: findColumnIndex(lowerCaseHeaders, columnMappings.name),
-                id: findColumnIndex(lowerCaseHeaders, columnMappings.id),
-                gender: findColumnIndex(lowerCaseHeaders, columnMappings.gender),
-                daysOut: findColumnIndex(lowerCaseHeaders, columnMappings.daysOut),
-                grade: findColumnIndex(lowerCaseHeaders, columnMappings.grade),
-                status: findColumnIndex(lowerCaseHeaders, columnMappings.status),
-                assigned: findColumnIndex(lowerCaseHeaders, columnMappings.assigned),
-                lastLda: findColumnIndex(lowerCaseHeaders, columnMappings.lastLda),
-                primaryPhone: findColumnIndex(lowerCaseHeaders, columnMappings.primaryPhone),
-                otherPhone: findColumnIndex(lowerCaseHeaders, columnMappings.otherPhone),
-                studentEmail: findColumnIndex(lowerCaseHeaders, columnMappings.studentEmail),
-                personalEmail: findColumnIndex(lowerCaseHeaders, columnMappings.personalEmail),
-                gradeBook: findColumnIndex(lowerCaseHeaders, columnMappings.gradeBook)
+                name: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.name),
+                id: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.id),
+                gender: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gender),
+                daysOut: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut),
+                grade: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade),
+                status: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.status),
+                assigned: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned),
+                lastLda: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda),
+                primaryPhone: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.primaryPhone),
+                otherPhone: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.otherPhone),
+                studentEmail: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.studentEmail),
+                personalEmail: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.personalEmail),
+                gradeBook: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook)
             };
 
-            const studentAvatar = document.getElementById("student-avatar");
-            const studentNameDisplay = document.getElementById("student-name-display");
-            const assignedToBadge = document.getElementById("assigned-to-badge");
-            const studentIdDisplay = document.getElementById("student-id-display");
-            const lastLdaDisplay = document.getElementById("last-lda-display");
-            const daysOutDisplay = document.getElementById("days-out-display");
-            const daysOutStatBlock = document.getElementById("days-out-stat-block");
-            const gradeDisplay = document.getElementById("grade-display");
-            const gradeStatBlock = document.getElementById("grade-stat-block");
-            const primaryPhoneDisplay = document.getElementById("primary-phone-display");
-            const otherPhoneDisplay = document.getElementById("other-phone-display");
-            const studentEmailDisplay = document.getElementById("student-email-display");
-            const personalEmailDisplay = document.getElementById("personal-email-display");
+            const studentAvatar = document.getElementById(CONSTANTS.STUDENT_AVATAR);
+            const studentNameDisplay = document.getElementById(CONSTANTS.STUDENT_NAME_DISPLAY);
+            const assignedToBadge = document.getElementById(CONSTANTS.ASSIGNED_TO_BADGE);
+            const studentIdDisplay = document.getElementById(CONSTANTS.STUDENT_ID_DISPLAY);
+            const lastLdaDisplay = document.getElementById(CONSTANTS.LAST_LDA_DISPLAY);
+            const daysOutDisplay = document.getElementById(CONSTANTS.DAYS_OUT_DISPLAY);
+            const daysOutStatBlock = document.getElementById(CONSTANTS.DAYS_OUT_STAT_BLOCK);
+            const gradeDisplay = document.getElementById(CONSTANTS.GRADE_DISPLAY);
+            const gradeStatBlock = document.getElementById(CONSTANTS.GRADE_STAT_BLOCK);
+            const primaryPhoneDisplay = document.getElementById(CONSTANTS.PRIMARY_PHONE_DISPLAY);
+            const otherPhoneDisplay = document.getElementById(CONSTANTS.OTHER_PHONE_DISPLAY);
+            const studentEmailDisplay = document.getElementById(CONSTANTS.STUDENT_EMAIL_DISPLAY);
+            const personalEmailDisplay = document.getElementById(CONSTANTS.PERSONAL_EMAIL_DISPLAY);
 
             const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
             
@@ -366,17 +403,17 @@ async function onSelectionChange() {
                 assignedToBadge.style.color = '#1f2937';
             }
 
-            const submitButton = document.getElementById('submit-comment-button');
+            const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
             if (submitButton) {
                 submitButton.disabled = !currentStudentId;
             }
 
-            const panelHistory = document.getElementById("panel-history");
+            const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
             if (!panelHistory.classList.contains("hidden")) {
                 if (currentStudentId) {
                     displayStudentHistory(currentStudentId);
                 } else {
-                    const historyContent = document.getElementById("history-content");
+                    const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
                     historyContent.innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
                 }
             }
@@ -427,10 +464,10 @@ function copyToClipboard(text, triggerElement) {
  */
 function setupCopyHandlers() {
     const contactInfoIds = [
-        'copy-primary-phone',
-        'copy-other-phone',
-        'copy-student-email',
-        'copy-personal-email'
+        CONSTANTS.COPY_PRIMARY_PHONE,
+        CONSTANTS.COPY_OTHER_PHONE,
+        CONSTANTS.COPY_STUDENT_EMAIL,
+        CONSTANTS.COPY_PERSONAL_EMAIL
     ];
 
     contactInfoIds.forEach(id => {
@@ -450,7 +487,7 @@ function setupCopyHandlers() {
  * Sets up the click event listener for the gradebook link.
  */
 function setupGradebookLinkHandler() {
-    const gradeStatBlock = document.getElementById("grade-stat-block");
+    const gradeStatBlock = document.getElementById(CONSTANTS.GRADE_STAT_BLOCK);
     if (gradeStatBlock) {
         gradeStatBlock.addEventListener('click', () => {
             if (currentGradebookLink) {
@@ -464,12 +501,12 @@ function setupGradebookLinkHandler() {
  * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
  */
 async function displayStudentHistory(studentId) {
-    const historyContent = document.getElementById("history-content");
+    const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
 
     try {
         await Excel.run(async (context) => {
-            const historySheet = context.workbook.worksheets.getItem("Student History");
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
             const historyRange = historySheet.getUsedRange();
             historyRange.load("values");
             await context.sync();
@@ -477,11 +514,11 @@ async function displayStudentHistory(studentId) {
             const historyData = historyRange.values;
             const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
             
-            const idColIdx = findColumnIndex(historyHeaders, ["student id", "student identifier"]);
-            const commentColIdx = historyHeaders.indexOf("comment");
-            const tagColIdx = historyHeaders.indexOf("tag");
-            const timestampColIdx = historyHeaders.indexOf("timestamp");
-            const createdByColIdx = historyHeaders.indexOf("created by");
+            const idColIdx = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
+            const commentColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.comment);
+            const tagColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.tag);
+            const timestampColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.timestamp);
+            const createdByColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.createdBy);
 
             if (idColIdx === -1 || commentColIdx === -1) {
                 historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
@@ -542,7 +579,7 @@ async function displayStudentHistory(studentId) {
         });
     } catch (error) {
         if (error.code === 'ItemNotFound') {
-            historyContent.innerHTML = '<p class="text-orange-500 font-semibold">A worksheet named "Student History" was not found.</p>';
+            historyContent.innerHTML = `<p class="text-orange-500 font-semibold">A worksheet named "${CONSTANTS.HISTORY_SHEET}" was not found.</p>`;
         } else {
             historyContent.innerHTML = `<p class="text-red-500 font-semibold">An error occurred: ${error.message}</p>`;
             console.error("Error in displayStudentHistory: " + error);
@@ -554,8 +591,8 @@ async function displayStudentHistory(studentId) {
  * Submits a new comment to the "Student History" sheet.
  */
 async function submitNewComment() {
-    const commentInput = document.getElementById("new-comment-input");
-    const statusDisplay = document.getElementById("comment-status");
+    const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
+    const statusDisplay = document.getElementById(CONSTANTS.COMMENT_STATUS);
     const commentText = commentInput.value.trim();
 
     if (!currentStudentId) {
@@ -571,7 +608,7 @@ async function submitNewComment() {
 
     try {
         await Excel.run(async (context) => {
-            const historySheet = context.workbook.worksheets.getItem("Student History");
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
             const historyRange = historySheet.getUsedRange();
             historyRange.load(["rowCount", "values"]);
             await context.sync();
@@ -579,12 +616,12 @@ async function submitNewComment() {
             const newRowIndex = historyRange.rowCount;
             const headers = historyRange.values[0].map(h => String(h || '').toLowerCase());
 
-            const idCol = findColumnIndex(headers, ["student id", "student identifier"]);
-            const studentCol = headers.indexOf("student");
-            const createdByCol = headers.indexOf("created by");
-            const tagCol = headers.indexOf("tag");
-            const timestampCol = headers.indexOf("timestamp");
-            const commentCol = headers.indexOf("comment");
+            const idCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
+            const studentCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.student);
+            const createdByCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.createdBy);
+            const tagCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.tag);
+            const timestampCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.timestamp);
+            const commentCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.comment);
 
             if (idCol === -1 || commentCol === -1) {
                 statusDisplay.textContent = "History sheet is missing required columns.";
@@ -627,7 +664,7 @@ async function submitNewComment() {
 
     } catch (error) {
         if (error.code === 'ItemNotFound') {
-            statusDisplay.textContent = 'Error: "Student History" sheet not found.';
+            statusDisplay.textContent = `Error: "${CONSTANTS.HISTORY_SHEET}" sheet not found.`;
         } else {
             statusDisplay.textContent = `Error: ${error.message}`;
         }
