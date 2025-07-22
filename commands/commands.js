@@ -132,7 +132,7 @@ async function handleFileSelected(message) {
         console.log(`[DEBUG] 'Master List' sheet exists: ${hasMasterListSheet}`);
         
         const isGradeFile = hasStudentIdCol && hasCourseIdCol && hasStudentNameCol && hasCurrentScoreCol;
-        const isMasterFile = (hasStudentIdCol || hasStudentNumberCol) && !isGradeFile;
+        const isMasterFile = hasStudentNumberCol && !isGradeFile;
         console.log(`[DEBUG] File type detection: isGradeFile=${isGradeFile}, isMasterFile=${isMasterFile}`);
 
         let statusMessage = "";
