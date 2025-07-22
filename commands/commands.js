@@ -16,6 +16,7 @@ const CONSTANTS = {
     COLUMN_MAPPINGS: {
         course: ["course"],
         courseId: ["course id"],
+        courseLastAccess: ["course last access"],
         currentScore: ["current score", "grade", "course grade"],
         grade: ["grade", "course grade"],
         gradeBook: ["grade book", "gradebook"],
@@ -127,7 +128,9 @@ async function handleFileSelected(message) {
     let hasStudentIdCol = false;
     let hasStudentNumberCol = false;
     let hasMasterListSheet = false;
+    let hasCourseCol = false;
     let hasCourseIdCol = false;
+    let hasCourseLastAccessCol = false;
     let hasStudentNameCol = false;
     let hasCurrentScoreCol = false;
 
@@ -155,12 +158,14 @@ async function handleFileSelected(message) {
         
         hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
         hasStudentNumberCol = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS) !== -1;
+        hasCourseCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.course) !== -1;
         hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
+        hasCourseLastAccessCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseLastAccess) !== -1;
         hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
         hasCurrentScoreCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.currentScore) !== -1;
-        console.log(`[DEBUG] Column checks: hasStudentIdCol=${hasStudentIdCol}, hasStudentNumberCol=${hasStudentNumberCol}, hasCourseIdCol=${hasCourseIdCol}, hasStudentNameCol=${hasStudentNameCol}, hasCurrentScoreCol=${hasCurrentScoreCol}`);
+        console.log(`[DEBUG] Column checks: hasStudentIdCol=${hasStudentIdCol}, hasStudentNumberCol=${hasStudentNumberCol}, hasCourseCol=${hasCourseCol}, hasCourseIdCol=${hasCourseIdCol}, hasCourseLastAccessCol=${hasCourseLastAccessCol}, hasStudentNameCol=${hasStudentNameCol}, hasCurrentScoreCol=${hasCurrentScoreCol}`);
 
-        if (hasStudentIdCol || hasStudentNameCol || hasStudentNumberCol) {
+        if (hasStudentNameCol || hasStudentNumberCol) {
             await Excel.run(async (context) => {
                 const sheetNames = context.workbook.worksheets.load("items/name");
                 await context.sync();
@@ -174,7 +179,7 @@ async function handleFileSelected(message) {
         }
         console.log(`[DEBUG] 'Master List' sheet exists: ${hasMasterListSheet}`);
         
-        const isGradeFile = hasStudentIdCol && hasCourseIdCol && hasStudentNameCol && hasCurrentScoreCol;
+        const isGradeFile = hasStudentNameCol && hasCurrentScoreCol && hasCourseCol && (hasCourseIdCol || hasCourseLastAccessCol);
         const isMasterFile = hasStudentNumberCol && !isGradeFile;
         console.log(`[DEBUG] File type detection: isGradeFile=${isGradeFile}, isMasterFile=${isMasterFile}`);
 
