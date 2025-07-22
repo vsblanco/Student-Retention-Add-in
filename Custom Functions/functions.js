@@ -7,7 +7,7 @@ console.log("Custom functions script loaded successfully.");
 
 /**
  * Displays a given date, but shows today's date if the cell is green.
- * @customfunction LDA
+ * @customfunction RETENTION.LDA
  * @param {number} inputDate The date value from a cell.
  * @param {CustomFunctions.Invocation} invocation The invocation object from Excel.
  * @returns {Promise<number>} A promise that resolves to the date to be displayed.
@@ -67,5 +67,5 @@ function excelDate(date) {
 }
 
 // Register the custom function with Excel
-CustomFunctions.associate("LDA", lda);
-console.log("Custom function LDA associated.");
+CustomFunctions.associate("RETENTION.LDA", lda);
+console.log("Custom function RETENTION.LDA associated.");
