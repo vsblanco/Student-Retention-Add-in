@@ -27,6 +27,9 @@
 
     <script>
         Office.onReady(() => {
+            // Debug log to confirm the import dialog HTML file is loaded.
+            console.log("Import dialog HTML page loaded successfully.");
+
             const fileInput = document.getElementById("file-input");
             const importButton = document.getElementById("import-button");
             const status = document.getElementById("status");
