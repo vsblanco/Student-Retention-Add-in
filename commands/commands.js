@@ -16,9 +16,11 @@ const CONSTANTS = {
     COLUMN_MAPPINGS: {
         course: ["course"],
         courseId: ["course id"],
-        currentScore: ["current score", "grade"],
+        currentScore: ["current score", "grade", "course grade"],
         grade: ["grade", "course grade"],
-        gradeBook: ["grade book", "gradebook"]
+        gradeBook: ["grade book", "gradebook"],
+        courseMissingAssignments: ["course missing assignments"],
+        courseZeroAssignments: ["course zero assignments"]
     }
 };
 
@@ -385,11 +387,13 @@ async function handleUpdateGrades(message) {
         const userCourseIdCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseId);
         const userGradeCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.currentScore);
         const userCourseCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.course);
+        const userMissingAssignmentsCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+        const userZeroAssignmentsCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseZeroAssignments);
 
-        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1 || userStudentNameCol === -1 || userCourseCol === -1) {
-            throw new Error("Imported file is missing one of the required columns: Student Name, Student ID, Course, Course ID, or Current Score/Grade.");
+        if (userGradeCol === -1 || userStudentNameCol === -1 || userCourseCol === -1) {
+            throw new Error("Imported file is missing one of the required columns: Student Name, Course, or Current Score/Grade.");
         }
-        console.log("Found required columns in the imported file.");
+        console.log("Found required columns for grade update in the imported file.");
 
         // 3. Create a map of student data from the imported file, keyed by normalized name, filtering out CAPV courses
         const studentDataMap = new Map();
@@ -407,7 +411,9 @@ async function handleUpdateGrades(message) {
                     grade: row[userGradeCol],
                     courseId: row[userCourseIdCol],
                     studentId: row[userStudentIdCol],
-                    originalName: studentName
+                    originalName: studentName,
+                    missingAssignments: row[userMissingAssignmentsCol],
+                    zeroAssignments: row[userZeroAssignmentsCol]
                 });
             }
         });
@@ -426,6 +432,8 @@ async function handleUpdateGrades(message) {
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradeCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
             const masterGradebookCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const masterMissingAssignmentsCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+            const masterZeroAssignmentsCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.courseZeroAssignments);
             
             if (masterStudentNameCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
                 throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
@@ -449,15 +457,26 @@ async function handleUpdateGrades(message) {
             for (const [normalizedName, importedData] of studentDataMap.entries()) {
                 if (masterNameMap.has(normalizedName)) {
                     const masterRowIndex = masterNameMap.get(normalizedName);
-                    const gradeCell = sheet.getRangeByIndexes(masterRowIndex, masterGradeCol, 1, 1);
-                    const gradebookCell = sheet.getRangeByIndexes(masterRowIndex, masterGradebookCol, 1, 1);
                     
-                    const newGrade = importedData.grade;
-                    const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
-                    const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                    const gradeCell = sheet.getCell(masterRowIndex, masterGradeCol);
+                    gradeCell.values = [[importedData.grade]];
 
-                    gradeCell.values = [[newGrade]];
-                    gradebookCell.formulas = [[hyperlinkFormula]];
+                    if (importedData.courseId && importedData.studentId) {
+                        const gradebookCell = sheet.getCell(masterRowIndex, masterGradebookCol);
+                        const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
+                        const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                        gradebookCell.formulas = [[hyperlinkFormula]];
+                    }
+
+                    if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
+                        const missingCell = sheet.getCell(masterRowIndex, masterMissingAssignmentsCol);
+                        missingCell.values = [[importedData.missingAssignments]];
+                    }
+                    if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
+                        const zeroCell = sheet.getCell(masterRowIndex, masterZeroAssignmentsCol);
+                        zeroCell.values = [[importedData.zeroAssignments]];
+                    }
+                    
                     updatedCount++;
                 } else {
                     newStudents.push(importedData);
@@ -471,17 +490,27 @@ async function handleUpdateGrades(message) {
                     const student = newStudents[i];
                     const newRowIndex = lastRow + i;
                     
-                    const newGradebookLink = `https://nuc.instructure.com/courses/${student.courseId}/grades/${student.studentId}`;
-                    const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
-
                     const nameCell = sheet.getCell(newRowIndex, masterStudentNameCol);
                     nameCell.values = [[formatToLastFirst(student.originalName)]];
 
                     const gradeCell = sheet.getCell(newRowIndex, masterGradeCol);
                     gradeCell.values = [[student.grade]];
 
-                    const gradebookCell = sheet.getCell(newRowIndex, masterGradebookCol);
-                    gradebookCell.formulas = [[hyperlinkFormula]];
+                    if (student.courseId && student.studentId) {
+                        const newGradebookLink = `https://nuc.instructure.com/courses/${student.courseId}/grades/${student.studentId}`;
+                        const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                        const gradebookCell = sheet.getCell(newRowIndex, masterGradebookCol);
+                        gradebookCell.formulas = [[hyperlinkFormula]];
+                    }
+
+                    if (masterMissingAssignmentsCol !== -1 && student.missingAssignments !== undefined) {
+                        const missingCell = sheet.getCell(newRowIndex, masterMissingAssignmentsCol);
+                        missingCell.values = [[student.missingAssignments]];
+                    }
+                    if (masterZeroAssignmentsCol !== -1 && student.zeroAssignments !== undefined) {
+                        const zeroCell = sheet.getCell(newRowIndex, masterZeroAssignmentsCol);
+                        zeroCell.values = [[student.zeroAssignments]];
+                    }
 
                     // Highlight the new row
                     const newRowRange = sheet.getRangeByIndexes(newRowIndex, 0, 1, masterHeaders.length);
