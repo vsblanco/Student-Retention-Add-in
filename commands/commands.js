@@ -85,6 +85,7 @@ async function handleFileSelected(message) {
     let hasMasterListSheet = false;
     let hasCourseIdCol = false;
     let hasStudentNameCol = false;
+    let hasCurrentScoreCol = false;
 
     try {
         const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
@@ -110,6 +111,7 @@ async function handleFileSelected(message) {
         hasStudentNumberCol = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS) !== -1;
         hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
         hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
+        hasCurrentScoreCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.currentScore) !== -1;
 
         if (hasStudentIdCol || hasStudentNameCol || hasStudentNumberCol) {
             await Excel.run(async (context) => {
@@ -124,13 +126,14 @@ async function handleFileSelected(message) {
             });
         }
         
-        const isGradeFile = fileName.toLowerCase().includes('grade');
-        console.log(`File name "${fileName}" contains "grade": ${isGradeFile}`);
+        // Detect file type based on columns present, not filename.
+        const isGradeFile = hasStudentIdCol && hasCourseIdCol && hasStudentNameCol && hasCurrentScoreCol;
+        console.log(`File is detected as a grade file: ${isGradeFile}`);
 
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: !isGradeFile && (hasStudentIdCol || hasStudentNumberCol) && hasMasterListSheet,
-                canUpdateGrades: isGradeFile && hasStudentIdCol && hasMasterListSheet && hasCourseIdCol && hasStudentNameCol
+                canUpdateGrades: isGradeFile && hasMasterListSheet
             }));
         }
     } catch (error) {
