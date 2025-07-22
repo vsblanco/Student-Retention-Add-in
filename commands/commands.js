@@ -9,7 +9,13 @@ const CONSTANTS = {
     OUTREACH_COLS: ["outreach"],
     STUDENT_ID_COLS: ["student id", "studentnumber", "student identifier"],
     MASTER_LIST_SHEET: "Master List",
-    TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx'
+    TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx',
+    COLUMN_MAPPINGS: {
+        courseId: ["course id"],
+        currentScore: ["current score", "grade"],
+        grade: ["grade", "course grade"],
+        gradeBook: ["grade book", "gradebook"]
+    }
 };
 
 let importDialog = null;
@@ -53,6 +59,9 @@ async function processImportMessage(arg) {
         case 'updateMaster':
             await handleUpdateMaster(message);
             break;
+        case 'updateGrades':
+            await handleUpdateGrades(message);
+            break;
         default:
             console.error("Unknown message type from dialog:", message.type);
             if (importDialog) {
@@ -70,6 +79,7 @@ async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
     let hasStudentIdCol = false;
     let hasMasterListSheet = false;
+    let hasCourseIdCol = false;
 
     try {
         const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
@@ -91,6 +101,9 @@ async function handleFileSelected(message) {
         if (findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1) {
             hasStudentIdCol = true;
         }
+        if (findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1) {
+            hasCourseIdCol = true;
+        }
 
         if (hasStudentIdCol) {
             await Excel.run(async (context) => {
@@ -106,12 +119,16 @@ async function handleFileSelected(message) {
         }
 
         if (importDialog) {
-            importDialog.messageChild(JSON.stringify({ canUpdateMaster: hasStudentIdCol && hasMasterListSheet }));
+            importDialog.messageChild(JSON.stringify({ 
+                canUpdateMaster: hasStudentIdCol && hasMasterListSheet,
+                canUpdateGrades: hasStudentIdCol && hasMasterListSheet && hasCourseIdCol
+            }));
         }
     } catch (error) {
         console.error("Error during file check:", error);
     }
 }
+
 
 /**
  * Handles the Master List update action.
@@ -223,6 +240,105 @@ async function handleUpdateMaster(message) {
 
     } catch (error) {
         console.error("Error updating Master List: " + error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
+/**
+ * Handles updating grades and gradebook links in the Master List.
+ * @param {object} message The message from the dialog.
+ */
+async function handleUpdateGrades(message) {
+    if (importDialog) {
+        importDialog.close();
+    }
+    try {
+        // 1. Parse user's uploaded file
+        const userArrayBuffer = dataUrlToArrayBuffer(message.data);
+        const userWorkbook = new ExcelJS.Workbook();
+        if (message.fileName.toLowerCase().endsWith('.xlsx')) {
+            await userWorkbook.xlsx.load(userArrayBuffer);
+        } else {
+            const csvData = new TextDecoder("utf-8").decode(userArrayBuffer);
+            const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
+            const data = rows.map(row => parseCsvRow(row));
+            const worksheet = userWorkbook.addWorksheet('sheet1');
+            worksheet.addRows(data);
+        }
+        const userWorksheet = userWorkbook.worksheets[0];
+        const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || '').toLowerCase());
+        const userData = [];
+        userWorksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                userData.push((row.values || []).slice(1));
+            }
+        });
+
+        // 2. Find column indices in user's file
+        const userStudentIdCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_ID_COLS);
+        const userCourseIdCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseId);
+        const userGradeCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.currentScore);
+
+        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1) {
+            throw new Error("Imported file is missing one of the required columns: Student ID, Course ID, or Current Score/Grade.");
+        }
+
+        // 3. Create a map of student data from the imported file
+        const studentDataMap = new Map();
+        userData.forEach(row => {
+            const studentId = row[userStudentIdCol];
+            if (studentId) {
+                studentDataMap.set(String(studentId), {
+                    grade: row[userGradeCol],
+                    courseId: row[userCourseIdCol]
+                });
+            }
+        });
+
+        // 4. Update the "Master List" sheet
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values, rowCount, columnCount");
+            await context.sync();
+
+            const masterHeaders = usedRange.values[0].map(h => String(h || '').toLowerCase());
+            const masterStudentIdCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_ID_COLS);
+            const masterGradeCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+            const masterGradebookCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            
+            if (masterStudentIdCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
+                throw new Error("'Master List' is missing required columns: Student ID, Grade, or Grade Book.");
+            }
+
+            const masterData = usedRange.values;
+            const updatedData = [];
+
+            // Start from 1 to skip header
+            for (let i = 1; i < masterData.length; i++) {
+                const row = masterData[i];
+                const studentId = String(row[masterStudentIdCol]);
+                if (studentDataMap.has(studentId)) {
+                    const importedData = studentDataMap.get(studentId);
+                    row[masterGradeCol] = importedData.grade;
+                    row[masterGradebookCol] = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${studentId}`;
+                }
+                updatedData.push(row);
+            }
+            
+            if (updatedData.length > 0) {
+                const dataRange = sheet.getRangeByIndexes(1, 0, updatedData.length, masterHeaders.length);
+                dataRange.values = updatedData;
+                dataRange.format.autofitColumns();
+            }
+            
+            await context.sync();
+        });
+
+    } catch (error) {
+        console.error("Error updating grades in Master List: " + error);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
