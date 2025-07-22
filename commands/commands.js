@@ -97,18 +97,10 @@ async function handleFileSelected(message) {
         }
 
         const worksheet = workbook.worksheets[0];
-        // Note: ExcelJS's getRow(1).values can be a sparse array, so we convert it to a dense one.
-        const headersRaw = worksheet.getRow(1).values;
         const headers = [];
-        if (Array.isArray(headersRaw)) {
-            for (let i = 1; i < headersRaw.length; i++) {
-                headers.push(String(headersRaw[i] || '').toLowerCase());
-            }
-        } else { // It can also be an object with col numbers as keys
-             for (const key in headersRaw) {
-                headers[parseInt(key, 10) - 1] = String(headersRaw[key] || '').toLowerCase();
-            }
-        }
+        worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
+            headers.push(String(cell.value || '').toLowerCase());
+        });
         
         hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
         hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
@@ -147,6 +139,7 @@ async function handleUpdateMaster(message) {
     if (importDialog) {
         importDialog.close();
     }
+    console.log("Starting Master List update process...");
     try {
         let templateHeaders;
 
@@ -178,12 +171,14 @@ async function handleUpdateMaster(message) {
                 }
             });
         }
+        console.log("Using template headers:", templateHeaders);
 
         if (!templateHeaders || templateHeaders.length === 0) {
             throw new Error("Could not determine template headers from Template.xlsx or Master List.");
         }
 
         // 2. Parse user's uploaded file
+        console.log("Parsing uploaded file for Master List update...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -196,13 +191,24 @@ async function handleUpdateMaster(message) {
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
+        
+        const userHeaders = [];
+        userWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
+            userHeaders.push(String(cell.value || ''));
+        });
+        console.log("Parsed imported file headers:", userHeaders);
+
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
-                userData.push((row.values || []).slice(1));
+                const rowData = [];
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    rowData.push(cell.value);
+                });
+                userData.push(rowData);
             }
         });
+        console.log(`Parsed ${userData.length} data rows from imported file.`);
 
         // 3. Create column mapping
         const lowerCaseUserHeaders = userHeaders.map(h => h.toLowerCase());
@@ -210,6 +216,7 @@ async function handleUpdateMaster(message) {
             if (!templateHeader) return -1;
             return lowerCaseUserHeaders.indexOf(templateHeader.toLowerCase());
         });
+        console.log("Created column mapping:", colMapping);
 
         // 4. Create final data array based on template (data only, no header)
         const finalData = [];
@@ -222,29 +229,35 @@ async function handleUpdateMaster(message) {
             });
             finalData.push(newRow);
         });
+        console.log(`Created ${finalData.length} rows of data to be written to Master List.`);
 
         // 5. Write to "Master List" sheet, preserving the header
         await Excel.run(async (context) => {
+            console.log("Accessing 'Master List' to write data...");
             let sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             
-            // Clear only the data, not the header
             const usedRange = sheet.getUsedRange();
             usedRange.load("rowCount");
             await context.sync();
+            console.log(`'Master List' has ${usedRange.rowCount} rows before clearing.`);
 
             if (usedRange.rowCount > 1) {
                 const dataRange = usedRange.getOffsetRange(1, 0).getResizedRange(usedRange.rowCount - 1, 0);
                 dataRange.clear();
+                console.log("Cleared existing data from 'Master List'.");
             }
 
-            // Write the new data starting from the second row (index 1)
             if (finalData.length > 0) {
                 const targetRange = sheet.getRangeByIndexes(1, 0, finalData.length, templateHeaders.length);
                 targetRange.values = finalData;
-                targetRange.format.autofitColumns();
+                console.log(`Writing ${finalData.length} new rows to 'Master List'.`);
+                sheet.getUsedRange().format.autofitColumns();
+            } else {
+                console.log("No data to write.");
             }
             
             await context.sync();
+            console.log("Master List update process completed.");
         });
 
     } catch (error) {
@@ -263,11 +276,12 @@ async function handleUpdateGrades(message) {
     if (importDialog) {
         importDialog.close();
     }
+    console.log("Starting grade update process...");
     try {
-        // Helper to normalize names from "Last, First" or "First Last" to "First Last"
+        // Helper to normalize names from "Last, First" or "First Last" to "first last"
         const normalizeName = (name) => {
             if (!name || typeof name !== 'string') return '';
-            name = name.trim();
+            name = name.trim().toLowerCase();
             if (name.includes(',')) {
                 const parts = name.split(',').map(part => part.trim());
                 if (parts.length > 1) {
@@ -278,6 +292,7 @@ async function handleUpdateGrades(message) {
         };
 
         // 1. Parse user's uploaded file
+        console.log("Parsing uploaded file for grade update...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -290,13 +305,23 @@ async function handleUpdateGrades(message) {
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || '').toLowerCase());
+        
+        const userHeaders = [];
+        userWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
+            userHeaders.push(String(cell.value || '').toLowerCase());
+        });
+        
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
-                userData.push((row.values || []).slice(1));
+                const rowData = [];
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    rowData.push(cell.value);
+                });
+                userData.push(rowData);
             }
         });
+        console.log(`Parsed ${userData.length} rows from the imported file.`);
 
         // 2. Find column indices in user's file
         const userStudentNameCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -307,6 +332,7 @@ async function handleUpdateGrades(message) {
         if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1 || userStudentNameCol === -1) {
             throw new Error("Imported file is missing one of the required columns: Student Name, Student ID, Course ID, or Current Score/Grade.");
         }
+        console.log("Found required columns in the imported file.");
 
         // 3. Create a map of student data from the imported file, keyed by normalized name
         const studentDataMap = new Map();
@@ -321,13 +347,16 @@ async function handleUpdateGrades(message) {
                 });
             }
         });
+        console.log(`Created a map of ${studentDataMap.size} students from the imported file.`);
 
         // 4. Update the "Master List" sheet
         await Excel.run(async (context) => {
+            console.log("Accessing 'Master List' sheet...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, rowCount, columnCount");
+            usedRange.load("values, rowCount");
             await context.sync();
+            console.log("'Master List' sheet loaded.");
 
             const masterHeaders = usedRange.values[0].map(h => String(h || '').toLowerCase());
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -337,31 +366,41 @@ async function handleUpdateGrades(message) {
             if (masterStudentNameCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
                 throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
             }
+            console.log("Found required columns in 'Master List'.");
 
             const masterData = usedRange.values;
-            const updatedData = [];
+            let updatedCount = 0;
 
+            console.log(`Iterating through ${masterData.length - 1} rows in 'Master List' to find matches...`);
             // Start from 1 to skip header
             for (let i = 1; i < masterData.length; i++) {
-                const row = [...masterData[i]]; // Create a copy to modify
+                const row = masterData[i];
                 const masterStudentName = row[masterStudentNameCol];
                 const normalizedMasterName = normalizeName(masterStudentName);
 
                 if (studentDataMap.has(normalizedMasterName)) {
+                    updatedCount++;
                     const importedData = studentDataMap.get(normalizedMasterName);
-                    row[masterGradeCol] = importedData.grade;
-                    row[masterGradebookCol] = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
+                    
+                    const gradeCell = sheet.getRangeByIndexes(i, masterGradeCol, 1, 1);
+                    const gradebookCell = sheet.getRangeByIndexes(i, masterGradebookCol, 1, 1);
+                    
+                    gradeCell.values = [[importedData.grade]];
+                    
+                    const gradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
+                    gradebookCell.values = [[gradebookLink]];
+                    
+                    console.log(`Updating row ${i + 1} for student: ${masterStudentName}`);
                 }
-                updatedData.push(row);
             }
             
-            if (updatedData.length > 0) {
-                const dataRange = sheet.getRangeByIndexes(1, 0, updatedData.length, masterHeaders.length);
-                dataRange.values = updatedData;
+            console.log(`Found and updated ${updatedCount} matching students.`);
+            if (updatedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
             
             await context.sync();
+            console.log("Grade update process completed successfully.");
         });
 
     } catch (error) {
