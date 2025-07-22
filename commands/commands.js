@@ -21,7 +21,7 @@ Office.onReady((info) => {
  */
 function openImportDialog(event) {
     Office.context.ui.displayDialogAsync(
-        'https://vsblanco.github.io/Student-Retention-Add-in/import-dialog.html',
+        'https://vsblanco.github.io/Student-Retention-Add-in/commands/import-dialog.html',
         { height: 25, width: 35, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
