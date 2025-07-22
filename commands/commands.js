@@ -50,9 +50,6 @@ async function processImportMessage(arg) {
         case 'fileSelected':
             await handleFileSelected(message);
             break;
-        case 'simpleImport':
-            await handleSimpleImport(message);
-            break;
         case 'updateMaster':
             await handleUpdateMaster(message);
             break;
@@ -117,17 +114,6 @@ async function handleFileSelected(message) {
 }
 
 /**
- * Handles the simple import action.
- * @param {object} message The message from the dialog.
- */
-async function handleSimpleImport(message) {
-    if (importDialog) {
-        importDialog.close();
-    }
-    await executeSimpleImport(message);
-}
-
-/**
  * Handles the Master List update action.
  * @param {object} message The message from the dialog.
  */
@@ -146,6 +132,7 @@ async function handleUpdateMaster(message) {
             const templateWorkbook = new ExcelJS.Workbook();
             await templateWorkbook.xlsx.load(templateArrayBuffer);
             const templateWorksheet = templateWorkbook.worksheets[0];
+            // .values is a sparse array [empty, value1, value2, ...], so we slice(1)
             templateHeaders = (templateWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
             if (templateHeaders.length === 0) {
                 throw new Error("Template.xlsx is empty or has no headers.");
@@ -185,20 +172,12 @@ async function handleUpdateMaster(message) {
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        const userHeaderRow = userWorksheet.getRow(1);
-        const userHeaders = [];
-        userHeaderRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            userHeaders[colNumber - 1] = cell.value ? String(cell.value) : '';
-        });
-
+        // Using .values and slicing is more reliable than eachCell
+        const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
-                const rowData = [];
-                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                    rowData[colNumber - 1] = cell.value;
-                });
-                userData.push(rowData);
+                userData.push((row.values || []).slice(1));
             }
         });
 
@@ -214,7 +193,7 @@ async function handleUpdateMaster(message) {
         userData.forEach(userRow => {
             const newRow = new Array(templateHeaders.length).fill("");
             colMapping.forEach((userColIndex, templateColIndex) => {
-                if (userColIndex !== -1) {
+                if (userColIndex !== -1 && userColIndex < userRow.length) {
                     newRow[templateColIndex] = userRow[userColIndex] || "";
                 }
             });
@@ -285,63 +264,6 @@ function parseCsvRow(row) {
     }
     cells.push(cell);
     return cells;
-}
-
-/**
- * Processes a simple data import to the active sheet.
- * @param {object} message The message from the dialog.
- */
-async function executeSimpleImport(message) {
-    const { fileName, data: dataUrl } = message;
-    let data = [];
-
-    try {
-        const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
-
-        if (fileName.toLowerCase().endsWith('.csv')) {
-            const csvData = new TextDecoder("utf-8").decode(arrayBuffer);
-            const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
-            data = rows.map(row => parseCsvRow(row));
-        } else if (fileName.toLowerCase().endsWith('.xlsx')) {
-            const workbook = new ExcelJS.Workbook();
-            await workbook.xlsx.load(arrayBuffer);
-            const worksheet = workbook.worksheets[0];
-            worksheet.eachRow(row => {
-                data.push(row.values.slice(1));
-            });
-        } else {
-            throw new Error("Unsupported file type.");
-        }
-
-        if (data.length === 0) {
-            console.log("No data to import.");
-            return;
-        }
-        
-        const numColumns = data[0].length;
-        data = data.map(row => {
-            while (row.length < numColumns) {
-                row.push("");
-            }
-            if (row.length > numColumns) {
-                return row.slice(0, numColumns);
-            }
-            return row;
-        });
-
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const range = sheet.getRangeByIndexes(0, 0, data.length, data[0].length);
-            range.values = data;
-            await context.sync();
-        });
-
-    } catch (error) {
-        console.error("Error processing or writing data: " + error);
-        if (error instanceof OfficeExtension.Error) {
-            console.error("Debug info: " + JSON.stringify(error.debugInfo));
-        }
-    }
 }
 
 /**
