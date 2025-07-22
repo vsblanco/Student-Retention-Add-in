@@ -2,7 +2,7 @@
   "functions": [
     {
       "id": "LDA",
-      "name": "LDA",
+      "name": "RETENTION.LDA",
       "description": "Displays a given date, but shows today's date if the cell is green.",
       "helpUrl": "https://github.com/vsblanco/Student-Retention-Add-in",
       "result": {
