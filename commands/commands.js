@@ -31,7 +31,7 @@ Office.onReady((info) => {
 function openImportDialog(event) {
     Office.context.ui.displayDialogAsync(
         'https://vsblanco.github.io/Student-Retention-Add-in/commands/import-dialog.html',
-        { height: 30, width: 35, displayInIframe: true },
+        { height: 35, width: 35, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
                 console.error("Dialog failed to open: " + asyncResult.error.message);
@@ -72,7 +72,7 @@ async function processImportMessage(arg) {
 
 /**
  * Handles the file selection event from the dialog.
- * Checks if the file has a student ID and if the Master List sheet exists.
+ * Checks for required columns and sheet existence to enable/disable dialog buttons.
  * @param {object} message The message from the dialog.
  */
 async function handleFileSelected(message) {
@@ -80,6 +80,7 @@ async function handleFileSelected(message) {
     let hasStudentIdCol = false;
     let hasMasterListSheet = false;
     let hasCourseIdCol = false;
+    let hasStudentNameCol = false;
 
     try {
         const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
@@ -91,21 +92,29 @@ async function handleFileSelected(message) {
             const csvData = new TextDecoder("utf-8").decode(arrayBuffer);
             const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
             const data = rows.map(row => parseCsvRow(row));
-            // Manually create worksheet from CSV data for ExcelJS
             const worksheet = workbook.addWorksheet('sheet1');
             worksheet.addRows(data);
         }
 
         const worksheet = workbook.worksheets[0];
-        const headers = (worksheet.getRow(1).values || []).map(h => String(h || '').toLowerCase());
-        if (findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1) {
-            hasStudentIdCol = true;
+        // Note: ExcelJS's getRow(1).values can be a sparse array, so we convert it to a dense one.
+        const headersRaw = worksheet.getRow(1).values;
+        const headers = [];
+        if (Array.isArray(headersRaw)) {
+            for (let i = 1; i < headersRaw.length; i++) {
+                headers.push(String(headersRaw[i] || '').toLowerCase());
+            }
+        } else { // It can also be an object with col numbers as keys
+             for (const key in headersRaw) {
+                headers[parseInt(key, 10) - 1] = String(headersRaw[key] || '').toLowerCase();
+            }
         }
-        if (findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1) {
-            hasCourseIdCol = true;
-        }
+        
+        hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
+        hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
+        hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
 
-        if (hasStudentIdCol) {
+        if (hasStudentIdCol || hasStudentNameCol) {
             await Excel.run(async (context) => {
                 const sheetNames = context.workbook.worksheets.load("items/name");
                 await context.sync();
@@ -121,7 +130,7 @@ async function handleFileSelected(message) {
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: hasStudentIdCol && hasMasterListSheet,
-                canUpdateGrades: hasStudentIdCol && hasMasterListSheet && hasCourseIdCol
+                canUpdateGrades: hasStudentIdCol && hasMasterListSheet && hasCourseIdCol && hasStudentNameCol
             }));
         }
     } catch (error) {
@@ -255,6 +264,19 @@ async function handleUpdateGrades(message) {
         importDialog.close();
     }
     try {
+        // Helper to normalize names from "Last, First" or "First Last" to "First Last"
+        const normalizeName = (name) => {
+            if (!name || typeof name !== 'string') return '';
+            name = name.trim();
+            if (name.includes(',')) {
+                const parts = name.split(',').map(part => part.trim());
+                if (parts.length > 1) {
+                    return `${parts[1]} ${parts[0]}`;
+                }
+            }
+            return name;
+        };
+
         // 1. Parse user's uploaded file
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
@@ -277,22 +299,25 @@ async function handleUpdateGrades(message) {
         });
 
         // 2. Find column indices in user's file
+        const userStudentNameCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_NAME_COLS);
         const userStudentIdCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_ID_COLS);
         const userCourseIdCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseId);
         const userGradeCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.currentScore);
 
-        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1) {
-            throw new Error("Imported file is missing one of the required columns: Student ID, Course ID, or Current Score/Grade.");
+        if (userStudentIdCol === -1 || userCourseIdCol === -1 || userGradeCol === -1 || userStudentNameCol === -1) {
+            throw new Error("Imported file is missing one of the required columns: Student Name, Student ID, Course ID, or Current Score/Grade.");
         }
 
-        // 3. Create a map of student data from the imported file
+        // 3. Create a map of student data from the imported file, keyed by normalized name
         const studentDataMap = new Map();
         userData.forEach(row => {
-            const studentId = row[userStudentIdCol];
-            if (studentId) {
-                studentDataMap.set(String(studentId), {
+            const studentName = row[userStudentNameCol];
+            if (studentName) {
+                const normalized = normalizeName(studentName);
+                studentDataMap.set(normalized, {
                     grade: row[userGradeCol],
-                    courseId: row[userCourseIdCol]
+                    courseId: row[userCourseIdCol],
+                    studentId: row[userStudentIdCol]
                 });
             }
         });
@@ -305,12 +330,12 @@ async function handleUpdateGrades(message) {
             await context.sync();
 
             const masterHeaders = usedRange.values[0].map(h => String(h || '').toLowerCase());
-            const masterStudentIdCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_ID_COLS);
+            const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradeCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
             const masterGradebookCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
             
-            if (masterStudentIdCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
-                throw new Error("'Master List' is missing required columns: Student ID, Grade, or Grade Book.");
+            if (masterStudentNameCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
+                throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
             }
 
             const masterData = usedRange.values;
@@ -318,12 +343,14 @@ async function handleUpdateGrades(message) {
 
             // Start from 1 to skip header
             for (let i = 1; i < masterData.length; i++) {
-                const row = masterData[i];
-                const studentId = String(row[masterStudentIdCol]);
-                if (studentDataMap.has(studentId)) {
-                    const importedData = studentDataMap.get(studentId);
+                const row = [...masterData[i]]; // Create a copy to modify
+                const masterStudentName = row[masterStudentNameCol];
+                const normalizedMasterName = normalizeName(masterStudentName);
+
+                if (studentDataMap.has(normalizedMasterName)) {
+                    const importedData = studentDataMap.get(normalizedMasterName);
                     row[masterGradeCol] = importedData.grade;
-                    row[masterGradebookCol] = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${studentId}`;
+                    row[masterGradebookCol] = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
                 }
                 updatedData.push(row);
             }
@@ -331,7 +358,7 @@ async function handleUpdateGrades(message) {
             if (updatedData.length > 0) {
                 const dataRange = sheet.getRangeByIndexes(1, 0, updatedData.length, masterHeaders.length);
                 dataRange.values = updatedData;
-                dataRange.format.autofitColumns();
+                sheet.getUsedRange().format.autofitColumns();
             }
             
             await context.sync();
