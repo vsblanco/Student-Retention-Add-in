@@ -24,6 +24,46 @@ const CONSTANTS = {
 
 let importDialog = null;
 
+/**
+ * Helper to normalize names from "Last, First" or "First Last" to "first last"
+ * for consistent matching.
+ * @param {string} name The name to normalize.
+ * @returns {string} The normalized name.
+ */
+const normalizeName = (name) => {
+    if (!name || typeof name !== 'string') return '';
+    name = name.trim().toLowerCase();
+    if (name.includes(',')) {
+        const parts = name.split(',').map(part => part.trim());
+        if (parts.length > 1) {
+            return `${parts[1]} ${parts[0]}`;
+        }
+    }
+    return name;
+};
+
+/**
+ * Helper to format names to "Last, First" format.
+ * @param {string} name The name to format.
+ * @returns {string} The formatted name.
+ */
+const formatToLastFirst = (name) => {
+    if (!name || typeof name !== 'string') return '';
+    name = name.trim();
+    if (name.includes(',')) {
+        // Already "Last, First"
+        return name.split(',').map(p => p.trim()).join(', ');
+    }
+    const parts = name.split(' ').filter(p => p);
+    if (parts.length > 1) {
+        const lastName = parts.pop();
+        const firstName = parts.join(' ');
+        return `${lastName}, ${firstName}`;
+    }
+    return name;
+};
+
+
 Office.onReady((info) => {
   // This file is loaded when the add-in is initialized, but the DOM is not relevant here.
 });
@@ -174,7 +214,7 @@ async function handleFileSelected(message) {
 
 
 /**
- * Handles the Master List update action.
+ * Handles the Master List update action. It updates rows in-place based on student name.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateMaster(message) {
@@ -183,47 +223,7 @@ async function handleUpdateMaster(message) {
     }
     console.log("Starting Master List update process...");
     try {
-        let templateHeaders;
-
-        // 1. Fetch and parse Template.xlsx, with a fallback to the Master List headers
-        try {
-            const templateResponse = await fetch(CONSTANTS.TEMPLATE_URL);
-            if (!templateResponse.ok) throw new Error('Failed to fetch Template.xlsx');
-            const templateArrayBuffer = await templateResponse.arrayBuffer();
-            const templateWorkbook = new ExcelJS.Workbook();
-            await templateWorkbook.xlsx.load(templateArrayBuffer);
-            const templateWorksheet = templateWorkbook.worksheets[0];
-            templateHeaders = [];
-            templateWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
-                templateHeaders.push(String(cell.value || ''));
-            });
-            if (templateHeaders.length === 0) {
-                throw new Error("Template.xlsx is empty or has no headers.");
-            }
-        } catch (templateError) {
-            console.error("Could not load or parse Template.xlsx. Falling back to 'Master List' headers. Error:", templateError);
-            
-            await Excel.run(async (context) => {
-                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                const usedRange = sheet.getUsedRange(true);
-                usedRange.load("values, rowCount");
-                await context.sync();
-
-                if (usedRange.rowCount > 0 && usedRange.values && usedRange.values[0].some(h => h)) {
-                    templateHeaders = usedRange.values[0].map(h => String(h || ''));
-                } else {
-                    throw new Error("'Master List' sheet is empty and Template.xlsx could not be loaded. Please ensure one of them has headers.");
-                }
-            });
-        }
-        console.log("Using template headers:", templateHeaders);
-
-        if (!templateHeaders || templateHeaders.length === 0) {
-            throw new Error("Could not determine template headers from Template.xlsx or Master List.");
-        }
-
-        // 2. Parse user's uploaded file
-        console.log("Parsing uploaded file for Master List update...");
+        // 1. Parse user's uploaded file
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -241,68 +241,91 @@ async function handleUpdateMaster(message) {
         userWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
             userHeaders.push(String(cell.value || ''));
         });
-        console.log("Parsed imported file headers:", userHeaders);
+        const lowerCaseUserHeaders = userHeaders.map(h => h.toLowerCase());
 
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
                 const rowData = [];
-                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                    rowData[colNumber - 1] = cell.value;
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    rowData.push(cell.value);
                 });
                 userData.push(rowData);
             }
         });
         console.log(`Parsed ${userData.length} data rows from imported file.`);
 
-        // 3. Create column mapping
-        const lowerCaseUserHeaders = userHeaders.map(h => h.toLowerCase());
-        const colMapping = templateHeaders.map(templateHeader => {
-            if (!templateHeader) return -1;
-            return lowerCaseUserHeaders.indexOf(templateHeader.toLowerCase());
-        });
-        console.log("Created column mapping:", colMapping);
+        const userStudentNameCol = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.STUDENT_NAME_COLS);
+        if (userStudentNameCol === -1) {
+            throw new Error("Imported file is missing a 'Student Name' column.");
+        }
 
-        // 4. Create final data array based on template (data only, no header)
-        const finalData = [];
-        userData.forEach(userRow => {
-            const newRow = new Array(templateHeaders.length).fill("");
-            colMapping.forEach((userColIndex, templateColIndex) => {
-                if (userColIndex !== -1 && userColIndex < userRow.length) {
-                    newRow[templateColIndex] = userRow[userColIndex] || "";
-                }
-            });
-            finalData.push(newRow);
-        });
-        console.log(`Created ${finalData.length} rows of data to be written to Master List.`);
-
-        // 5. Write to "Master List" sheet, preserving the header
+        // 2. Update the "Master List" sheet
         await Excel.run(async (context) => {
-            console.log("Accessing 'Master List' to write data...");
-            let sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-            
+            console.log("Accessing 'Master List' sheet...");
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("rowCount");
+            usedRange.load("values, rowCount");
             await context.sync();
-            console.log(`'Master List' has ${usedRange.rowCount} rows before clearing.`);
+            console.log("'Master List' sheet loaded.");
 
-            if (usedRange.rowCount > 1) {
-                const dataRange = usedRange.getOffsetRange(1, 0).getResizedRange(usedRange.rowCount - 1, 0);
-                dataRange.clear();
-                console.log("Cleared existing data from 'Master List'.");
+            const masterHeaders = usedRange.values[0].map(h => String(h || ''));
+            const lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
+            const masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            
+            if (masterStudentNameCol === -1) {
+                throw new Error("'Master List' is missing a 'StudentName' column.");
+            }
+            console.log("Found 'StudentName' column in 'Master List'.");
+
+            // Create a map of student names in the Master List to their row index
+            const masterNameMap = new Map();
+            for (let i = 1; i < usedRange.values.length; i++) {
+                const name = usedRange.values[i][masterStudentNameCol];
+                if (name) {
+                    masterNameMap.set(normalizeName(name), i);
+                }
             }
 
-            if (finalData.length > 0) {
-                const targetRange = sheet.getRangeByIndexes(1, 0, finalData.length, templateHeaders.length);
-                targetRange.values = finalData;
-                console.log(`Writing ${finalData.length} new rows to 'Master List'.`);
+            // Create a mapping from user file column index to master list column index
+            const colMapping = lowerCaseUserHeaders.map(userHeader => 
+                lowerCaseMasterHeaders.indexOf(userHeader)
+            );
+
+            let updatedCount = 0;
+            const matchedStudentsLog = [];
+
+            // Iterate through imported data and update matching rows
+            for (const userRow of userData) {
+                const studentName = userRow[userStudentNameCol];
+                const normalizedName = normalizeName(studentName);
+
+                if (masterNameMap.has(normalizedName)) {
+                    updatedCount++;
+                    const masterRowIndex = masterNameMap.get(normalizedName);
+                    
+                    // Update only the columns that exist in the imported file
+                    for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
+                        const masterColIdx = colMapping[userColIdx];
+                        if (masterColIdx !== -1) {
+                            const cell = sheet.getCell(masterRowIndex, masterColIdx);
+                            cell.values = [[userRow[userColIdx] || ""]];
+                        }
+                    }
+
+                    matchedStudentsLog.push({ student: studentName });
+                }
+            }
+            
+            console.log(`Found and updated ${updatedCount} matching students.`);
+            console.table(matchedStudentsLog);
+
+            if (updatedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
-            } else {
-                console.log("No data to write.");
             }
             
             await context.sync();
-            console.log("Master List update process completed.");
+            console.log("Master List update process completed successfully.");
         });
 
     } catch (error) {
@@ -315,6 +338,7 @@ async function handleUpdateMaster(message) {
 
 /**
  * Handles updating grades and gradebook links in the Master List.
+ * If a student from the import is not on the Master List, they are added.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateGrades(message) {
@@ -323,19 +347,6 @@ async function handleUpdateGrades(message) {
     }
     console.log("Starting grade update process...");
     try {
-        // Helper to normalize names from "Last, First" or "First Last" to "first last"
-        const normalizeName = (name) => {
-            if (!name || typeof name !== 'string') return '';
-            name = name.trim().toLowerCase();
-            if (name.includes(',')) {
-                const parts = name.split(',').map(part => part.trim());
-                if (parts.length > 1) {
-                    return `${parts[1]} ${parts[0]}`;
-                }
-            }
-            return name;
-        };
-
         // 1. Parse user's uploaded file
         console.log("Parsing uploaded file for grade update...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
@@ -395,7 +406,8 @@ async function handleUpdateGrades(message) {
                 studentDataMap.set(normalized, {
                     grade: row[userGradeCol],
                     courseId: row[userCourseIdCol],
-                    studentId: row[userStudentIdCol]
+                    studentId: row[userStudentIdCol],
+                    originalName: studentName
                 });
             }
         });
@@ -420,23 +432,25 @@ async function handleUpdateGrades(message) {
             }
             console.log("Found required columns in 'Master List'.");
 
-            const masterData = usedRange.values;
+            // Create a map of existing student names in the Master List to their row index
+            const masterNameMap = new Map();
+            for (let i = 1; i < usedRange.values.length; i++) {
+                const name = usedRange.values[i][masterStudentNameCol];
+                if (name) {
+                    masterNameMap.set(normalizeName(name), i);
+                }
+            }
+
             let updatedCount = 0;
-            const matchedStudentsLog = [];
+            let addedCount = 0;
+            const newStudents = [];
 
-            console.log(`Iterating through ${masterData.length - 1} rows in 'Master List' to find matches...`);
-            // Start from 1 to skip header
-            for (let i = 1; i < masterData.length; i++) {
-                const row = masterData[i];
-                const masterStudentName = row[masterStudentNameCol];
-                const normalizedMasterName = normalizeName(masterStudentName);
-
-                if (studentDataMap.has(normalizedMasterName)) {
-                    updatedCount++;
-                    const importedData = studentDataMap.get(normalizedMasterName);
-                    
-                    const gradeCell = sheet.getRangeByIndexes(i, masterGradeCol, 1, 1);
-                    const gradebookCell = sheet.getRangeByIndexes(i, masterGradebookCol, 1, 1);
+            // Separate students into update list and add list
+            for (const [normalizedName, importedData] of studentDataMap.entries()) {
+                if (masterNameMap.has(normalizedName)) {
+                    const masterRowIndex = masterNameMap.get(normalizedName);
+                    const gradeCell = sheet.getRangeByIndexes(masterRowIndex, masterGradeCol, 1, 1);
+                    const gradebookCell = sheet.getRangeByIndexes(masterRowIndex, masterGradebookCol, 1, 1);
                     
                     const newGrade = importedData.grade;
                     const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
@@ -444,20 +458,42 @@ async function handleUpdateGrades(message) {
 
                     gradeCell.values = [[newGrade]];
                     gradebookCell.formulas = [[hyperlinkFormula]];
+                    updatedCount++;
+                } else {
+                    newStudents.push(importedData);
+                }
+            }
 
-                    matchedStudentsLog.push({
-                        student: masterStudentName,
-                        grade: newGrade,
-                        gradebookLink: newGradebookLink
-                    });
+            // Add new students to the end of the sheet
+            if (newStudents.length > 0) {
+                const lastRow = usedRange.rowCount;
+                for (let i = 0; i < newStudents.length; i++) {
+                    const student = newStudents[i];
+                    const newRowIndex = lastRow + i;
+                    
+                    const newGradebookLink = `https://nuc.instructure.com/courses/${student.courseId}/grades/${student.studentId}`;
+                    const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+
+                    const nameCell = sheet.getCell(newRowIndex, masterStudentNameCol);
+                    nameCell.values = [[formatToLastFirst(student.originalName)]];
+
+                    const gradeCell = sheet.getCell(newRowIndex, masterGradeCol);
+                    gradeCell.values = [[student.grade]];
+
+                    const gradebookCell = sheet.getCell(newRowIndex, masterGradebookCol);
+                    gradebookCell.formulas = [[hyperlinkFormula]];
+
+                    // Highlight the new row
+                    const newRowRange = sheet.getRangeByIndexes(newRowIndex, 0, 1, masterHeaders.length);
+                    newRowRange.format.fill.color = "#ADD8E6"; // Light Blue
+                    addedCount++;
                 }
             }
             
-            console.log(`Found and will update ${updatedCount} matching students.`);
-            console.log("Matched students and their new data:");
-            console.table(matchedStudentsLog);
+            console.log(`Found and updated ${updatedCount} matching students.`);
+            console.log(`Added ${addedCount} new students.`);
 
-            if (updatedCount > 0) {
+            if (updatedCount > 0 || addedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
             
