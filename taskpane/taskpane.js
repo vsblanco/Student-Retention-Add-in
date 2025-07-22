@@ -254,8 +254,8 @@ async function onSelectionChange() {
             
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            // Load formulas to detect hyperlinks
-            usedRange.load(["rowIndex", "values", "formulas"]);
+            // Load formulas and format to detect hyperlinks and colors
+            usedRange.load(["rowIndex", "values", "formulas", "format/fill/color"]);
             
             await context.sync();
 
@@ -281,6 +281,7 @@ async function onSelectionChange() {
             }
             const rowData = usedRange.values[rowDataIndex];
             const rowFormulas = usedRange.formulas[rowDataIndex];
+            const rowColors = usedRange.format.fill.color[rowDataIndex];
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
@@ -331,21 +332,40 @@ async function onSelectionChange() {
             studentAvatar.textContent = getInitials(studentName);
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
-            const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
-            daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
-            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
-            if (daysOut !== null && !isNaN(daysOut)) {
-                if (daysOut >= 14) {
-                    daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
-                } else if (daysOut > 10) {
-                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
-                } else if (daysOut > 5) {
-                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
-                } else {
-                    daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
+            // Check for green highlight on the row
+            const cellColor = rowColors[colIdx.name];
+            let isGreen = false;
+            if (cellColor && cellColor.startsWith('#')) {
+                const r = parseInt(cellColor.substr(1, 2), 16);
+                const g = parseInt(cellColor.substr(3, 2), 16);
+                const b = parseInt(cellColor.substr(5, 2), 16);
+                if (g > r && g > b && g > 120) { // Check for a dominant green color
+                    isGreen = true;
                 }
+            }
+
+            if (isGreen) {
+                daysOutDisplay.textContent = "0";
+                daysOutDisplay.nextElementSibling.textContent = "Engaged!";
+                daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-green-200 text-green-800';
             } else {
-                daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
+                daysOutDisplay.nextElementSibling.textContent = "DAYS OUT";
+                const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
+                daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
+                daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
+                if (daysOut !== null && !isNaN(daysOut)) {
+                    if (daysOut >= 14) {
+                        daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
+                    } else if (daysOut > 10) {
+                        daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
+                    } else if (daysOut > 5) {
+                        daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
+                    } else {
+                        daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
+                    }
+                } else {
+                    daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
+                }
             }
 
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
@@ -353,9 +373,9 @@ async function onSelectionChange() {
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
-                if (gradePercent >= 90) {
+                if (gradePercent >= 70) {
                     gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
-                } else if (gradePercent >= 70) {
+                } else if (gradePercent >= 60) {
                     gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
                     gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
