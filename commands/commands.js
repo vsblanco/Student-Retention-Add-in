@@ -132,7 +132,6 @@ async function handleUpdateMaster(message) {
             const templateWorkbook = new ExcelJS.Workbook();
             await templateWorkbook.xlsx.load(templateArrayBuffer);
             const templateWorksheet = templateWorkbook.worksheets[0];
-            // .values is a sparse array [empty, value1, value2, ...], so we slice(1)
             templateHeaders = (templateWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
             if (templateHeaders.length === 0) {
                 throw new Error("Template.xlsx is empty or has no headers.");
@@ -140,7 +139,6 @@ async function handleUpdateMaster(message) {
         } catch (templateError) {
             console.error("Could not load or parse Template.xlsx. Falling back to 'Master List' headers. Error:", templateError);
             
-            // Fallback: Use headers from the existing "Master List" sheet
             await Excel.run(async (context) => {
                 const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
                 const usedRange = sheet.getUsedRange(true);
@@ -172,7 +170,6 @@ async function handleUpdateMaster(message) {
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        // Using .values and slicing is more reliable than eachCell
         const userHeaders = (userWorksheet.getRow(1).values || []).slice(1).map(h => String(h || ''));
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
@@ -188,8 +185,8 @@ async function handleUpdateMaster(message) {
             return lowerCaseUserHeaders.indexOf(templateHeader.toLowerCase());
         });
 
-        // 4. Create final data array based on template
-        const finalData = [templateHeaders];
+        // 4. Create final data array based on template (data only, no header)
+        const finalData = [];
         userData.forEach(userRow => {
             const newRow = new Array(templateHeaders.length).fill("");
             colMapping.forEach((userColIndex, templateColIndex) => {
@@ -200,16 +197,26 @@ async function handleUpdateMaster(message) {
             finalData.push(newRow);
         });
 
-        // 5. Write to "Master List" sheet
+        // 5. Write to "Master List" sheet, preserving the header
         await Excel.run(async (context) => {
             let sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             
-            const range = sheet.getUsedRange();
-            range.clear();
+            // Clear only the data, not the header
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("rowCount");
+            await context.sync();
 
-            const targetRange = sheet.getRangeByIndexes(0, 0, finalData.length, templateHeaders.length);
-            targetRange.values = finalData;
-            targetRange.format.autofitColumns();
+            if (usedRange.rowCount > 1) {
+                const dataRange = usedRange.getOffsetRange(1, 0).getResizedRange(usedRange.rowCount - 1, 0);
+                dataRange.clear();
+            }
+
+            // Write the new data starting from the second row (index 1)
+            if (finalData.length > 0) {
+                const targetRange = sheet.getRangeByIndexes(1, 0, finalData.length, templateHeaders.length);
+                targetRange.values = finalData;
+                targetRange.format.autofitColumns();
+            }
             
             await context.sync();
         });
