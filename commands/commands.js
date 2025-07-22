@@ -202,8 +202,8 @@ async function handleUpdateMaster(message) {
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
                 const rowData = [];
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                    rowData.push(cell.value);
+                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                    rowData[colNumber - 1] = cell.value;
                 });
                 userData.push(rowData);
             }
@@ -315,8 +315,8 @@ async function handleUpdateGrades(message) {
         userWorksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1) {
                 const rowData = [];
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                    rowData.push(cell.value);
+                row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                    rowData[colNumber - 1] = cell.value;
                 });
                 userData.push(rowData);
             }
