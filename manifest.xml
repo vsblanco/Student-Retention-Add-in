@@ -42,8 +42,8 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <!-- Function file for ribbon commands -->
-          <FunctionFile resid="Commands.Url"/>
+          <!-- Function file for ribbon commands should also point to the shared runtime HTML -->
+          <FunctionFile resid="Functions.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
@@ -105,14 +105,9 @@
             </CustomTab>
           </ExtensionPoint>
           
-          <!-- Custom Functions Extension Point -->
+          <!-- Custom Functions Extension Point for a shared runtime -->
+          <!-- It should NOT contain <Script> or <Page> elements -->
           <ExtensionPoint xsi:type="CustomFunctions">
-            <Script>
-              <SourceLocation resid="Functions.Script.Url"/>
-            </Script>
-            <Page>
-              <SourceLocation resid="Functions.Url"/>
-            </Page>
             <Metadata>
               <SourceLocation resid="Functions.Metadata.Url"/>
             </Metadata>
