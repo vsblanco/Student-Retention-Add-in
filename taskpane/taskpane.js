@@ -204,12 +204,6 @@ async function cacheAssignedColors() {
             usedRange.load("values");
             await context.sync();
 
-            // *** FIX: Check if usedRange.values is null or empty before using it ***
-            if (!usedRange.values || usedRange.values.length === 0) {
-                console.log("Sheet is empty, skipping color cache.");
-                return;
-            }
-
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
             const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
 
@@ -260,8 +254,8 @@ async function onSelectionChange() {
             
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            // Load formulas and format to detect hyperlinks and colors
-            usedRange.load(["rowIndex", "values", "formulas", "format/fill/color"]);
+            // Load formulas to detect hyperlinks
+            usedRange.load(["rowIndex", "values", "formulas"]);
             
             await context.sync();
 
@@ -270,8 +264,7 @@ async function onSelectionChange() {
             }
             lastSelectedRow = selectedRange.rowIndex;
 
-            // *** FIX: Check if usedRange.values is null before using it ***
-            if (selectedRange.rowIndex < usedRange.rowIndex || !usedRange.values) {
+            if (selectedRange.rowIndex < usedRange.rowIndex) {
                 currentStudentId = null;
                 currentStudentName = null;
                 return;
@@ -287,19 +280,7 @@ async function onSelectionChange() {
                 return;
             }
             const rowData = usedRange.values[rowDataIndex];
-            
-            if (!rowData) {
-                console.log("Selected row is empty.");
-                currentStudentId = null;
-                currentStudentName = null;
-                return;
-            }
-
             const rowFormulas = usedRange.formulas[rowDataIndex];
-            
-            const rowColors = (usedRange.format && usedRange.format.fill && usedRange.format.fill.color) 
-                              ? usedRange.format.fill.color[rowDataIndex] 
-                              : null;
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
@@ -350,40 +331,21 @@ async function onSelectionChange() {
             studentAvatar.textContent = getInitials(studentName);
             studentAvatar.style.backgroundColor = gender === 'female' ? '#ec4899' : gender === 'male' ? '#3b82f6' : '#6b7280';
 
-            // Check for green highlight on the row
-            const cellColor = (rowColors && colIdx.name !== -1) ? rowColors[colIdx.name] : null;
-            let isGreen = false;
-            if (cellColor && cellColor.startsWith('#')) {
-                const r = parseInt(cellColor.substr(1, 2), 16);
-                const g = parseInt(cellColor.substr(3, 2), 16);
-                const b = parseInt(cellColor.substr(5, 2), 16);
-                if (g > r && g > b && g > 120) { // Check for a dominant green color
-                    isGreen = true;
-                }
-            }
-
-            if (isGreen) {
-                daysOutDisplay.textContent = "0";
-                daysOutDisplay.nextElementSibling.textContent = "Engaged!";
-                daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-green-200 text-green-800';
-            } else {
-                daysOutDisplay.nextElementSibling.textContent = "DAYS OUT";
-                const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
-                daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
-                daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
-                if (daysOut !== null && !isNaN(daysOut)) {
-                    if (daysOut >= 14) {
-                        daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
-                    } else if (daysOut > 10) {
-                        daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
-                    } else if (daysOut > 5) {
-                        daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
-                    } else {
-                        daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
-                    }
+            const daysOut = colIdx.daysOut !== -1 ? parseInt(rowData[colIdx.daysOut], 10) : null;
+            daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
+            daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
+            if (daysOut !== null && !isNaN(daysOut)) {
+                if (daysOut >= 14) {
+                    daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
+                } else if (daysOut > 10) {
+                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
+                } else if (daysOut > 5) {
+                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
-                    daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
+                    daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
                 }
+            } else {
+                daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
             }
 
             let grade = colIdx.grade !== -1 ? rowData[colIdx.grade] : null;
@@ -391,9 +353,9 @@ async function onSelectionChange() {
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
-                if (gradePercent >= 70) {
+                if (gradePercent >= 90) {
                     gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
-                } else if (gradePercent >= 60) {
+                } else if (gradePercent >= 70) {
                     gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
                     gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
@@ -564,10 +526,6 @@ async function displayStudentHistory(studentId) {
             await context.sync();
 
             const historyData = historyRange.values;
-            if (!historyData || historyData.length === 0) {
-                historyContent.innerHTML = `<p class="text-orange-500 font-semibold">The "${CONSTANTS.HISTORY_SHEET}" sheet is empty.</p>`;
-                return;
-            }
             const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
             
             const idColIdx = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
@@ -668,10 +626,9 @@ async function submitNewComment() {
             const historyRange = historySheet.getUsedRange();
             historyRange.load(["rowCount", "values"]);
             await context.sync();
-            
-            const headers = (historyRange.values && historyRange.values.length > 0) 
-                            ? historyRange.values[0].map(h => String(h || '').toLowerCase())
-                            : [];
+
+            const newRowIndex = historyRange.rowCount;
+            const headers = historyRange.values[0].map(h => String(h || '').toLowerCase());
 
             const idCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
             const studentCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.student);
@@ -684,9 +641,6 @@ async function submitNewComment() {
                 statusDisplay.textContent = "History sheet is missing required columns.";
                 return;
             }
-            
-            // Determine the new row index safely
-            const newRowIndex = (historyRange.values) ? historyRange.rowCount : 0;
             
             // Create an array with the correct number of columns
             const newRowData = new Array(headers.length).fill("");
