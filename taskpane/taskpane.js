@@ -218,22 +218,30 @@ async function cacheAssignedColors() {
             
             const newColorMap = {};
             const values = assignedColumnRange.values;
-            const colors = assignedColumnRange.format.fill.color;
 
-            // Start from 1 to skip header
-            for (let i = 1; i < values.length; i++) {
-                // Check if the row and cell value exist
-                if (values[i] && values[i][0]) {
-                    const name = values[i][0];
-                    // Check if the corresponding color row exists
-                    if (name && !newColorMap[name] && colors[i]) {
-                        const cellColor = colors[i][0];
-                         if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
-                            newColorMap[name] = cellColor;
+            // FIX: Check if format and format.fill exist before accessing color.
+            // This prevents an error if the range contains empty but previously formatted cells.
+            if (assignedColumnRange.format && assignedColumnRange.format.fill) {
+                const colors = assignedColumnRange.format.fill.color;
+
+                // Start from 1 to skip header
+                for (let i = 1; i < values.length; i++) {
+                    // Check if the row and cell value exist
+                    if (values[i] && values[i][0]) {
+                        const name = values[i][0];
+                        // Check if the corresponding color row exists
+                        if (name && !newColorMap[name] && colors[i]) {
+                            const cellColor = colors[i][0];
+                             if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                                newColorMap[name] = cellColor;
+                            }
                         }
                     }
                 }
+            } else {
+                console.log("No formatting information found for the 'Assigned' column.");
             }
+            
             assignedColorMap = newColorMap;
             console.log("Assigned colors cached:", assignedColorMap);
         });
