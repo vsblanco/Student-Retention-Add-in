@@ -18,6 +18,7 @@
   </Hosts>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
+    <RequestedWidth>450</RequestedWidth>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
