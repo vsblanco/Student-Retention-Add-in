@@ -333,8 +333,8 @@ async function handleUpdateMaster(message) {
             sendMessageToDialog(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
         });
 
-        // Clear existing formatting before adding/updating
-        sendMessageToDialog("Clearing existing formatting...");
+        // 3. Prepare sheet by clearing formatting and inserting all new rows at once
+        sendMessageToDialog("Preparing sheet for updates...");
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
@@ -344,23 +344,19 @@ async function handleUpdateMaster(message) {
             if (usedRange.rowCount > 1) {
                 const rangeToClear = sheet.getRangeByIndexes(1, 0, usedRange.rowCount - 1, masterHeaders.length);
                 rangeToClear.format.fill.clear();
-                await context.sync();
             }
-        });
-        sendMessageToDialog("Formatting cleared.");
 
-        // 3. Insert all new rows at once, then populate in batches.
-        const batchSize = 100;
-        if (newStudents.length > 0) {
-            sendMessageToDialog(`Inserting ${newStudents.length} new rows...`);
-            await Excel.run(async (context) => {
-                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            if (newStudents.length > 0) {
                 const newRowRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
                 newRowRange.insert(Excel.InsertShiftDirection.down);
-                await context.sync();
-            });
-            sendMessageToDialog("New rows inserted.");
+            }
+            await context.sync();
+        });
+        sendMessageToDialog("Sheet prepared.");
 
+        // 4. Batch-populate the newly created rows
+        const batchSize = 100;
+        if (newStudents.length > 0) {
             sendMessageToDialog(`Populating data for ${newStudents.length} new students in batches of ${batchSize}...`);
             for (let i = 0; i < newStudents.length; i += batchSize) {
                 const batch = newStudents.slice(i, i + batchSize);
@@ -393,7 +389,7 @@ async function handleUpdateMaster(message) {
             }
         }
 
-        // 4. Batch-update existing students
+        // 5. Batch-update existing students
         if (existingStudents.length > 0) {
             sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches...`);
             
@@ -434,7 +430,7 @@ async function handleUpdateMaster(message) {
                     }
                     await context.sync();
                 });
-                sendMessageToDialog(`Updated batch of ${batch.length} students. (${i + batch.length}/${existingStudents.length})`);
+                sendMessageToDialog(`Updated batch of ${batch.length} existing students. (${i + batch.length}/${existingStudents.length})`);
             }
         }
         
