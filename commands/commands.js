@@ -221,7 +221,7 @@ async function handleFileSelected(message) {
 
 
 /**
- * Handles the Master List update action. It updates existing students and adds new ones to the top.
+ * Handles the Master List update action. It updates existing students and adds new ones to the top, in batches.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateMaster(message) {
@@ -243,7 +243,7 @@ async function handleUpdateMaster(message) {
             worksheet.addRows(data);
         }
         const userWorksheet = userWorkbook.worksheets[0];
-        
+
         const userHeaders = [];
         userWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
             userHeaders.push(String(cell.value || ''));
@@ -267,25 +267,31 @@ async function handleUpdateMaster(message) {
             throw new Error("Imported file is missing a 'Student Name' column.");
         }
 
-        // 2. Update the "Master List" sheet
+        // 2. Initial data separation
+        let newStudents = [];
+        let existingStudents = [];
+        let masterHeaders;
+        let lowerCaseMasterHeaders;
+        let masterStudentNameCol;
+        let colMapping;
+
         await Excel.run(async (context) => {
-            console.log("Accessing 'Master List' sheet...");
+            console.log("Accessing 'Master List' sheet for initial analysis...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, rowCount");
+            usedRange.load("values");
             await context.sync();
             console.log("'Master List' sheet loaded.");
 
-            const masterHeaders = usedRange.values[0].map(h => String(h || ''));
-            const lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
-            const masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
-            
+            masterHeaders = usedRange.values[0].map(h => String(h || ''));
+            lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
+            masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+
             if (masterStudentNameCol === -1) {
                 throw new Error("'Master List' is missing a 'StudentName' column.");
             }
             console.log("Found 'StudentName' column in 'Master List'.");
 
-            // Create a map of student names in the Master List to their row index
             const masterNameMap = new Map();
             for (let i = 1; i < usedRange.values.length; i++) {
                 const name = usedRange.values[i][masterStudentNameCol];
@@ -294,14 +300,10 @@ async function handleUpdateMaster(message) {
                 }
             }
 
-            // Create a mapping from user file column index to master list column index
-            const colMapping = lowerCaseUserHeaders.map(userHeader => 
+            colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
             );
 
-            // Separate users into new and existing
-            const newStudents = [];
-            const existingStudents = [];
             for (const userRow of userData) {
                 const studentName = userRow[userStudentNameCol];
                 const normalizedName = normalizeName(studentName);
@@ -316,54 +318,97 @@ async function handleUpdateMaster(message) {
                 }
             }
             console.log(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
+        });
 
-            // Add new students to the top of the sheet (below headers)
-            if (newStudents.length > 0) {
-                const newRowRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
-                newRowRange.insert(Excel.InsertShiftDirection.down);
-
-                for (let i = 0; i < newStudents.length; i++) {
-                    const userRow = newStudents[i];
-                    const newRowIndex = 1 + i;
+        // 3. Batch-add new students
+        const batchSize = 100; // Process 100 students at a time to avoid payload limits
+        if (newStudents.length > 0) {
+            console.log(`Adding ${newStudents.length} new students in batches of ${batchSize}...`);
+            for (let i = 0; i < newStudents.length; i += batchSize) {
+                const batch = newStudents.slice(i, i + batchSize);
+                await Excel.run(async (context) => {
+                    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
                     
-                    for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
-                        const masterColIdx = colMapping[userColIdx];
-                        if (masterColIdx !== -1) {
-                            const cell = sheet.getCell(newRowIndex, masterColIdx);
-                            let cellValue = userRow[userColIdx] || "";
-                            if (masterColIdx === masterStudentNameCol) {
-                                cellValue = formatToLastFirst(String(cellValue));
+                    const newRowRange = sheet.getRangeByIndexes(1, 0, batch.length, masterHeaders.length);
+                    newRowRange.insert(Excel.InsertShiftDirection.down);
+                    
+                    const dataForBatch = batch.map(userRow => {
+                        const newRow = new Array(masterHeaders.length).fill("");
+                        for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
+                            const masterColIdx = colMapping[userColIdx];
+                            if (masterColIdx !== -1) {
+                                let cellValue = userRow[userColIdx] || "";
+                                if (masterColIdx === masterStudentNameCol) {
+                                    cellValue = formatToLastFirst(String(cellValue));
+                                }
+                                newRow[masterColIdx] = cellValue;
                             }
-                            cell.values = [[cellValue]];
+                        }
+                        return newRow;
+                    });
+
+                    const addedRowRange = sheet.getRangeByIndexes(1, 0, batch.length, masterHeaders.length);
+                    addedRowRange.values = dataForBatch;
+                    addedRowRange.format.fill.color = "#ADD8E6"; // Light Blue
+                    
+                    console.log(`Added batch of ${batch.length} students.`);
+                    await context.sync();
+                });
+            }
+        }
+
+        // 4. Batch-update existing students
+        if (existingStudents.length > 0) {
+            console.log(`Updating ${existingStudents.length} existing students in batches of ${batchSize}...`);
+            
+            let updatedMasterNameMap = new Map();
+            await Excel.run(async (context) => {
+                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+                const usedRange = sheet.getUsedRange();
+                usedRange.load("values");
+                await context.sync();
+                for (let i = 1; i < usedRange.values.length; i++) {
+                    const name = usedRange.values[i][masterStudentNameCol];
+                    if (name) {
+                        updatedMasterNameMap.set(normalizeName(name), i);
+                    }
+                }
+            });
+
+            for (let i = 0; i < existingStudents.length; i += batchSize) {
+                const batch = existingStudents.slice(i, i + batchSize);
+                await Excel.run(async (context) => {
+                    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+                    
+                    for (const student of batch) {
+                        const { userRow } = student;
+                        const studentName = userRow[userStudentNameCol];
+                        const normalizedName = normalizeName(studentName);
+                        const newMasterRowIndex = updatedMasterNameMap.get(normalizedName);
+
+                        if (newMasterRowIndex !== undefined) {
+                            for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
+                                const masterColIdx = colMapping[userColIdx];
+                                if (masterColIdx !== -1) {
+                                    const cell = sheet.getCell(newMasterRowIndex, masterColIdx);
+                                    cell.values = [[userRow[userColIdx] || ""]];
+                                }
+                            }
                         }
                     }
-                    const addedRowRange = sheet.getRangeByIndexes(newRowIndex, 0, 1, masterHeaders.length);
-                    addedRowRange.format.fill.color = "#ADD8E6"; // Light Blue
-                }
+                    console.log(`Updated batch of ${batch.length} students.`);
+                    await context.sync();
+                });
             }
-            
-            // Update existing students
-            const offset = newStudents.length;
-            for (const student of existingStudents) {
-                const { userRow, masterRowIndex } = student;
-                const newMasterRowIndex = masterRowIndex + offset;
-                
-                for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
-                    const masterColIdx = colMapping[userColIdx];
-                    if (masterColIdx !== -1) {
-                        const cell = sheet.getCell(newMasterRowIndex, masterColIdx);
-                        cell.values = [[userRow[userColIdx] || ""]];
-                    }
-                }
-            }
-            
-            console.log(`Added ${newStudents.length} new students and updated ${existingStudents.length} existing students.`);
-
+        }
+        
+        // Final autofit
+        await Excel.run(async (context) => {
             if (newStudents.length > 0 || existingStudents.length > 0) {
+                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
                 sheet.getUsedRange().format.autofitColumns();
+                await context.sync();
             }
-            
-            await context.sync();
             console.log("Master List update process completed successfully.");
         });
 
