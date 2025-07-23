@@ -43,21 +43,6 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="ImportDataButton">
-                  <Label resid="ImportDataButton.Label"/>
-                  <Supertip>
-                    <Title resid="ImportDataButton.Label"/>
-                    <Description resid="ImportDataButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="ImportIcon.16x16"/>
-                    <bt:Image size="32" resid="ImportIcon.32x32"/>
-                    <bt:Image size="80" resid="ImportIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>openImportDialog</FunctionName>
-                  </Action>
-                </Control>
                 <Control xsi:type="Button" id="ContactedButton">
                   <Label resid="ContactedButton.Label"/>
                   <Supertip>
@@ -106,6 +91,44 @@
                   </Action>
                 </Control>
               </Group>
+              <Group id="DataGroup">
+                <Label resid="DataGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="ImportDataButton">
+                  <Label resid="ImportDataButton.Label"/>
+                  <Supertip>
+                    <Title resid="ImportDataButton.Label"/>
+                    <Description resid="ImportDataButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="ImportIcon.16x16"/>
+                    <bt:Image size="32" resid="ImportIcon.32x32"/>
+                    <bt:Image size="80" resid="ImportIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openImportDialog</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="TransferDataButton">
+                  <Label resid="TransferDataButton.Label"/>
+                  <Supertip>
+                    <Title resid="TransferDataButton.Label"/>
+                    <Description resid="TransferDataButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="TransferDataIcon.16x16"/>
+                    <bt:Image size="32" resid="TransferDataIcon.32x32"/>
+                    <bt:Image size="80" resid="TransferDataIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>transferData</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
             </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
@@ -119,6 +142,9 @@
         <bt:Image id="ImportIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
         <bt:Image id="ImportIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
         <bt:Image id="ImportIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
+        <bt:Image id="TransferDataIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
+        <bt:Image id="TransferDataIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
+        <bt:Image id="TransferDataIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
         <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
         <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
         <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
@@ -139,9 +165,11 @@
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
         <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
         <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
+        <bt:String id="DataGroup.Label" DefaultValue="Data"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
         <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
+        <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
         <bt:String id="AboutButton.Label" DefaultValue="About"/>
       </bt:ShortStrings>
       <bt:LongStrings>
@@ -149,6 +177,7 @@
         <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student details pane."/>
         <bt:String id="ContactedButton.Tooltip" DefaultValue="Toggles a yellow highlight on the selected student row to mark as contacted."/>
         <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
+        <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
         <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
       </bt:LongStrings>
     </Resources>
