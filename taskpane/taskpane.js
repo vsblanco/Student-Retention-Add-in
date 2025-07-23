@@ -203,8 +203,9 @@ async function cacheAssignedColors() {
             console.log("[DEBUG] Excel.run for cacheAssignedColors started.");
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
+            
             // First, load only the values to find the column index efficiently.
-            usedRange.load("values");
+            usedRange.load("values, rowCount");
             await context.sync();
 
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
@@ -216,24 +217,25 @@ async function cacheAssignedColors() {
             }
             console.log(`[DEBUG] 'Assigned' column found at index: ${assignedColIdx}`);
 
-            // Now, get a range object for just the "Assigned" column and load its format.
-            const assignedColumnRange = usedRange.getColumn(assignedColIdx);
-            assignedColumnRange.load("values, format/fill/color");
+            // Now, get a specific range for the data in that column (excluding the header).
+            // This is a more targeted and reliable way to get individual cell formats.
+            const assignedColumnDataRange = sheet.getRangeByIndexes(1, assignedColIdx, usedRange.rowCount - 1, 1);
+            assignedColumnDataRange.load("values, format/fill/color");
             await context.sync();
-            console.log("[DEBUG] Loaded values and format for the 'Assigned' column specifically.");
+            console.log(`[DEBUG] Loaded data for specific range: ${assignedColumnDataRange.address}`);
 
             const newColorMap = {};
-            const values = assignedColumnRange.values;
-            const colors = assignedColumnRange.format.fill.color;
+            const values = assignedColumnDataRange.values;
+            const colors = assignedColumnDataRange.format.fill.color;
 
             if (!colors) {
-                console.log("[DEBUG] No fill color information available for the 'Assigned' column range.");
+                console.log("[DEBUG] No fill color information available for the 'Assigned' column data range.");
                 return;
             }
 
-            // Iterate through each row of the column, starting from the second row (index 1).
-            for (let i = 1; i < values.length; i++) {
-                const name = values[i][0]; // It's a single column range, so the inner index is always 0.
+            // Iterate through each row of the column data.
+            for (let i = 0; i < values.length; i++) {
+                const name = values[i][0];
 
                 // If the name is valid and we haven't cached a color for it yet...
                 if (name && !newColorMap[name]) {
