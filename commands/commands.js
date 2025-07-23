@@ -393,6 +393,7 @@ async function handleUpdateMaster(message) {
         if (existingStudents.length > 0) {
             sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches...`);
             
+            // BUG FIX: Re-read the master list to get the new row indices after inserting new students.
             let updatedMasterNameMap = new Map();
             await Excel.run(async (context) => {
                 const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
