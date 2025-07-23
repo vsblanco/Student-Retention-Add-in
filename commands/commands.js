@@ -333,6 +333,22 @@ async function handleUpdateMaster(message) {
             sendMessageToDialog(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
         });
 
+        // Clear existing formatting before adding/updating
+        sendMessageToDialog("Clearing existing formatting...");
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("rowCount");
+            await context.sync();
+
+            if (usedRange.rowCount > 1) {
+                const rangeToClear = sheet.getRangeByIndexes(1, 0, usedRange.rowCount - 1, masterHeaders.length);
+                rangeToClear.format.fill.clear();
+                await context.sync();
+            }
+        });
+        sendMessageToDialog("Formatting cleared.");
+
         // 3. Batch-add new students
         const batchSize = 100;
         if (newStudents.length > 0) {
