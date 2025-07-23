@@ -753,26 +753,71 @@ async function transferData(event) {
             for (let i = 1; i < usedRange.values.length; i++) {
                 const row = usedRange.values[i];
                 const rowData = {};
-                if (colIndices.studentName !== -1) rowData.StudentName = row[colIndices.studentName];
-                if (colIndices.gradeBook !== -1) rowData.GradeBook = row[colIndices.gradeBook];
-                if (colIndices.daysOut !== -1) rowData.DaysOut = row[colIndices.daysOut];
-                if (colIndices.lastLda !== -1) rowData.LDA = row[colIndices.lastLda];
-                if (colIndices.grade !== -1) rowData.Grade = row[colIndices.grade];
-                dataToCopy.push(rowData);
+                let hasData = false; // Flag to check if the row has any data to copy
+                if (colIndices.studentName !== -1 && row[colIndices.studentName]) {
+                    rowData.StudentName = row[colIndices.studentName];
+                    hasData = true;
+                }
+                if (colIndices.gradeBook !== -1 && row[colIndices.gradeBook]) {
+                    rowData.GradeBook = row[colIndices.gradeBook];
+                    hasData = true;
+                }
+                if (colIndices.daysOut !== -1 && row[colIndices.daysOut]) {
+                    rowData.DaysOut = row[colIndices.daysOut];
+                    hasData = true;
+                }
+                if (colIndices.lastLda !== -1 && row[colIndices.lastLda]) {
+                    rowData.LDA = row[colIndices.lastLda];
+                    hasData = true;
+                }
+                if (colIndices.grade !== -1 && row[colIndices.grade]) {
+                    rowData.Grade = row[colIndices.grade];
+                    hasData = true;
+                }
+                if (hasData) {
+                    dataToCopy.push(rowData);
+                }
+            }
+
+            if (dataToCopy.length === 0) {
+                console.log("No data found to copy.");
+                return;
             }
 
             const jsonString = JSON.stringify(dataToCopy, null, 2);
             
-            // Create a temporary textarea to copy the text
+            // The function file runs in a headless browser, which makes clipboard operations tricky.
+            // We create a temporary textarea, add it to the body, select its content, and execute the copy command.
             const textArea = document.createElement("textarea");
+            textArea.style.position = "fixed";
+            textArea.style.top = "-9999px";
+            textArea.style.left = "-9999px";
             textArea.value = jsonString;
+
             document.body.appendChild(textArea);
+            textArea.focus();
             textArea.select();
-            document.execCommand('copy');
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    console.log('Data successfully copied to clipboard.');
+                    // NOTE: We cannot show a UI notification from a function file.
+                    // The user must assume the copy was successful or check the console.
+                } else {
+                    console.error('Failed to copy data to clipboard. The browser may have blocked the command.');
+                }
+            } catch (err) {
+                console.error('Error trying to copy to clipboard: ', err);
+            }
+
             document.body.removeChild(textArea);
         });
     } catch (error) {
         console.error("Error in transferData: " + error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        }
     } finally {
         if (event) {
             event.completed();
