@@ -347,8 +347,11 @@ async function handleUpdateMaster(message) {
             }
 
             if (newStudents.length > 0) {
-                const newRowRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
-                newRowRange.insert(Excel.InsertShiftDirection.down);
+                // BUG FIX: Instead of getting a multi-column range, get a single-column range 
+                // and then its entire row to perform the insert. This is more robust,
+                // especially if the sheet contains a table, preventing "InvalidReference" errors.
+                const insertRange = sheet.getRangeByIndexes(1, 0, newStudents.length, 1);
+                insertRange.getEntireRow().insert(Excel.InsertShiftDirection.down);
             }
             await context.sync();
         });
@@ -727,4 +730,4 @@ async function toggleHighlight(event) {
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
-//1.0 new
+//Version 1.2
