@@ -281,7 +281,6 @@ async function onSelectionChange() {
             }
             const rowData = usedRange.values[rowDataIndex];
             
-            // *** FIX: Add a check for empty/null rows ***
             if (!rowData) {
                 console.log("Selected row is empty.");
                 currentStudentId = null;
@@ -290,7 +289,11 @@ async function onSelectionChange() {
             }
 
             const rowFormulas = usedRange.formulas[rowDataIndex];
-            const rowColors = usedRange.format.fill.color[rowDataIndex];
+            
+            // *** FIX: Safely access row color information by checking if the parent objects exist ***
+            const rowColors = (usedRange.format && usedRange.format.fill && usedRange.format.fill.color) 
+                              ? usedRange.format.fill.color[rowDataIndex] 
+                              : null;
             
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
