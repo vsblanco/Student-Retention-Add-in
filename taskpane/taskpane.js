@@ -218,9 +218,9 @@ async function cacheAssignedColors() {
             console.log(`[DEBUG] 'Assigned' column found at index: ${assignedColIdx}`);
 
             // Now, get a specific range for the data in that column (excluding the header).
-            // This is a more targeted and reliable way to get individual cell formats.
             const assignedColumnDataRange = sheet.getRangeByIndexes(1, assignedColIdx, usedRange.rowCount - 1, 1);
-            assignedColumnDataRange.load("values, format/fill/color");
+            // FIX: Load the 'address' property before trying to access it.
+            assignedColumnDataRange.load("address, values, format/fill/color");
             await context.sync();
             console.log(`[DEBUG] Loaded data for specific range: ${assignedColumnDataRange.address}`);
 
