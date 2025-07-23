@@ -84,9 +84,8 @@ Office.onReady((info) => {
       }
     });
     
-    // Run initial check and cache the colors
+    // Run initial check
     onSelectionChange();
-    cacheAssignedColors();
   }
 });
 
@@ -192,73 +191,6 @@ function formatExcelDate(excelDate) {
 
     return `${month} ${day}${daySuffix}, ${year}`;
 }
-
-/**
- * Scans the "Assigned" column and caches the fill color for each unique person.
- */
-async function cacheAssignedColors() {
-    console.log("[DEBUG] Starting cacheAssignedColors...");
-    try {
-        await Excel.run(async (context) => {
-            console.log("[DEBUG] Excel.run for cacheAssignedColors started.");
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const usedRange = sheet.getUsedRange();
-            
-            // First, load only the values to find the column index efficiently.
-            usedRange.load("values, rowCount");
-            await context.sync();
-
-            const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
-            const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
-
-            if (assignedColIdx === -1) {
-                console.log("[DEBUG] 'Assigned' column not found.");
-                return;
-            }
-            console.log(`[DEBUG] 'Assigned' column found at index: ${assignedColIdx}`);
-
-            // Now, get a specific range for the data in that column (excluding the header).
-            const assignedColumnDataRange = sheet.getRangeByIndexes(1, assignedColIdx, usedRange.rowCount - 1, 1);
-            // FIX: Load the 'address' property before trying to access it.
-            assignedColumnDataRange.load("address, values, format/fill/color");
-            await context.sync();
-            console.log(`[DEBUG] Loaded data for specific range: ${assignedColumnDataRange.address}`);
-
-            const newColorMap = {};
-            const values = assignedColumnDataRange.values;
-            const colors = assignedColumnDataRange.format.fill.color;
-
-            if (!colors) {
-                console.log("[DEBUG] No fill color information available for the 'Assigned' column data range.");
-                return;
-            }
-
-            // Iterate through each row of the column data.
-            for (let i = 0; i < values.length; i++) {
-                const name = values[i][0];
-
-                // If the name is valid and we haven't cached a color for it yet...
-                if (name && !newColorMap[name]) {
-                    const cellColor = colors[i][0];
-                    // Cache the color if it's not white or black (default colors).
-                    if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
-                        newColorMap[name] = cellColor;
-                        console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
-                    }
-                }
-            }
-            
-            assignedColorMap = newColorMap;
-            console.log("[DEBUG] Final assigned colors cached:", assignedColorMap);
-        });
-    } catch (error) {
-        console.error("Error caching assigned colors: " + error.message);
-        if (error instanceof OfficeExtension.Error) {
-            console.error("Debug info for cacheAssignedColors: " + JSON.stringify(error.debugInfo));
-        }
-    }
-}
-
 
 /**
  * Handles the document selection change event.
@@ -414,19 +346,41 @@ async function onSelectionChange() {
                 const assignedTo = rowData[colIdx.assigned];
                 assignedToBadge.textContent = assignedTo || "Unassigned";
 
-                const cellColor = assignedColorMap[assignedTo]; // Use the cache
-
-                if (cellColor) {
+                // Check if the color is already in our cache
+                if (assignedColorMap[assignedTo]) {
+                    const cellColor = assignedColorMap[assignedTo];
                     assignedToBadge.style.backgroundColor = cellColor;
-                    // Simple brightness check to determine text color
                     const r = parseInt(cellColor.substr(1, 2), 16);
                     const g = parseInt(cellColor.substr(3, 2), 16);
                     const b = parseInt(cellColor.substr(5, 2), 16);
                     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
                     assignedToBadge.style.color = brightness > 125 ? 'black' : 'white';
+                } else if (assignedTo) {
+                    // If not in cache, get the color for this specific cell and cache it
+                    const assignedCell = sheet.getCell(lastSelectedRow, colIdx.assigned);
+                    assignedCell.load("format/fill/color");
+                    await context.sync();
+
+                    if (assignedCell.format && assignedCell.format.fill) {
+                        const cellColor = assignedCell.format.fill.color;
+                        if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                            assignedColorMap[assignedTo] = cellColor;
+                            console.log(`[DEBUG] Caching new color for '${assignedTo}': ${cellColor}`);
+                            
+                            assignedToBadge.style.backgroundColor = cellColor;
+                            const r = parseInt(cellColor.substr(1, 2), 16);
+                            const g = parseInt(cellColor.substr(3, 2), 16);
+                            const b = parseInt(cellColor.substr(5, 2), 16);
+                            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                            assignedToBadge.style.color = brightness > 125 ? 'black' : 'white';
+                        } else {
+                            assignedToBadge.style.backgroundColor = '#e5e7eb';
+                            assignedToBadge.style.color = '#1f2937';
+                        }
+                    }
                 } else {
-                    assignedToBadge.style.backgroundColor = '#e5e7eb'; // Tailwind gray-200
-                    assignedToBadge.style.color = '#1f2937'; // Tailwind gray-800
+                    assignedToBadge.style.backgroundColor = '#e5e7eb';
+                    assignedToBadge.style.color = '#1f2937';
                 }
             } else {
                 assignedToBadge.textContent = "Unassigned";
