@@ -204,6 +204,12 @@ async function cacheAssignedColors() {
             usedRange.load("values");
             await context.sync();
 
+            // *** FIX: Check if usedRange.values is null or empty before using it ***
+            if (!usedRange.values || usedRange.values.length === 0) {
+                console.log("Sheet is empty, skipping color cache.");
+                return;
+            }
+
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
             const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
 
@@ -264,7 +270,8 @@ async function onSelectionChange() {
             }
             lastSelectedRow = selectedRange.rowIndex;
 
-            if (selectedRange.rowIndex < usedRange.rowIndex) {
+            // *** FIX: Check if usedRange.values is null before using it ***
+            if (selectedRange.rowIndex < usedRange.rowIndex || !usedRange.values) {
                 currentStudentId = null;
                 currentStudentName = null;
                 return;
@@ -290,7 +297,6 @@ async function onSelectionChange() {
 
             const rowFormulas = usedRange.formulas[rowDataIndex];
             
-            // *** FIX: Safely access row color information by checking if the parent objects exist ***
             const rowColors = (usedRange.format && usedRange.format.fill && usedRange.format.fill.color) 
                               ? usedRange.format.fill.color[rowDataIndex] 
                               : null;
@@ -558,6 +564,10 @@ async function displayStudentHistory(studentId) {
             await context.sync();
 
             const historyData = historyRange.values;
+            if (!historyData || historyData.length === 0) {
+                historyContent.innerHTML = `<p class="text-orange-500 font-semibold">The "${CONSTANTS.HISTORY_SHEET}" sheet is empty.</p>`;
+                return;
+            }
             const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
             
             const idColIdx = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
@@ -658,9 +668,10 @@ async function submitNewComment() {
             const historyRange = historySheet.getUsedRange();
             historyRange.load(["rowCount", "values"]);
             await context.sync();
-
-            const newRowIndex = historyRange.rowCount;
-            const headers = historyRange.values[0].map(h => String(h || '').toLowerCase());
+            
+            const headers = (historyRange.values && historyRange.values.length > 0) 
+                            ? historyRange.values[0].map(h => String(h || '').toLowerCase())
+                            : [];
 
             const idCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
             const studentCol = headers.indexOf(CONSTANTS.COLUMN_MAPPINGS.student);
@@ -673,6 +684,9 @@ async function submitNewComment() {
                 statusDisplay.textContent = "History sheet is missing required columns.";
                 return;
             }
+            
+            // Determine the new row index safely
+            const newRowIndex = (historyRange.values) ? historyRange.rowCount : 0;
             
             // Create an array with the correct number of columns
             const newRowData = new Array(headers.length).fill("");
