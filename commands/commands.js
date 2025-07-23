@@ -349,17 +349,24 @@ async function handleUpdateMaster(message) {
         });
         sendMessageToDialog("Formatting cleared.");
 
-        // 3. Batch-add new students
+        // 3. Insert all new rows at once, then populate in batches.
         const batchSize = 100;
         if (newStudents.length > 0) {
-            sendMessageToDialog(`Adding ${newStudents.length} new students in batches of ${batchSize}...`);
+            sendMessageToDialog(`Inserting ${newStudents.length} new rows...`);
+            await Excel.run(async (context) => {
+                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+                const newRowRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
+                newRowRange.insert(Excel.InsertShiftDirection.down);
+                await context.sync();
+            });
+            sendMessageToDialog("New rows inserted.");
+
+            sendMessageToDialog(`Populating data for ${newStudents.length} new students in batches of ${batchSize}...`);
             for (let i = 0; i < newStudents.length; i += batchSize) {
                 const batch = newStudents.slice(i, i + batchSize);
                 await Excel.run(async (context) => {
                     const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                    
-                    const newRowRange = sheet.getRangeByIndexes(1, 0, batch.length, masterHeaders.length);
-                    newRowRange.insert(Excel.InsertShiftDirection.down);
+                    const startRow = 1 + i;
                     
                     const dataForBatch = batch.map(userRow => {
                         const newRow = new Array(masterHeaders.length).fill("");
@@ -376,19 +383,19 @@ async function handleUpdateMaster(message) {
                         return newRow;
                     });
 
-                    const addedRowRange = sheet.getRangeByIndexes(1, 0, batch.length, masterHeaders.length);
-                    addedRowRange.values = dataForBatch;
-                    addedRowRange.format.fill.color = "#ADD8E6";
+                    const rangeToPopulate = sheet.getRangeByIndexes(startRow, 0, batch.length, masterHeaders.length);
+                    rangeToPopulate.values = dataForBatch;
+                    rangeToPopulate.format.fill.color = "#ADD8E6";
                     
                     await context.sync();
                 });
-                sendMessageToDialog(`Added batch of ${batch.length} students. (${i + batch.length}/${newStudents.length})`);
+                sendMessageToDialog(`Populated batch of ${batch.length} students. (${i + batch.length}/${newStudents.length})`);
             }
         }
 
         // 4. Batch-update existing students
         if (existingStudents.length > 0) {
-            sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches of ${batchSize}...`);
+            sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches...`);
             
             let updatedMasterNameMap = new Map();
             await Excel.run(async (context) => {
