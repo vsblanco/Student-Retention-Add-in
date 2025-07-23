@@ -221,7 +221,7 @@ async function handleFileSelected(message) {
 
 
 /**
- * Handles the Master List update action. It updates rows in-place based on student name.
+ * Handles the Master List update action. It updates existing students and adds new ones to the top.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateMaster(message) {
@@ -299,35 +299,67 @@ async function handleUpdateMaster(message) {
                 lowerCaseMasterHeaders.indexOf(userHeader)
             );
 
-            let updatedCount = 0;
-            const matchedStudentsLog = [];
-
-            // Iterate through imported data and update matching rows
+            // Separate users into new and existing
+            const newStudents = [];
+            const existingStudents = [];
             for (const userRow of userData) {
                 const studentName = userRow[userStudentNameCol];
                 const normalizedName = normalizeName(studentName);
 
                 if (masterNameMap.has(normalizedName)) {
-                    updatedCount++;
-                    const masterRowIndex = masterNameMap.get(normalizedName);
+                    existingStudents.push({
+                        userRow: userRow,
+                        masterRowIndex: masterNameMap.get(normalizedName)
+                    });
+                } else {
+                    newStudents.push(userRow);
+                }
+            }
+            console.log(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
+
+            // Add new students to the top of the sheet (below headers)
+            if (newStudents.length > 0) {
+                const newRowRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
+                newRowRange.insert(Excel.InsertShiftDirection.down);
+
+                for (let i = 0; i < newStudents.length; i++) {
+                    const userRow = newStudents[i];
+                    const newRowIndex = 1 + i;
                     
-                    // Update only the columns that exist in the imported file
                     for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
                         const masterColIdx = colMapping[userColIdx];
                         if (masterColIdx !== -1) {
-                            const cell = sheet.getCell(masterRowIndex, masterColIdx);
-                            cell.values = [[userRow[userColIdx] || ""]];
+                            const cell = sheet.getCell(newRowIndex, masterColIdx);
+                            let cellValue = userRow[userColIdx] || "";
+                            if (masterColIdx === masterStudentNameCol) {
+                                cellValue = formatToLastFirst(String(cellValue));
+                            }
+                            cell.values = [[cellValue]];
                         }
                     }
-
-                    matchedStudentsLog.push({ student: studentName });
+                    const addedRowRange = sheet.getRangeByIndexes(newRowIndex, 0, 1, masterHeaders.length);
+                    addedRowRange.format.fill.color = "#ADD8E6"; // Light Blue
                 }
             }
             
-            console.log(`Found and updated ${updatedCount} matching students.`);
-            console.table(matchedStudentsLog);
+            // Update existing students
+            const offset = newStudents.length;
+            for (const student of existingStudents) {
+                const { userRow, masterRowIndex } = student;
+                const newMasterRowIndex = masterRowIndex + offset;
+                
+                for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
+                    const masterColIdx = colMapping[userColIdx];
+                    if (masterColIdx !== -1) {
+                        const cell = sheet.getCell(newMasterRowIndex, masterColIdx);
+                        cell.values = [[userRow[userColIdx] || ""]];
+                    }
+                }
+            }
+            
+            console.log(`Added ${newStudents.length} new students and updated ${existingStudents.length} existing students.`);
 
-            if (updatedCount > 0) {
+            if (newStudents.length > 0 || existingStudents.length > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
             
@@ -344,8 +376,7 @@ async function handleUpdateMaster(message) {
 }
 
 /**
- * Handles updating grades and gradebook links in the Master List.
- * If a student from the import is not on the Master List, they are added.
+ * Handles updating grades and gradebook links in the Master List for existing students.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateGrades(message) {
@@ -455,10 +486,8 @@ async function handleUpdateGrades(message) {
             }
 
             let updatedCount = 0;
-            let addedCount = 0;
-            const newStudents = [];
 
-            // Separate students into update list and add list
+            // Update existing students only
             for (const [normalizedName, importedData] of studentDataMap.entries()) {
                 if (masterNameMap.has(normalizedName)) {
                     const masterRowIndex = masterNameMap.get(normalizedName);
@@ -483,51 +512,12 @@ async function handleUpdateGrades(message) {
                     }
                     
                     updatedCount++;
-                } else {
-                    newStudents.push(importedData);
-                }
-            }
-
-            // Add new students to the end of the sheet
-            if (newStudents.length > 0) {
-                const lastRow = usedRange.rowCount;
-                for (let i = 0; i < newStudents.length; i++) {
-                    const student = newStudents[i];
-                    const newRowIndex = lastRow + i;
-                    
-                    const nameCell = sheet.getCell(newRowIndex, masterStudentNameCol);
-                    nameCell.values = [[formatToLastFirst(student.originalName)]];
-
-                    const gradeCell = sheet.getCell(newRowIndex, masterGradeCol);
-                    gradeCell.values = [[student.grade]];
-
-                    if (student.courseId && student.studentId) {
-                        const newGradebookLink = `https://nuc.instructure.com/courses/${student.courseId}/grades/${student.studentId}`;
-                        const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
-                        const gradebookCell = sheet.getCell(newRowIndex, masterGradebookCol);
-                        gradebookCell.formulas = [[hyperlinkFormula]];
-                    }
-
-                    if (masterMissingAssignmentsCol !== -1 && student.missingAssignments !== undefined) {
-                        const missingCell = sheet.getCell(newRowIndex, masterMissingAssignmentsCol);
-                        missingCell.values = [[student.missingAssignments]];
-                    }
-                    if (masterZeroAssignmentsCol !== -1 && student.zeroAssignments !== undefined) {
-                        const zeroCell = sheet.getCell(newRowIndex, masterZeroAssignmentsCol);
-                        zeroCell.values = [[student.zeroAssignments]];
-                    }
-
-                    // Highlight the new row
-                    const newRowRange = sheet.getRangeByIndexes(newRowIndex, 0, 1, masterHeaders.length);
-                    newRowRange.format.fill.color = "#ADD8E6"; // Light Blue
-                    addedCount++;
                 }
             }
             
             console.log(`Found and updated ${updatedCount} matching students.`);
-            console.log(`Added ${addedCount} new students.`);
 
-            if (updatedCount > 0 || addedCount > 0) {
+            if (updatedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
             
