@@ -226,27 +226,52 @@ async function cacheAssignedColors() {
             const values = assignedColumnRange.values;
             console.log(`[DEBUG] Total rows in 'Assigned' column: ${values.length}`);
 
-            // FIX: Check if format and format.fill exist before accessing color.
             if (assignedColumnRange.format && assignedColumnRange.format.fill) {
                 const colors = assignedColumnRange.format.fill.color;
                 console.log("[DEBUG] Format and fill color properties are available.");
 
-                // Start from 1 to skip header
-                for (let i = 1; i < values.length; i++) {
-                    // Check if the row and cell value exist
-                    if (values[i] && values[i][0]) {
-                        const name = values[i][0];
-                        // Check if the corresponding color row exists
-                        if (name && !newColorMap[name] && colors[i]) {
-                            const cellColor = colors[i][0];
-                            console.log(`[DEBUG] Row ${i+1}: Name='${name}', Color='${cellColor}'`);
-                             if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
-                                newColorMap[name] = cellColor;
-                                console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
-                            }
+                // FIX: Add a null check for the 'colors' array itself.
+                if (!colors) {
+                    console.log("[DEBUG] 'colors' array is null or undefined. No fill colors to cache.");
+                } else {
+                    // Start from 1 to skip header
+                    for (let i = 1; i < values.length; i++) {
+                        console.log(`[DEBUG] Processing row ${i + 1}`);
+                        const valueRow = values[i];
+                        if (!valueRow) {
+                            console.log(`[DEBUG] Row ${i + 1}: values[${i}] is null or undefined. Skipping.`);
+                            continue;
                         }
-                    } else {
-                         console.log(`[DEBUG] Row ${i+1}: Skipping, no name found.`);
+
+                        const name = valueRow[0];
+                        if (!name) {
+                            console.log(`[DEBUG] Row ${i + 1}: Name is null or empty. Skipping.`);
+                            continue;
+                        }
+                        console.log(`[DEBUG] Row ${i + 1}: Name='${name}'`);
+
+                        if (newColorMap[name]) {
+                            console.log(`[DEBUG] Row ${i + 1}: Color for '${name}' already cached. Skipping.`);
+                            continue;
+                        }
+
+                        const colorRow = colors[i];
+                        if (!colorRow) {
+                            console.log(`[DEBUG] Row ${i + 1}: colors[${i}] is null or undefined. Skipping.`);
+                            continue;
+                        }
+
+                        const cellColor = colorRow[0];
+                        if (!cellColor) {
+                            console.log(`[DEBUG] Row ${i + 1}: cellColor is null or empty. Skipping.`);
+                            continue;
+                        }
+                        console.log(`[DEBUG] Row ${i + 1}: Color='${cellColor}'`);
+
+                        if (cellColor !== '#ffffff' && cellColor !== '#000000') {
+                            newColorMap[name] = cellColor;
+                            console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
+                        }
                     }
                 }
             } else {
