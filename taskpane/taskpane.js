@@ -197,32 +197,39 @@ function formatExcelDate(excelDate) {
  * Scans the "Assigned" column and caches the fill color for each unique person.
  */
 async function cacheAssignedColors() {
+    console.log("[DEBUG] Starting cacheAssignedColors...");
     try {
         await Excel.run(async (context) => {
+            console.log("[DEBUG] Excel.run for cacheAssignedColors started.");
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values");
+            usedRange.load("values, address");
             await context.sync();
+            console.log(`[DEBUG] Active sheet used range is ${usedRange.address}.`);
 
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
+            console.log("[DEBUG] Headers found:", headers);
             const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
 
             if (assignedColIdx === -1) {
-                console.log("Could not find 'Assigned' column to cache colors.");
+                console.log("[DEBUG] Could not find 'Assigned' column to cache colors. Exiting function.");
                 return;
             }
+            console.log(`[DEBUG] 'Assigned' column found at index: ${assignedColIdx}`);
 
             const assignedColumnRange = usedRange.getColumn(assignedColIdx);
             assignedColumnRange.load("values, format/fill/color");
             await context.sync();
+            console.log("[DEBUG] Loaded values and format for 'Assigned' column.");
             
             const newColorMap = {};
             const values = assignedColumnRange.values;
+            console.log(`[DEBUG] Total rows in 'Assigned' column: ${values.length}`);
 
             // FIX: Check if format and format.fill exist before accessing color.
-            // This prevents an error if the range contains empty but previously formatted cells.
             if (assignedColumnRange.format && assignedColumnRange.format.fill) {
                 const colors = assignedColumnRange.format.fill.color;
+                console.log("[DEBUG] Format and fill color properties are available.");
 
                 // Start from 1 to skip header
                 for (let i = 1; i < values.length; i++) {
@@ -232,21 +239,28 @@ async function cacheAssignedColors() {
                         // Check if the corresponding color row exists
                         if (name && !newColorMap[name] && colors[i]) {
                             const cellColor = colors[i][0];
+                            console.log(`[DEBUG] Row ${i+1}: Name='${name}', Color='${cellColor}'`);
                              if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
                                 newColorMap[name] = cellColor;
+                                console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
                             }
                         }
+                    } else {
+                         console.log(`[DEBUG] Row ${i+1}: Skipping, no name found.`);
                     }
                 }
             } else {
-                console.log("No formatting information found for the 'Assigned' column.");
+                console.log("[DEBUG] No formatting information (format.fill) found for the 'Assigned' column.");
             }
             
             assignedColorMap = newColorMap;
-            console.log("Assigned colors cached:", assignedColorMap);
+            console.log("[DEBUG] Final assigned colors cached:", assignedColorMap);
         });
     } catch (error) {
-        console.error("Error caching assigned colors: " + error);
+        console.error("Error caching assigned colors: " + error.message);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("Debug info for cacheAssignedColors: " + JSON.stringify(error.debugInfo));
+        }
     }
 }
 
