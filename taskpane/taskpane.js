@@ -302,9 +302,9 @@ async function onSelectionChange() {
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
-                if (gradePercent >= 90) {
+                if (gradePercent >= 70) {
                     gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
-                } else if (gradePercent >= 70) {
+                } else if (gradePercent >= 60) {
                     gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
                 } else {
                     gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
