@@ -20,6 +20,8 @@ const CONSTANTS = {
         currentScore: ["current score", "grade", "course grade"],
         grade: ["grade", "course grade"],
         gradeBook: ["grade book", "gradebook"],
+        daysOut: ["days out"],
+        lastLda: ["lda"],
         courseMissingAssignments: ["course missing assignments"],
         courseZeroAssignments: ["course zero assignments"]
     }
@@ -727,7 +729,59 @@ async function toggleHighlight(event) {
   }
 }
 
+/**
+ * Copies data from specified columns to the clipboard in JSON format.
+ */
+async function transferData(event) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values");
+            await context.sync();
+
+            const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
+            const colIndices = {
+                studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
+                gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
+                daysOut: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut),
+                lastLda: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.lastLda),
+                grade: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade)
+            };
+
+            const dataToCopy = [];
+            for (let i = 1; i < usedRange.values.length; i++) {
+                const row = usedRange.values[i];
+                const rowData = {};
+                if (colIndices.studentName !== -1) rowData.StudentName = row[colIndices.studentName];
+                if (colIndices.gradeBook !== -1) rowData.GradeBook = row[colIndices.gradeBook];
+                if (colIndices.daysOut !== -1) rowData.DaysOut = row[colIndices.daysOut];
+                if (colIndices.lastLda !== -1) rowData.LDA = row[colIndices.lastLda];
+                if (colIndices.grade !== -1) rowData.Grade = row[colIndices.grade];
+                dataToCopy.push(rowData);
+            }
+
+            const jsonString = JSON.stringify(dataToCopy, null, 2);
+            
+            // Create a temporary textarea to copy the text
+            const textArea = document.createElement("textarea");
+            textArea.value = jsonString;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        });
+    } catch (error) {
+        console.error("Error in transferData: " + error);
+    } finally {
+        if (event) {
+            event.completed();
+        }
+    }
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
+Office.actions.associate("transferData", transferData);
 //Version 1.2
