@@ -64,9 +64,9 @@
                     <Description resid="ContactedButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="Icon.16x16"/>
-                    <bt:Image size="32" resid="Icon.32x32"/>
-                    <bt:Image size="80" resid="Icon.80x80"/>
+                    <bt:Image size="16" resid="ContactedIcon.16x16"/>
+                    <bt:Image size="32" resid="ContactedIcon.32x32"/>
+                    <bt:Image size="80" resid="ContactedIcon.80x80"/>
                   </Icon>
                   <Action xsi:type="ExecuteFunction">
                     <FunctionName>toggleHighlight</FunctionName>
@@ -124,6 +124,9 @@
         <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
         <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
         <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
+        <bt:Image id="ContactedIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
+        <bt:Image id="ContactedIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
+        <bt:Image id="ContactedIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
