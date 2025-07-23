@@ -28,6 +28,18 @@ const CONSTANTS = {
 let importDialog = null;
 
 /**
+ * Sends a status message back to the import dialog.
+ * @param {string} status The message to send.
+ * @param {string} type The type of message ('log', 'error', 'complete').
+ */
+function sendMessageToDialog(status, type = 'log') {
+    if (importDialog) {
+        console.log(`[DIALOG LOG] ${status}`);
+        importDialog.messageChild(JSON.stringify({ type, status }));
+    }
+}
+
+/**
  * Helper to normalize names from "Last, First" or "First Last" to "first last"
  * for consistent matching.
  * @param {string} name The name to normalize.
@@ -78,7 +90,7 @@ Office.onReady((info) => {
 function openImportDialog(event) {
     Office.context.ui.displayDialogAsync(
         'https://vsblanco.github.io/Student-Retention-Add-in/commands/import-dialog.html',
-        { height: 35, width: 35, displayInIframe: true },
+        { height: 45, width: 35, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
                 console.error("Dialog failed to open: " + asyncResult.error.message);
@@ -108,6 +120,11 @@ async function processImportMessage(arg) {
             break;
         case 'updateGrades':
             await handleUpdateGrades(message);
+            break;
+        case 'closeDialog':
+            if (importDialog) {
+                importDialog.close();
+            }
             break;
         default:
             console.error("Unknown message type from dialog:", message.type);
@@ -225,12 +242,10 @@ async function handleFileSelected(message) {
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateMaster(message) {
-    if (importDialog) {
-        importDialog.close();
-    }
-    console.log("Starting Master List update process...");
+    sendMessageToDialog("Starting Master List update process...");
     try {
         // 1. Parse user's uploaded file
+        sendMessageToDialog("Parsing uploaded file...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -260,7 +275,7 @@ async function handleUpdateMaster(message) {
                 userData.push(rowData);
             }
         });
-        console.log(`Parsed ${userData.length} data rows from imported file.`);
+        sendMessageToDialog(`Parsed ${userData.length} data rows from imported file.`);
 
         const userStudentNameCol = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.STUDENT_NAME_COLS);
         if (userStudentNameCol === -1) {
@@ -276,13 +291,12 @@ async function handleUpdateMaster(message) {
         let colMapping;
 
         await Excel.run(async (context) => {
-            console.log("Accessing 'Master List' sheet for initial analysis...");
+            sendMessageToDialog("Accessing 'Master List' sheet for initial analysis...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
             await context.sync();
-            console.log("'Master List' sheet loaded.");
-
+            
             masterHeaders = usedRange.values[0].map(h => String(h || ''));
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -290,7 +304,6 @@ async function handleUpdateMaster(message) {
             if (masterStudentNameCol === -1) {
                 throw new Error("'Master List' is missing a 'StudentName' column.");
             }
-            console.log("Found 'StudentName' column in 'Master List'.");
 
             const masterNameMap = new Map();
             for (let i = 1; i < usedRange.values.length; i++) {
@@ -317,13 +330,13 @@ async function handleUpdateMaster(message) {
                     newStudents.push(userRow);
                 }
             }
-            console.log(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
+            sendMessageToDialog(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
         });
 
         // 3. Batch-add new students
-        const batchSize = 100; // Process 100 students at a time to avoid payload limits
+        const batchSize = 100;
         if (newStudents.length > 0) {
-            console.log(`Adding ${newStudents.length} new students in batches of ${batchSize}...`);
+            sendMessageToDialog(`Adding ${newStudents.length} new students in batches of ${batchSize}...`);
             for (let i = 0; i < newStudents.length; i += batchSize) {
                 const batch = newStudents.slice(i, i + batchSize);
                 await Excel.run(async (context) => {
@@ -349,17 +362,17 @@ async function handleUpdateMaster(message) {
 
                     const addedRowRange = sheet.getRangeByIndexes(1, 0, batch.length, masterHeaders.length);
                     addedRowRange.values = dataForBatch;
-                    addedRowRange.format.fill.color = "#ADD8E6"; // Light Blue
+                    addedRowRange.format.fill.color = "#ADD8E6";
                     
-                    console.log(`Added batch of ${batch.length} students.`);
                     await context.sync();
                 });
+                sendMessageToDialog(`Added batch of ${batch.length} students. (${i + batch.length}/${newStudents.length})`);
             }
         }
 
         // 4. Batch-update existing students
         if (existingStudents.length > 0) {
-            console.log(`Updating ${existingStudents.length} existing students in batches of ${batchSize}...`);
+            sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches of ${batchSize}...`);
             
             let updatedMasterNameMap = new Map();
             await Excel.run(async (context) => {
@@ -396,24 +409,26 @@ async function handleUpdateMaster(message) {
                             }
                         }
                     }
-                    console.log(`Updated batch of ${batch.length} students.`);
                     await context.sync();
                 });
+                sendMessageToDialog(`Updated batch of ${batch.length} students. (${i + batch.length}/${existingStudents.length})`);
             }
         }
         
         // Final autofit
         await Excel.run(async (context) => {
             if (newStudents.length > 0 || existingStudents.length > 0) {
+                sendMessageToDialog("Autofitting columns...");
                 const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
                 sheet.getUsedRange().format.autofitColumns();
                 await context.sync();
             }
-            console.log("Master List update process completed successfully.");
+            sendMessageToDialog("Master List update process completed successfully.", 'complete');
         });
 
     } catch (error) {
         console.error("Error updating Master List: " + error);
+        sendMessageToDialog(`Error: ${error.message}`, 'error');
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
@@ -425,13 +440,10 @@ async function handleUpdateMaster(message) {
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateGrades(message) {
-    if (importDialog) {
-        importDialog.close();
-    }
-    console.log("Starting grade update process...");
+    sendMessageToDialog("Starting grade update process...");
     try {
         // 1. Parse user's uploaded file
-        console.log("Parsing uploaded file for grade update...");
+        sendMessageToDialog("Parsing uploaded file for grade update...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -460,7 +472,7 @@ async function handleUpdateGrades(message) {
                 userData.push(rowData);
             }
         });
-        console.log(`Parsed ${userData.length} rows from the imported file.`);
+        sendMessageToDialog(`Parsed ${userData.length} rows from the imported file.`);
 
         // 2. Find column indices in user's file
         const userStudentNameCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -474,14 +486,12 @@ async function handleUpdateGrades(message) {
         if (userGradeCol === -1 || userStudentNameCol === -1 || userCourseCol === -1) {
             throw new Error("Imported file is missing one of the required columns: Student Name, Course, or Current Score/Grade.");
         }
-        console.log("Found required columns for grade update in the imported file.");
 
         // 3. Create a map of student data from the imported file, keyed by normalized name, filtering out CAPV courses
         const studentDataMap = new Map();
         userData.forEach(row => {
             const courseName = row[userCourseCol] ? String(row[userCourseCol]) : '';
             if (courseName.toUpperCase().includes('CAPV')) {
-                console.log(`[DEBUG] Skipping row for CAPV course: ${courseName}`);
                 return; // Skip this row
             }
 
@@ -498,16 +508,15 @@ async function handleUpdateGrades(message) {
                 });
             }
         });
-        console.log(`Created a map of ${studentDataMap.size} students from the imported file after filtering.`);
+        sendMessageToDialog(`Created a map of ${studentDataMap.size} students from the imported file after filtering.`);
 
         // 4. Update the "Master List" sheet
         await Excel.run(async (context) => {
-            console.log("Accessing 'Master List' sheet...");
+            sendMessageToDialog("Accessing 'Master List' sheet...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values, rowCount");
             await context.sync();
-            console.log("'Master List' sheet loaded.");
 
             const masterHeaders = usedRange.values[0].map(h => String(h || '').toLowerCase());
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -519,9 +528,7 @@ async function handleUpdateGrades(message) {
             if (masterStudentNameCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
                 throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
             }
-            console.log("Found required columns in 'Master List'.");
 
-            // Create a map of existing student names in the Master List to their row index
             const masterNameMap = new Map();
             for (let i = 1; i < usedRange.values.length; i++) {
                 const name = usedRange.values[i][masterStudentNameCol];
@@ -532,7 +539,6 @@ async function handleUpdateGrades(message) {
 
             let updatedCount = 0;
 
-            // Update existing students only
             for (const [normalizedName, importedData] of studentDataMap.entries()) {
                 if (masterNameMap.has(normalizedName)) {
                     const masterRowIndex = masterNameMap.get(normalizedName);
@@ -560,18 +566,19 @@ async function handleUpdateGrades(message) {
                 }
             }
             
-            console.log(`Found and updated ${updatedCount} matching students.`);
+            sendMessageToDialog(`Found and updated ${updatedCount} matching students.`);
 
             if (updatedCount > 0) {
                 sheet.getUsedRange().format.autofitColumns();
             }
             
             await context.sync();
-            console.log("Grade update process completed successfully.");
+            sendMessageToDialog("Grade update process completed successfully.", 'complete');
         });
 
     } catch (error) {
         console.error("Error updating grades in Master List: " + error);
+        sendMessageToDialog(`Error: ${error.message}`, 'error');
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
