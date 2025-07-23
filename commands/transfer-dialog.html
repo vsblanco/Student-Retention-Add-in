@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Transfer Data</title>
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
+    <div class="w-full max-w-md text-left">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Data to Transfer</h3>
+        <p class="text-sm text-gray-600 mb-2">The following data has been prepared in JSON format. Click the button to copy it to your clipboard.</p>
+        <textarea id="json-data" class="w-full h-64 p-2 border border-gray-300 rounded-md font-mono text-xs" readonly>Loading data...</textarea>
+        <div class="mt-4 flex space-x-2">
+            <button id="copy-button" class="flex-1 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400" disabled>
+                Copy to Clipboard
+            </button>
+            <button id="close-button" class="flex-1 bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
+                Close
+            </button>
+        </div>
+        <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
+    </div>
+
+    <script>
+        Office.onReady(() => {
+            const jsonDataTextArea = document.getElementById('json-data');
+            const copyButton = document.getElementById('copy-button');
+            const closeButton = document.getElementById('close-button');
+            const copyStatus = document.getElementById('copy-status');
+
+            // 1. Tell the parent (commands.js) that the dialog is ready to receive data.
+            Office.context.ui.messageParent(JSON.stringify({ type: 'dialogReady' }));
+
+            // 2. Handle receiving the data from the parent.
+            Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
+                const message = JSON.parse(arg.message);
+                if (message.type === 'dataForTransfer') {
+                    jsonDataTextArea.value = message.data;
+                    copyButton.disabled = false;
+                }
+            });
+
+            // 3. Handle the copy button click.
+            copyButton.addEventListener('click', () => {
+                jsonDataTextArea.select();
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        copyStatus.textContent = "Copied successfully!";
+                    } else {
+                        copyStatus.textContent = "Copy failed. Please copy manually.";
+                    }
+                } catch (err) {
+                    copyStatus.textContent = "Error: " + err;
+                }
+                setTimeout(() => { copyStatus.textContent = ""; }, 3000);
+            });
+
+            // 4. Handle the close button click.
+            closeButton.addEventListener('click', () => {
+                Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
+            });
+        });
+    </script>
+</body>
+</html>
