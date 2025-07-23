@@ -726,3 +726,4 @@ async function toggleHighlight(event) {
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
+//1.0 new
