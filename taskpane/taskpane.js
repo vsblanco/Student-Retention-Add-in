@@ -203,8 +203,8 @@ async function cacheAssignedColors() {
             console.log("[DEBUG] Excel.run for cacheAssignedColors started.");
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            // Load values and cell formatting for the entire used range.
-            usedRange.load("values, format/fill/color");
+            // FIX: Load the 'address' property before trying to access it.
+            usedRange.load("values, address, format/fill/color");
             await context.sync();
             console.log(`[DEBUG] Loaded values and format for range: ${usedRange.address}.`);
 
