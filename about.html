@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>About - Student Retention Add-in</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            color: #4b5563;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+        ul {
+            list-style-position: inside;
+            padding-left: 0.5rem;
+        }
+        li {
+            margin-bottom: 0.5rem;
+        }
+        code {
+            background-color: #f3f4f6;
+            color: #4b5563;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow-md">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">About the Student Retention Add-in</h1>
+            <p class="text-sm text-gray-500">Version 1.5.0.0</p>
+        </div>
+
+        <p>This add-in is designed to streamline the process of tracking and managing student retention by integrating key data directly within your Excel workbook.</p>
+
+        <h2>How It Works</h2>
+        <p>The add-in adds a new "Retention" tab to the Excel ribbon with several tools to help you manage your student data efficiently.</p>
+
+        <h3>Ribbon Buttons</h3>
+        <ul>
+            <li><strong>Import Data:</strong> Opens a dialog to import data from <code>.csv</code> or <code>.xlsx</code> files. The add-in automatically detects the file type to offer relevant actions:
+                <ul>
+                    <li><strong>Update Master List:</strong> Updates existing student records in your "Master List" sheet and adds new students to the top of the sheet, highlighted for visibility.</li>
+                    <li><strong>Update Grades:</strong> Updates grades and gradebook links for students already present in your "Master List".</li>
+                </ul>
+            </li>
+            <li><strong>Contacted:</strong> Toggles a yellow highlight on the currently selected student row to visually mark that contact has been made.</li>
+            <li><strong>Show Details:</strong> Opens the main task pane where you can view detailed student information and their history.</li>
+            <li><strong>About:</strong> Opens this informational pane.</li>
+        </ul>
+
+        <h3>The "Show Details" Task Pane</h3>
+        <p>This is the main interface of the add-in, providing a comprehensive view of the selected student.</p>
+        
+        <h4>Student Details Tab</h4>
+        <p>When you select a row in your worksheet, this tab automatically populates with that student's information, including:</p>
+        <ul>
+            <li>A color-coded avatar and name.</li>
+            <li>Key stats like "Days Out" and "Grade", which are color-coded for at-a-glance status checks.</li>
+            <li>Contact information (phone numbers and emails) that can be copied to your clipboard with a single click.</li>
+        </ul>
+        
+        <h4>Student History Tab</h4>
+        <p>This tab provides a complete interaction history for the selected student, pulled from the "Student History" sheet.</p>
+        <ul>
+            <li><strong>View History:</strong> Displays all previously logged comments and outreach notes in chronological order.</li>
+            <li><strong>Add New Comment:</strong> Allows you to quickly add new comments or notes for the selected student, which are then saved to the "Student History" sheet with a timestamp.</li>
+        </ul>
+    </div>
+</body>
+</html>
