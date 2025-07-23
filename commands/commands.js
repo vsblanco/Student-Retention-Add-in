@@ -28,6 +28,7 @@ const CONSTANTS = {
 };
 
 let importDialog = null;
+let transferDialog = null;
 
 /**
  * Sends a status message back to the import dialog.
@@ -730,9 +731,10 @@ async function toggleHighlight(event) {
 }
 
 /**
- * Copies data from specified columns to the clipboard in JSON format.
+ * Opens a dialog to transfer data to the clipboard.
  */
 async function transferData(event) {
+    let jsonDataString = "";
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getActiveWorksheet();
@@ -753,7 +755,7 @@ async function transferData(event) {
             for (let i = 1; i < usedRange.values.length; i++) {
                 const row = usedRange.values[i];
                 const rowData = {};
-                let hasData = false; // Flag to check if the row has any data to copy
+                let hasData = false;
                 if (colIndices.studentName !== -1 && row[colIndices.studentName]) {
                     rowData.StudentName = row[colIndices.studentName];
                     hasData = true;
@@ -779,49 +781,48 @@ async function transferData(event) {
                 }
             }
 
-            if (dataToCopy.length === 0) {
-                console.log("No data found to copy.");
-                return;
+            if (dataToCopy.length > 0) {
+                jsonDataString = JSON.stringify(dataToCopy, null, 2);
             }
-
-            const jsonString = JSON.stringify(dataToCopy, null, 2);
-            
-            // The function file runs in a headless browser, which makes clipboard operations tricky.
-            // We create a temporary textarea, add it to the body, select its content, and execute the copy command.
-            const textArea = document.createElement("textarea");
-            textArea.style.position = "fixed";
-            textArea.style.top = "-9999px";
-            textArea.style.left = "-9999px";
-            textArea.value = jsonString;
-
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    console.log('Data successfully copied to clipboard.');
-                    // NOTE: We cannot show a UI notification from a function file.
-                    // The user must assume the copy was successful or check the console.
-                } else {
-                    console.error('Failed to copy data to clipboard. The browser may have blocked the command.');
-                }
-            } catch (err) {
-                console.error('Error trying to copy to clipboard: ', err);
-            }
-
-            document.body.removeChild(textArea);
         });
+
+        if (!jsonDataString) {
+            console.log("No data found to copy.");
+            event.completed();
+            return;
+        }
+
+        Office.context.ui.displayDialogAsync(
+            'https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html',
+            { height: 60, width: 40, displayInIframe: true },
+            function (asyncResult) {
+                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                    console.error("Transfer dialog failed to open: " + asyncResult.error.message);
+                    event.completed();
+                    return;
+                }
+                transferDialog = asyncResult.value;
+                transferDialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
+                    const message = JSON.parse(arg.message);
+                    if (message.type === 'dialogReady') {
+                        transferDialog.messageChild(JSON.stringify({
+                            type: 'dataForTransfer',
+                            data: jsonDataString
+                        }));
+                    } else if (message.type === 'closeDialog') {
+                        transferDialog.close();
+                        transferDialog = null;
+                    }
+                });
+                event.completed();
+            }
+        );
     } catch (error) {
         console.error("Error in transferData: " + error);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
-    } finally {
-        if (event) {
-            event.completed();
-        }
+        event.completed();
     }
 }
 
@@ -829,4 +830,4 @@ async function transferData(event) {
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
-//Version 1.2
+//Version 1.3
