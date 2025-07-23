@@ -280,6 +280,15 @@ async function onSelectionChange() {
                 return;
             }
             const rowData = usedRange.values[rowDataIndex];
+            
+            // *** FIX: Add a check for empty/null rows ***
+            if (!rowData) {
+                console.log("Selected row is empty.");
+                currentStudentId = null;
+                currentStudentName = null;
+                return;
+            }
+
             const rowFormulas = usedRange.formulas[rowDataIndex];
             const rowColors = usedRange.format.fill.color[rowDataIndex];
             
