@@ -654,8 +654,13 @@ function parseCsvRow(row) {
 
 /**
  * Finds the index of a column by checking against a list of possible names.
+ * Includes a check to ensure possibleNames is an array.
  */
 function findColumnIndex(headers, possibleNames) {
+    if (!Array.isArray(possibleNames)) {
+        console.error("[DEBUG] findColumnIndex received non-array for possibleNames:", possibleNames);
+        return -1;
+    }
     for (const name of possibleNames) {
         const index = headers.indexOf(name);
         if (index !== -1) {
