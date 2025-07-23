@@ -58,38 +58,6 @@
                     <FunctionName>toggleHighlight</FunctionName>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="TaskpaneButton">
-                  <Label resid="TaskpaneButton.Label"/>
-                  <Supertip>
-                    <Title resid="TaskpaneButton.Label"/>
-                    <Description resid="TaskpaneButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="DetailsIcon.16x16"/>
-                    <bt:Image size="32" resid="DetailsIcon.32x32"/>
-                    <bt:Image size="80" resid="DetailsIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>ButtonId1</TaskpaneId>
-                    <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="AboutButton">
-                  <Label resid="AboutButton.Label"/>
-                  <Supertip>
-                    <Title resid="AboutButton.Label"/>
-                    <Description resid="AboutButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="AboutIcon.16x16"/>
-                    <bt:Image size="32" resid="AboutIcon.32x32"/>
-                    <bt:Image size="80" resid="AboutIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>About</TaskpaneId>
-                    <SourceLocation resid="About.Url"/>
-                  </Action>
-                </Control>
               </Group>
               <Group id="DataGroup">
                 <Label resid="DataGroup.Label"/>
@@ -126,6 +94,46 @@
                   </Icon>
                   <Action xsi:type="ExecuteFunction">
                     <FunctionName>transferData</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+              <Group id="SystemGroup">
+                <Label resid="SystemGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="TaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="DetailsIcon.16x16"/>
+                    <bt:Image size="32" resid="DetailsIcon.32x32"/>
+                    <bt:Image size="80" resid="DetailsIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="AboutButton">
+                  <Label resid="AboutButton.Label"/>
+                  <Supertip>
+                    <Title resid="AboutButton.Label"/>
+                    <Description resid="AboutButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="AboutIcon.16x16"/>
+                    <bt:Image size="32" resid="AboutIcon.32x32"/>
+                    <bt:Image size="80" resid="AboutIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>About</TaskpaneId>
+                    <SourceLocation resid="About.Url"/>
                   </Action>
                 </Control>
               </Group>
@@ -166,6 +174,7 @@
         <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
         <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
         <bt:String id="DataGroup.Label" DefaultValue="Data"/>
+        <bt:String id="SystemGroup.Label" DefaultValue="System"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
         <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
