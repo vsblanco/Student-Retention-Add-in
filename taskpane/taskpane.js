@@ -203,79 +203,41 @@ async function cacheAssignedColors() {
             console.log("[DEBUG] Excel.run for cacheAssignedColors started.");
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, address");
+            // Load values and cell formatting for the entire used range.
+            usedRange.load("values, format/fill/color");
             await context.sync();
-            console.log(`[DEBUG] Active sheet used range is ${usedRange.address}.`);
+            console.log(`[DEBUG] Loaded values and format for range: ${usedRange.address}.`);
 
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
-            console.log("[DEBUG] Headers found:", headers);
             const assignedColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned);
 
             if (assignedColIdx === -1) {
-                console.log("[DEBUG] Could not find 'Assigned' column to cache colors. Exiting function.");
+                console.log("[DEBUG] 'Assigned' column not found.");
                 return;
             }
             console.log(`[DEBUG] 'Assigned' column found at index: ${assignedColIdx}`);
 
-            const assignedColumnRange = usedRange.getColumn(assignedColIdx);
-            assignedColumnRange.load("values, format/fill/color");
-            await context.sync();
-            console.log("[DEBUG] Loaded values and format for 'Assigned' column.");
-            console.log("[DEBUG] Full format object:", JSON.stringify(assignedColumnRange.format, null, 2));
-            
             const newColorMap = {};
-            const values = assignedColumnRange.values;
-            console.log(`[DEBUG] Total rows in 'Assigned' column: ${values.length}`);
+            const values = usedRange.values;
+            const colors = usedRange.format.fill.color;
 
-            if (assignedColumnRange.format && assignedColumnRange.format.fill) {
-                const colors = assignedColumnRange.format.fill.color;
-                console.log("[DEBUG] Format and fill color properties are available.");
+            if (!colors) {
+                console.log("[DEBUG] No fill color information available for the used range.");
+                return;
+            }
 
-                if (!colors) {
-                    console.log("[DEBUG] 'colors' array is null or undefined. No fill colors to cache.");
-                } else {
-                    // Start from 1 to skip header
-                    for (let i = 1; i < values.length; i++) {
-                        console.log(`[DEBUG] Processing row ${i + 1}`);
-                        const valueRow = values[i];
-                        if (!valueRow) {
-                            console.log(`[DEBUG] Row ${i + 1}: values[${i}] is null or undefined. Skipping.`);
-                            continue;
-                        }
+            // Iterate through each row of the used range, starting from the second row.
+            for (let i = 1; i < values.length; i++) {
+                const name = values[i][assignedColIdx];
 
-                        const name = valueRow[0];
-                        if (!name) {
-                            console.log(`[DEBUG] Row ${i + 1}: Name is null or empty. Skipping.`);
-                            continue;
-                        }
-                        console.log(`[DEBUG] Row ${i + 1}: Name='${name}'`);
-
-                        if (newColorMap[name]) {
-                            console.log(`[DEBUG] Row ${i + 1}: Color for '${name}' already cached. Skipping.`);
-                            continue;
-                        }
-
-                        const colorRow = colors[i];
-                        if (!colorRow) {
-                            console.log(`[DEBUG] Row ${i + 1}: colors[${i}] is null or undefined. Skipping.`);
-                            continue;
-                        }
-
-                        const cellColor = colorRow[0];
-                        if (!cellColor) {
-                            console.log(`[DEBUG] Row ${i + 1}: cellColor is null or empty. Skipping.`);
-                            continue;
-                        }
-                        console.log(`[DEBUG] Row ${i + 1}: Color='${cellColor}'`);
-
-                        if (cellColor !== '#ffffff' && cellColor !== '#000000') {
-                            newColorMap[name] = cellColor;
-                            console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
-                        }
+                // Check if the name exists and is not already in our map.
+                if (name && !newColorMap[name]) {
+                    const cellColor = colors[i][assignedColIdx];
+                    if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
+                        newColorMap[name] = cellColor;
+                        console.log(`[DEBUG] Caching color for '${name}': ${cellColor}`);
                     }
                 }
-            } else {
-                console.log("[DEBUG] No formatting information (format.fill) found for the 'Assigned' column.");
             }
             
             assignedColorMap = newColorMap;
