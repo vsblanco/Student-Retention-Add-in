@@ -221,6 +221,7 @@ async function cacheAssignedColors() {
             assignedColumnRange.load("values, format/fill/color");
             await context.sync();
             console.log("[DEBUG] Loaded values and format for 'Assigned' column.");
+            console.log("[DEBUG] Full format object:", JSON.stringify(assignedColumnRange.format, null, 2));
             
             const newColorMap = {};
             const values = assignedColumnRange.values;
@@ -230,7 +231,6 @@ async function cacheAssignedColors() {
                 const colors = assignedColumnRange.format.fill.color;
                 console.log("[DEBUG] Format and fill color properties are available.");
 
-                // FIX: Add a null check for the 'colors' array itself.
                 if (!colors) {
                     console.log("[DEBUG] 'colors' array is null or undefined. No fill colors to cache.");
                 } else {
