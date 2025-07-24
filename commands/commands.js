@@ -878,7 +878,28 @@ async function processCreateLdaMessage(arg) {
 async function handleCreateLdaSheet() {
     try {
         await Excel.run(async (context) => {
-            // 1. Get data from Master List
+            // 1. Get all existing worksheet names to check for duplicates.
+            const worksheets = context.workbook.worksheets;
+            worksheets.load("items/name");
+            await context.sync();
+
+            const today = new Date();
+            const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+            let sheetName = baseSheetName;
+            let counter = 2;
+
+            // Create a set of existing names for quick lookups.
+            const existingSheetNames = new Set();
+            for (let i = 0; i < worksheets.items.length; i++) {
+                existingSheetNames.add(worksheets.items[i].name);
+            }
+
+            // 2. Find a unique sheet name.
+            while (existingSheetNames.has(sheetName)) {
+                sheetName = `${baseSheetName} (${counter++})`;
+            }
+
+            // 3. Get data from Master List
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
             masterRange.load("values");
@@ -893,7 +914,7 @@ async function handleCreateLdaSheet() {
                 throw new Error("'Days Out' column not found in Master List.");
             }
 
-            // 2. Filter and sort the data
+            // 4. Filter and sort the data
             const dataRows = masterData.slice(1); // All rows except header
             const filteredData = dataRows.filter(row => {
                 const daysOut = row[daysOutColIdx];
@@ -907,18 +928,16 @@ async function handleCreateLdaSheet() {
                 return daysOutB - daysOutA;
             });
 
-            // 3. Create the new sheet
-            const today = new Date();
-            const sheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+            // 5. Create the new sheet with the unique name
             const newSheet = context.workbook.worksheets.add(sheetName);
             newSheet.activate();
 
-            // 4. Write data to the new sheet
+            // 6. Write data to the new sheet
             const dataToWrite = [headers, ...filteredData];
             const newRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
             newRange.values = dataToWrite;
 
-            // 5. Autofit columns
+            // 7. Autofit columns
             newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             
             await context.sync();
