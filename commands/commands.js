@@ -974,42 +974,38 @@ async function processCreateLdaMessage(arg) {
  */
 async function handleCreateLdaSheet() {
     try {
+        let sheetName;
+        let finalData;
+        let headers;
+
+        // Phase 1: Read data and create the new sheet
         await Excel.run(async (context) => {
-            // 1. Get all existing worksheet names to check for duplicates.
             const worksheets = context.workbook.worksheets;
             worksheets.load("items/name");
             await context.sync();
 
             const today = new Date();
             const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-            let sheetName = baseSheetName;
+            sheetName = baseSheetName;
             let counter = 2;
-
-            const existingSheetNames = new Set();
-            for (let i = 0; i < worksheets.items.length; i++) {
-                existingSheetNames.add(worksheets.items[i].name);
-            }
-
+            const existingSheetNames = new Set(worksheets.items.map(s => s.name));
             while (existingSheetNames.has(sheetName)) {
                 sheetName = `${baseSheetName} (${counter++})`;
             }
 
-            // 3. Get data from Master List
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
-            masterRange.load("values");
+            masterRange.load("values, formulas");
             await context.sync();
 
             const masterData = masterRange.values;
-            let headers = [...masterData[0]]; // Make a mutable copy
+            const masterFormulas = masterRange.formulas;
+            headers = [...masterData[0]];
             const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+            
             const daysOutColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
+            if (daysOutColIdx === -1) throw new Error("'Days Out' column not found in Master List.");
 
-            if (daysOutColIdx === -1) {
-                throw new Error("'Days Out' column not found in Master List.");
-            }
-
-            // NEW: Check for 'Assigned' column and add it if missing
             let assignedColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
             let assignedColumnAdded = false;
             if (assignedColIdx === -1) {
@@ -1017,44 +1013,61 @@ async function handleCreateLdaSheet() {
                 assignedColumnAdded = true;
             }
 
-            // 4. Filter and sort the data
-            const dataRows = masterData.slice(1);
-            const filteredData = dataRows.filter(row => {
+            const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const dataRowsWithIndex = masterData.slice(1).map((row, index) => ({ row, originalIndex: index + 1 }));
+
+            const filteredRows = dataRowsWithIndex.filter(({ row }) => {
                 const daysOut = row[daysOutColIdx];
                 return typeof daysOut === 'number' && daysOut > 5;
             });
 
-            filteredData.sort((a, b) => {
-                const daysOutA = a[daysOutColIdx] || 0;
-                const daysOutB = b[daysOutColIdx] || 0;
-                return daysOutB - daysOutA;
+            filteredRows.sort((a, b) => (b.row[daysOutColIdx] || 0) - (a.row[daysOutColIdx] || 0));
+
+            const dataToWrite = filteredRows.map(({ row, originalIndex }) => {
+                const newRow = [...row];
+                if (gradeBookColIdx !== -1) {
+                    const formula = masterFormulas[originalIndex][gradeBookColIdx];
+                    const value = newRow[gradeBookColIdx];
+                    if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
+                        newRow[gradeBookColIdx] = formula;
+                    } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                        newRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                    }
+                }
+                if (assignedColumnAdded) newRow.unshift("");
+                return newRow;
             });
 
-            // If 'Assigned' column was added, prepend an empty cell to each data row
-            if (assignedColumnAdded) {
-                filteredData.forEach(row => row.unshift(""));
-            }
+            finalData = [headers, ...dataToWrite];
 
-            // 5. Create the new sheet
             const newSheet = context.workbook.worksheets.add(sheetName);
             newSheet.activate();
 
-            // 6. Write data and create table
-            const dataToWrite = [headers, ...filteredData];
-            if (dataToWrite.length > 1) {
-                const newRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
-                newRange.values = dataToWrite;
-                
-                const table = newSheet.tables.add(newRange, true);
+            if (finalData.length > 1) {
+                const newRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
+                newRange.values = finalData;
+            } else {
+                newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
+            }
+            
+            await context.sync();
+        });
+
+        // Phase 2: Format the new sheet
+        await Excel.run(async (context) => {
+            const newSheet = context.workbook.worksheets.getItem(sheetName);
+            
+            if (finalData.length > 1) {
+                const tableRange = newSheet.getUsedRange();
+                const table = newSheet.tables.add(tableRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
                 table.style = "TableStyleLight9";
 
-                // 7. Apply formatting
-                const newHeaders = dataToWrite[0].map(h => String(h || '').toLowerCase());
+                const newHeaders = finalData[0].map(h => String(h || '').toLowerCase());
                 
                 const gradeColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
                 if (gradeColIdx !== -1) {
-                    const gradeRange = newSheet.getRangeByIndexes(1, gradeColIdx, dataToWrite.length - 1, 1);
+                    const gradeRange = table.columns.getItemAt(gradeColIdx).getDataBodyRange();
                     const conditionalFormat = gradeRange.format.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
                         minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
@@ -1067,23 +1080,19 @@ async function handleCreateLdaSheet() {
                 dateColumnsToFormat.forEach(colName => {
                     const colIdx = findColumnIndex(newHeaders, [colName]);
                     if (colIdx !== -1) {
-                        const dateColumnRange = newSheet.getRangeByIndexes(1, colIdx, dataToWrite.length - 1, 1);
+                        const dateColumnRange = table.columns.getItemAt(colIdx).getRange();
                         dateColumnRange.numberFormat = [["m/d/yyyy"]];
                     }
                 });
 
                 const programVersionColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.programVersion);
                 if (programVersionColIdx !== -1) {
-                    const programVersionColumn = newSheet.getRangeByIndexes(0, programVersionColIdx, dataToWrite.length, 1).getColumn(0);
-                    programVersionColumn.format.columnWidth = 13 * 5; // Approximate conversion
+                    const programVersionColumn = table.columns.getItemAt(programVersionColIdx).getRange().format;
+                    programVersionColumn.columnWidth = 91; // Approx 13 characters wide
                 }
-
-                newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
-            } else {
-                newSheet.getRange("A1").values = [headers];
-                newSheet.getRange("A1").getResizedRange(0, headers.length - 1).format.autofitColumns();
             }
-            
+
+            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             await context.sync();
         });
 
@@ -1104,4 +1113,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.9
+//Version 1.11
