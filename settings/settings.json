@@ -1,5 +1,7 @@
 {
+  "transferData": {
+    "daysOutFilter": 6
+  },
   "defaultCategory": "General",
-  "showWelcomeMessage": true,
-  "ldaDaysOut": 6
+  "showWelcomeMessage": true
 }
