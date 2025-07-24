@@ -41,6 +41,11 @@ function loadSettings() {
   const settings = getSettings();
   if (settings && settings.createlda) {
     document.getElementById("ldaDaysOut").value = settings.createlda.daysOutFilter || 6;
+    // Default to true if the setting is not defined (nullish coalescing operator)
+    document.getElementById("includeFailingList").checked = settings.createlda.includeFailingList ?? true;
+  } else {
+    // Also default to true if there are no settings at all yet
+    document.getElementById("includeFailingList").checked = true;
   }
 }
 
@@ -50,11 +55,13 @@ function loadSettings() {
 function saveSettings() {
   const settings = getSettings();
   const daysOut = document.getElementById("ldaDaysOut").value;
+  const includeFailing = document.getElementById("includeFailingList").checked;
 
   if (!settings.createlda) {
     settings.createlda = {};
   }
   settings.createlda.daysOutFilter = parseInt(daysOut, 10);
+  settings.createlda.includeFailingList = includeFailing;
 
   Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settings));
   Office.context.document.settings.saveAsync(function (asyncResult) {
