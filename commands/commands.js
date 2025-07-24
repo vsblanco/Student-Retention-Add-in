@@ -999,7 +999,7 @@ async function handleCreateLdaSheet() {
             const masterFormulas = masterRange.formulas;
             const headers = [...masterData[0]];
             const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-
+            
             const daysOutColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
             if (daysOutColIdx === -1) throw new Error("'Days Out' column not found in Master List.");
 
@@ -1049,15 +1049,6 @@ async function handleCreateLdaSheet() {
                 console.log("[DEBUG] Data written to the new sheet.");
 
                 const tableRange = newSheet.getUsedRange();
-                tableRange.load('address');
-                await context.sync();
-                console.log(`[DEBUG] Used range for table: ${tableRange.address}`);
-                
-                // Load the tables property to ensure it's available
-                newSheet.load('tables');
-                await context.sync();
-                console.log("[DEBUG] newSheet.tables object:", newSheet.tables);
-
                 const table = newSheet.tables.add(tableRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
                 table.style = "TableStyleLight9";
@@ -1068,6 +1059,12 @@ async function handleCreateLdaSheet() {
                 const gradeColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
                 if (gradeColIdx !== -1) {
                     const gradeRange = table.columns.getItemAt(gradeColIdx).getDataBodyRange();
+                    
+                    // Load the conditionalFormats property before using it
+                    gradeRange.load("format/conditionalFormats");
+                    await context.sync();
+                    console.log("[DEBUG] Loaded conditionalFormats property.");
+
                     const conditionalFormat = gradeRange.format.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
                         minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
@@ -1090,7 +1087,7 @@ async function handleCreateLdaSheet() {
                 const programVersionColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.programVersion);
                 if (programVersionColIdx !== -1) {
                     const programVersionColumn = table.columns.getItemAt(programVersionColIdx).getRange().format;
-                    programVersionColumn.columnWidth = 91; // Approx 13 characters wide
+                    programVersionColumn.columnWidth = 91; 
                 }
                 
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
@@ -1110,15 +1107,19 @@ async function handleCreateLdaSheet() {
 
     } catch (error) {
         console.error("Error creating LDA sheet: " + error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        }
         if (createLdaDialog) {
             createLdaDialog.messageChild(JSON.stringify({ type: 'creationError', error: error.message }));
         }
     }
 }
 
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.13
+//Version 1.14
