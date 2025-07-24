@@ -1,4 +1,5 @@
 {
   "defaultCategory": "General",
-  "showWelcomeMessage": true
+  "showWelcomeMessage": true,
+  "ldaDaysOut": 6
 }
