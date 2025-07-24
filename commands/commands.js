@@ -837,7 +837,8 @@ async function transferData(event) {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values");
+            // Load both values and formulas to inspect hyperlinks
+            usedRange.load("values, formulas");
             await context.sync();
 
             const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
@@ -850,30 +851,43 @@ async function transferData(event) {
             };
 
             const dataToCopy = [];
+            const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
+
             for (let i = 1; i < usedRange.values.length; i++) {
-                const row = usedRange.values[i];
+                const rowValues = usedRange.values[i];
+                const rowFormulas = usedRange.formulas[i];
                 const rowData = {};
                 let hasData = false;
-                if (colIndices.studentName !== -1 && row[colIndices.studentName]) {
-                    rowData.StudentName = row[colIndices.studentName];
+
+                if (colIndices.studentName !== -1 && rowValues[colIndices.studentName]) {
+                    rowData.StudentName = rowValues[colIndices.studentName];
                     hasData = true;
                 }
-                if (colIndices.gradeBook !== -1 && row[colIndices.gradeBook]) {
-                    rowData.GradeBook = row[colIndices.gradeBook];
+
+                if (colIndices.gradeBook !== -1 && rowValues[colIndices.gradeBook]) {
+                    const formula = rowFormulas[colIndices.gradeBook];
+                    const match = String(formula).match(hyperlinkRegex);
+                    if (match && match[1]) {
+                        rowData.GradeBook = match[1]; // Extract URL from formula
+                    } else {
+                        rowData.GradeBook = rowValues[colIndices.gradeBook]; // Fallback to value
+                    }
                     hasData = true;
                 }
-                if (colIndices.daysOut !== -1 && row[colIndices.daysOut]) {
-                    rowData.DaysOut = row[colIndices.daysOut];
+
+                if (colIndices.daysOut !== -1 && rowValues[colIndices.daysOut]) {
+                    rowData.DaysOut = rowValues[colIndices.daysOut];
                     hasData = true;
                 }
-                if (colIndices.lastLda !== -1 && row[colIndices.lastLda]) {
-                    rowData.LDA = row[colIndices.lastLda];
+                if (colIndices.lastLda !== -1 && rowValues[colIndices.lastLda]) {
+                    rowData.LDA = rowValues[colIndices.lastLda];
                     hasData = true;
                 }
-                if (colIndices.grade !== -1 && row[colIndices.grade]) {
-                    rowData.Grade = row[colIndices.grade];
+                if (colIndices.grade !== -1 && rowValues[colIndices.grade]) {
+                    rowData.Grade = rowValues[colIndices.grade];
                     hasData = true;
                 }
+
                 if (hasData) {
                     dataToCopy.push(rowData);
                 }
