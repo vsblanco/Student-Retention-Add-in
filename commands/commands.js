@@ -873,17 +873,53 @@ async function processCreateLdaMessage(arg) {
 }
 
 /**
- * Creates a new worksheet with today's date for LDA.
+ * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
     try {
         await Excel.run(async (context) => {
+            // 1. Get data from Master List
+            const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const masterRange = masterSheet.getUsedRange();
+            masterRange.load("values");
+            await context.sync();
+
+            const masterData = masterRange.values;
+            const headers = masterData[0];
+            const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+            const daysOutColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
+
+            if (daysOutColIdx === -1) {
+                throw new Error("'Days Out' column not found in Master List.");
+            }
+
+            // 2. Filter and sort the data
+            const dataRows = masterData.slice(1); // All rows except header
+            const filteredData = dataRows.filter(row => {
+                const daysOut = row[daysOutColIdx];
+                return typeof daysOut === 'number' && daysOut > 5;
+            });
+
+            // Sort by Days Out, greatest to least
+            filteredData.sort((a, b) => {
+                const daysOutA = a[daysOutColIdx] || 0;
+                const daysOutB = b[daysOutColIdx] || 0;
+                return daysOutB - daysOutA;
+            });
+
+            // 3. Create the new sheet
             const today = new Date();
-            // Format date as M-DD-YYYY
             const sheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-            
-            const sheet = context.workbook.worksheets.add(sheetName);
-            sheet.activate();
+            const newSheet = context.workbook.worksheets.add(sheetName);
+            newSheet.activate();
+
+            // 4. Write data to the new sheet
+            const dataToWrite = [headers, ...filteredData];
+            const newRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
+            newRange.values = dataToWrite;
+
+            // 5. Autofit columns
+            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             
             await context.sync();
         });
@@ -904,4 +940,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.4
+//Version 1.5
