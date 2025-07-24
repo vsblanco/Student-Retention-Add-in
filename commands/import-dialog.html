@@ -1,124 +1,156 @@
 <!DOCTYPE html>
 <html>
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <title>Create LDA</title>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script src="exceljsmin.js"></script>
-    <link
-      rel="stylesheet"
-      href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/11.0.0/css/fabric.min.css"
-    />
-    <style>
-      body {
-        padding: 20px;
-      }
-    </style>
-  </head>
-  <body>
-    <h1 class="ms-font-xl">Create LDA File</h1>
-    <p class="ms-font-m">This will create a new Excel file with students who have not attended recently.</p>
-    <button id="create-lda" class="ms-Button ms-Button--primary">Create File</button>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Import Data</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
+
+    <div id="initial-view" class="w-full max-w-sm text-center">
+        <label for="file-input" class="block text-sm font-medium text-gray-700 mb-2">Select a file to import:</label>
+        
+        <input type="file" id="file-input" accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
+        
+        <div id="button-container" class="mt-4 space-y-2">
+            <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
+                Update Master List
+            </button>
+            <button id="update-grades-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
+                Update Grades
+            </button>
+        </div>
+        <p id="status" class="text-xs text-gray-500 mt-2 h-4"></p>
+    </div>
+
+    <div id="progress-view" class="w-full max-w-sm text-left hidden">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Importing Data...</h3>
+        <div id="log-container" class="w-full h-48 p-2 bg-gray-800 text-white font-mono text-xs rounded-md overflow-y-auto border border-gray-600">
+            <!-- Log messages will be appended here -->
+        </div>
+        <button id="close-button" class="mt-4 w-full bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200 hidden">
+            Close
+        </button>
+    </div>
+
 
     <script>
-      (function () {
-        "use strict";
-        Office.onReady(function () {
-          $(document).ready(function () {
-            $("#create-lda").click(createLDA);
-          });
+        let selectedFile = null;
+
+        Office.onReady(() => {
+            console.log("Import dialog HTML page loaded successfully.");
+
+            const initialView = document.getElementById("initial-view");
+            const progressView = document.getElementById("progress-view");
+            const logContainer = document.getElementById("log-container");
+            const closeButton = document.getElementById("close-button");
+
+            const fileInput = document.getElementById("file-input");
+            const updateMasterButton = document.getElementById("update-master-list-button");
+            const updateGradesButton = document.getElementById("update-grades-button");
+            const status = document.getElementById("status");
+
+            // Disable buttons initially
+            updateMasterButton.disabled = true;
+            updateGradesButton.disabled = true;
+
+            // Listen for file selection
+            fileInput.addEventListener('change', () => {
+                updateMasterButton.classList.add('hidden');
+                updateGradesButton.classList.add('hidden');
+                updateMasterButton.disabled = true;
+                updateGradesButton.disabled = true;
+
+                if (fileInput.files.length > 0) {
+                    selectedFile = fileInput.files[0];
+                    status.textContent = "Checking file...";
+                    
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: 'fileSelected',
+                            fileName: selectedFile.name,
+                            data: event.target.result
+                        }));
+                    };
+                    reader.readAsDataURL(selectedFile);
+                } else {
+                    selectedFile = null;
+                    status.textContent = "";
+                }
+            });
+
+            const startImport = (actionType) => {
+                if (selectedFile) {
+                    initialView.classList.add('hidden');
+                    progressView.classList.remove('hidden');
+                    logContainer.innerHTML = ''; // Clear previous logs
+                    closeButton.classList.add('hidden');
+
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: actionType,
+                            fileName: selectedFile.name,
+                            data: event.target.result
+                        }));
+                    };
+                    reader.readAsDataURL(selectedFile);
+                }
+            };
+
+            updateMasterButton.addEventListener('click', () => startImport('updateMaster'));
+            updateGradesButton.addEventListener('click', () => startImport('updateGrades'));
+            closeButton.addEventListener('click', () => {
+                Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
+            });
+
+            // Listen for messages from the parent (commands.js)
+            Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
+                const message = JSON.parse(arg.message);
+                
+                if (message.type === 'log' || message.type === 'error' || message.type === 'complete') {
+                    const logEntry = document.createElement('p');
+                    logEntry.textContent = message.status;
+                    if (message.type === 'error') {
+                        logEntry.className = 'text-red-400';
+                    } else if (message.type === 'complete') {
+                        logEntry.className = 'text-green-400 font-bold';
+                        closeButton.classList.remove('hidden');
+                    } else {
+                        logEntry.className = 'text-gray-300';
+                    }
+                    logContainer.appendChild(logEntry);
+                    logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
+                } else {
+                    // Initial file check response
+                    status.textContent = message.status || "";
+
+                    if (message.canUpdateMaster) {
+                        updateMasterButton.classList.remove('hidden');
+                        updateMasterButton.disabled = false;
+                    } else {
+                        updateMasterButton.classList.add('hidden');
+                        updateMasterButton.disabled = true;
+                    }
+
+                    if (message.canUpdateGrades) {
+                        updateGradesButton.classList.remove('hidden');
+                        updateGradesButton.disabled = false;
+                    } else {
+                        updateGradesButton.classList.add('hidden');
+                        updateGradesButton.disabled = true;
+                    }
+                }
+            });
         });
-
-        /**
-         * Converts a JavaScript Date object to an Excel serial number (OA date).
-         * @param {Date} date The JavaScript Date to convert.
-         * @returns {number} The date as an Excel serial number.
-         */
-        function toOADate(date) {
-            // Excel's epoch starts on 1899-12-30.
-            // 25569 is the number of days between the UNIX epoch (1970-01-01) and Excel's epoch.
-            return (date.getTime() / 86400000) + 25569.0;
-        }
-
-        function createLDA() {
-          Excel.run(function (context) {
-            var masterSheet = context.workbook.worksheets.getItem("Master List");
-            var table = masterSheet.tables.getItemAt(0);
-            var ldaColumn = table.columns.getItem("Last Day Attended");
-            var headerRange = table.getHeaderRowRange().load("values");
-            var bodyRange = table.getDataBodyRange().load("values");
-
-            return context
-              .sync()
-              .then(function () {
-                // Get the setting for "days out" from the document settings.
-                // Fallback to a default of 6 if not set.
-                var ldaDaysOutSetting = Office.context.document.settings.get("ldaDaysOut");
-                var daysOut = (ldaDaysOutSetting !== null && ldaDaysOutSetting !== undefined) ? ldaDaysOutSetting : 6;
-
-                // Calculate the date to filter by
-                var today = new Date();
-                var filterDate = new Date(today);
-                filterDate.setDate(today.getDate() - daysOut);
-
-                // Convert the JS date to Excel's serial number format for filtering
-                var filterDateSerial = toOADate(filterDate);
-
-                // Apply a custom filter to get all dates less than or equal to the filter date
-                ldaColumn.filter.applyCustom({
-                    filterOn: Excel.FilterOn.custom,
-                    criterion1: "<=" + filterDateSerial
-                });
-
-                return context.sync();
-              })
-              .then(function () {
-                var filteredRange = table.getRange().getVisibleView();
-                var filteredValues = filteredRange.load("values");
-                return context.sync().then(function () {
-                  return filteredValues.values;
-                });
-              })
-              .then(function (visibleData) {
-                  // Clear the filter after getting the data
-                  ldaColumn.filter.clear();
-
-                  if (visibleData.length <= 1) { // Only headers are visible
-                      console.log("No students found matching the LDA criteria.");
-                      // You might want to show a message to the user here.
-                      Office.context.ui.messageParent("No data");
-                      return context.sync();
-                  }
-
-                  // Create a new workbook and add the data
-                  const newWorkbook = new ExcelJS.Workbook();
-                  const newSheet = newWorkbook.addWorksheet("Todays LDA");
-                  newSheet.addRows(visibleData);
-
-                  // Create the file
-                  return newWorkbook.xlsx.writeBuffer().then(function (buffer) {
-                      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "Todays LDA.xlsx";
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      Office.context.ui.messageParent("Success");
-                  });
-              })
-              .catch(function (error) {
-                  console.log("Error: " + error);
-                  if (error instanceof OfficeExtension.Error) {
-                      console.log("Debug info: " + JSON.stringify(error.debugInfo));
-                  }
-                  Office.context.ui.messageParent("Error");
-              });
-          });
-        }
-      })();
     </script>
-  </body>
+</body>
 </html>
