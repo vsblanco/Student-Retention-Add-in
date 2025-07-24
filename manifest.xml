@@ -162,6 +162,29 @@
               </Group>
             </CustomTab>
           </ExtensionPoint>
+
+          <!-- START: Context Menu Definition -->
+          <ExtensionPoint xsi:type="ContextMenu">
+            <OfficeMenu id="ContextMenuCell">
+              <Control xsi:type="Button" id="ContactedContextMenuButton">
+                <Label resid="ContactedContextMenu.Label"/>
+                <Supertip>
+                  <Title resid="ContactedContextMenu.Label"/>
+                  <Description resid="ContactedContextMenu.Tooltip"/>
+                </Supertip>
+                <Icon>
+                  <bt:Image size="16" resid="ContactedIcon.16x16"/>
+                  <bt:Image size="32" resid="ContactedIcon.32x32"/>
+                  <bt:Image size="80" resid="ContactedIcon.80x80"/>
+                </Icon>
+                <Action xsi:type="ExecuteFunction">
+                  <FunctionName>toggleHighlight</FunctionName>
+                </Action>
+              </Control>
+            </OfficeMenu>
+          </ExtensionPoint>
+          <!-- END: Context Menu Definition -->
+          
         </DesktopFormFactor>
       </Host>
     </Hosts>
@@ -210,6 +233,7 @@
         <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
         <bt:String id="AboutButton.Label" DefaultValue="About"/>
+        <bt:String id="ContactedContextMenu.Label" DefaultValue="Contacted"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
@@ -219,6 +243,7 @@
         <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
         <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
+        <bt:String id="ContactedContextMenu.Tooltip" DefaultValue="Toggles a yellow highlight on the selected student row to mark as contacted."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
