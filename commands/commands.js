@@ -29,29 +29,9 @@ const CONSTANTS = {
     }
 };
 
-const SETTINGS_KEY = "studentRetentionSettings";
-
 let importDialog = null;
 let transferDialog = null;
 let createLdaDialog = null; // New dialog variable
-
-
-/**
- * Gets the settings object from document settings.
- * @returns {object} The parsed settings object.
- */
-function getSettings() {
-    const settingsString = Office.context.document.settings.get(SETTINGS_KEY);
-    if (settingsString) {
-        try {
-            return JSON.parse(settingsString);
-        } catch (e) {
-            console.error("Error parsing settings:", e);
-            return {};
-        }
-    }
-    return {};
-}
 
 /**
  * Parses a date value from various possible formats (Date object, string, Excel serial number).
@@ -855,12 +835,9 @@ async function transferData(event) {
     let jsonDataString = "";
     try {
         await Excel.run(async (context) => {
-            const settings = getSettings();
-            const daysOutFilter = settings.transferData && settings.transferData.daysOutFilter !== undefined ? settings.transferData.daysOutFilter : 6;
-            console.log(`[DEBUG] Transfer Data using Days Out filter: > ${daysOutFilter}`);
-
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
+            // Load both values and formulas to inspect hyperlinks
             usedRange.load("values, formulas");
             await context.sync();
 
@@ -878,15 +855,6 @@ async function transferData(event) {
 
             for (let i = 1; i < usedRange.values.length; i++) {
                 const rowValues = usedRange.values[i];
-
-                // Filter logic
-                if (daysOutFilter > -1 && colIndices.daysOut !== -1) {
-                    const daysOut = rowValues[colIndices.daysOut];
-                    if (typeof daysOut !== 'number' || daysOut <= daysOutFilter) {
-                        continue;
-                    }
-                }
-
                 const rowFormulas = usedRange.formulas[i];
                 const rowData = {};
                 let hasData = false;
@@ -1019,13 +987,9 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v4");
     try {
         await Excel.run(async (context) => {
-            const settings = getSettings();
-            const daysOutFilter = settings.transferData && settings.transferData.daysOutFilter !== undefined ? settings.transferData.daysOutFilter : 6;
-            console.log(`[DEBUG] Using Days Out filter: > ${daysOutFilter}`);
-
             // Phase 1: Read data and create the new sheet
             console.log("[DEBUG] Phase 1: Reading data and creating sheet.");
             const worksheets = context.workbook.worksheets;
@@ -1067,7 +1031,7 @@ async function handleCreateLdaSheet() {
 
             const filteredRows = dataRowsWithIndex.filter(({ row }) => {
                 const daysOut = row[daysOutColIdx];
-                return typeof daysOut === 'number' && daysOut > daysOutFilter;
+                return typeof daysOut === 'number' && daysOut > 5;
             });
 
             filteredRows.sort((a, b) => (b.row[daysOutColIdx] || 0) - (a.row[daysOutColIdx] || 0));
@@ -1112,6 +1076,7 @@ async function handleCreateLdaSheet() {
                     const gradeColumn = table.columns.getItemAt(gradeColIdx);
                     const gradeRange = gradeColumn.getDataBodyRange();
                     
+                    // The crucial change is here: Access conditionalFormats directly from the range.
                     const conditionalFormat = gradeRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
                         minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
@@ -1170,4 +1135,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.18
+//Version 1.16
