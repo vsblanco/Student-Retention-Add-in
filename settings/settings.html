@@ -16,9 +16,7 @@
     />
 
     <!-- Styles for this task pane -->
-    <link href="../taskpane/taskpane.css" rel="stylesheet" type="text/css" />
     <link href="settings.css" rel="stylesheet" type="text/css" />
-    <script type="text/javascript" src="settings.js"></script>
   </head>
 
   <body class="ms-font-m ms-Fabric" dir="ltr">
@@ -26,10 +24,22 @@
       <div class="ms-Grid-row">
         <div class="ms-Grid-col ms-sm12 ms-md12 ms-lg12">
           <h2 class="ms-font-xl">Settings</h2>
-          <p class="ms-font-m">This is where your add-in settings will go.</p>
-          <p class="ms-font-m">You can tell me what to build here next!</p>
+          
+          <div class="setting-container">
+            <h3 class="ms-font-l">Create LDA</h3>
+            <div class="ms-TextField">
+              <label class="ms-Label" for="ldaDaysOut">Filter by days since last attendance</label>
+              <input class="ms-TextField-field" type="number" id="ldaDaysOut" placeholder="e.g., 6" />
+            </div>
+          </div>
+
+          <button id="save-settings" class="ms-Button ms-Button--primary"><span class="ms-Button-label">Save Settings</span></button>
+          
+          <div id="status-notification" class="ms-font-m" style="display: none;"></div>
+
         </div>
       </div>
     </main>
+    <script type="text/javascript" src="settings.js"></script>
   </body>
 </html>
