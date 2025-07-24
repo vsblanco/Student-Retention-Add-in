@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
+  <!-- It's a good practice to generate a new GUID for your add-in -->
   <Id>541b5174-b498-4e43-98a1-c116e3a3f78b</Id>
   <Version>1.0.0.0</Version>
-  <ProviderName>Contoso</ProviderName>
+  <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention"/>
-  <Description DefaultValue="A template to get started."/>
+  <Description DefaultValue="An add-in for tracking student retention tasks."/>
   <IconUrl DefaultValue="~remoteAppUrl/images/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="~remoteAppUrl/images/icon-80.png"/>
   <SupportUrl DefaultValue="https://www.contoso.com/help"/>
@@ -30,15 +31,18 @@
           </GetStarted>
           <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <CustomTab id="Contoso.Tab1">
-              <Group id="Contoso.Student">
+            <!-- Using the same Tab ID as your working version -->
+            <CustomTab id="Victor.RetentionTab">
+              <Label resid="RetentionTab.Label"/>
+              <!-- Student Group -->
+              <Group id="StudentGroup">
                 <Label resid="StudentGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="Contoso.StudentDetails">
+                <Control xsi:type="Button" id="StudentDetailsButton">
                   <Label resid="StudentDetails.Label"/>
                   <Supertip>
                     <Title resid="StudentDetails.Label"/>
@@ -53,7 +57,7 @@
                     <FunctionName>studentDetails</FunctionName>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="Contoso.Contacted">
+                <Control xsi:type="Button" id="ContactedButton">
                   <Label resid="Contacted.Label"/>
                   <Supertip>
                     <Title resid="Contacted.Label"/>
@@ -68,30 +72,16 @@
                     <FunctionName>contacted</FunctionName>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="Contoso.Email">
-                  <Label resid="Email.Label"/>
-                  <Supertip>
-                    <Title resid="Email.Label"/>
-                    <Description resid="Email.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.Email.16x16"/>
-                    <bt:Image size="32" resid="Icon.Email.32x32"/>
-                    <bt:Image size="80" resid="Icon.Email.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>email</FunctionName>
-                  </Action>
-                </Control>
               </Group>
-              <Group id="Contoso.Data">
+              <!-- Data Group -->
+              <Group id="DataGroup">
                 <Label resid="DataGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="Contoso.CreateLDA">
+                <Control xsi:type="Button" id="CreateLdaButton">
                   <Label resid="CreateLDA.Label"/>
                   <Supertip>
                     <Title resid="CreateLDA.Label"/>
@@ -106,45 +96,16 @@
                     <FunctionName>createLDA</FunctionName>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="Contoso.Import">
-                  <Label resid="Import.Label"/>
-                  <Supertip>
-                    <Title resid="Import.Label"/>
-                    <Description resid="Import.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.Import.16x16"/>
-                    <bt:Image size="32" resid="Icon.Import.32x32"/>
-                    <bt:Image size="80" resid="Icon.Import.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>importData</FunctionName>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="Contoso.TransferData">
-                  <Label resid="TransferData.Label"/>
-                  <Supertip>
-                    <Title resid="TransferData.Label"/>
-                    <Description resid="TransferData.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.TransferData.16x16"/>
-                    <bt:Image size="32" resid="Icon.TransferData.32x32"/>
-                    <bt:Image size="80" resid="Icon.TransferData.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>transferData</FunctionName>
-                  </Action>
-                </Control>
               </Group>
-              <Group id="Contoso.System">
+              <!-- System Group -->
+              <Group id="SystemGroup">
                 <Label resid="SystemGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="Contoso.About">
+                <Control xsi:type="Button" id="AboutButton">
                   <Label resid="About.Label"/>
                   <Supertip>
                     <Title resid="About.Label"/>
@@ -155,11 +116,14 @@
                     <bt:Image size="32" resid="Icon.About.32x32"/>
                     <bt:Image size="80" resid="Icon.About.80x80"/>
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>about</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <!-- Added required TaskpaneId -->
+                    <TaskpaneId>About</TaskpaneId>
+                    <SourceLocation resid="About.Url"/>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="Contoso.Settings">
+                <!-- ** NEW SETTINGS BUTTON ** -->
+                <Control xsi:type="Button" id="SettingsButton">
                     <Label resid="Settings.Label" />
                     <Supertip>
                         <Title resid="Settings.Label" />
@@ -171,12 +135,12 @@
                         <bt:Image size="80" resid="Icon.Settings.80x80" />
                     </Icon>
                     <Action xsi:type="ShowTaskpane">
+                        <!-- Added required TaskpaneId -->
+                        <TaskpaneId>Settings</TaskpaneId>
                         <SourceLocation resid="Settings.Url" />
-                        <Title resid="Settings.Label" />
                     </Action>
                 </Control>
               </Group>
-              <Label resid="Contoso.Tab1.Label"/>
             </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
@@ -193,18 +157,9 @@
         <bt:Image id="Icon.Details.16x16" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
         <bt:Image id="Icon.Details.32x32" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
         <bt:Image id="Icon.Details.80x80" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
-        <bt:Image id="Icon.Email.16x16" DefaultValue="~remoteAppUrl/images/email-icon.png"/>
-        <bt:Image id="Icon.Email.32x32" DefaultValue="~remoteAppUrl/images/email-icon.png"/>
-        <bt:Image id="Icon.Email.80x80" DefaultValue="~remoteAppUrl/images/email-icon.png"/>
         <bt:Image id="Icon.CreateLDA.16x16" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
         <bt:Image id="Icon.CreateLDA.32x32" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
         <bt:Image id="Icon.CreateLDA.80x80" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
-        <bt:Image id="Icon.Import.16x16" DefaultValue="~remoteAppUrl/images/import-icon.png"/>
-        <bt:Image id="Icon.Import.32x32" DefaultValue="~remoteAppUrl/images/import-icon.png"/>
-        <bt:Image id="Icon.Import.80x80" DefaultValue="~remoteAppUrl/images/import-icon.png"/>
-        <bt:Image id="Icon.TransferData.16x16" DefaultValue="~remoteAppUrl/images/transfer-data-icon.png"/>
-        <bt:Image id="Icon.TransferData.32x32" DefaultValue="~remoteAppUrl/images/transfer-data-icon.png"/>
-        <bt:Image id="Icon.TransferData.80x80" DefaultValue="~remoteAppUrl/images/transfer-data-icon.png"/>
         <bt:Image id="Icon.About.16x16" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
         <bt:Image id="Icon.About.32x32" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
         <bt:Image id="Icon.About.80x80" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
@@ -217,34 +172,25 @@
         <bt:Url id="Commands.Url" DefaultValue="~remoteAppUrl/commands/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="~remoteAppUrl/taskpane/taskpane.html"/>
         <bt:Url id="About.Url" DefaultValue="~remoteAppUrl/about/about.html"/>
-        <bt:Url id="CreateLDA.Url" DefaultValue="~remoteAppUrl/commands/create-lda-dialog.html"/>
-        <bt:Url id="Import.Url" DefaultValue="~remoteAppUrl/commands/import-dialog.html"/>
-        <bt:Url id="Transfer.Url" DefaultValue="~remoteAppUrl/commands/transfer-dialog.html"/>
         <bt:Url id="Settings.Url" DefaultValue="~remoteAppUrl/settings/settings.html" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="Get started with your sample add-in!"/>
-        <bt:String id="Contoso.Tab1.Label" DefaultValue="Student Retention"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Get started with your add-in!"/>
+        <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
         <bt:String id="StudentGroup.Label" DefaultValue="Student"/>
         <bt:String id="DataGroup.Label" DefaultValue="Data"/>
         <bt:String id="SystemGroup.Label" DefaultValue="System"/>
         <bt:String id="Contacted.Label" DefaultValue="Contacted"/>
         <bt:String id="StudentDetails.Label" DefaultValue="Details"/>
-        <bt:String id="Email.Label" DefaultValue="Email"/>
         <bt:String id="CreateLDA.Label" DefaultValue="Create LDA"/>
-        <bt:String id="Import.Label" DefaultValue="Import"/>
-        <bt:String id="TransferData.Label" DefaultValue="Transfer"/>
         <bt:String id="About.Label" DefaultValue="About"/>
         <bt:String id="Settings.Label" DefaultValue="Settings" />
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="GetStarted.Description" DefaultValue="Your sample add-in loaded succesfully. Go to the HOME tab and click the 'Show Taskpane' button to get started."/>
+        <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
         <bt:String id="Contacted.Tooltip" DefaultValue="Mark student as contacted."/>
         <bt:String id="StudentDetails.Tooltip" DefaultValue="See student details."/>
-        <bt:String id="Email.Tooltip" DefaultValue="Email student."/>
         <bt:String id="CreateLDA.Tooltip" DefaultValue="Create LDA file."/>
-        <bt:String id="Import.Tooltip" DefaultValue="Import data."/>
-        <bt:String id="TransferData.Tooltip" DefaultValue="Transfer data to another file."/>
         <bt:String id="About.Tooltip" DefaultValue="About this add-in."/>
         <bt:String id="Settings.Tooltip" DefaultValue="Configure add-in settings." />
       </bt:LongStrings>
