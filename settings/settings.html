@@ -24,15 +24,29 @@
             <img src="../images/create-lda-icon.png" alt="Create LDA Icon" class="w-6 h-6 mr-3" />
             <h3 class="text-lg font-semibold text-gray-700">Create LDA</h3>
           </div>
-          <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-600" for="ldaDaysOut">Days Out Filter</label>
-            <input
-              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              type="number"
-              id="ldaDaysOut"
-              placeholder="e.g., 6"
-            />
-            <p class="text-xs text-gray-500 pt-1">This sets the minimum 'Days Out' for a student to be included when creating a new LDA sheet.</p>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-600" for="ldaDaysOut">Days Out Filter</label>
+              <input
+                class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                type="number"
+                id="ldaDaysOut"
+                placeholder="e.g., 6"
+              />
+              <p class="text-xs text-gray-500 pt-1">This sets the minimum 'Days Out' for a student to be included when creating a new LDA sheet.</p>
+            </div>
+            <div class="border-t border-gray-200 pt-4">
+              <label for="includeFailingList" class="flex items-center justify-between cursor-pointer">
+                <span class="text-sm font-medium text-gray-600">Include Failing List</span>
+                <!-- Toggle Switch -->
+                <div class="relative">
+                  <input type="checkbox" id="includeFailingList" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 peer-checked:bg-blue-600"></div>
+                  <div class="absolute top-[2px] left-[2px] bg-white border-gray-300 border rounded-full h-5 w-5 transition-all peer-checked:translate-x-full peer-checked:border-white"></div>
+                </div>
+              </label>
+              <p class="text-xs text-gray-500 pt-1">If enabled, students with a failing grade will be added to the bottom of the LDA report.</p>
+            </div>
           </div>
         </div>
 
