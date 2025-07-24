@@ -1,23 +1,24 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
-  <!-- It's a good practice to generate a new GUID for your add-in -->
-  <Id>541b5174-b498-4e43-98a1-c116e3a3f78b</Id>
-  <Version>1.0.0.0</Version>
+  <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
+  <Version>1.5.0.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Student Retention"/>
+  <DisplayName DefaultValue="Student Retention Add-in"/>
   <Description DefaultValue="An add-in for tracking student retention tasks."/>
-  <IconUrl DefaultValue="~remoteAppUrl/images/icon-32.png"/>
-  <HighResolutionIconUrl DefaultValue="~remoteAppUrl/images/icon-80.png"/>
-  <SupportUrl DefaultValue="https://www.contoso.com/help"/>
+  
+  <IconUrl DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-32.png"/>
+  
+  <SupportUrl DefaultValue="https://github.com/vsblanco/Student-Retention-Add-in"/>
   <AppDomains>
-    <AppDomain>https://www.contoso.com</AppDomain>
+    <AppDomain>https://vsblanco.github.io</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="~remoteAppUrl/taskpane/taskpane.html"/>
+    <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
+    <RequestedWidth>450</RequestedWidth>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -29,51 +30,35 @@
             <Description resid="GetStarted.Description"/>
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
+          
           <FunctionFile resid="Commands.Url"/>
+
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <!-- Using the same Tab ID as your working version -->
             <CustomTab id="Victor.RetentionTab">
               <Label resid="RetentionTab.Label"/>
-              <!-- Student Group -->
-              <Group id="StudentGroup">
-                <Label resid="StudentGroup.Label"/>
+              <Group id="CommandsGroup">
+                <Label resid="CommandsGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="StudentDetailsButton">
-                  <Label resid="StudentDetails.Label"/>
-                  <Supertip>
-                    <Title resid="StudentDetails.Label"/>
-                    <Description resid="StudentDetails.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="Icon.Details.16x16"/>
-                    <bt:Image size="32" resid="Icon.Details.32x32"/>
-                    <bt:Image size="80" resid="Icon.Details.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>studentDetails</FunctionName>
-                  </Action>
-                </Control>
                 <Control xsi:type="Button" id="ContactedButton">
-                  <Label resid="Contacted.Label"/>
+                  <Label resid="ContactedButton.Label"/>
                   <Supertip>
-                    <Title resid="Contacted.Label"/>
-                    <Description resid="Contacted.Tooltip"/>
+                    <Title resid="ContactedButton.Label"/>
+                    <Description resid="ContactedButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="Icon.Contacted.16x16"/>
-                    <bt:Image size="32" resid="Icon.Contacted.32x32"/>
-                    <bt:Image size="80" resid="Icon.Contacted.80x80"/>
+                    <bt:Image size="16" resid="ContactedIcon.16x16"/>
+                    <bt:Image size="32" resid="ContactedIcon.32x32"/>
+                    <bt:Image size="80" resid="ContactedIcon.80x80"/>
                   </Icon>
                   <Action xsi:type="ExecuteFunction">
-                    <FunctionName>contacted</FunctionName>
+                    <FunctionName>toggleHighlight</FunctionName>
                   </Action>
                 </Control>
               </Group>
-              <!-- Data Group -->
               <Group id="DataGroup">
                 <Label resid="DataGroup.Label"/>
                 <Icon>
@@ -81,23 +66,60 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="CreateLdaButton">
-                  <Label resid="CreateLDA.Label"/>
+                <Control xsi:type="Button" id="ImportDataButton">
+                  <Label resid="ImportDataButton.Label"/>
                   <Supertip>
-                    <Title resid="CreateLDA.Label"/>
-                    <Description resid="CreateLDA.Tooltip"/>
+                    <Title resid="ImportDataButton.Label"/>
+                    <Description resid="ImportDataButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="Icon.CreateLDA.16x16"/>
-                    <bt:Image size="32" resid="Icon.CreateLDA.32x32"/>
-                    <bt:Image size="80" resid="Icon.CreateLDA.80x80"/>
+                    <bt:Image size="16" resid="ImportIcon.16x16"/>
+                    <bt:Image size="32" resid="ImportIcon.32x32"/>
+                    <bt:Image size="80" resid="ImportIcon.80x80"/>
                   </Icon>
                   <Action xsi:type="ExecuteFunction">
-                    <FunctionName>createLDA</FunctionName>
+                    <FunctionName>openImportDialog</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="TransferDataButton">
+                  <Label resid="TransferDataButton.Label"/>
+                  <Supertip>
+                    <Title resid="TransferDataButton.Label"/>
+                    <Description resid="TransferDataButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="TransferDataIcon.16x16"/>
+                    <bt:Image size="32" resid="TransferDataIcon.32x32"/>
+                    <bt:Image size="80" resid="TransferDataIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>transferData</FunctionName>
                   </Action>
                 </Control>
               </Group>
-              <!-- System Group -->
+              <Group id="ReportGroup">
+                <Label resid="ReportGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="CreateLdaButton">
+                  <Label resid="CreateLdaButton.Label"/>
+                  <Supertip>
+                    <Title resid="CreateLdaButton.Label"/>
+                    <Description resid="CreateLdaButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="CreateLdaIcon.16x16"/>
+                    <bt:Image size="32" resid="CreateLdaIcon.32x32"/>
+                    <bt:Image size="80" resid="CreateLdaIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openCreateLdaDialog</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
               <Group id="SystemGroup">
                 <Label resid="SystemGroup.Label"/>
                 <Icon>
@@ -105,40 +127,37 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="AboutButton">
-                  <Label resid="About.Label"/>
+                <Control xsi:type="Button" id="TaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
                   <Supertip>
-                    <Title resid="About.Label"/>
-                    <Description resid="About.Tooltip"/>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="Icon.About.16x16"/>
-                    <bt:Image size="32" resid="Icon.About.32x32"/>
-                    <bt:Image size="80" resid="Icon.About.80x80"/>
+                    <bt:Image size="16" resid="DetailsIcon.16x16"/>
+                    <bt:Image size="32" resid="DetailsIcon.32x32"/>
+                    <bt:Image size="80" resid="DetailsIcon.80x80"/>
                   </Icon>
                   <Action xsi:type="ShowTaskpane">
-                    <!-- Added required TaskpaneId -->
+                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="AboutButton">
+                  <Label resid="AboutButton.Label"/>
+                  <Supertip>
+                    <Title resid="AboutButton.Label"/>
+                    <Description resid="AboutButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="AboutIcon.16x16"/>
+                    <bt:Image size="32" resid="AboutIcon.32x32"/>
+                    <bt:Image size="80" resid="AboutIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
                     <TaskpaneId>About</TaskpaneId>
                     <SourceLocation resid="About.Url"/>
                   </Action>
-                </Control>
-                <!-- ** NEW SETTINGS BUTTON ** -->
-                <Control xsi:type="Button" id="SettingsButton">
-                    <Label resid="Settings.Label" />
-                    <Supertip>
-                        <Title resid="Settings.Label" />
-                        <Description resid="Settings.Tooltip" />
-                    </Supertip>
-                    <Icon>
-                        <bt:Image size="16" resid="Icon.Settings.16x16" />
-                        <bt:Image size="32" resid="Icon.Settings.32x32" />
-                        <bt:Image size="80" resid="Icon.Settings.80x80" />
-                    </Icon>
-                    <Action xsi:type="ShowTaskpane">
-                        <!-- Added required TaskpaneId -->
-                        <TaskpaneId>Settings</TaskpaneId>
-                        <SourceLocation resid="Settings.Url" />
-                    </Action>
                 </Control>
               </Group>
             </CustomTab>
@@ -148,51 +167,58 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="~remoteAppUrl/images/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="~remoteAppUrl/images/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="~remoteAppUrl/images/icon-80.png"/>
-        <bt:Image id="Icon.Contacted.16x16" DefaultValue="~remoteAppUrl/images/contacted-icon.png"/>
-        <bt:Image id="Icon.Contacted.32x32" DefaultValue="~remoteAppUrl/images/contacted-icon.png"/>
-        <bt:Image id="Icon.Contacted.80x80" DefaultValue="~remoteAppUrl/images/contacted-icon.png"/>
-        <bt:Image id="Icon.Details.16x16" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
-        <bt:Image id="Icon.Details.32x32" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
-        <bt:Image id="Icon.Details.80x80" DefaultValue="~remoteAppUrl/images/details-icon.png"/>
-        <bt:Image id="Icon.CreateLDA.16x16" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
-        <bt:Image id="Icon.CreateLDA.32x32" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
-        <bt:Image id="Icon.CreateLDA.80x80" DefaultValue="~remoteAppUrl/images/create-lda-icon.png"/>
-        <bt:Image id="Icon.About.16x16" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
-        <bt:Image id="Icon.About.32x32" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
-        <bt:Image id="Icon.About.80x80" DefaultValue="~remoteAppUrl/images/about-icon.png"/>
-        <bt:Image id="Icon.Settings.16x16" DefaultValue="~remoteAppUrl/images/settings-icon.png" />
-        <bt:Image id="Icon.Settings.32x32" DefaultValue="~remoteAppUrl/images/settings-icon.png" />
-        <bt:Image id="Icon.Settings.80x80" DefaultValue="~remoteAppUrl/images/settings-icon.png" />
+        <bt:Image id="Icon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-80.png"/>
+        <bt:Image id="ImportIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
+        <bt:Image id="ImportIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
+        <bt:Image id="ImportIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
+        <bt:Image id="TransferDataIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
+        <bt:Image id="TransferDataIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
+        <bt:Image id="TransferDataIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/transfer-data-icon.png"/>
+        <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
+        <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
+        <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
+        <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
+        <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
+        <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
+        <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
+        <bt:Image id="ContactedIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
+        <bt:Image id="ContactedIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
+        <bt:Image id="ContactedIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
-        <bt:Url id="Commands.Url" DefaultValue="~remoteAppUrl/commands/commands.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="~remoteAppUrl/taskpane/taskpane.html"/>
-        <bt:Url id="About.Url" DefaultValue="~remoteAppUrl/about/about.html"/>
-        <bt:Url id="Settings.Url" DefaultValue="~remoteAppUrl/settings/settings.html" />
+        <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/commands.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
+        <bt:Url id="About.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/about/about.html"/>
+        <bt:Url id="TransferData.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html"/>
+        <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="Get started with your add-in!"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
         <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
-        <bt:String id="StudentGroup.Label" DefaultValue="Student"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
         <bt:String id="DataGroup.Label" DefaultValue="Data"/>
         <bt:String id="SystemGroup.Label" DefaultValue="System"/>
-        <bt:String id="Contacted.Label" DefaultValue="Contacted"/>
-        <bt:String id="StudentDetails.Label" DefaultValue="Details"/>
-        <bt:String id="CreateLDA.Label" DefaultValue="Create LDA"/>
-        <bt:String id="About.Label" DefaultValue="About"/>
-        <bt:String id="Settings.Label" DefaultValue="Settings" />
+        <bt:String id="ReportGroup.Label" DefaultValue="Report"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
+        <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
+        <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
+        <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
+        <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
+        <bt:String id="AboutButton.Label" DefaultValue="About"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
-        <bt:String id="Contacted.Tooltip" DefaultValue="Mark student as contacted."/>
-        <bt:String id="StudentDetails.Tooltip" DefaultValue="See student details."/>
-        <bt:String id="CreateLDA.Tooltip" DefaultValue="Create LDA file."/>
-        <bt:String id="About.Tooltip" DefaultValue="About this add-in."/>
-        <bt:String id="Settings.Tooltip" DefaultValue="Configure add-in settings." />
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student details pane."/>
+        <bt:String id="ContactedButton.Tooltip" DefaultValue="Toggles a yellow highlight on the selected student row to mark as contacted."/>
+        <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
+        <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
+        <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
+        <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
