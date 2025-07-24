@@ -1,25 +1,11 @@
-.setting-container {
-    margin-bottom: 20px;
+/*
+  All styling is now handled by Tailwind CSS classes directly in settings.html.
+  This file is kept for consistency but can be removed if the <link> tag is removed from settings.html.
+*/
+#status-notification.success {
+    color: #166534; /* green-700 */
 }
 
-#save-settings {
-    margin-top: 10px;
-}
-
-#status-notification {
-    margin-top: 15px;
-    padding: 10px;
-    border-radius: 4px;
-}
-
-.success {
-    background-color: #dff0d8;
-    color: #3c763d;
-    border: 1px solid #d6e9c6;
-}
-
-.error {
-    background-color: #f2dede;
-    color: #a94442;
-    border: 1px solid #ebccd1;
+#status-notification.error {
+    color: #b91c1c; /* red-700 */
 }
