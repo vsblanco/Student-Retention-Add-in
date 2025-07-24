@@ -973,12 +973,8 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
+    console.log("[DEBUG] Starting handleCreateLdaSheet");
     try {
-        let sheetName;
-        let finalData;
-        let headers;
-
-        // Phase 1: Read data, prepare it, and create the new sheet with the data.
         await Excel.run(async (context) => {
             const worksheets = context.workbook.worksheets;
             worksheets.load("items/name");
@@ -986,12 +982,13 @@ async function handleCreateLdaSheet() {
 
             const today = new Date();
             const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-            sheetName = baseSheetName;
+            let sheetName = baseSheetName;
             let counter = 2;
             const existingSheetNames = new Set(worksheets.items.map(s => s.name));
             while (existingSheetNames.has(sheetName)) {
                 sheetName = `${baseSheetName} (${counter++})`;
             }
+            console.log(`[DEBUG] New sheet name: ${sheetName}`);
 
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
@@ -1000,9 +997,9 @@ async function handleCreateLdaSheet() {
 
             const masterData = masterRange.values;
             const masterFormulas = masterRange.formulas;
-            headers = [...masterData[0]];
+            const headers = [...masterData[0]];
             const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-            
+
             const daysOutColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
             if (daysOutColIdx === -1) throw new Error("'Days Out' column not found in Master List.");
 
@@ -1038,29 +1035,33 @@ async function handleCreateLdaSheet() {
                 return newRow;
             });
 
-            finalData = [headers, ...dataToWrite];
+            const finalData = [headers, ...dataToWrite];
+            console.log(`[DEBUG] Prepared ${finalData.length - 1} rows of data to write.`);
 
             const newSheet = context.workbook.worksheets.add(sheetName);
             newSheet.activate();
+            console.log("[DEBUG] New sheet created and activated.");
 
             if (finalData.length > 1) {
                 const newRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
                 newRange.values = finalData;
-            } else {
-                newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
-            }
-            
-            await context.sync();
-        });
+                await context.sync();
+                console.log("[DEBUG] Data written to the new sheet.");
 
-        // Phase 2: Format the newly created sheet.
-        await Excel.run(async (context) => {
-            if (finalData.length > 1) {
-                const newSheet = context.workbook.worksheets.getItem(sheetName);
                 const tableRange = newSheet.getUsedRange();
+                tableRange.load('address');
+                await context.sync();
+                console.log(`[DEBUG] Used range for table: ${tableRange.address}`);
+                
+                // Load the tables property to ensure it's available
+                newSheet.load('tables');
+                await context.sync();
+                console.log("[DEBUG] newSheet.tables object:", newSheet.tables);
+
                 const table = newSheet.tables.add(tableRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
                 table.style = "TableStyleLight9";
+                console.log(`[DEBUG] Table '${table.name}' created.`);
 
                 const newHeaders = finalData[0].map(h => String(h || '').toLowerCase());
                 
@@ -1073,6 +1074,7 @@ async function handleCreateLdaSheet() {
                         midpoint: { type: Excel.ConditionalFormatColorCriterionType.percentile, percentile: 50, color: "#FFEB84" },
                         maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
                     };
+                    console.log("[DEBUG] Applied conditional formatting to Grade column.");
                 }
 
                 const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
@@ -1083,6 +1085,7 @@ async function handleCreateLdaSheet() {
                         dateColumnRange.numberFormat = [["m/d/yyyy"]];
                     }
                 });
+                console.log("[DEBUG] Formatted date columns.");
 
                 const programVersionColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.programVersion);
                 if (programVersionColIdx !== -1) {
@@ -1091,13 +1094,20 @@ async function handleCreateLdaSheet() {
                 }
                 
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+                console.log("[DEBUG] Autofit columns.");
+            } else {
+                newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
+                console.log("[DEBUG] Wrote headers only.");
             }
+            
             await context.sync();
         });
 
         if (createLdaDialog) {
             createLdaDialog.messageChild(JSON.stringify({ type: 'creationSuccess' }));
         }
+        console.log("[DEBUG] handleCreateLdaSheet completed successfully.");
+
     } catch (error) {
         console.error("Error creating LDA sheet: " + error);
         if (createLdaDialog) {
@@ -1106,10 +1116,9 @@ async function handleCreateLdaSheet() {
     }
 }
 
-
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.12
+//Version 1.13
