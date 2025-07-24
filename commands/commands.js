@@ -29,9 +29,29 @@ const CONSTANTS = {
     }
 };
 
+const SETTINGS_KEY = "studentRetentionSettings";
+
 let importDialog = null;
 let transferDialog = null;
 let createLdaDialog = null; // New dialog variable
+
+
+/**
+ * Gets the settings object from document settings.
+ * @returns {object} The parsed settings object.
+ */
+function getSettings() {
+    const settingsString = Office.context.document.settings.get(SETTINGS_KEY);
+    if (settingsString) {
+        try {
+            return JSON.parse(settingsString);
+        } catch (e) {
+            console.error("Error parsing settings:", e);
+            return {};
+        }
+    }
+    return {};
+}
 
 /**
  * Parses a date value from various possible formats (Date object, string, Excel serial number).
@@ -835,9 +855,12 @@ async function transferData(event) {
     let jsonDataString = "";
     try {
         await Excel.run(async (context) => {
+            const settings = getSettings();
+            const daysOutFilter = settings.transferData && settings.transferData.daysOutFilter !== undefined ? settings.transferData.daysOutFilter : 6;
+            console.log(`[DEBUG] Transfer Data using Days Out filter: > ${daysOutFilter}`);
+
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            // Load both values and formulas to inspect hyperlinks
             usedRange.load("values, formulas");
             await context.sync();
 
@@ -855,6 +878,15 @@ async function transferData(event) {
 
             for (let i = 1; i < usedRange.values.length; i++) {
                 const rowValues = usedRange.values[i];
+
+                // Filter logic
+                if (daysOutFilter > -1 && colIndices.daysOut !== -1) {
+                    const daysOut = rowValues[colIndices.daysOut];
+                    if (typeof daysOut !== 'number' || daysOut <= daysOutFilter) {
+                        continue;
+                    }
+                }
+
                 const rowFormulas = usedRange.formulas[i];
                 const rowData = {};
                 let hasData = false;
@@ -990,10 +1022,8 @@ async function handleCreateLdaSheet() {
     console.log("[DEBUG] Starting handleCreateLdaSheet");
     try {
         await Excel.run(async (context) => {
-            // Get the setting for "days out" from the document settings.
-            // Fallback to a default of 5 if not set.
-            const ldaDaysOutSetting = Office.context.document.settings.get("ldaDaysOut");
-            const daysOutFilter = (ldaDaysOutSetting !== null && ldaDaysOutSetting !== undefined) ? parseInt(ldaDaysOutSetting, 10) : 5;
+            const settings = getSettings();
+            const daysOutFilter = settings.transferData && settings.transferData.daysOutFilter !== undefined ? settings.transferData.daysOutFilter : 6;
             console.log(`[DEBUG] Using Days Out filter: > ${daysOutFilter}`);
 
             // Phase 1: Read data and create the new sheet
@@ -1140,4 +1170,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.17
+//Version 1.18
