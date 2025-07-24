@@ -50,9 +50,9 @@
                     <Description resid="ContactedButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="ContactedIcon.16x16"/>
-                    <bt:Image size="32" resid="ContactedIcon.32x32"/>
-                    <bt:Image size="80" resid="ContactedIcon.80x80"/>
+                    <bt:Image size="16" resid="contacted-icon.png"/>
+                    <bt:Image size="32" resid="contacted-icon.png"/>
+                    <bt:Image size="80" resid="contacted-icon.png"/>
                   </Icon>
                   <Action xsi:type="ExecuteFunction">
                     <FunctionName>toggleHighlight</FunctionName>
