@@ -973,7 +973,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v3"); // New version log
     try {
         await Excel.run(async (context) => {
             const worksheets = context.workbook.worksheets;
@@ -1045,11 +1045,8 @@ async function handleCreateLdaSheet() {
             if (finalData.length > 1) {
                 const newRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
                 newRange.values = finalData;
-                await context.sync();
-                console.log("[DEBUG] Data written to the new sheet.");
-
-                const tableRange = newSheet.getUsedRange();
-                const table = newSheet.tables.add(tableRange, true);
+                
+                const table = newSheet.tables.add(newRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
                 table.style = "TableStyleLight9";
                 console.log(`[DEBUG] Table '${table.name}' created.`);
@@ -1060,10 +1057,9 @@ async function handleCreateLdaSheet() {
                 if (gradeColIdx !== -1) {
                     const gradeRange = table.columns.getItemAt(gradeColIdx).getDataBodyRange();
                     
-                    // Load the conditionalFormats property before using it
-                    gradeRange.load("format/conditionalFormats");
+                    gradeRange.load("format");
                     await context.sync();
-                    console.log("[DEBUG] Loaded conditionalFormats property.");
+                    console.log("[DEBUG] Loaded gradeRange.format property.");
 
                     const conditionalFormat = gradeRange.format.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
@@ -1122,4 +1118,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.14
+//Version 1.15
