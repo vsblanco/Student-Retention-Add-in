@@ -236,7 +236,6 @@
         <bt:String id="TransferData.Label" DefaultValue="Transfer"/>
         <bt:String id="About.Label" DefaultValue="About"/>
         <bt:String id="Settings.Label" DefaultValue="Settings" />
-        <bt:String id="Settings.Tooltip" DefaultValue="Configure add-in settings." />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your sample add-in loaded succesfully. Go to the HOME tab and click the 'Show Taskpane' button to get started."/>
@@ -247,6 +246,7 @@
         <bt:String id="Import.Tooltip" DefaultValue="Import data."/>
         <bt:String id="TransferData.Tooltip" DefaultValue="Transfer data to another file."/>
         <bt:String id="About.Tooltip" DefaultValue="About this add-in."/>
+        <bt:String id="Settings.Tooltip" DefaultValue="Configure add-in settings." />
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
