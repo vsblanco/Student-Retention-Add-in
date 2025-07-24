@@ -13,6 +13,54 @@ Office.onReady((info) => {
     }
 
     // Assign event handlers and other initialization logic.
+    document.getElementById("save-settings").addEventListener("click", saveSettings);
+    loadSettings();
     console.log("Settings task pane initialized.");
   }
 });
+
+/**
+ * Reads the 'ldaDaysOut' setting and populates the input field.
+ * Defaults to 6 if no setting is found.
+ */
+function loadSettings() {
+  const ldaDaysOut = Office.context.document.settings.get("ldaDaysOut");
+  if (ldaDaysOut !== null && ldaDaysOut !== undefined) {
+    document.getElementById("ldaDaysOut").value = ldaDaysOut;
+  } else {
+    // Default to 6 if no setting is saved yet.
+    document.getElementById("ldaDaysOut").value = 6;
+  }
+}
+
+/**
+ * Saves the value from the 'ldaDaysOut' input field to the document settings.
+ */
+function saveSettings() {
+  const ldaDaysOutValue = document.getElementById("ldaDaysOut").value;
+  const ldaDaysOut = parseInt(ldaDaysOutValue, 10);
+  const statusNotification = document.getElementById("status-notification");
+
+  if (!isNaN(ldaDaysOut) && ldaDaysOut >= 0) {
+    Office.context.document.settings.set("ldaDaysOut", ldaDaysOut);
+    Office.context.document.settings.saveAsync(function (asyncResult) {
+      if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+        statusNotification.textContent = "Settings saved successfully!";
+        statusNotification.className = "success";
+        statusNotification.style.display = "block";
+      } else {
+        statusNotification.textContent = "Error: " + asyncResult.error.message;
+        statusNotification.className = "error";
+        statusNotification.style.display = "block";
+      }
+      // Hide the notification after 3 seconds
+      setTimeout(() => {
+        statusNotification.style.display = "none";
+      }, 3000);
+    });
+  } else {
+    statusNotification.textContent = "Please enter a valid non-negative number for days out.";
+    statusNotification.className = "error";
+    statusNotification.style.display = "block";
+  }
+}
