@@ -1029,11 +1029,23 @@ async function handleCreateLdaSheet() {
 
             // 6. Write data to the new sheet
             const dataToWrite = [headers, ...filteredData];
-            const newRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
-            newRange.values = dataToWrite;
-
-            // 7. Autofit columns
-            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+            if (dataToWrite.length > 1) { // Only proceed if there is data to write
+                const newRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
+                newRange.values = dataToWrite;
+                
+                // 7. Add and format as a table
+                const tableRange = newSheet.getRangeByIndexes(0, 0, dataToWrite.length, headers.length);
+                let table = newSheet.tables.add(tableRange, true /* hasHeaders */);
+                table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_"); // Create a valid table name from the sheet name
+                table.style = "TableStyleLight9"; // Dark Teal style
+                
+                // 8. Autofit columns
+                newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+            } else {
+                // If no data, just write the headers
+                newSheet.getRange("A1").values = [headers];
+                newSheet.getRange("A1").getResizedRange(0, headers.length -1).format.autofitColumns();
+            }
             
             await context.sync();
         });
@@ -1054,4 +1066,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.6
+//Version 1.7
