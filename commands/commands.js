@@ -1039,6 +1039,32 @@ async function handleCreateLdaSheet() {
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_"); // Create a valid table name from the sheet name
                 table.style = "TableStyleLight9"; // Dark Teal style
                 
+                // NEW: Apply conditional formatting and date formats
+                const newHeaders = dataToWrite[0].map(h => String(h || '').toLowerCase());
+                
+                // Conditional formatting for Grade
+                const gradeColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+                if (gradeColIdx !== -1) {
+                    const gradeRange = newSheet.getRangeByIndexes(1, gradeColIdx, dataToWrite.length - 1, 1);
+                    const conditionalFormat = gradeRange.format.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+                    const criteria = {
+                        minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
+                        midpoint: { type: Excel.ConditionalFormatColorCriterionType.percentile, percentile: 50, color: "#FFEB84" }, // Yellow
+                        maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }  // Green
+                    };
+                    conditionalFormat.colorScale.criteria = criteria;
+                }
+
+                // Date formatting for specified columns
+                const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
+                dateColumnsToFormat.forEach(colName => {
+                    const colIdx = findColumnIndex(newHeaders, [colName.toLowerCase()]);
+                    if (colIdx !== -1) {
+                        const dateColumnRange = newSheet.getRangeByIndexes(1, colIdx, dataToWrite.length - 1, 1);
+                        dateColumnRange.numberFormat = [["m/d/yyyy"]];
+                    }
+                });
+
                 // 8. Autofit columns
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             } else {
@@ -1066,4 +1092,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.7
+//Version 1.8
