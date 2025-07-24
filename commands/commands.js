@@ -21,7 +21,7 @@ const CONSTANTS = {
         grade: ["grade", "course grade"],
         gradeBook: ["grade book", "gradebook"],
         daysOut: ["days out"],
-        lastLda: ["lda"],
+        lastLda: ["lda", "last lda"],
         courseMissingAssignments: ["course missing assignments"],
         courseZeroAssignments: ["course zero assignments"]
     }
@@ -30,6 +30,44 @@ const CONSTANTS = {
 let importDialog = null;
 let transferDialog = null;
 let createLdaDialog = null; // New dialog variable
+
+/**
+ * Parses a date value from various possible formats (Date object, string, Excel serial number).
+ * @param {*} dateValue The value to parse.
+ * @returns {Date|null} A valid Date object or null.
+ */
+function parseDate(dateValue) {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) {
+        // ExcelJS can return Date objects for .xlsx
+        return dateValue;
+    }
+    if (typeof dateValue === 'number') {
+        // Excel serial date number
+        // Check for a reasonable range to avoid treating random numbers as dates
+        if (dateValue > 25569) { // Corresponds to 1970-01-01
+            return new Date((dateValue - 25569) * 86400 * 1000);
+        }
+    }
+    if (typeof dateValue === 'string') {
+        // Try parsing common date formats
+        const parsed = new Date(dateValue);
+        if (!isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+    return null;
+}
+
+/**
+ * Converts a JavaScript Date object to an Excel serial date number.
+ * @param {Date} date The JavaScript Date object.
+ * @returns {number} The Excel serial date number.
+ */
+function jsDateToExcelDate(date) {
+    return (date.getTime() / 86400000) + 25569;
+}
+
 
 /**
  * Sends a status message back to the import dialog.
@@ -351,9 +389,6 @@ async function handleUpdateMaster(message) {
             }
 
             if (newStudents.length > 0) {
-                // BUG FIX: Instead of getting a multi-column range, get a single-column range 
-                // and then its entire row to perform the insert. This is more robust,
-                // especially if the sheet contains a table, preventing "InvalidReference" errors.
                 const insertRange = sheet.getRangeByIndexes(1, 0, newStudents.length, 1);
                 insertRange.getEntireRow().insert(Excel.InsertShiftDirection.down);
             }
@@ -383,6 +418,30 @@ async function handleUpdateMaster(message) {
                                 newRow[masterColIdx] = cellValue;
                             }
                         }
+                        
+                        // NEW: Calculate Days Out and format LDA date
+                        const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                        if (userLdaColIdx !== -1) {
+                            const ldaValue = userRow[userLdaColIdx];
+                            const ldaDate = parseDate(ldaValue);
+                            if (ldaDate) {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                ldaDate.setHours(0, 0, 0, 0);
+
+                                const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                                const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
+
+                                if (masterLdaColIdx !== -1) {
+                                    newRow[masterLdaColIdx] = jsDateToExcelDate(ldaDate);
+                                }
+                                if (masterDaysOutColIdx !== -1) {
+                                    const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
+                                    newRow[masterDaysOutColIdx] = daysOut;
+                                }
+                            }
+                        }
+
                         return newRow;
                     });
 
@@ -400,7 +459,6 @@ async function handleUpdateMaster(message) {
         if (existingStudents.length > 0) {
             sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches...`);
             
-            // BUG FIX: Re-read the master list to get the new row indices after inserting new students.
             let updatedMasterNameMap = new Map();
             await Excel.run(async (context) => {
                 const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
@@ -427,11 +485,37 @@ async function handleUpdateMaster(message) {
                         const newMasterRowIndex = updatedMasterNameMap.get(normalizedName);
 
                         if (newMasterRowIndex !== undefined) {
+                            // Update all mapped columns first
                             for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
                                 const masterColIdx = colMapping[userColIdx];
                                 if (masterColIdx !== -1) {
                                     const cell = sheet.getCell(newMasterRowIndex, masterColIdx);
                                     cell.values = [[userRow[userColIdx] || ""]];
+                                }
+                            }
+                            
+                            // NEW: Calculate and update Days Out and LDA
+                            const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                            if (userLdaColIdx !== -1) {
+                                const ldaValue = userRow[userLdaColIdx];
+                                const ldaDate = parseDate(ldaValue);
+                                if (ldaDate) {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    ldaDate.setHours(0, 0, 0, 0);
+
+                                    const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                                    const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
+
+                                    if (masterLdaColIdx !== -1) {
+                                        const cell = sheet.getCell(newMasterRowIndex, masterLdaColIdx);
+                                        cell.values = [[jsDateToExcelDate(ldaDate)]];
+                                    }
+                                    if (masterDaysOutColIdx !== -1) {
+                                        const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
+                                        const cell = sheet.getCell(newMasterRowIndex, masterDaysOutColIdx);
+                                        cell.values = [[daysOut]];
+                                    }
                                 }
                             }
                         }
@@ -442,14 +526,25 @@ async function handleUpdateMaster(message) {
             }
         }
         
-        // Final autofit
+        // 6. Final formatting and autofit
         await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("rowCount");
+            await context.sync();
+
+            // Format LDA column
+            const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+            if (masterLdaColIdx !== -1) {
+                const ldaColumn = sheet.getRangeByIndexes(0, masterLdaColIdx, usedRange.rowCount, 1);
+                ldaColumn.numberFormat = [["M-DD-YYYY"]];
+            }
+
             if (newStudents.length > 0 || existingStudents.length > 0) {
                 sendMessageToDialog("Autofitting columns...");
-                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
                 sheet.getUsedRange().format.autofitColumns();
-                await context.sync();
             }
+            await context.sync();
             sendMessageToDialog("Master List update process completed successfully.", 'complete');
         });
 
@@ -959,4 +1054,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.5
+//Version 1.6
