@@ -973,9 +973,11 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v3"); // New version log
+    console.log("[DEBUG] Starting handleCreateLdaSheet v4");
     try {
         await Excel.run(async (context) => {
+            // Phase 1: Read data and create the new sheet
+            console.log("[DEBUG] Phase 1: Reading data and creating sheet.");
             const worksheets = context.workbook.worksheets;
             worksheets.load("items/name");
             await context.sync();
@@ -988,7 +990,7 @@ async function handleCreateLdaSheet() {
             while (existingSheetNames.has(sheetName)) {
                 sheetName = `${baseSheetName} (${counter++})`;
             }
-            console.log(`[DEBUG] New sheet name: ${sheetName}`);
+            console.log(`[DEBUG] New sheet name will be: ${sheetName}`);
 
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
@@ -1042,11 +1044,13 @@ async function handleCreateLdaSheet() {
             newSheet.activate();
             console.log("[DEBUG] New sheet created and activated.");
 
+            // Phase 2: Write data and apply formatting
+            console.log("[DEBUG] Phase 2: Writing data and applying formats.");
             if (finalData.length > 1) {
-                const newRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
-                newRange.values = finalData;
+                const dataRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
+                dataRange.values = finalData;
                 
-                const table = newSheet.tables.add(newRange, true);
+                const table = newSheet.tables.add(dataRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
                 table.style = "TableStyleLight9";
                 console.log(`[DEBUG] Table '${table.name}' created.`);
@@ -1055,13 +1059,11 @@ async function handleCreateLdaSheet() {
                 
                 const gradeColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
                 if (gradeColIdx !== -1) {
-                    const gradeRange = table.columns.getItemAt(gradeColIdx).getDataBodyRange();
+                    const gradeColumn = table.columns.getItemAt(gradeColIdx);
+                    const gradeRange = gradeColumn.getDataBodyRange();
                     
-                    gradeRange.load("format");
-                    await context.sync();
-                    console.log("[DEBUG] Loaded gradeRange.format property.");
-
-                    const conditionalFormat = gradeRange.format.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+                    // The crucial change is here: Access conditionalFormats directly from the range.
+                    const conditionalFormat = gradeRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
                         minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
                         midpoint: { type: Excel.ConditionalFormatColorCriterionType.percentile, percentile: 50, color: "#FFEB84" },
@@ -1118,4 +1120,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.15
+//Version 1.16
