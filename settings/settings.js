@@ -62,15 +62,17 @@ function saveSettings() {
     if (asyncResult.status == Office.AsyncResultStatus.Failed) {
       console.error('Settings save failed. Error: ' + asyncResult.error.message);
       status.textContent = "Error saving settings.";
-      status.className = "error";
+      status.classList.remove("success");
+      status.classList.add("error");
     } else {
       console.log('Settings saved successfully');
       status.textContent = "Settings saved successfully!";
-      status.className = "success";
+      status.classList.remove("error");
+      status.classList.add("success");
     }
-    status.style.display = "block";
     setTimeout(() => {
-        status.style.display = "none";
+        status.textContent = "";
+        status.classList.remove("success", "error");
     }, 3000);
   });
 }
