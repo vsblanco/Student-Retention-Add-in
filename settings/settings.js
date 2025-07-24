@@ -28,8 +28,49 @@ function getSettings() {
         } catch (e) {
             console.error("Error parsing settings:", e);
             // If parsing fails, return a default structure
-            return { transferData: {} };
+            return { createlda: {} };
         }
     }
-    return { transferData: {} };
+    return { createlda: {} };
+}
+
+/**
+ * Loads settings and populates the form.
+ */
+function loadSettings() {
+  const settings = getSettings();
+  if (settings && settings.createlda) {
+    document.getElementById("ldaDaysOut").value = settings.createlda.daysOutFilter || 6;
+  }
+}
+
+/**
+ * Saves the current settings from the form to the document.
+ */
+function saveSettings() {
+  const settings = getSettings();
+  const daysOut = document.getElementById("ldaDaysOut").value;
+
+  if (!settings.createlda) {
+    settings.createlda = {};
+  }
+  settings.createlda.daysOutFilter = parseInt(daysOut, 10);
+
+  Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settings));
+  Office.context.document.settings.saveAsync(function (asyncResult) {
+    const status = document.getElementById("status-notification");
+    if (asyncResult.status == Office.AsyncResultStatus.Failed) {
+      console.error('Settings save failed. Error: ' + asyncResult.error.message);
+      status.textContent = "Error saving settings.";
+      status.className = "error";
+    } else {
+      console.log('Settings saved successfully');
+      status.textContent = "Settings saved successfully!";
+      status.className = "success";
+    }
+    status.style.display = "block";
+    setTimeout(() => {
+        status.style.display = "none";
+    }, 3000);
+  });
 }
