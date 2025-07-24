@@ -29,6 +29,7 @@ const CONSTANTS = {
 
 let importDialog = null;
 let transferDialog = null;
+let createLdaDialog = null; // New dialog variable
 
 /**
  * Sends a status message back to the import dialog.
@@ -826,8 +827,81 @@ async function transferData(event) {
     }
 }
 
+/**
+ * Opens a dialog to confirm creating a new LDA sheet.
+ * @param {Office.AddinCommands.Event} event
+ */
+function openCreateLdaDialog(event) {
+    Office.context.ui.displayDialogAsync(
+        'https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html',
+        { height: 25, width: 30, displayInIframe: true },
+        function (asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Create LDA dialog failed to open: " + asyncResult.error.message);
+                event.completed();
+                return;
+            }
+            createLdaDialog = asyncResult.value;
+            createLdaDialog.addEventHandler(Office.EventType.DialogMessageReceived, processCreateLdaMessage);
+            event.completed();
+        }
+    );
+}
+
+/**
+ * Handles messages from the create LDA dialog.
+ * @param {Office.DialogMessageReceivedEventArgs} arg
+ */
+async function processCreateLdaMessage(arg) {
+    const message = JSON.parse(arg.message);
+    switch (message.type) {
+        case 'createLdaSheet':
+            await handleCreateLdaSheet();
+            break;
+        case 'closeDialog':
+            if (createLdaDialog) {
+                createLdaDialog.close();
+                createLdaDialog = null;
+            }
+            break;
+        default:
+            console.error("Unknown message type from create LDA dialog:", message.type);
+            if (createLdaDialog) {
+                createLdaDialog.close();
+            }
+    }
+}
+
+/**
+ * Creates a new worksheet with today's date for LDA.
+ */
+async function handleCreateLdaSheet() {
+    try {
+        await Excel.run(async (context) => {
+            const today = new Date();
+            // Format date as M-DD-YYYY
+            const sheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+            
+            const sheet = context.workbook.worksheets.add(sheetName);
+            sheet.activate();
+            
+            await context.sync();
+        });
+
+        if (createLdaDialog) {
+            createLdaDialog.messageChild(JSON.stringify({ type: 'creationSuccess' }));
+        }
+    } catch (error) {
+        console.error("Error creating LDA sheet: " + error);
+        if (createLdaDialog) {
+            createLdaDialog.messageChild(JSON.stringify({ type: 'creationError', error: error.message }));
+        }
+    }
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
-//Version 1.3
+Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
+//Version 1.4
