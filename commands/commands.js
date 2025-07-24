@@ -978,7 +978,7 @@ async function handleCreateLdaSheet() {
         let finalData;
         let headers;
 
-        // Phase 1: Read data and create the new sheet
+        // Phase 1: Read data, prepare it, and create the new sheet with the data.
         await Excel.run(async (context) => {
             const worksheets = context.workbook.worksheets;
             worksheets.load("items/name");
@@ -1053,11 +1053,10 @@ async function handleCreateLdaSheet() {
             await context.sync();
         });
 
-        // Phase 2: Format the new sheet
+        // Phase 2: Format the newly created sheet.
         await Excel.run(async (context) => {
-            const newSheet = context.workbook.worksheets.getItem(sheetName);
-            
             if (finalData.length > 1) {
+                const newSheet = context.workbook.worksheets.getItem(sheetName);
                 const tableRange = newSheet.getUsedRange();
                 const table = newSheet.tables.add(tableRange, true);
                 table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
@@ -1090,9 +1089,9 @@ async function handleCreateLdaSheet() {
                     const programVersionColumn = table.columns.getItemAt(programVersionColIdx).getRange().format;
                     programVersionColumn.columnWidth = 91; // Approx 13 characters wide
                 }
+                
+                newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             }
-
-            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             await context.sync();
         });
 
@@ -1113,4 +1112,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.11
+//Version 1.12
