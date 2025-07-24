@@ -1085,7 +1085,8 @@ async function handleCreateLdaSheet() {
                 const programVersionColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.programVersion);
                 if (programVersionColIdx !== -1) {
                     const programVersionColumn = table.columns.getItemAt(programVersionColIdx).getRange().format;
-                    programVersionColumn.columnWidth = 91; 
+                    programVersionColumn.columnWidth = 20; 
+                    console.log(programVersionColumn.columnWidth)
                 }
                 
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
