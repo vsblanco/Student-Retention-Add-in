@@ -561,12 +561,13 @@ async function handleUpdateMaster(message) {
 
 /**
  * Handles updating grades and gradebook links in the Master List for existing students.
+ * This version is optimized to perform a single bulk write operation to avoid timeouts.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateGrades(message) {
     sendMessageToDialog("Starting grade update process...");
     try {
-        // 1. Parse user's uploaded file
+        // Step 1: Parse the uploaded file using ExcelJS
         sendMessageToDialog("Parsing uploaded file for grade update...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
@@ -598,7 +599,7 @@ async function handleUpdateGrades(message) {
         });
         sendMessageToDialog(`Parsed ${userData.length} rows from the imported file.`);
 
-        // 2. Find column indices in user's file
+        // Step 2: Find column indices in the imported file
         const userStudentNameCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_NAME_COLS);
         const userStudentIdCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_ID_COLS);
         const userCourseIdCol = findColumnIndex(userHeaders, CONSTANTS.COLUMN_MAPPINGS.courseId);
@@ -611,7 +612,7 @@ async function handleUpdateGrades(message) {
             throw new Error("Imported file is missing one of the required columns: Student Name, Course, or Current Score/Grade.");
         }
 
-        // 3. Create a map of student data from the imported file, keyed by normalized name, filtering out CAPV courses
+        // Step 3: Create a map of student data from the import, filtering out 'CAPV' courses
         const studentDataMap = new Map();
         userData.forEach(row => {
             const courseName = row[userCourseCol] ? String(row[userCourseCol]) : '';
@@ -626,7 +627,6 @@ async function handleUpdateGrades(message) {
                     grade: row[userGradeCol],
                     courseId: row[userCourseIdCol],
                     studentId: row[userStudentIdCol],
-                    originalName: studentName,
                     missingAssignments: row[userMissingAssignmentsCol],
                     zeroAssignments: row[userZeroAssignmentsCol]
                 });
@@ -634,15 +634,21 @@ async function handleUpdateGrades(message) {
         });
         sendMessageToDialog(`Created a map of ${studentDataMap.size} students from the imported file after filtering.`);
 
-        // 4. Update the "Master List" sheet
+        // Step 4: Perform the bulk update on the "Master List" sheet
         await Excel.run(async (context) => {
             sendMessageToDialog("Accessing 'Master List' sheet...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-            const usedRange = sheet.getUsedRange();
-            usedRange.load("values, rowCount");
+            const range = sheet.getUsedRange();
+            
+            // Load all values and formulas from the sheet into memory
+            range.load("values, formulas, rowCount");
             await context.sync();
 
-            const masterHeaders = usedRange.values[0].map(h => String(h || '').toLowerCase());
+            const masterValues = range.values;
+            const masterFormulas = range.formulas;
+            const masterHeaders = masterValues[0].map(h => String(h || '').toLowerCase());
+
+            // Find column indices in the Master List
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradeCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
             const masterGradebookCol = findColumnIndex(masterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
@@ -653,46 +659,43 @@ async function handleUpdateGrades(message) {
                 throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
             }
 
-            const masterNameMap = new Map();
-            for (let i = 1; i < usedRange.values.length; i++) {
-                const name = usedRange.values[i][masterStudentNameCol];
-                if (name) {
-                    masterNameMap.set(normalizeName(name), i);
-                }
-            }
-
             let updatedCount = 0;
+            // Iterate through the Master List data (in memory) and update it
+            for (let i = 1; i < range.rowCount; i++) {
+                const masterName = masterValues[i][masterStudentNameCol];
+                if (masterName) {
+                    const normalizedName = normalizeName(masterName);
+                    if (studentDataMap.has(normalizedName)) {
+                        const importedData = studentDataMap.get(normalizedName);
+                        
+                        // Update the values in the local arrays
+                        masterValues[i][masterGradeCol] = importedData.grade;
 
-            for (const [normalizedName, importedData] of studentDataMap.entries()) {
-                if (masterNameMap.has(normalizedName)) {
-                    const masterRowIndex = masterNameMap.get(normalizedName);
-                    
-                    const gradeCell = sheet.getCell(masterRowIndex, masterGradeCol);
-                    gradeCell.values = [[importedData.grade]];
+                        if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
+                            masterValues[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
+                        }
+                        if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
+                            masterValues[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
+                        }
 
-                    if (importedData.courseId && importedData.studentId) {
-                        const gradebookCell = sheet.getCell(masterRowIndex, masterGradebookCol);
-                        const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
-                        const hyperlinkFormula = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
-                        gradebookCell.formulas = [[hyperlinkFormula]];
+                        // Update the formula for the hyperlink
+                        if (importedData.courseId && importedData.studentId) {
+                            const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
+                            masterFormulas[i][masterGradebookCol] = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                        }
+                        
+                        updatedCount++;
                     }
-
-                    if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
-                        const missingCell = sheet.getCell(masterRowIndex, masterMissingAssignmentsCol);
-                        missingCell.values = [[importedData.missingAssignments]];
-                    }
-                    if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
-                        const zeroCell = sheet.getCell(masterRowIndex, masterZeroAssignmentsCol);
-                        zeroCell.values = [[importedData.zeroAssignments]];
-                    }
-                    
-                    updatedCount++;
                 }
             }
             
-            sendMessageToDialog(`Found and updated ${updatedCount} matching students.`);
+            sendMessageToDialog(`Found and prepared updates for ${updatedCount} matching students.`);
 
             if (updatedCount > 0) {
+                // Write the updated data and formulas back to the sheet in two bulk operations
+                sendMessageToDialog("Writing updates to the sheet...");
+                range.values = masterValues;
+                range.formulas = masterFormulas;
                 sheet.getUsedRange().format.autofitColumns();
             }
             
@@ -1135,4 +1138,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.16
+//Version 1.20
