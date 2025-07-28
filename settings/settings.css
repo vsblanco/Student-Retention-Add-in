@@ -4,32 +4,51 @@ body {
     padding: 20px;
     background-color: #f3f4f6;
     color: #374151;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .container {
-    max-width: 600px;
+    max-width: 800px;
     margin: 0 auto;
+}
+
+.section {
     background-color: #fff;
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
 }
 
-h1 {
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     color: #111827;
-    margin-top: 0;
     margin-bottom: 24px;
-    font-size: 24px;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 12px;
+}
+
+.section-header svg {
+    color: #4b5563;
+}
+
+.section-header h2 {
+    margin: 0;
+    font-size: 18px;
 }
 
 .setting-item {
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .setting-item label {
-    display: block;
     font-weight: 500;
-    margin-bottom: 8px;
     color: #4b5563;
 }
 
@@ -37,27 +56,127 @@ input[type="number"] {
     padding: 8px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
-    width: 100%;
+    width: 80px;
     box-sizing: border-box;
+    text-align: center;
 }
 
-input[type="checkbox"] {
-    width: auto;
-    height: 16px;
-    width: 16px;
-    vertical-align: middle;
+/* Toggle Switch Styles */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 28px;
 }
 
+.switch input { 
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+}
+
+input:checked + .slider {
+    background-color: #2563eb;
+}
+
+input:focus + .slider {
+    box-shadow: 0 0 1px #2563eb;
+}
+
+input:checked + .slider:before {
+    transform: translateX(22px);
+}
+
+.slider.round {
+    border-radius: 34px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Columns Management Styles */
+.columns-management {
+    display: flex;
+    gap: 20px;
+}
+
+.column-box {
+    flex: 1;
+}
+
+.column-box h3 {
+    font-size: 16px;
+    color: #374151;
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.column-list {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    min-height: 200px;
+    height: 300px;
+    overflow-y: auto;
+}
+
+.column-item {
+    background-color: #ffffff;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: grab;
+    font-size: 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.column-item:last-child {
+    margin-bottom: 0;
+}
+
+/* SortableJS dragging style */
+.sortable-ghost {
+    opacity: 0.4;
+    background-color: #dbeafe;
+}
+
+/* Button and Status Styles */
 .button-primary {
     background-color: #2563eb;
     color: white;
-    padding: 10px 15px;
+    padding: 12px 20px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
     font-size: 16px;
     width: 100%;
     transition: background-color 0.2s;
+    margin-top: 10px;
 }
 
 .button-primary:hover {
@@ -70,8 +189,13 @@ input[type="checkbox"] {
     border-radius: 6px;
     text-align: center;
     font-weight: 500;
-    height: 20px; /* Reserve space */
+    opacity: 0;
     transition: opacity 0.3s;
+    height: 20px; /* Reserve space */
+}
+
+.status-message.visible {
+    opacity: 1;
 }
 
 .status-success {
@@ -82,42 +206,4 @@ input[type="checkbox"] {
 .status-error {
     background-color: #fee2e2;
     color: #991b1b;
-}
-
-.columns-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background-color: #f9fafb;
-    min-height: 50px;
-}
-
-.column-item {
-    padding: 6px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 16px;
-    cursor: pointer;
-    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
-    font-size: 14px;
-    user-select: none; /* Prevent text selection on click */
-    
-    /* Deselected state */
-    background-color: #f3f4f6;
-    color: #6b7280;
-}
-
-.column-item.selected {
-    /* Selected state */
-    background-color: #dbeafe;
-    color: #1e40af;
-    border-color: #93c5fd;
-    font-weight: 500;
-}
-
-.error-message {
-    color: #991b1b;
-    font-style: italic;
 }
