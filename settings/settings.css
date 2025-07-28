@@ -1,11 +1,123 @@
-/*
-  All styling is now handled by Tailwind CSS classes directly in settings.html.
-  This file is kept for consistency but can be removed if the <link> tag is removed from settings.html.
-*/
-#status-notification.success {
-    color: #166534; /* green-700 */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f3f4f6;
+    color: #374151;
 }
 
-#status-notification.error {
-    color: #b91c1c; /* red-700 */
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #111827;
+    margin-top: 0;
+    margin-bottom: 24px;
+    font-size: 24px;
+}
+
+.setting-item {
+    margin-bottom: 20px;
+}
+
+.setting-item label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #4b5563;
+}
+
+input[type="number"] {
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+input[type="checkbox"] {
+    width: auto;
+    height: 16px;
+    width: 16px;
+    vertical-align: middle;
+}
+
+.button-primary {
+    background-color: #2563eb;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+    transition: background-color 0.2s;
+}
+
+.button-primary:hover {
+    background-color: #1d4ed8;
+}
+
+.status-message {
+    margin-top: 15px;
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+    height: 20px; /* Reserve space */
+    transition: opacity 0.3s;
+}
+
+.status-success {
+    background-color: #dcfce7;
+    color: #166534;
+}
+
+.status-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.columns-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background-color: #f9fafb;
+    min-height: 50px;
+}
+
+.column-item {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+    font-size: 14px;
+    user-select: none; /* Prevent text selection on click */
+    
+    /* Deselected state */
+    background-color: #f3f4f6;
+    color: #6b7280;
+}
+
+.column-item.selected {
+    /* Selected state */
+    background-color: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+    font-weight: 500;
+}
+
+.error-message {
+    color: #991b1b;
+    font-style: italic;
 }
