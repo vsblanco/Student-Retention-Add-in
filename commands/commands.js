@@ -1020,7 +1020,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v6");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v7");
     try {
         const settings = getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
@@ -1091,10 +1091,14 @@ async function handleCreateLdaSheet() {
                 newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
                 ldaTableEndRow = 1;
             }
+            
+            // We need to sync here so that the sheet and table are created before we try to add another table.
+            await context.sync();
 
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
-                await createFailingListTable(context, newSheet, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded);
+                // Pass the sheetName variable instead of trying to read sheet.name
+                await createFailingListTable(context, newSheet, sheetName, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded);
             }
             
             newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
@@ -1121,13 +1125,14 @@ async function handleCreateLdaSheet() {
  * Creates and appends a table of failing students to the LDA sheet.
  * @param {Excel.RequestContext} context - The Excel request context.
  * @param {Excel.Worksheet} sheet - The worksheet to add the table to.
+ * @param {string} sheetName - The name of the new sheet.
  * @param {number} startRow - The starting row index for the new table.
  * @param {Array<object>} masterDataWithIndex - The full data from the Master List.
  * @param {Array<Array<any>>} masterFormulas - The formulas from the Master List.
  * @param {Array<string>} headers - The column headers.
  * @param {boolean} assignedColumnAdded - Flag if 'Assigned' column was added dynamically.
  */
-async function createFailingListTable(context, sheet, startRow, masterDataWithIndex, masterFormulas, headers, assignedColumnAdded) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, headers, assignedColumnAdded) {
     console.log("[DEBUG] Creating failing list table.");
     const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -1172,7 +1177,8 @@ async function createFailingListTable(context, sheet, startRow, masterDataWithIn
         dataRange.values = failingData;
 
         const table = sheet.tables.add(dataRange, true);
-        table.name = sheet.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
+        // Use the passed sheetName variable instead of sheet.name
+        table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
         table.style = "TableStyleLight9";
 
         const newGradeColIdx = findColumnIndex(headers.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -1196,4 +1202,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.22
+//Version 1.20
