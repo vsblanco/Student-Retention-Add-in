@@ -1020,30 +1020,15 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v5");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v6");
     try {
-        // Get settings at the beginning
         const settings = getSettings();
-        const daysOutFilter = settings.createlda.daysOutFilter || 6; // Use setting, fallback to 6
-        console.log(`[DEBUG] Using Days Out filter value from settings: ${daysOutFilter}`);
+        const daysOutFilter = settings.createlda.daysOutFilter || 6;
+        const includeFailingList = settings.createlda.includeFailingList;
+        console.log(`[DEBUG] Using Days Out filter: ${daysOutFilter}, Include Failing List: ${includeFailingList}`);
 
         await Excel.run(async (context) => {
-            // Phase 1: Read data and create the new sheet
-            console.log("[DEBUG] Phase 1: Reading data and creating sheet.");
-            const worksheets = context.workbook.worksheets;
-            worksheets.load("items/name");
-            await context.sync();
-
-            const today = new Date();
-            const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-            let sheetName = baseSheetName;
-            let counter = 2;
-            const existingSheetNames = new Set(worksheets.items.map(s => s.name));
-            while (existingSheetNames.has(sheetName)) {
-                sheetName = `${baseSheetName} (${counter++})`;
-            }
-            console.log(`[DEBUG] New sheet name will be: ${sheetName}`);
-
+            console.log("[DEBUG] Reading data from Master List.");
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
             masterRange.load("values, formulas");
@@ -1063,91 +1048,56 @@ async function handleCreateLdaSheet() {
                 headers.unshift("Assigned");
                 assignedColumnAdded = true;
             }
-
-            const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            
             const dataRowsWithIndex = masterData.slice(1).map((row, index) => ({ row, originalIndex: index + 1 }));
 
-            // Use the daysOutFilter from settings
             const filteredRows = dataRowsWithIndex.filter(({ row }) => {
                 const daysOut = row[daysOutColIdx];
-                return typeof daysOut === 'number' && daysOut > daysOutFilter;
+                return typeof daysOut === 'number' && daysOut >= daysOutFilter;
             });
-
             filteredRows.sort((a, b) => (b.row[daysOutColIdx] || 0) - (a.row[daysOutColIdx] || 0));
-
-            const dataToWrite = filteredRows.map(({ row, originalIndex }) => {
-                const newRow = [...row];
-                if (gradeBookColIdx !== -1) {
-                    const formula = masterFormulas[originalIndex][gradeBookColIdx];
-                    const value = newRow[gradeBookColIdx];
-                    if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
-                        newRow[gradeBookColIdx] = formula;
-                    } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-                        newRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
-                    }
-                }
+            
+            const dataToWrite = filteredRows.map(item => {
+                const newRow = [...item.row];
                 if (assignedColumnAdded) newRow.unshift("");
                 return newRow;
             });
+            const finalLdaData = [headers, ...dataToWrite];
+            
+            const today = new Date();
+            const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+            let sheetName = baseSheetName;
+            let counter = 2;
+            const worksheets = context.workbook.worksheets;
+            worksheets.load("items/name");
+            await context.sync();
+            const existingSheetNames = new Set(worksheets.items.map(s => s.name));
+            while (existingSheetNames.has(sheetName)) {
+                sheetName = `${baseSheetName} (${counter++})`;
+            }
 
-            const finalData = [headers, ...dataToWrite];
-            console.log(`[DEBUG] Prepared ${finalData.length - 1} rows of data to write.`);
-
-            const newSheet = context.workbook.worksheets.add(sheetName);
+            const newSheet = worksheets.add(sheetName);
             newSheet.activate();
-            console.log("[DEBUG] New sheet created and activated.");
-
-            // Phase 2: Write data and apply formatting
-            console.log("[DEBUG] Phase 2: Writing data and applying formats.");
-            if (finalData.length > 1) {
-                const dataRange = newSheet.getRangeByIndexes(0, 0, finalData.length, headers.length);
-                dataRange.values = finalData;
-                
-                const table = newSheet.tables.add(dataRange, true);
-                table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_");
-                table.style = "TableStyleLight9";
-                console.log(`[DEBUG] Table '${table.name}' created.`);
-
-                const newHeaders = finalData[0].map(h => String(h || '').toLowerCase());
-                
-                const gradeColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
-                if (gradeColIdx !== -1) {
-                    const gradeColumn = table.columns.getItemAt(gradeColIdx);
-                    const gradeRange = gradeColumn.getDataBodyRange();
-                    
-                    const conditionalFormat = gradeRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
-                    conditionalFormat.colorScale.criteria = {
-                        minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
-                        midpoint: { type: Excel.ConditionalFormatColorCriterionType.percentile, percentile: 50, color: "#FFEB84" },
-                        maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
-                    };
-                    console.log("[DEBUG] Applied conditional formatting to Grade column.");
-                }
-
-                const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
-                dateColumnsToFormat.forEach(colName => {
-                    const colIdx = findColumnIndex(newHeaders, [colName]);
-                    if (colIdx !== -1) {
-                        const dateColumnRange = table.columns.getItemAt(colIdx).getRange();
-                        dateColumnRange.numberFormat = [["m/d/yyyy"]];
-                    }
-                });
-                console.log("[DEBUG] Formatted date columns.");
-
-                const programVersionColIdx = findColumnIndex(newHeaders, CONSTANTS.COLUMN_MAPPINGS.programVersion);
-                if (programVersionColIdx !== -1) {
-                    const programVersionColumn = table.columns.getItemAt(programVersionColIdx).getRange().format;
-                    programVersionColumn.columnWidth = 20; 
-                    console.log(programVersionColumn.columnWidth)
-                }
-                
-                newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
-                console.log("[DEBUG] Autofit columns.");
+            
+            let ldaTableEndRow = 0;
+            if (finalLdaData.length > 1) {
+                const dataRange = newSheet.getRangeByIndexes(0, 0, finalLdaData.length, headers.length);
+                dataRange.values = finalLdaData;
+                const ldaTable = newSheet.tables.add(dataRange, true);
+                ldaTable.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_LDA";
+                ldaTable.style = "TableStyleLight9";
+                ldaTableEndRow = finalLdaData.length;
             } else {
                 newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
-                console.log("[DEBUG] Wrote headers only.");
+                ldaTableEndRow = 1;
+            }
+
+            if (includeFailingList) {
+                console.log("[DEBUG] includeFailingList is true, creating failing list.");
+                await createFailingListTable(context, newSheet, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded);
             }
             
+            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
             await context.sync();
         });
 
@@ -1167,10 +1117,83 @@ async function handleCreateLdaSheet() {
     }
 }
 
+/**
+ * Creates and appends a table of failing students to the LDA sheet.
+ * @param {Excel.RequestContext} context - The Excel request context.
+ * @param {Excel.Worksheet} sheet - The worksheet to add the table to.
+ * @param {number} startRow - The starting row index for the new table.
+ * @param {Array<object>} masterDataWithIndex - The full data from the Master List.
+ * @param {Array<Array<any>>} masterFormulas - The formulas from the Master List.
+ * @param {Array<string>} headers - The column headers.
+ * @param {boolean} assignedColumnAdded - Flag if 'Assigned' column was added dynamically.
+ */
+async function createFailingListTable(context, sheet, startRow, masterDataWithIndex, masterFormulas, headers, assignedColumnAdded) {
+    console.log("[DEBUG] Creating failing list table.");
+    const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+    const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+    const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+
+    if (gradeColIdx === -1) {
+        console.warn("'Grade' column not found, cannot create failing list.");
+        return;
+    }
+
+    const failingRows = masterDataWithIndex.filter(({ row }) => {
+        const grade = row[gradeColIdx];
+        // Handle both percentage (0-1) and whole number (0-100) grades
+        return typeof grade === 'number' && (grade < 0.60 || (grade >= 1 && grade < 60));
+    });
+
+    failingRows.sort((a, b) => (a.row[gradeColIdx] || 0) - (b.row[gradeColIdx] || 0));
+
+    if (failingRows.length > 0) {
+        const dataToWrite = failingRows.map(({ row, originalIndex }) => {
+            const newRow = [...row];
+             if (gradeBookColIdx !== -1) {
+                const formula = masterFormulas[originalIndex][gradeBookColIdx];
+                const value = newRow[gradeBookColIdx];
+                if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
+                    newRow[gradeBookColIdx] = formula;
+                } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                    newRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                }
+            }
+            if (assignedColumnAdded) newRow.unshift("");
+            return newRow;
+        });
+
+        const titleRange = sheet.getRangeByIndexes(startRow, 0, 1, 1);
+        titleRange.values = [["Failing Students"]];
+        titleRange.format.font.bold = true;
+
+        const failingData = [headers, ...dataToWrite];
+        const tableStartRow = startRow + 1;
+        const dataRange = sheet.getRangeByIndexes(tableStartRow, 0, failingData.length, headers.length);
+        dataRange.values = failingData;
+
+        const table = sheet.tables.add(dataRange, true);
+        table.name = sheet.name.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
+        table.style = "TableStyleLight9";
+
+        const newGradeColIdx = findColumnIndex(headers.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.grade);
+        if (newGradeColIdx !== -1) {
+            const gradeColumn = table.columns.getItemAt(newGradeColIdx);
+            const gradeRange = gradeColumn.getDataBodyRange();
+            const conditionalFormat = gradeRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+            conditionalFormat.colorScale.criteria = {
+                minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+                midpoint: { type: Excel.ConditionalFormatColorCriterionType.percentile, percentile: 50, color: "#FFEB84" },
+                maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
+            };
+        }
+        console.log(`[DEBUG] Added failing list with ${failingRows.length} students.`);
+    }
+}
+
 
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.21
+//Version 1.22
