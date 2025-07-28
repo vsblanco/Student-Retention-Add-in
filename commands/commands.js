@@ -13,6 +13,7 @@ const CONSTANTS = {
     STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
     MASTER_LIST_SHEET: "Master List",
     TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx',
+    SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
     COLUMN_MAPPINGS: {
         course: ["course"],
         courseId: ["course id"],
@@ -32,6 +33,35 @@ const CONSTANTS = {
 let importDialog = null;
 let transferDialog = null;
 let createLdaDialog = null; // New dialog variable
+
+/**
+ * Gets the settings object from document settings.
+ * @returns {object} The parsed settings object with defaults.
+ */
+function getSettings() {
+    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
+    const defaults = {
+        createlda: {
+            daysOutFilter: 6,
+            includeFailingList: true,
+            ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
+        }
+    };
+
+    if (settingsString) {
+        try {
+            const settings = JSON.parse(settingsString);
+            // Ensure createlda property and its sub-properties exist by merging with defaults
+            settings.createlda = { ...defaults.createlda, ...(settings.createlda || {}) };
+            return settings;
+        } catch (e) {
+            console.error("Error parsing settings, returning defaults:", e);
+            return defaults; // Return defaults if parsing fails
+        }
+    }
+    return defaults; // Return defaults if no settings are found
+}
+
 
 /**
  * Parses a date value from various possible formats (Date object, string, Excel serial number).
@@ -990,8 +1020,13 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v4");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v5");
     try {
+        // Get settings at the beginning
+        const settings = getSettings();
+        const daysOutFilter = settings.createlda.daysOutFilter || 6; // Use setting, fallback to 6
+        console.log(`[DEBUG] Using Days Out filter value from settings: ${daysOutFilter}`);
+
         await Excel.run(async (context) => {
             // Phase 1: Read data and create the new sheet
             console.log("[DEBUG] Phase 1: Reading data and creating sheet.");
@@ -1032,9 +1067,10 @@ async function handleCreateLdaSheet() {
             const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
             const dataRowsWithIndex = masterData.slice(1).map((row, index) => ({ row, originalIndex: index + 1 }));
 
+            // Use the daysOutFilter from settings
             const filteredRows = dataRowsWithIndex.filter(({ row }) => {
                 const daysOut = row[daysOutColIdx];
-                return typeof daysOut === 'number' && daysOut > 5;
+                return typeof daysOut === 'number' && daysOut > daysOutFilter;
             });
 
             filteredRows.sort((a, b) => (b.row[daysOutColIdx] || 0) - (a.row[daysOutColIdx] || 0));
@@ -1079,7 +1115,6 @@ async function handleCreateLdaSheet() {
                     const gradeColumn = table.columns.getItemAt(gradeColIdx);
                     const gradeRange = gradeColumn.getDataBodyRange();
                     
-                    // The crucial change is here: Access conditionalFormats directly from the range.
                     const conditionalFormat = gradeRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                     conditionalFormat.colorScale.criteria = {
                         minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
@@ -1138,4 +1173,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.20
+//Version 1.21
