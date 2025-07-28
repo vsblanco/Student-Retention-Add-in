@@ -43,7 +43,10 @@ function loadSettingsAndPopulateUI() {
 }
 
 async function loadAndRenderLdaColumns() {
-    const container = document.getElementById("lda-columns-container");
+    const includedContainer = document.getElementById("included-columns");
+    const availableContainer = document.getElementById("available-columns");
+    const loader = document.getElementById("columns-loader");
+    
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
@@ -51,45 +54,66 @@ async function loadAndRenderLdaColumns() {
             headerRange.load("values");
             await context.sync();
 
-            const headers = headerRange.values[0].filter(h => h && String(h).trim() !== "");
-            container.innerHTML = ""; // Clear previous items
+            const allMasterColumns = headerRange.values[0].filter(h => h && String(h).trim() !== "");
+            includedContainer.innerHTML = ""; // Clear previous items
+            availableContainer.innerHTML = "";
 
-            const selectedColumns = new Set(settings.createlda.ldaColumns || []);
+            const selectedColumns = settings.createlda.ldaColumns || [];
+            const selectedSet = new Set(selectedColumns);
 
-            headers.forEach(header => {
-                const colItem = document.createElement("div");
-                colItem.className = "column-item";
-                colItem.textContent = header;
-                colItem.dataset.columnName = header;
-
-                if (selectedColumns.has(header)) {
-                    colItem.classList.add("selected");
+            // Populate included columns in the saved order
+            selectedColumns.forEach(header => {
+                if (allMasterColumns.includes(header)) {
+                    includedContainer.appendChild(createColumnItem(header));
                 }
-
-                colItem.onclick = () => {
-                    colItem.classList.toggle("selected");
-                };
-
-                container.appendChild(colItem);
             });
+
+            // Populate available columns with the remaining items
+            allMasterColumns.forEach(header => {
+                if (!selectedSet.has(header)) {
+                    availableContainer.appendChild(createColumnItem(header));
+                }
+            });
+            
+            loader.style.display = 'none';
         });
+
+        // Initialize SortableJS on both lists
+        const sharedSortableOptions = {
+            group: 'shared-columns', // set both lists to same group
+            animation: 150,
+            ghostClass: 'sortable-ghost'
+        };
+        new Sortable(includedContainer, sharedSortableOptions);
+        new Sortable(availableContainer, sharedSortableOptions);
+
     } catch (error) {
         console.error("Error loading master list columns:", error);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info:", JSON.stringify(error.debugInfo));
         }
-        container.innerHTML = `<p class="error-message">Error: Could not load columns. Make sure a sheet named 'Master List' exists and has a header row.</p>`;
+        loader.innerHTML = `<p class="error-message">Error: Could not load columns. Make sure a sheet named 'Master List' exists and has a header row.</p>`;
+        loader.classList.add('status-error', 'visible');
     }
 }
+
+function createColumnItem(header) {
+    const colItem = document.createElement("div");
+    colItem.className = "column-item";
+    colItem.textContent = header;
+    colItem.dataset.columnName = header;
+    return colItem;
+}
+
 
 function saveSettings() {
     // Get values from the UI
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
 
-    // Get selected columns from the new UI
-    const container = document.getElementById("lda-columns-container");
-    const selectedItems = container.querySelectorAll(".column-item.selected");
+    // Get selected columns from the "Included" list, preserving their order
+    const includedContainer = document.getElementById("included-columns");
+    const selectedItems = includedContainer.querySelectorAll(".column-item");
     settings.createlda.ldaColumns = Array.from(selectedItems).map(item => item.dataset.columnName);
 
     // Save the updated settings object
@@ -99,16 +123,16 @@ function saveSettings() {
         if (asyncResult.status == Office.AsyncResultStatus.Failed) {
             console.log('Settings failed to save. Error: ' + asyncResult.error.message);
             status.textContent = 'Error saving settings.';
-            status.className = 'status-message status-error';
+            status.className = 'status-message status-error visible';
         } else {
             console.log('Settings saved successfully.');
             status.textContent = 'Settings saved!';
-            status.className = 'status-message status-success';
+            status.className = 'status-message status-success visible';
         }
         // Clear the message after a few seconds
         setTimeout(() => {
             status.textContent = '';
-            status.className = '';
+            status.className = 'status-message';
         }, 3000);
     });
 }
