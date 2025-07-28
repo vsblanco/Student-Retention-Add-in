@@ -1020,7 +1020,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v7");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v8");
     try {
         const settings = getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
@@ -1057,12 +1057,36 @@ async function handleCreateLdaSheet() {
             });
             filteredRows.sort((a, b) => (b.row[daysOutColIdx] || 0) - (a.row[daysOutColIdx] || 0));
             
-            const dataToWrite = filteredRows.map(item => {
-                const newRow = [...item.row];
-                if (assignedColumnAdded) newRow.unshift("");
-                return newRow;
+            const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const dataToWrite = [];
+            const formulasToWrite = [];
+
+            filteredRows.forEach(({ row, originalIndex }) => {
+                const newRow = [...row];
+                const formulaRow = new Array(headers.length).fill(null);
+
+                if (gradeBookColIdx !== -1) {
+                    const formula = masterFormulas[originalIndex][gradeBookColIdx];
+                    const value = newRow[gradeBookColIdx];
+                    if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
+                        formulaRow[gradeBookColIdx] = formula;
+                        const match = formula.match(/, *"([^"]+)"\)/);
+                        newRow[gradeBookColIdx] = match ? match[1] : "Gradebook";
+                    } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                        formulaRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                        newRow[gradeBookColIdx] = "Gradebook";
+                    }
+                }
+                if (assignedColumnAdded) {
+                    newRow.unshift("");
+                    formulaRow.unshift(null);
+                }
+                dataToWrite.push(newRow);
+                formulasToWrite.push(formulaRow);
             });
-            const finalLdaData = [headers, ...dataToWrite];
+
+            const finalLdaValues = [headers, ...dataToWrite];
+            const finalLdaFormulas = [new Array(headers.length).fill(null), ...formulasToWrite];
             
             const today = new Date();
             const baseSheetName = `LDA ${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
@@ -1080,24 +1104,33 @@ async function handleCreateLdaSheet() {
             newSheet.activate();
             
             let ldaTableEndRow = 0;
-            if (finalLdaData.length > 1) {
-                const dataRange = newSheet.getRangeByIndexes(0, 0, finalLdaData.length, headers.length);
-                dataRange.values = finalLdaData;
+            if (finalLdaValues.length > 1) {
+                const dataRange = newSheet.getRangeByIndexes(0, 0, finalLdaValues.length, headers.length);
+                dataRange.values = finalLdaValues;
+                dataRange.formulas = finalLdaFormulas;
                 const ldaTable = newSheet.tables.add(dataRange, true);
                 ldaTable.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_LDA";
                 ldaTable.style = "TableStyleLight9";
-                ldaTableEndRow = finalLdaData.length;
+                
+                const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
+                dateColumnsToFormat.forEach(colName => {
+                    const colIdx = findColumnIndex(lowerCaseHeaders, [colName]);
+                    if (colIdx !== -1) {
+                        const dateColumnRange = ldaTable.columns.getItemAt(colIdx).getRange();
+                        dateColumnRange.numberFormat = [["m/d/yyyy"]];
+                    }
+                });
+
+                ldaTableEndRow = finalLdaValues.length;
             } else {
                 newSheet.getRange("A1").getResizedRange(0, headers.length - 1).values = [headers];
                 ldaTableEndRow = 1;
             }
             
-            // We need to sync here so that the sheet and table are created before we try to add another table.
             await context.sync();
 
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
-                // Pass the sheetName variable instead of trying to read sheet.name
                 await createFailingListTable(context, newSheet, sheetName, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded);
             }
             
@@ -1152,32 +1185,45 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
     failingRows.sort((a, b) => (a.row[gradeColIdx] || 0) - (b.row[gradeColIdx] || 0));
 
     if (failingRows.length > 0) {
-        const dataToWrite = failingRows.map(({ row, originalIndex }) => {
+        const dataToWrite = [];
+        const formulasToWrite = [];
+
+        failingRows.forEach(({ row, originalIndex }) => {
             const newRow = [...row];
-             if (gradeBookColIdx !== -1) {
+            const formulaRow = new Array(headers.length).fill(null);
+
+            if (gradeBookColIdx !== -1) {
                 const formula = masterFormulas[originalIndex][gradeBookColIdx];
                 const value = newRow[gradeBookColIdx];
                 if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
-                    newRow[gradeBookColIdx] = formula;
+                    formulaRow[gradeBookColIdx] = formula;
+                    const match = formula.match(/, *"([^"]+)"\)/);
+                    newRow[gradeBookColIdx] = match ? match[1] : "Gradebook";
                 } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-                    newRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                    formulaRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                    newRow[gradeBookColIdx] = "Gradebook";
                 }
             }
-            if (assignedColumnAdded) newRow.unshift("");
-            return newRow;
+            if (assignedColumnAdded) {
+                newRow.unshift("");
+                formulaRow.unshift(null);
+            }
+            dataToWrite.push(newRow);
+            formulasToWrite.push(formulaRow);
         });
 
         const titleRange = sheet.getRangeByIndexes(startRow, 0, 1, 1);
         titleRange.values = [["Failing Students"]];
         titleRange.format.font.bold = true;
 
-        const failingData = [headers, ...dataToWrite];
+        const failingValues = [headers, ...dataToWrite];
+        const failingFormulas = [new Array(headers.length).fill(null), ...formulasToWrite];
         const tableStartRow = startRow + 1;
-        const dataRange = sheet.getRangeByIndexes(tableStartRow, 0, failingData.length, headers.length);
-        dataRange.values = failingData;
+        const dataRange = sheet.getRangeByIndexes(tableStartRow, 0, failingValues.length, headers.length);
+        dataRange.values = failingValues;
+        dataRange.formulas = failingFormulas;
 
         const table = sheet.tables.add(dataRange, true);
-        // Use the passed sheetName variable instead of sheet.name
         table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
         table.style = "TableStyleLight9";
 
@@ -1192,6 +1238,16 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
                 maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
             };
         }
+        
+        const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
+        dateColumnsToFormat.forEach(colName => {
+            const colIdx = findColumnIndex(lowerCaseHeaders, [colName]);
+            if (colIdx !== -1) {
+                const dateColumnRange = table.columns.getItemAt(colIdx).getRange();
+                dateColumnRange.numberFormat = [["m/d/yyyy"]];
+            }
+        });
+
         console.log(`[DEBUG] Added failing list with ${failingRows.length} students.`);
     }
 }
