@@ -30,6 +30,7 @@ function loadSettingsAndPopulateUI() {
         settings.createlda = {
             daysOutFilter: 6,
             includeFailingList: true,
+            hideLeftoverColumns: true, // Default to true
             ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
         };
     }
@@ -37,6 +38,8 @@ function loadSettingsAndPopulateUI() {
     // Populate UI for existing fields
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
     document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
+    document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
+
 
     // Load and render the new column selector
     loadAndRenderLdaColumns();
@@ -110,6 +113,7 @@ function saveSettings() {
     // Get values from the UI
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
+    settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
 
     // Get selected columns from the "Included" list, preserving their order
     const includedContainer = document.getElementById("included-columns");
