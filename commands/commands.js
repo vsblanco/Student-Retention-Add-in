@@ -35,10 +35,24 @@ let transferDialog = null;
 let createLdaDialog = null; // New dialog variable
 
 /**
- * Gets the settings object from document settings.
- * @returns {object} The parsed settings object with defaults.
+ * Gets the settings object from document settings, ensuring it's the latest version.
+ * @returns {Promise<object>} A promise that resolves with the parsed settings object.
  */
-function getSettings() {
+async function getSettings() {
+    // First, refresh the settings from the document to ensure we have the latest version.
+    await new Promise((resolve) => {
+        Office.context.document.settings.refreshAsync(asyncResult => {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Error refreshing settings: " + asyncResult.error.message);
+                // Even if refresh fails, we proceed with the cached version.
+            } else {
+                console.log("Settings refreshed successfully.");
+            }
+            resolve();
+        });
+    });
+
+    // Now, get the settings value.
     const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
     const defaults = {
         createlda: {
@@ -51,15 +65,14 @@ function getSettings() {
     if (settingsString) {
         try {
             const settings = JSON.parse(settingsString);
-            // Ensure createlda property and its sub-properties exist by merging with defaults
             settings.createlda = { ...defaults.createlda, ...(settings.createlda || {}) };
             return settings;
         } catch (e) {
             console.error("Error parsing settings, returning defaults:", e);
-            return defaults; // Return defaults if parsing fails
+            return defaults;
         }
     }
-    return defaults; // Return defaults if no settings are found
+    return defaults;
 }
 
 
@@ -1020,9 +1033,9 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v8");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v9");
     try {
-        const settings = getSettings();
+        const settings = await getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
         const includeFailingList = settings.createlda.includeFailingList;
         console.log(`[DEBUG] Using Days Out filter: ${daysOutFilter}, Include Failing List: ${includeFailingList}`);
@@ -1264,4 +1277,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.25
+//Version 1.26
