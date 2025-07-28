@@ -1036,7 +1036,8 @@ async function handleCreateLdaSheet() {
 
             const masterData = masterRange.values;
             const masterFormulas = masterRange.formulas;
-            const headers = [...masterData[0]];
+            const originalHeaders = masterData[0];
+            let headers = [...originalHeaders];
             const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
             
             const daysOutColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
@@ -1062,24 +1063,26 @@ async function handleCreateLdaSheet() {
             const formulasToWrite = [];
 
             filteredRows.forEach(({ row, originalIndex }) => {
-                const newRow = [...row];
+                const newRow = new Array(headers.length).fill("");
                 const formulaRow = new Array(headers.length).fill(null);
+                const colOffset = assignedColumnAdded ? 1 : 0;
+
+                for (let i = 0; i < originalHeaders.length; i++) {
+                    newRow[i + colOffset] = row[i] || "";
+                }
 
                 if (gradeBookColIdx !== -1) {
+                    const finalGradeBookIdx = gradeBookColIdx + colOffset;
                     const formula = masterFormulas[originalIndex][gradeBookColIdx];
-                    const value = newRow[gradeBookColIdx];
+                    const value = row[gradeBookColIdx];
                     if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
-                        formulaRow[gradeBookColIdx] = formula;
-                        const match = formula.match(/, *"([^"]+)"\)/);
-                        newRow[gradeBookColIdx] = match ? match[1] : "Gradebook";
+                        formulaRow[finalGradeBookIdx] = formula;
+                        const match = formula.match(/, *"([^"]+)"\)/i);
+                        newRow[finalGradeBookIdx] = match ? match[1] : "Gradebook";
                     } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-                        formulaRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
-                        newRow[gradeBookColIdx] = "Gradebook";
+                        formulaRow[finalGradeBookIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                        newRow[finalGradeBookIdx] = "Gradebook";
                     }
-                }
-                if (assignedColumnAdded) {
-                    newRow.unshift("");
-                    formulaRow.unshift(null);
                 }
                 dataToWrite.push(newRow);
                 formulasToWrite.push(formulaRow);
@@ -1114,7 +1117,7 @@ async function handleCreateLdaSheet() {
                 
                 const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
                 dateColumnsToFormat.forEach(colName => {
-                    const colIdx = findColumnIndex(lowerCaseHeaders, [colName]);
+                    const colIdx = findColumnIndex(headers.map(h => h.toLowerCase()), [colName]);
                     if (colIdx !== -1) {
                         const dateColumnRange = ldaTable.columns.getItemAt(colIdx).getRange();
                         dateColumnRange.numberFormat = [["m/d/yyyy"]];
@@ -1131,7 +1134,7 @@ async function handleCreateLdaSheet() {
 
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
-                await createFailingListTable(context, newSheet, sheetName, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded);
+                await createFailingListTable(context, newSheet, sheetName, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, headers, assignedColumnAdded, originalHeaders);
             }
             
             newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
@@ -1162,14 +1165,15 @@ async function handleCreateLdaSheet() {
  * @param {number} startRow - The starting row index for the new table.
  * @param {Array<object>} masterDataWithIndex - The full data from the Master List.
  * @param {Array<Array<any>>} masterFormulas - The formulas from the Master List.
- * @param {Array<string>} headers - The column headers.
+ * @param {Array<string>} headers - The column headers to use for the new table.
  * @param {boolean} assignedColumnAdded - Flag if 'Assigned' column was added dynamically.
+ * @param {Array<string>} originalHeaders - The original headers from the Master List.
  */
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, headers, assignedColumnAdded) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, headers, assignedColumnAdded, originalHeaders) {
     console.log("[DEBUG] Creating failing list table.");
-    const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-    const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
-    const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+    const lowerCaseOriginalHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
+    const gradeColIdx = findColumnIndex(lowerCaseOriginalHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+    const gradeBookColIdx = findColumnIndex(lowerCaseOriginalHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
 
     if (gradeColIdx === -1) {
         console.warn("'Grade' column not found, cannot create failing list.");
@@ -1178,7 +1182,6 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
 
     const failingRows = masterDataWithIndex.filter(({ row }) => {
         const grade = row[gradeColIdx];
-        // Handle both percentage (0-1) and whole number (0-100) grades
         return typeof grade === 'number' && (grade < 0.60 || (grade >= 1 && grade < 60));
     });
 
@@ -1189,24 +1192,26 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
         const formulasToWrite = [];
 
         failingRows.forEach(({ row, originalIndex }) => {
-            const newRow = [...row];
+            const newRow = new Array(headers.length).fill("");
             const formulaRow = new Array(headers.length).fill(null);
+            const colOffset = assignedColumnAdded ? 1 : 0;
+
+            for (let i = 0; i < originalHeaders.length; i++) {
+                newRow[i + colOffset] = row[i] || "";
+            }
 
             if (gradeBookColIdx !== -1) {
+                const finalGradeBookIdx = gradeBookColIdx + colOffset;
                 const formula = masterFormulas[originalIndex][gradeBookColIdx];
-                const value = newRow[gradeBookColIdx];
+                const value = row[gradeBookColIdx];
                 if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
-                    formulaRow[gradeBookColIdx] = formula;
-                    const match = formula.match(/, *"([^"]+)"\)/);
-                    newRow[gradeBookColIdx] = match ? match[1] : "Gradebook";
+                    formulaRow[finalGradeBookIdx] = formula;
+                    const match = formula.match(/, *"([^"]+)"\)/i);
+                    newRow[finalGradeBookIdx] = match ? match[1] : "Gradebook";
                 } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-                    formulaRow[gradeBookColIdx] = `=HYPERLINK("${value}", "Gradebook")`;
-                    newRow[gradeBookColIdx] = "Gradebook";
+                    formulaRow[finalGradeBookIdx] = `=HYPERLINK("${value}", "Gradebook")`;
+                    newRow[finalGradeBookIdx] = "Gradebook";
                 }
-            }
-            if (assignedColumnAdded) {
-                newRow.unshift("");
-                formulaRow.unshift(null);
             }
             dataToWrite.push(newRow);
             formulasToWrite.push(formulaRow);
@@ -1226,8 +1231,9 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
         const table = sheet.tables.add(dataRange, true);
         table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
         table.style = "TableStyleLight9";
-
-        const newGradeColIdx = findColumnIndex(headers.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.grade);
+        
+        const lowerCaseFinalHeaders = headers.map(h => String(h || '').toLowerCase());
+        const newGradeColIdx = findColumnIndex(lowerCaseFinalHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
         if (newGradeColIdx !== -1) {
             const gradeColumn = table.columns.getItemAt(newGradeColIdx);
             const gradeRange = gradeColumn.getDataBodyRange();
@@ -1241,7 +1247,7 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
         
         const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
         dateColumnsToFormat.forEach(colName => {
-            const colIdx = findColumnIndex(lowerCaseHeaders, [colName]);
+            const colIdx = findColumnIndex(lowerCaseFinalHeaders, [colName]);
             if (colIdx !== -1) {
                 const dateColumnRange = table.columns.getItemAt(colIdx).getRange();
                 dateColumnRange.numberFormat = [["m/d/yyyy"]];
@@ -1258,4 +1264,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.20
+//Version 1.25
