@@ -7,28 +7,47 @@
     <title>Student Retention Settings</title>
     <link rel="stylesheet" href="settings.css">
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <!-- SortableJS for drag-and-drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
     <script type="text/javascript" src="settings.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>Settings</h1>
-        
-        <div class="setting-item">
-            <label for="days-out-filter">Days Out Filter for LDA:</label>
-            <input type="number" id="days-out-filter" min="0">
-        </div>
-
-        <div class="setting-item">
-            <label for="include-failing-list">Include Failing List in LDA Report:</label>
-            <input type="checkbox" id="include-failing-list">
-        </div>
-
-        <div class="setting-item">
-            <label>LDA Columns (click to select/deselect):</label>
-            <div id="lda-columns-container" class="columns-container">
-                <!-- Columns will be populated by JavaScript -->
-                <p>Loading columns...</p>
+        <div class="section">
+            <div class="section-header">
+                <!-- Icon SVG -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <h2>LDA Report Settings</h2>
             </div>
+            <div class="setting-item">
+                <label for="days-out-filter">Days Out Filter:</label>
+                <input type="number" id="days-out-filter" min="0">
+            </div>
+            <div class="setting-item">
+                <label>Include Failing List:</label>
+                <label class="switch">
+                    <input type="checkbox" id="include-failing-list">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="section">
+             <div class="columns-management">
+                <div class="column-box">
+                    <h3>Included Columns</h3>
+                    <div id="included-columns" class="column-list">
+                        <!-- Draggable items will be populated here -->
+                    </div>
+                </div>
+                <div class="column-box">
+                    <h3>Available Columns</h3>
+                    <div id="available-columns" class="column-list">
+                        <!-- Draggable items will be populated here -->
+                    </div>
+                </div>
+            </div>
+             <div id="columns-loader" class="status-message">Loading columns...</div>
         </div>
 
         <button id="save-button" class="button-primary">Save Settings</button>
