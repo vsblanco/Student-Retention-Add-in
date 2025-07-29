@@ -1214,6 +1214,11 @@ async function createAndFormatTable(context, options) {
     table.columns.load("items/name");
     await context.sync();
 
+    // Autofit first
+    newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+    await context.sync();
+
+    // Then hide columns
     if (hideLeftoverColumns) {
   console.log("[DEBUG] Hiding unused columns for table:", tableName);
   const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
