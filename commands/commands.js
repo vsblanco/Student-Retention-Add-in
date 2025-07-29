@@ -1093,7 +1093,11 @@ async function handleCreateLdaSheet() {
                 ldaColumns,
                 hideLeftoverColumns,
                 originalHeaders
-            });
+            }
+             // Autofit after hidng columns to avoid turning visible
+            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+            await context.sync();
+            );
 
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
@@ -1103,10 +1107,6 @@ async function handleCreateLdaSheet() {
             
             
         });
-
-        // Autofit after hidng columns to avoid turning visible
-        newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
-        await context.sync();
 
         if (createLdaDialog) {
             createLdaDialog.messageChild(JSON.stringify({ type: 'creationSuccess' }));
