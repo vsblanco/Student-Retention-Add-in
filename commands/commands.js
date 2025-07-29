@@ -1104,6 +1104,10 @@ async function handleCreateLdaSheet() {
             
         });
 
+        // Autofit after hidng columns to avoid turning visible
+        newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+        await context.sync();
+
         if (createLdaDialog) {
             createLdaDialog.messageChild(JSON.stringify({ type: 'creationSuccess' }));
         }
@@ -1212,10 +1216,6 @@ async function createAndFormatTable(context, options) {
 
     // Load column names before accessing them
     table.columns.load("items/name");
-    await context.sync();
-
-    // Autofit first
-    newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
     await context.sync();
 
     // Then hide columns
