@@ -18,7 +18,7 @@ const CONSTANTS = {
         courseId: ["course id"],
         courseLastAccess: ["course last access"],
         currentScore: ["current score", "grade", "course grade"],
-        grade: ["grade", "course grade","final score"],
+        grade: ["grade", "course grade"],
         gradeBook: ["grade book", "gradebook"],
         daysOut: ["days out"],
         lastLda: ["lda", "last lda"],
@@ -121,7 +121,7 @@ function jsDateToExcelDate(date) {
  */
 function sendMessageToDialog(status, type = 'log') {
     if (importDialog) {
-        console.log(`[DIALOG LOG] ${status}`);
+        console.log(`[DIALOG LOG] ${type.toUpperCase()}: ${status}`);
         importDialog.messageChild(JSON.stringify({ type, status }));
     }
 }
@@ -228,48 +228,53 @@ async function processImportMessage(arg) {
  */
 async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
-    console.log(`[DEBUG] File selected: ${fileName}`);
-    let hasStudentIdCol = false;
-    let hasStudentNumberCol = false;
+    sendMessageToDialog(`File selected: ${fileName}. Starting analysis...`);
     let hasMasterListSheet = false;
-    let hasCourseCol = false;
-    let hasCourseIdCol = false;
-    let hasCourseLastAccessCol = false;
-    let hasStudentNameCol = false;
-    let hasCurrentScoreCol = false;
 
     try {
         const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
         const workbook = new ExcelJS.Workbook();
         
         if (fileName.toLowerCase().endsWith('.xlsx')) {
+            sendMessageToDialog("Detected .xlsx file, parsing...");
             await workbook.xlsx.load(arrayBuffer);
         } else {
+            sendMessageToDialog("Detected .csv file, parsing...");
             const csvData = new TextDecoder("utf-8").decode(arrayBuffer);
             const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
             const data = rows.map(row => parseCsvRow(row));
             const worksheet = workbook.addWorksheet('sheet1');
             worksheet.addRows(data);
         }
-        console.log("[DEBUG] File parsed with ExcelJS.");
+        sendMessageToDialog("File parsed successfully. Reading headers...");
 
         const worksheet = workbook.worksheets[0];
         const headers = [];
         worksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
-            headers.push(String(cell.value || '').toLowerCase());
+            headers.push(String(cell.value || ''));
         });
-        console.log("[DEBUG] Parsed headers:", headers);
+        const lowerCaseHeaders = headers.map(h => h.toLowerCase());
+        sendMessageToDialog(`Found headers: [${headers.join(', ')}]`);
         
-        hasStudentIdCol = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS) !== -1;
-        hasStudentNumberCol = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS) !== -1;
-        hasCourseCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.course) !== -1;
-        hasCourseIdCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseId) !== -1;
-        hasCourseLastAccessCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseLastAccess) !== -1;
-        hasStudentNameCol = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS) !== -1;
-        hasCurrentScoreCol = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.currentScore) !== -1;
-        console.log(`[DEBUG] Column checks: hasStudentIdCol=${hasStudentIdCol}, hasStudentNumberCol=${hasStudentNumberCol}, hasCourseCol=${hasCourseCol}, hasCourseIdCol=${hasCourseIdCol}, hasCourseLastAccessCol=${hasCourseLastAccessCol}, hasStudentNameCol=${hasStudentNameCol}, hasCurrentScoreCol=${hasCurrentScoreCol}`);
+        // --- Column Checks ---
+        sendMessageToDialog("Checking for required columns...");
+        const checkCol = (key, aliases) => {
+            const index = findColumnIndex(lowerCaseHeaders, aliases);
+            sendMessageToDialog(`- Checking for '${key}': ${index !== -1 ? `Found at index ${index}` : 'Not found'}`);
+            return index !== -1;
+        };
 
+        const hasStudentNameCol = checkCol('Student Name', CONSTANTS.STUDENT_NAME_COLS);
+        const hasStudentIdCol = checkCol('Student ID', CONSTANTS.STUDENT_ID_COLS);
+        const hasStudentNumberCol = checkCol('Student Number', CONSTANTS.STUDENT_NUMBER_COLS);
+        const hasCourseCol = checkCol('Course', CONSTANTS.COLUMN_MAPPINGS.course);
+        const hasCourseIdCol = checkCol('Course ID', CONSTANTS.COLUMN_MAPPINGS.courseId);
+        const hasCourseLastAccessCol = checkCol('Course Last Access', CONSTANTS.COLUMN_MAPPINGS.courseLastAccess);
+        const hasCurrentScoreCol = checkCol('Current Score', CONSTANTS.COLUMN_MAPPINGS.currentScore);
+        
+        // --- Sheet Existence Check ---
         if (hasStudentNameCol || hasStudentNumberCol) {
+            sendMessageToDialog("Checking for 'Master List' sheet in workbook...");
             await Excel.run(async (context) => {
                 const sheetNames = context.workbook.worksheets.load("items/name");
                 await context.sync();
@@ -280,12 +285,13 @@ async function handleFileSelected(message) {
                     }
                 }
             });
+            sendMessageToDialog(`'Master List' sheet exists: ${hasMasterListSheet}`);
         }
-        console.log(`[DEBUG] 'Master List' sheet exists: ${hasMasterListSheet}`);
         
+        // --- Determine Available Actions ---
         const isGradeFile = hasStudentNameCol && hasCurrentScoreCol && hasCourseCol && (hasCourseIdCol || hasCourseLastAccessCol);
         const isMasterFile = hasStudentNumberCol && !isGradeFile;
-        console.log(`[DEBUG] File type detection: isGradeFile=${isGradeFile}, isMasterFile=${isMasterFile}`);
+        sendMessageToDialog(`File type analysis: Grade File=${isGradeFile}, Master File=${isMasterFile}`);
 
         let statusMessage = "";
         let canUpdateGrades = false;
@@ -293,6 +299,7 @@ async function handleFileSelected(message) {
 
         if (!hasMasterListSheet) {
             statusMessage = "'Master List' sheet not found in this workbook.";
+            sendMessageToDialog(statusMessage, 'error');
         } else if (isGradeFile) {
             statusMessage = "Ready to update grades.";
             canUpdateGrades = true;
@@ -300,10 +307,10 @@ async function handleFileSelected(message) {
             statusMessage = "Ready to update Master List.";
             canUpdateMaster = true;
         } else {
-            statusMessage = "File not compatible. Missing required columns.";
+            statusMessage = "File not compatible. Check log for missing columns.";
+            sendMessageToDialog("File does not meet requirements for either update type.", 'error');
         }
-        console.log(`[DEBUG] Final status: message='${statusMessage}', canUpdateGrades=${canUpdateGrades}, canUpdateMaster=${canUpdateMaster}`);
-
+        
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: canUpdateMaster,
@@ -313,6 +320,7 @@ async function handleFileSelected(message) {
         }
     } catch (error) {
         console.error("Error during file check:", error);
+        sendMessageToDialog(`Error during file analysis: ${error.message}`, 'error');
         if (importDialog) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: false,
@@ -351,6 +359,7 @@ async function handleUpdateMaster(message) {
             userHeaders.push(String(cell.value || ''));
         });
         const lowerCaseUserHeaders = userHeaders.map(h => h.toLowerCase());
+        sendMessageToDialog(`Parsed import headers: [${userHeaders.join(', ')}]`);
 
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
@@ -378,7 +387,7 @@ async function handleUpdateMaster(message) {
         let colMapping;
 
         await Excel.run(async (context) => {
-            sendMessageToDialog("Accessing 'Master List' sheet for initial analysis...");
+            sendMessageToDialog("Reading 'Master List' to identify new vs. existing students...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
@@ -387,6 +396,7 @@ async function handleUpdateMaster(message) {
             masterHeaders = usedRange.values[0].map(h => String(h || ''));
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            sendMessageToDialog(`'Master List' headers: [${masterHeaders.join(', ')}]`);
 
             if (masterStudentNameCol === -1) {
                 throw new Error("'Master List' is missing a 'StudentName' column.");
@@ -399,10 +409,12 @@ async function handleUpdateMaster(message) {
                     masterNameMap.set(normalizeName(name), i);
                 }
             }
+            sendMessageToDialog(`Created map of ${masterNameMap.size} students from 'Master List'.`);
 
             colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
             );
+            sendMessageToDialog(`Column mapping created: [${colMapping.join(', ')}]`);
 
             for (const userRow of userData) {
                 const studentName = userRow[userStudentNameCol];
@@ -421,7 +433,7 @@ async function handleUpdateMaster(message) {
         });
 
         // 3. Prepare sheet by clearing formatting and inserting all new rows at once
-        sendMessageToDialog("Preparing sheet for updates...");
+        sendMessageToDialog("Preparing sheet: clearing old highlights and inserting rows for new students...");
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
@@ -517,6 +529,7 @@ async function handleUpdateMaster(message) {
                     }
                 }
             });
+            sendMessageToDialog("Refreshed Master List map for accurate row updates.");
 
             for (let i = 0; i < existingStudents.length; i += batchSize) {
                 const batch = existingStudents.slice(i, i + batchSize);
@@ -581,12 +594,13 @@ async function handleUpdateMaster(message) {
             // Format LDA column
             const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
             if (masterLdaColIdx !== -1) {
+                sendMessageToDialog("Formatting 'LDA' column as date...");
                 const ldaColumn = sheet.getRangeByIndexes(0, masterLdaColIdx, usedRange.rowCount, 1);
                 ldaColumn.numberFormat = [["M-DD-YYYY"]];
             }
 
             if (newStudents.length > 0 || existingStudents.length > 0) {
-                sendMessageToDialog("Autofitting columns...");
+                sendMessageToDialog("Autofitting columns for readability...");
                 sheet.getUsedRange().format.autofitColumns();
             }
             await context.sync();
@@ -611,7 +625,7 @@ async function handleUpdateGrades(message) {
     sendMessageToDialog("Starting grade update process...");
     try {
         // Step 1: Parse the uploaded file using ExcelJS
-        sendMessageToDialog("Parsing uploaded file for grade update...");
+        sendMessageToDialog("Parsing uploaded file for grade data...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
         const userWorkbook = new ExcelJS.Workbook();
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
@@ -629,6 +643,7 @@ async function handleUpdateGrades(message) {
         userWorksheet.getRow(1).eachCell({ includeEmpty: true }, (cell) => {
             userHeaders.push(String(cell.value || '').toLowerCase());
         });
+        sendMessageToDialog(`Parsed grade file headers: [${userHeaders.join(', ')}]`);
         
         const userData = [];
         userWorksheet.eachRow((row, rowNumber) => {
@@ -640,7 +655,7 @@ async function handleUpdateGrades(message) {
                 userData.push(rowData);
             }
         });
-        sendMessageToDialog(`Parsed ${userData.length} rows from the imported file.`);
+        sendMessageToDialog(`Parsed ${userData.length} rows from the grade file.`);
 
         // Step 2: Find column indices in the imported file
         const userStudentNameCol = findColumnIndex(userHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -654,12 +669,26 @@ async function handleUpdateGrades(message) {
         if (userGradeCol === -1 || userStudentNameCol === -1 || userCourseCol === -1) {
             throw new Error("Imported file is missing one of the required columns: Student Name, Course, or Current Score/Grade.");
         }
+        sendMessageToDialog("Required columns found in grade file.");
+        sendMessageToDialog(`- Using column index ${userGradeCol} for Grades.`);
+        if (userMissingAssignmentsCol !== -1) {
+            sendMessageToDialog(`- Using column index ${userMissingAssignmentsCol} for Missing Assignments.`);
+        }
+        if (userZeroAssignmentsCol !== -1) {
+            sendMessageToDialog(`- Using column index ${userZeroAssignmentsCol} for Zero Assignments.`);
+        }
+        if (userCourseIdCol !== -1 && userStudentIdCol !== -1) {
+            sendMessageToDialog(`- Using column indices ${userCourseIdCol} (CourseID) and ${userStudentIdCol} (StudentID) for hyperlinks.`);
+        }
+
 
         // Step 3: Create a map of student data from the import, filtering out 'CAPV' courses
         const studentDataMap = new Map();
+        let skippedRows = 0;
         userData.forEach(row => {
             const courseName = row[userCourseCol] ? String(row[userCourseCol]) : '';
             if (courseName.toUpperCase().includes('CAPV')) {
+                skippedRows++;
                 return; // Skip this row
             }
 
@@ -675,17 +704,18 @@ async function handleUpdateGrades(message) {
                 });
             }
         });
-        sendMessageToDialog(`Created a map of ${studentDataMap.size} students from the imported file after filtering.`);
+        sendMessageToDialog(`Created a map of ${studentDataMap.size} students (skipped ${skippedRows} 'CAPV' rows).`);
 
         // Step 4: Perform the bulk update on the "Master List" sheet
         await Excel.run(async (context) => {
-            sendMessageToDialog("Accessing 'Master List' sheet...");
+            sendMessageToDialog("Reading current 'Master List' data into memory...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const range = sheet.getUsedRange();
             
             // Load all values and formulas from the sheet into memory
             range.load("values, formulas, rowCount");
             await context.sync();
+            sendMessageToDialog("'Master List' data loaded.");
 
             const masterValues = range.values;
             const masterFormulas = range.formulas;
@@ -701,8 +731,14 @@ async function handleUpdateGrades(message) {
             if (masterStudentNameCol === -1 || masterGradeCol === -1 || masterGradebookCol === -1) {
                 throw new Error("'Master List' is missing required columns: StudentName, Grade, or Grade Book.");
             }
+            sendMessageToDialog("Required columns located in 'Master List'.");
 
             let updatedCount = 0;
+            let gradesUpdated = 0;
+            let missingUpdated = 0;
+            let zerosUpdated = 0;
+            let linksUpdated = 0;
+
             // Iterate through the Master List data (in memory) and update it
             for (let i = 1; i < range.rowCount; i++) {
                 const masterName = masterValues[i][masterStudentNameCol];
@@ -711,20 +747,33 @@ async function handleUpdateGrades(message) {
                     if (studentDataMap.has(normalizedName)) {
                         const importedData = studentDataMap.get(normalizedName);
                         
+                        sendMessageToDialog(`Updating row ${i + 1}: ${masterName}`);
+                        
                         // Update the values in the local arrays
-                        masterValues[i][masterGradeCol] = importedData.grade;
+                        if (importedData.grade !== undefined && importedData.grade !== null) {
+                            masterValues[i][masterGradeCol] = importedData.grade;
+                            sendMessageToDialog(`  - Grade set to: ${importedData.grade}`);
+                            gradesUpdated++;
+                        }
 
                         if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
                             masterValues[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
+                            sendMessageToDialog(`  - Missing Assignments set to: ${importedData.missingAssignments}`);
+                            missingUpdated++;
                         }
                         if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
                             masterValues[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
+                            sendMessageToDialog(`  - Zero Assignments set to: ${importedData.zeroAssignments}`);
+                            zerosUpdated++;
                         }
 
                         // Update the formula for the hyperlink
                         if (importedData.courseId && importedData.studentId) {
+                            sendMessageToDialog(`  - Found CourseID: ${importedData.courseId}, StudentID: ${importedData.studentId}`);
                             const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
                             masterFormulas[i][masterGradebookCol] = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                            sendMessageToDialog(`  - Wrapped hyperlink: ${newGradebookLink}`);
+                            linksUpdated++;
                         }
                         
                         updatedCount++;
@@ -732,11 +781,16 @@ async function handleUpdateGrades(message) {
                 }
             }
             
-            sendMessageToDialog(`Found and prepared updates for ${updatedCount} matching students.`);
+            sendMessageToDialog(`Prepared updates for ${updatedCount} students:`);
+            sendMessageToDialog(`- ${gradesUpdated} grades to be updated.`);
+            if (missingUpdated > 0) sendMessageToDialog(`- ${missingUpdated} 'Missing Assignments' values to be updated.`);
+            if (zerosUpdated > 0) sendMessageToDialog(`- ${zerosUpdated} 'Zero Assignments' values to be updated.`);
+            if (linksUpdated > 0) sendMessageToDialog(`- ${linksUpdated} hyperlinks to be created/updated.`);
+
 
             if (updatedCount > 0) {
                 // Write the updated data and formulas back to the sheet in two bulk operations
-                sendMessageToDialog("Writing updates to the sheet...");
+                sendMessageToDialog("Writing all updates to the sheet at once...");
                 range.values = masterValues;
                 range.formulas = masterFormulas;
                 sheet.getUsedRange().format.autofitColumns();
@@ -1262,4 +1316,5 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version copiolotttttt
+//Version 1.21
+
