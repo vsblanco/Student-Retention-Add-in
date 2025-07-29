@@ -1133,7 +1133,7 @@ async function handleCreateLdaSheet() {
                     const selectedColumnsSet = new Set(ldaColumns);
                     finalHeaders.forEach(header => {
                         if (!selectedColumnsSet.has(header)) {
-                            ldaTable.columns.getItem(header).getRange().Hidden = true;
+                            ldaTable.columns.getItem(header).EntireColumn.Hidden = true;
                         }
                     });
                 }
@@ -1251,7 +1251,7 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             const selectedColumnsSet = new Set(ldaColumns);
             finalHeaders.forEach(header => {
                 if (!selectedColumnsSet.has(header)) {
-                    table.columns.getItem(header).getRange().Hidden = true;
+                    ldaTable.columns.getItem(header).EntireColumn.Hidden = true;
                 }
             });
         }
