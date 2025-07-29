@@ -1198,7 +1198,7 @@ async function createAndFormatTable(context, options) {
         table.name = tableName;
         table.style = "TableStyleLight9";
         
-        await context.sync(); // CRITICAL: Sync after creating the table.
+
 
         if (hideLeftoverColumns) {
             console.log("[DEBUG] Hiding unused columns for table:", tableName);
@@ -1208,11 +1208,12 @@ async function createAndFormatTable(context, options) {
                     console.log(`[DEBUG] Hiding column: "${header}"`);
                     table.columns.getItem(header).getRange().columnHidden = true;
                     console.log(table.columns.getItem(header).getRange().columnHidden);
-                    await context.sync();
+                
                 }
             });
         }
-
+        await context.sync(); // CRITICAL: Sync after creating the table.
+        
         const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
         dateColumnsToFormat.forEach(colName => {
             const colIdx = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), [colName.toLowerCase()]);
@@ -1233,4 +1234,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.30 frfr
+//Version 1.31
