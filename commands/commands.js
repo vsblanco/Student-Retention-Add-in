@@ -1210,14 +1210,16 @@ async function createAndFormatTable(context, options) {
     table.name = tableName;
     table.style = "TableStyleLight9";
 
-    await context.sync(); // Ensure table is created before accessing columns
+    // Load column names before accessing them
+    table.columns.load("items/name");
+    await context.sync();
 
     if (hideLeftoverColumns) {
       console.log("[DEBUG] Hiding unused columns for table:", tableName);
       const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
-      const tableColumnNames = table.columns.items.map(col => col.name.trim().toLowerCase());
 
-      tableColumnNames.forEach((colName, idx) => {
+      table.columns.items.forEach((col, idx) => {
+        const colName = col.name.trim().toLowerCase();
         if (!selectedColumnsSet.has(colName)) {
           try {
             console.log(`[DEBUG] Hiding column: "${colName}"`);
