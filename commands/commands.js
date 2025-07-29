@@ -1206,8 +1206,9 @@ async function createAndFormatTable(context, options) {
             finalHeaders.forEach(header => {
                 if (!selectedColumnsSet.has(header)) {
                     console.log(`[DEBUG] Hiding column: "${header}"`);
-                    table.columns.getItem(header).getRange().format.columnHidden = true;
+                    table.columns.getItem(header).getRange().columnHidden = true;
                     console.log(table.columns.getItem(header).getRange().columnHidden);
+                    await context.sync();
                 }
             });
         }
@@ -1232,4 +1233,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.30 log again
+//Version 1.30 frfr
