@@ -1225,6 +1225,7 @@ async function createAndFormatTable(context, options) {
         console.log(`[DEBUG] Hiding worksheet column at index ${idx} for "${col.name}"`);
         const columnLetter = String.fromCharCode(65 + idx); // A, B, C, ...
         const worksheetColumn = sheet.getRange(`${columnLetter}:${columnLetter}`);
+        console.log(`[DEBUG] Column index ${idx} maps to letter ${columnLetter} for column "${col.name}"`);
         worksheetColumn.columnHidden = true;
 
       } catch (err) {
