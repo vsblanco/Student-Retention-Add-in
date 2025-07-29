@@ -800,6 +800,10 @@ async function handleUpdateGrades(message) {
             }
             
             await context.sync();
+
+            // Apply conditional formatting after updates are synced
+            await applyGradeConditionalFormatting(context);
+
             sendMessageToDialog("Grade update process completed successfully.", 'complete');
         });
 
@@ -810,6 +814,58 @@ async function handleUpdateGrades(message) {
             console.error("Debug info: " + JSON.stringify(error.debugInfo));
         }
     }
+}
+
+/**
+ * Applies a 3-color scale conditional formatting to the grade column.
+ * @param {Excel.RequestContext} context The request context.
+ */
+async function applyGradeConditionalFormatting(context) {
+    sendMessageToDialog("Applying conditional formatting to grades...");
+    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+    const range = sheet.getUsedRange(true); // Use true to get the most up-to-date range
+    range.load("values, rowCount");
+    await context.sync();
+
+    const headers = range.values[0].map(h => String(h || '').toLowerCase());
+    const gradeColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade);
+
+    if (gradeColIdx === -1) {
+        sendMessageToDialog("'Grade' column not found, skipping conditional formatting.", 'log');
+        return;
+    }
+
+    if (range.rowCount <= 1) {
+        sendMessageToDialog("No data rows to format.", 'log');
+        return;
+    }
+
+    const gradeColumnRange = sheet.getRangeByIndexes(1, gradeColIdx, range.rowCount - 1, 1);
+
+    // Determine if grades are 0-1 or 0-100 scale by checking the first few values
+    let isPercentScale = false;
+    for (let i = 1; i < Math.min(range.rowCount, 10); i++) { // Check up to 10 rows
+        if (range.values[i] && typeof range.values[i][gradeColIdx] === 'number' && range.values[i][gradeColIdx] > 1) {
+            isPercentScale = true;
+            break;
+        }
+    }
+    
+    sendMessageToDialog(`Detected grade scale: ${isPercentScale ? '0-100' : '0-1'}. Applying 3-color scale.`);
+
+    // Clear existing conditional formats on the column to avoid duplicates
+    gradeColumnRange.conditionalFormats.clear();
+    
+    const conditionalFormat = gradeColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+    const criteria = {
+        minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
+        midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: isPercentScale ? "70" : "0.7", color: "#FFEB84" }, // Yellow
+        maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" } // Green
+    };
+    conditionalFormat.colorScale.criteria = criteria;
+
+    await context.sync();
+    sendMessageToDialog("Conditional formatting applied.");
 }
 
 
@@ -1319,4 +1375,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.22
+//Version 1.23
