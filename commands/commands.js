@@ -1093,18 +1093,13 @@ async function handleCreateLdaSheet() {
                 ldaColumns,
                 hideLeftoverColumns,
                 originalHeaders
-            }
-             // Autofit after hidng columns to avoid turning visible
-            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
-            await context.sync();
-            );
-
+            });
+            
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
                 await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders);
             }
-            
             
         });
 
