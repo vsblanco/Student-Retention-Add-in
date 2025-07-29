@@ -12,7 +12,6 @@ const CONSTANTS = {
     STUDENT_ID_COLS: ["student id"],
     STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
     MASTER_LIST_SHEET: "Master List",
-    TEMPLATE_URL: 'https://vsblanco.github.io/Student-Retention-Add-in/Template.xlsx',
     SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
     COLUMN_MAPPINGS: {
         course: ["course"],
