@@ -1131,7 +1131,7 @@ async function handleCreateLdaSheet() {
                     const selectedColumnsSet = new Set(ldaColumns);
                     finalHeaders.forEach(header => {
                         if (!selectedColumnsSet.has(header)) {
-                            ldaTable.columns.getItem(header).getRange().columnHidden = true;
+                            ldaTable.columns.getItem(header).getRange().columnHidden = -1;
                         }
                     });
                 }
@@ -1284,4 +1284,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.28
+//Version 1.29
