@@ -18,7 +18,7 @@ const CONSTANTS = {
         courseId: ["course id"],
         courseLastAccess: ["course last access"],
         currentScore: ["current score", "grade", "course grade"],
-        grade: ["grade", "course grade"],
+        grade: ["grade", "course grade","final score"],
         gradeBook: ["grade book", "gradebook"],
         daysOut: ["days out"],
         lastLda: ["lda", "last lda"],
