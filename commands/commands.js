@@ -1214,7 +1214,7 @@ async function createAndFormatTable(context, options) {
     await context.sync();
       
     // Autofit first
-    newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+    sheet.getUsedRange().getEntireColumn().format.autofitColumns();
     await context.sync();
       
     // Then hide columns
