@@ -1215,22 +1215,23 @@ async function createAndFormatTable(context, options) {
     await context.sync();
 
     if (hideLeftoverColumns) {
-      console.log("[DEBUG] Hiding unused columns for table:", tableName);
-      const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
+  console.log("[DEBUG] Hiding unused columns for table:", tableName);
+  const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
 
-      table.columns.items.forEach((col, idx) => {
-        const colName = col.name.trim().toLowerCase();
-        if (!selectedColumnsSet.has(colName)) {
-          try {
-            console.log(`[DEBUG] Hiding column: "${colName}"`);
-            const columnRange = table.columns.getItemAt(idx).getRange();
-            columnRange.columnHidden = true;
-          } catch (err) {
-            console.warn(`Failed to hide column "${colName}":`, err);
-          }
-        }
-      });
+  table.columns.items.forEach((col, idx) => {
+    const colName = col.name.trim().toLowerCase();
+    if (!selectedColumnsSet.has(colName)) {
+      try {
+        console.log(`[DEBUG] Hiding worksheet column at index ${idx} for "${col.name}"`);
+        const worksheetColumn = sheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn();
+        worksheetColumn.columnHidden = true;
+      } catch (err) {
+        console.warn(`Failed to hide worksheet column for "${col.name}":`, err);
+      }
     }
+  });
+}
+
 
     const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
     dateColumnsToFormat.forEach(colName => {
@@ -1253,4 +1254,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version copiolot
+//Version copiolotttttt
