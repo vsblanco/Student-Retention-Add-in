@@ -712,13 +712,15 @@ async function handleUpdateGrades(message) {
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const range = sheet.getUsedRange();
             
-            // Load all values and formulas from the sheet into memory
-            range.load("values, formulas, rowCount");
+            // Load all values from the sheet into memory
+            range.load("values, rowCount");
             await context.sync();
             sendMessageToDialog("'Master List' data loaded.");
 
             const masterValues = range.values;
-            const masterFormulas = range.formulas;
+            // Create a mutable copy of the values to write back
+            const valuesToWrite = masterValues.map(row => [...row]);
+
             const masterHeaders = masterValues[0].map(h => String(h || '').toLowerCase());
 
             // Find column indices in the Master List
@@ -739,7 +741,7 @@ async function handleUpdateGrades(message) {
             let zerosUpdated = 0;
             let linksUpdated = 0;
 
-            // Iterate through the Master List data (in memory) and update it
+            // Iterate through the Master List data (in memory) and update the valuesToWrite array
             for (let i = 1; i < range.rowCount; i++) {
                 const masterName = masterValues[i][masterStudentNameCol];
                 if (masterName) {
@@ -749,29 +751,30 @@ async function handleUpdateGrades(message) {
                         
                         sendMessageToDialog(`Updating row ${i + 1}: ${masterName}`);
                         
-                        // Update the values in the local arrays
+                        // Update grade
                         if (importedData.grade !== undefined && importedData.grade !== null) {
-                            masterValues[i][masterGradeCol] = importedData.grade;
+                            valuesToWrite[i][masterGradeCol] = importedData.grade;
                             sendMessageToDialog(`  - Grade set to: ${importedData.grade}`);
                             gradesUpdated++;
                         }
 
+                        // Update assignments
                         if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
-                            masterValues[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
+                            valuesToWrite[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
                             sendMessageToDialog(`  - Missing Assignments set to: ${importedData.missingAssignments}`);
                             missingUpdated++;
                         }
                         if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
-                            masterValues[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
+                            valuesToWrite[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
                             sendMessageToDialog(`  - Zero Assignments set to: ${importedData.zeroAssignments}`);
                             zerosUpdated++;
                         }
 
-                        // Update the formula for the hyperlink
+                        // Update hyperlink by setting a formula string in the values array
                         if (importedData.courseId && importedData.studentId) {
                             sendMessageToDialog(`  - Found CourseID: ${importedData.courseId}, StudentID: ${importedData.studentId}`);
                             const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
-                            masterFormulas[i][masterGradebookCol] = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
+                            valuesToWrite[i][masterGradebookCol] = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
                             sendMessageToDialog(`  - Wrapped hyperlink: ${newGradebookLink}`);
                             linksUpdated++;
                         }
@@ -789,10 +792,10 @@ async function handleUpdateGrades(message) {
 
 
             if (updatedCount > 0) {
-                // Write the updated data and formulas back to the sheet in two bulk operations
+                // Write the updated data back to the sheet in a single operation.
+                // Excel will automatically interpret values starting with '=' as formulas.
                 sendMessageToDialog("Writing all updates to the sheet at once...");
-                range.values = masterValues;
-                range.formulas = masterFormulas;
+                range.values = valuesToWrite;
                 sheet.getUsedRange().format.autofitColumns();
             }
             
