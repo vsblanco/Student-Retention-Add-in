@@ -1212,7 +1212,11 @@ async function createAndFormatTable(context, options) {
     // Load column names before accessing them
     table.columns.load("items/name");
     await context.sync();
-
+      
+    // Autofit first
+    newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+    await context.sync();
+      
     // Then hide columns
     if (hideLeftoverColumns) {
   console.log("[DEBUG] Hiding unused columns for table:", tableName);
