@@ -1127,11 +1127,13 @@ async function handleCreateLdaSheet() {
                 ldaTable.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_LDA";
                 ldaTable.style = "TableStyleLight9";
                 
+                await context.sync(); // Sync after creating the table, before formatting
+
                 if (hideLeftoverColumns) {
                     const selectedColumnsSet = new Set(ldaColumns);
                     finalHeaders.forEach(header => {
                         if (!selectedColumnsSet.has(header)) {
-                            ldaTable.columns.getItem(header).getRange().columnHidden = -1;
+                            ldaTable.columns.getItem(header).getRange().columnHidden = true;
                         }
                     });
                 }
@@ -1150,11 +1152,10 @@ async function handleCreateLdaSheet() {
                 ldaTableEndRow = 1;
             }
             
-            await context.sync();
-
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
-                await createFailingListTable(context, newSheet, sheetName, ldaTableEndRow + 2, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders);
+                const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders);
             }
             
             newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
@@ -1243,6 +1244,8 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
         const table = sheet.tables.add(dataRange, true);
         table.name = sheetName.replace(/[^a-zA-Z0-9]/g, "_") + "_Failing";
         table.style = "TableStyleLight9";
+
+        await context.sync(); // Sync after creating the table, before formatting
         
         if (hideLeftoverColumns) {
             const selectedColumnsSet = new Set(ldaColumns);
