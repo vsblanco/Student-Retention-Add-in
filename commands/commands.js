@@ -1206,12 +1206,14 @@ async function createAndFormatTable(context, options) {
             finalHeaders.forEach(header => {
                 if (!selectedColumnsSet.has(header)) {
                     console.log(`[DEBUG] Hiding column: "${header}"`);
-                    table.columns.getItem(header).getRange().columnHidden = true;
+                    const columnRange = table.columns.getItem(header).getRange();
+                    columnRange.columnHidden = true;
                 
                 }
             });
         }
         await context.sync(); // CRITICAL: Sync after creating the table.
+        
 
         const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
         dateColumnsToFormat.forEach(colName => {
@@ -1233,4 +1235,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.33543534534
+//Version 1.111
