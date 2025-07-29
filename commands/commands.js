@@ -1233,6 +1233,8 @@ async function createAndFormatTable(context, options) {
       }
     }
   });
+await context.sync();
+
 }
 
 
