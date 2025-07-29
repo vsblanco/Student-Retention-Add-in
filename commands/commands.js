@@ -1133,7 +1133,7 @@ async function handleCreateLdaSheet() {
                     const selectedColumnsSet = new Set(ldaColumns);
                     finalHeaders.forEach(header => {
                         if (!selectedColumnsSet.has(header)) {
-                            ldaTable.columns.getItem(header).getRange().columnHidden = true;
+                            ldaTable.columns.getItem(header).getRange().Hidden = true;
                         }
                     });
                 }
@@ -1251,7 +1251,7 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             const selectedColumnsSet = new Set(ldaColumns);
             finalHeaders.forEach(header => {
                 if (!selectedColumnsSet.has(header)) {
-                    table.columns.getItem(header).getRange().columnHidden = true;
+                    table.columns.getItem(header).getRange().Hidden = true;
                 }
             });
         }
@@ -1287,4 +1287,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.29
+//Version 1.29 hidden
