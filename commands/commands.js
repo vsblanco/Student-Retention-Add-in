@@ -708,20 +708,20 @@ async function handleUpdateGrades(message) {
 
         // Step 4: Perform the bulk update on the "Master List" sheet
         await Excel.run(async (context) => {
-            sendMessageToDialog("Reading current 'Master List' data into memory...");
+            sendMessageToDialog("Reading current 'Master List' data and formulas into memory...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const range = sheet.getUsedRange();
             
-            // Load all values from the sheet into memory
-            range.load("values, rowCount");
+            // Load both values and formulas from the sheet into memory
+            range.load("values, formulas, rowCount");
             await context.sync();
-            sendMessageToDialog("'Master List' data loaded.");
+            sendMessageToDialog("'Master List' data and formulas loaded.");
 
-            const masterValues = range.values;
-            // Create a mutable copy of the values to write back
-            const valuesToWrite = masterValues.map(row => [...row]);
+            const masterFormulas = range.formulas;
+            // Create a mutable copy of the formulas to preserve existing data/formulas
+            const valuesToWrite = masterFormulas.map(row => [...row]);
 
-            const masterHeaders = masterValues[0].map(h => String(h || '').toLowerCase());
+            const masterHeaders = range.values[0].map(h => String(h || '').toLowerCase());
 
             // Find column indices in the Master List
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -743,7 +743,7 @@ async function handleUpdateGrades(message) {
 
             // Iterate through the Master List data (in memory) and update the valuesToWrite array
             for (let i = 1; i < range.rowCount; i++) {
-                const masterName = masterValues[i][masterStudentNameCol];
+                const masterName = range.values[i][masterStudentNameCol]; // Use original values for matching
                 if (masterName) {
                     const normalizedName = normalizeName(masterName);
                     if (studentDataMap.has(normalizedName)) {
@@ -1319,5 +1319,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.21
-
+//Version 1.22
