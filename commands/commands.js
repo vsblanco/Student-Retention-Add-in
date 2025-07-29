@@ -1101,7 +1101,7 @@ async function handleCreateLdaSheet() {
                 await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders);
             }
             
-            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+            
         });
 
         if (createLdaDialog) {
