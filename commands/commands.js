@@ -852,6 +852,8 @@ async function applyGradeConditionalFormatting(context) {
     }
     
     sendMessageToDialog(`Detected grade scale: ${isPercentScale ? '0-100' : '0-1'}. Applying 3-color scale.`);
+    // Clear existing conditional formats on the column to avoid duplicates
+    gradeColumnRange.conditionalFormats.clearAll();
     
     const conditionalFormat = gradeColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
     const criteria = {
@@ -1372,5 +1374,5 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.21
+//Version 1.3
 
