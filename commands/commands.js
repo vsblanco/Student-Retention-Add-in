@@ -346,7 +346,7 @@ async function handleUpdateMaster(message) {
         if (message.fileName.toLowerCase().endsWith('.xlsx')) {
             await userWorkbook.xlsx.load(userArrayBuffer);
         } else {
-            const csvData = new TextDecoder("utf-8").decode(arrayBuffer);
+            const csvData = new TextDecoder("utf-8").decode(userArrayBuffer);
             const rows = csvData.split(/\r?\n/).filter(row => row.trim().length > 0);
             const data = rows.map(row => parseCsvRow(row));
             const worksheet = userWorkbook.addWorksheet('sheet1');
@@ -852,8 +852,9 @@ async function applyGradeConditionalFormatting(context) {
     }
     
     sendMessageToDialog(`Detected grade scale: ${isPercentScale ? '0-100' : '0-1'}. Applying 3-color scale.`);
+
     // Clear existing conditional formats on the column to avoid duplicates
-    gradeColumnRange.conditionalFormats.clearAll();
+    gradeColumnRange.conditionalFormats.deleteAll();
     
     const conditionalFormat = gradeColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
     const criteria = {
@@ -1374,5 +1375,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.3
-
+//Version 1.22 u
