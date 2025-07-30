@@ -868,8 +868,20 @@ async function addOutreachComment(studentId, studentName, commentText) {
             historySheet.getUsedRange().format.autofitColumns();
             await context.sync();
 
+            // NEW: Check if the updated student is the one currently displayed in the task pane
+            // and if the history tab is active. If so, refresh the history.
+            if (studentId && String(studentId) === String(currentStudentId)) {
+                const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
+                if (panelHistory && !panelHistory.classList.contains("hidden")) {
+                    console.log(`Refreshing history for student ${studentName} after outreach update.`);
+                    // Use a brief timeout to allow the UI to process the sheet change before refreshing.
+                    setTimeout(() => displayStudentHistory(currentStudentId), 100);
+                }
+            }
+
         } catch (error) {
             errorHandler(error);
         }
     });
 }
+// --- END: Code moved from commands.js ---
