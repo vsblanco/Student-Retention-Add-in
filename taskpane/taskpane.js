@@ -47,6 +47,7 @@ const CONSTANTS = {
         studentEmail: ["student email", "school email", "email"],
         personalEmail: ["personal email", "otheremail"],
         gradeBook: ["grade book", "gradebook"],
+        outreach: ["outreach"], // Added from commands.js
         comment: "comment",
         tag: "tag",
         timestamp: "timestamp",
@@ -76,6 +77,7 @@ Office.onReady((info) => {
         submitButton.addEventListener("click", submitNewComment);
     }
 
+    // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
         console.error("Failed to register selection change handler: " + result.error.message);
@@ -84,6 +86,14 @@ Office.onReady((info) => {
       }
     });
     
+    // Add event handler for worksheet changes to catch outreach updates
+    Excel.run(async (context) => {
+      const worksheet = context.workbook.worksheets.getActiveWorksheet();
+      worksheet.onChanged.add(onWorksheetChanged);
+      await context.sync();
+      console.log("Worksheet onChanged event handler registered from taskpane.");
+    }).catch(errorHandler);
+
     // Run initial check
     onSelectionChange();
   }
@@ -655,4 +665,211 @@ async function submitNewComment() {
         }
         console.error("Error in submitNewComment: " + error);
     }
+}
+
+// --- START: Code moved from commands.js ---
+
+/**
+ * Generic error handler for Excel.run calls.
+ * @param {any} error The error object.
+ */
+function errorHandler(error) {
+    console.log("Error: " + error);
+    if (error instanceof OfficeExtension.Error) {
+        console.log("Debug info: " + JSON.stringify(error.debugInfo));
+    }
+}
+
+/**
+ * Parses a date value from various possible formats (Date object, string, Excel serial number).
+ * @param {*} dateValue The value to parse.
+ * @returns {Date|null} A valid Date object or null.
+ */
+function parseDate(dateValue) {
+    if (!dateValue) return null;
+    if (dateValue instanceof Date) {
+        return dateValue;
+    }
+    if (typeof dateValue === 'number') {
+        if (dateValue > 25569) { // Corresponds to 1970-01-01
+            return new Date((dateValue - 25569) * 86400 * 1000);
+        }
+    }
+    if (typeof dateValue === 'string') {
+        const parsed = new Date(dateValue);
+        if (!isNaN(parsed.getTime())) {
+            return parsed;
+        }
+    }
+    return null;
+}
+
+/**
+ * Converts a JavaScript Date object to an Excel serial date number.
+ * @param {Date} date The JavaScript Date object.
+ * @returns {number} The Excel serial date number.
+ */
+function jsDateToExcelDate(date) {
+    return (date.getTime() / 86400000) + 25569;
+}
+
+/**
+ * Event handler for when the worksheet changes.
+ * @param {Excel.WorksheetChangedEventArgs} eventArgs
+ */
+async function onWorksheetChanged(eventArgs) {
+    await Excel.run(async (context) => {
+        console.log("onWorksheetChanged event fired:", eventArgs);
+
+        if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") {
+            console.log(`Change ignored. Type: ${eventArgs.changeType}`);
+            return;
+        }
+
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const changedRange = sheet.getRange(eventArgs.address);
+        
+        changedRange.load("columnIndex, rowIndex, values, valuesBefore");
+        const headerRange = sheet.getRange("1:1").getUsedRange(true);
+        headerRange.load("values, columnCount");
+
+        await context.sync();
+        
+        const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
+        const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
+        
+        if (outreachColIndex === -1) {
+            console.log(`No 'Outreach' column found on active sheet. Ignoring change.`);
+            return;
+        }
+
+        if (changedRange.columnIndex === outreachColIndex && changedRange.rowIndex > 0) {
+            console.log(`Change detected in Outreach column at row ${changedRange.rowIndex + 1}.`);
+
+            const newValue = (changedRange.values && changedRange.values[0] ? changedRange.values[0][0] || "" : "").toString().trim();
+            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[0] ? changedRange.valuesBefore[0][0] || "" : "").toString().trim();
+            
+            console.log(`Old value: "${oldValue}", New value: "${newValue}"`);
+
+            if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
+                console.log("Value has changed. Proceeding to add comment.");
+
+                const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
+                const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
+                
+                if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+                    console.log("Required columns (StudentNumber, StudentName) not found on active sheet.");
+                    return;
+                }
+
+                const studentInfoRowRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, headerRange.columnCount);
+                studentInfoRowRange.load("values");
+                await context.sync();
+
+                if (!studentInfoRowRange.values || !studentInfoRowRange.values[0]) {
+                    console.error("Could not load values for the changed row.");
+                    return;
+                }
+                const rowValues = studentInfoRowRange.values[0];
+                const studentId = rowValues[studentIdColIndex];
+                const studentName = rowValues[studentNameColIndex];
+
+                if (studentId && studentName) {
+                    await addOutreachComment(studentId, studentName, newValue);
+                } else {
+                    console.log("Could not find Student ID or Name in the changed row.");
+                }
+            } else {
+                 console.log("Value has not meaningfully changed or is empty. No action taken.");
+            }
+        }
+    }).catch(errorHandler);
+}
+
+/**
+ * Adds or updates a comment in the "Student History" sheet based on an outreach entry.
+ * @param {string|number} studentId The student's ID.
+ * @param {string} studentName The student's name.
+ * @param {string} commentText The new comment text from the Outreach column.
+ */
+async function addOutreachComment(studentId, studentName, commentText) {
+    await Excel.run(async (context) => {
+        try {
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+            const historyRange = historySheet.getUsedRange(true);
+            historyRange.load("values, rowIndex, rowCount, address");
+            await context.sync();
+
+            const historyData = historyRange.values;
+            const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
+
+            const idCol = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
+            const commentCol = findColumnIndex(historyHeaders, ["comment"]);
+            const timestampCol = findColumnIndex(historyHeaders, ["timestamp"]);
+            const tagCol = findColumnIndex(historyHeaders, ["tag"]);
+            const createdByCol = findColumnIndex(historyHeaders, ["created by"]);
+            const studentCol = findColumnIndex(historyHeaders, ["student"]);
+
+            if (idCol === -1 || commentCol === -1 || timestampCol === -1) {
+                console.log("Student History sheet is missing required columns (StudentNumber, Comment, Timestamp).");
+                return;
+            }
+
+            let lastCommentRowIndex = -1;
+            let lastCommentTimestamp = 0;
+
+            for (let i = historyData.length - 1; i > 0; i--) {
+                const row = historyData[i];
+                if (row[idCol] && String(row[idCol]) === String(studentId)) {
+                    lastCommentRowIndex = historyRange.rowIndex + i;
+                    lastCommentTimestamp = row[timestampCol];
+                    break;
+                }
+            }
+
+            const now = new Date();
+            const excelNow = jsDateToExcelDate(now);
+            const oneMinuteInMillis = 60 * 1000;
+            let updateExisting = false;
+
+            if (lastCommentRowIndex !== -1) {
+                const lastCommentDate = parseDate(lastCommentTimestamp);
+                if (lastCommentDate && (now.getTime() - lastCommentDate.getTime()) < oneMinuteInMillis) {
+                    updateExisting = true;
+                }
+            }
+
+            if (updateExisting) {
+                console.log(`Updating existing comment for ${studentName} at row ${lastCommentRowIndex + 1}`);
+                const commentCell = historySheet.getCell(lastCommentRowIndex, commentCol);
+                commentCell.values = [[commentText]];
+                const timestampCell = historySheet.getCell(lastCommentRowIndex, timestampCol);
+                timestampCell.values = [[excelNow]];
+                timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
+
+            } else {
+                console.log(`Adding new comment for ${studentName}`);
+                const newRowData = new Array(historyHeaders.length).fill("");
+                newRowData[idCol] = studentId;
+                if (studentCol !== -1) newRowData[studentCol] = studentName;
+                if (createdByCol !== -1) newRowData[createdByCol] = "Victor Blanco";
+                if (tagCol !== -1) newRowData[tagCol] = "Outreach";
+                newRowData[timestampCol] = excelNow;
+                newRowData[commentCol] = commentText;
+                
+                const newRowIndex = historyRange.rowIndex + historyRange.rowCount;
+                const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, historyHeaders.length);
+                newRowRange.values = [newRowData];
+                
+                const newTimestampCell = historySheet.getCell(newRowIndex, timestampCol);
+                newTimestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
+            }
+            
+            historySheet.getUsedRange().format.autofitColumns();
+            await context.sync();
+
+        } catch (error) {
+            errorHandler(error);
+        }
+    });
 }
