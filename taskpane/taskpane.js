@@ -714,24 +714,21 @@ function jsDateToExcelDate(date) {
 }
 
 /**
- * Event handler for when the worksheet changes.
+ * Event handler for when the worksheet changes. Now handles bulk pastes.
  * @param {Excel.WorksheetChangedEventArgs} eventArgs
  */
 async function onWorksheetChanged(eventArgs) {
     await Excel.run(async (context) => {
-        console.log("onWorksheetChanged event fired:", eventArgs);
-
         if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") {
-            console.log(`Change ignored. Type: ${eventArgs.changeType}`);
             return;
         }
 
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const changedRange = sheet.getRange(eventArgs.address);
         
-        changedRange.load("columnIndex, rowIndex, values, valuesBefore");
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
         headerRange.load("values, columnCount");
+        changedRange.load("address, rowIndex, columnIndex, rowCount, columnCount, values, valuesBefore");
 
         await context.sync();
         
@@ -739,52 +736,54 @@ async function onWorksheetChanged(eventArgs) {
         const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
         
         if (outreachColIndex === -1) {
-            console.log(`No 'Outreach' column found on active sheet. Ignoring change.`);
             return;
         }
 
-        if (changedRange.columnIndex === outreachColIndex && changedRange.rowIndex > 0) {
-            console.log(`Change detected in Outreach column at row ${changedRange.rowIndex + 1}.`);
+        // Check if the change is in the data area and intersects with the outreach column
+        if (changedRange.rowIndex > 0 && 
+            changedRange.columnIndex <= outreachColIndex && 
+            (changedRange.columnIndex + changedRange.columnCount - 1) >= outreachColIndex) {
 
-            const newValue = (changedRange.values && changedRange.values[0] ? changedRange.values[0][0] || "" : "").toString().trim();
-            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[0] ? changedRange.valuesBefore[0][0] || "" : "").toString().trim();
+            const outreachColumnOffset = outreachColIndex - changedRange.columnIndex;
             
-            console.log(`Old value: "${oldValue}", New value: "${newValue}"`);
+            // Load all necessary data for the affected rows in one go
+            const studentInfoRange = sheet.getRangeByIndexes(
+                changedRange.rowIndex, 0, 
+                changedRange.rowCount, headerRange.columnCount
+            );
+            studentInfoRange.load("values");
+            await context.sync();
+            const allRowValues = studentInfoRange.values;
 
-            if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
-                console.log("Value has changed. Proceeding to add comment.");
+            const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
+            const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
 
-                const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
-                const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
-                
-                if (studentIdColIndex === -1 || studentNameColIndex === -1) {
-                    console.log("Required columns (StudentNumber, StudentName) not found on active sheet.");
-                    return;
+            if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+                console.log("Required columns (StudentNumber, StudentName) not found.");
+                return;
+            }
+
+            // Loop through each row in the changed range
+            for (let i = 0; i < changedRange.rowCount; i++) {
+                const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
+                                 String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
+                const oldValue = (changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ? 
+                                 String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
+
+                if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
+                    const studentId = allRowValues[i][studentIdColIndex];
+                    const studentName = allRowValues[i][studentNameColIndex];
+
+                    if (studentId && studentName) {
+                        console.log(`Processing pasted value for ${studentName}: "${newValue}"`);
+                        await addOutreachComment(studentId, studentName, newValue);
+                    }
                 }
-
-                const studentInfoRowRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, headerRange.columnCount);
-                studentInfoRowRange.load("values");
-                await context.sync();
-
-                if (!studentInfoRowRange.values || !studentInfoRowRange.values[0]) {
-                    console.error("Could not load values for the changed row.");
-                    return;
-                }
-                const rowValues = studentInfoRowRange.values[0];
-                const studentId = rowValues[studentIdColIndex];
-                const studentName = rowValues[studentNameColIndex];
-
-                if (studentId && studentName) {
-                    await addOutreachComment(studentId, studentName, newValue);
-                } else {
-                    console.log("Could not find Student ID or Name in the changed row.");
-                }
-            } else {
-                 console.log("Value has not meaningfully changed or is empty. No action taken.");
             }
         }
     }).catch(errorHandler);
 }
+
 
 /**
  * Adds or updates a comment in the "Student History" sheet based on an outreach entry.
