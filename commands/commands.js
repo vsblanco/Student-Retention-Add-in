@@ -333,7 +333,8 @@ async function handleFileSelected(message) {
 
 
 /**
- * Handles the Master List update action. It updates existing students and adds new ones to the top, in batches.
+ * Handles the Master List update action. It clears all data rows, then performs a clean import,
+ * highlighting any students that were not on the list before the import.
  * @param {object} message The message from the dialog.
  */
 async function handleUpdateMaster(message) {
@@ -378,7 +379,7 @@ async function handleUpdateMaster(message) {
             throw new Error("Imported file is missing a 'Student Name' column.");
         }
 
-        // 2. Initial data separation
+        // 2. Read existing Master List to identify new students before clearing
         let newStudents = [];
         let existingStudents = [];
         let masterHeaders;
@@ -387,12 +388,16 @@ async function handleUpdateMaster(message) {
         let colMapping;
 
         await Excel.run(async (context) => {
-            sendMessageToDialog("Reading 'Master List' to identify new vs. existing students...");
+            sendMessageToDialog("Reading current 'Master List' to identify new students...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
             await context.sync();
-            
+
+            if (usedRange.values.length < 1) {
+                throw new Error("'Master List' is empty or has no header row.");
+            }
+
             masterHeaders = usedRange.values[0].map(h => String(h || ''));
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -421,19 +426,16 @@ async function handleUpdateMaster(message) {
                 const normalizedName = normalizeName(studentName);
 
                 if (masterNameMap.has(normalizedName)) {
-                    existingStudents.push({
-                        userRow: userRow,
-                        masterRowIndex: masterNameMap.get(normalizedName)
-                    });
+                    existingStudents.push(userRow);
                 } else {
                     newStudents.push(userRow);
                 }
             }
-            sendMessageToDialog(`Found ${existingStudents.length} existing students and ${newStudents.length} new students.`);
+            sendMessageToDialog(`Found ${newStudents.length} new students and ${existingStudents.length} existing students.`);
         });
 
-        // 3. Prepare sheet by clearing formatting and inserting all new rows at once
-        sendMessageToDialog("Preparing sheet: clearing old highlights and inserting rows for new students...");
+        // 3. Clear the sheet and repopulate
+        sendMessageToDialog("Clearing 'Master List' for a clean import...");
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
@@ -442,167 +444,82 @@ async function handleUpdateMaster(message) {
 
             if (usedRange.rowCount > 1) {
                 const rangeToClear = sheet.getRangeByIndexes(1, 0, usedRange.rowCount - 1, masterHeaders.length);
-                rangeToClear.format.fill.clear();
-            }
-
-            if (newStudents.length > 0) {
-                const insertRange = sheet.getRangeByIndexes(1, 0, newStudents.length, 1);
-                insertRange.getEntireRow().insert(Excel.InsertShiftDirection.down);
+                rangeToClear.clear(Excel.ClearApplyTo.all);
+                rangeToClear.getEntireRow().delete(Excel.DeleteShiftDirection.up);
             }
             await context.sync();
-        });
-        sendMessageToDialog("Sheet prepared.");
+            sendMessageToDialog("Sheet cleared.");
 
-        // 4. Batch-populate the newly created rows
-        const batchSize = 100;
-        if (newStudents.length > 0) {
-            sendMessageToDialog(`Populating data for ${newStudents.length} new students in batches of ${batchSize}...`);
-            for (let i = 0; i < newStudents.length; i += batchSize) {
-                const batch = newStudents.slice(i, i + batchSize);
-                await Excel.run(async (context) => {
-                    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                    const startRow = 1 + i;
-                    
-                    const dataForBatch = batch.map(userRow => {
-                        const newRow = new Array(masterHeaders.length).fill("");
-                        for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
-                            const masterColIdx = colMapping[userColIdx];
-                            if (masterColIdx !== -1) {
-                                let cellValue = userRow[userColIdx] || "";
-                                if (masterColIdx === masterStudentNameCol) {
-                                    cellValue = formatToLastFirst(String(cellValue));
-                                }
-                                newRow[masterColIdx] = cellValue;
-                            }
-                        }
-                        
-                        // NEW: Calculate Days Out and format LDA date
-                        const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
-                        if (userLdaColIdx !== -1) {
-                            const ldaValue = userRow[userLdaColIdx];
-                            const ldaDate = parseDate(ldaValue);
-                            if (ldaDate) {
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0);
-                                ldaDate.setHours(0, 0, 0, 0);
-
-                                const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
-                                const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
-
-                                if (masterLdaColIdx !== -1) {
-                                    newRow[masterLdaColIdx] = jsDateToExcelDate(ldaDate);
-                                }
-                                if (masterDaysOutColIdx !== -1) {
-                                    const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
-                                    newRow[masterDaysOutColIdx] = daysOut;
-                                }
-                            }
-                        }
-
-                        return newRow;
-                    });
-
-                    const rangeToPopulate = sheet.getRangeByIndexes(startRow, 0, batch.length, masterHeaders.length);
-                    rangeToPopulate.values = dataForBatch;
-                    rangeToPopulate.format.fill.color = "#ADD8E6";
-                    
-                    await context.sync();
-                });
-                sendMessageToDialog(`Populated batch of ${batch.length} students. (${i + batch.length}/${newStudents.length})`);
+            // 4. Combine students and prepare data for writing
+            const allStudentsToWrite = [...newStudents, ...existingStudents];
+            if (allStudentsToWrite.length === 0) {
+                sendMessageToDialog("No students to import.", 'complete');
+                return;
             }
-        }
 
-        // 5. Batch-update existing students
-        if (existingStudents.length > 0) {
-            sendMessageToDialog(`Updating ${existingStudents.length} existing students in batches...`);
-            
-            let updatedMasterNameMap = new Map();
-            await Excel.run(async (context) => {
-                const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                const usedRange = sheet.getUsedRange();
-                usedRange.load("values");
-                await context.sync();
-                for (let i = 1; i < usedRange.values.length; i++) {
-                    const name = usedRange.values[i][masterStudentNameCol];
-                    if (name) {
-                        updatedMasterNameMap.set(normalizeName(name), i);
+            sendMessageToDialog(`Preparing to write ${allStudentsToWrite.length} students...`);
+            const dataToWrite = allStudentsToWrite.map(userRow => {
+                const newRow = new Array(masterHeaders.length).fill("");
+                for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
+                    const masterColIdx = colMapping[userColIdx];
+                    if (masterColIdx !== -1) {
+                        let cellValue = userRow[userColIdx] || "";
+                        if (masterColIdx === masterStudentNameCol) {
+                            cellValue = formatToLastFirst(String(cellValue));
+                        }
+                        newRow[masterColIdx] = cellValue;
                     }
                 }
-            });
-            sendMessageToDialog("Refreshed Master List map for accurate row updates.");
+                
+                // Calculate Days Out and format LDA date
+                const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                if (userLdaColIdx !== -1) {
+                    const ldaValue = userRow[userLdaColIdx];
+                    const ldaDate = parseDate(ldaValue);
+                    if (ldaDate) {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        ldaDate.setHours(0, 0, 0, 0);
 
-            for (let i = 0; i < existingStudents.length; i += batchSize) {
-                const batch = existingStudents.slice(i, i + batchSize);
-                await Excel.run(async (context) => {
-                    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-                    
-                    for (const student of batch) {
-                        const { userRow } = student;
-                        const studentName = userRow[userStudentNameCol];
-                        const normalizedName = normalizeName(studentName);
-                        const newMasterRowIndex = updatedMasterNameMap.get(normalizedName);
+                        const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
+                        const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
 
-                        if (newMasterRowIndex !== undefined) {
-                            // Update all mapped columns first
-                            for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
-                                const masterColIdx = colMapping[userColIdx];
-                                if (masterColIdx !== -1) {
-                                    const cell = sheet.getCell(newMasterRowIndex, masterColIdx);
-                                    cell.values = [[userRow[userColIdx] || ""]];
-                                }
-                            }
-                            
-                            // NEW: Calculate and update Days Out and LDA
-                            const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
-                            if (userLdaColIdx !== -1) {
-                                const ldaValue = userRow[userLdaColIdx];
-                                const ldaDate = parseDate(ldaValue);
-                                if (ldaDate) {
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    ldaDate.setHours(0, 0, 0, 0);
-
-                                    const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
-                                    const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
-
-                                    if (masterLdaColIdx !== -1) {
-                                        const cell = sheet.getCell(newMasterRowIndex, masterLdaColIdx);
-                                        cell.values = [[jsDateToExcelDate(ldaDate)]];
-                                    }
-                                    if (masterDaysOutColIdx !== -1) {
-                                        const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
-                                        const cell = sheet.getCell(newMasterRowIndex, masterDaysOutColIdx);
-                                        cell.values = [[daysOut]];
-                                    }
-                                }
-                            }
+                        if (masterLdaColIdx !== -1) {
+                            newRow[masterLdaColIdx] = jsDateToExcelDate(ldaDate);
+                        }
+                        if (masterDaysOutColIdx !== -1) {
+                            const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
+                            newRow[masterDaysOutColIdx] = daysOut;
                         }
                     }
-                    await context.sync();
-                });
-                sendMessageToDialog(`Updated batch of ${batch.length} existing students. (${i + batch.length}/${existingStudents.length})`);
-            }
-        }
-        
-        // 6. Final formatting and autofit
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-            const usedRange = sheet.getUsedRange();
-            usedRange.load("rowCount");
+                }
+                return newRow;
+            });
+
+            // 5. Write all data in a single batch
+            sendMessageToDialog("Writing data to the sheet...");
+            const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
+            writeRange.values = dataToWrite;
             await context.sync();
 
-            // Format LDA column
+            // 6. Highlight new students
+            if (newStudents.length > 0) {
+                sendMessageToDialog(`Highlighting ${newStudents.length} new students...`);
+                const highlightRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
+                highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
+            }
+            
+            // 7. Final formatting and autofit
             const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
             if (masterLdaColIdx !== -1) {
                 sendMessageToDialog("Formatting 'LDA' column as date...");
-                const ldaColumn = sheet.getRangeByIndexes(0, masterLdaColIdx, usedRange.rowCount, 1);
+                const ldaColumn = sheet.getRangeByIndexes(0, masterLdaColIdx, dataToWrite.length + 1, 1);
                 ldaColumn.numberFormat = [["M-DD-YYYY"]];
             }
 
-            if (newStudents.length > 0 || existingStudents.length > 0) {
-                sendMessageToDialog("Autofitting columns for readability...");
-                sheet.getUsedRange().format.autofitColumns();
-            }
+            sendMessageToDialog("Autofitting columns for readability...");
+            sheet.getUsedRange().format.autofitColumns();
+            
             await context.sync();
             sendMessageToDialog("Master List update process completed successfully.", 'complete');
         });
@@ -615,6 +532,7 @@ async function handleUpdateMaster(message) {
         }
     }
 }
+
 
 /**
  * Handles updating grades and gradebook links in the Master List for existing students.
