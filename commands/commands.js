@@ -1184,107 +1184,123 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
 }
 
 async function createAndFormatTable(context, options) {
-  const {
-    sheet,
-    tableName,
-    startRow,
-    dataRows,
-    masterFormulas,
-    ldaColumns,
-    hideLeftoverColumns,
-    originalHeaders
-  } = options;
+    const {
+        sheet,
+        tableName,
+        startRow,
+        dataRows,
+        masterFormulas,
+        ldaColumns,
+        hideLeftoverColumns,
+        originalHeaders
+    } = options;
 
-  const finalHeaders = hideLeftoverColumns ? originalHeaders : ldaColumns;
-  const indicesToKeep = finalHeaders.map(h => originalHeaders.indexOf(h));
-  const originalLCHeaders = originalHeaders.map(h => String(h ?? '').toLowerCase());
-  const gradeBookColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
-
-  const dataToWrite = [];
-  const formulasToWrite = [];
-
-  dataRows.forEach(({ row, originalIndex }) => {
-    const newRow = [];
-    const formulaRow = new Array(finalHeaders.length).fill(null);
-
-    indicesToKeep.forEach((keptIdx, i) => {
-      newRow.push(row[keptIdx] ?? "");
-      if (keptIdx === gradeBookColIdx) {
-        const formula = masterFormulas[originalIndex][keptIdx];
-        const value = row[keptIdx];
-        if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
-          formulaRow[i] = formula;
-          const match = formula.match(/, *"([^"]+)"\)/i);
-          newRow[i] = match ? match[1] : "Gradebook";
-        } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
-          formulaRow[i] = `=HYPERLINK("${value}", "Gradebook")`;
-          newRow[i] = "Gradebook";
-        }
-      }
-    });
-
-    dataToWrite.push(newRow);
-    formulasToWrite.push(formulaRow);
-  });
-
-  const finalValues = [finalHeaders, ...dataToWrite];
-  const finalFormulas = [new Array(finalHeaders.length).fill(null), ...formulasToWrite];
-
-  if (finalValues.length > 1) {
-    const dataRange = sheet.getRangeByIndexes(startRow, 0, finalValues.length, finalHeaders.length);
-    dataRange.values = finalValues;
-    dataRange.formulas = finalFormulas;
-
-    const table = sheet.tables.add(dataRange, true);
-    table.name = tableName;
-    table.style = "TableStyleLight9";
-
-    // Load column names before accessing them
-    table.columns.load("items/name");
-    await context.sync();
-      
-    // Autofit first
-    sheet.getUsedRange().getEntireColumn().format.autofitColumns();
-    await context.sync();
-      
-    // Then hide columns
+    let finalHeaders;
     if (hideLeftoverColumns) {
-  console.log("[DEBUG] Hiding unused columns for table:", tableName);
-  const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
-
-  table.columns.items.forEach((col, idx) => {
-    const colName = col.name.trim().toLowerCase();
-    if (!selectedColumnsSet.has(colName)) {
-      try {
-        console.log(`[DEBUG] Hiding worksheet column at index ${idx} for "${col.name}"`);
-        const columnLetter = String.fromCharCode(65 + idx); // A, B, C, ...
-        const worksheetColumn = sheet.getRange(`${columnLetter}:${columnLetter}`);
-        console.log(`[DEBUG] Column index ${idx} maps to letter ${columnLetter} for column "${col.name}"`);
-        worksheetColumn.columnHidden = true;
-
-      } catch (err) {
-        console.warn(`Failed to hide worksheet column for "${col.name}":`, err);
-      }
+        // Start with the user-defined order
+        finalHeaders = [...ldaColumns];
+        const ldaColumnsSet = new Set(ldaColumns);
+        // Add any other columns from the master list that weren't in the user's list
+        originalHeaders.forEach(h => {
+            if (!ldaColumnsSet.has(h)) {
+                finalHeaders.push(h);
+            }
+        });
+    } else {
+        // Only use the columns specified in settings
+        finalHeaders = ldaColumns;
     }
-  });
-await context.sync();
 
-}
+    const indicesToKeep = finalHeaders.map(h => originalHeaders.indexOf(h));
+    const originalLCHeaders = originalHeaders.map(h => String(h ?? '').toLowerCase());
+    const gradeBookColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
 
+    const dataToWrite = [];
+    const formulasToWrite = [];
 
-    const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
-    dateColumnsToFormat.forEach(colName => {
-      const colIdx = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), [colName.toLowerCase()]);
-      if (colIdx !== -1) {
-        table.columns.getItemAt(colIdx).getRange().numberFormat = [["m/d/yyyy"]];
-      }
+    dataRows.forEach(({
+        row,
+        originalIndex
+    }) => {
+        const newRow = [];
+        const formulaRow = new Array(finalHeaders.length).fill(null);
+
+        indicesToKeep.forEach((keptIdx, i) => {
+            newRow.push(row[keptIdx] ?? "");
+            if (keptIdx === gradeBookColIdx) {
+                const formula = masterFormulas[originalIndex][keptIdx];
+                const value = row[keptIdx];
+                if (typeof formula === 'string' && formula.toLowerCase().startsWith('=hyperlink')) {
+                    formulaRow[i] = formula;
+                    const match = formula.match(/, *"([^"]+)"\)/i);
+                    newRow[i] = match ? match[1] : "Gradebook";
+                } else if (typeof value === 'string' && (value.startsWith('http://') || value.startsWith('https://'))) {
+                    formulaRow[i] = `=HYPERLINK("${value}", "Gradebook")`;
+                    newRow[i] = "Gradebook";
+                }
+            }
+        });
+
+        dataToWrite.push(newRow);
+        formulasToWrite.push(formulaRow);
     });
 
-    return startRow + finalValues.length;
-  } else {
-    sheet.getRangeByIndexes(startRow, 0, 1, finalHeaders.length).values = [finalHeaders];
-    return startRow + 1;
-  }
+    const finalValues = [finalHeaders, ...dataToWrite];
+    const finalFormulas = [new Array(finalHeaders.length).fill(null), ...formulasToWrite];
+
+    if (finalValues.length > 1) {
+        const dataRange = sheet.getRangeByIndexes(startRow, 0, finalValues.length, finalHeaders.length);
+        dataRange.values = finalValues;
+        dataRange.formulas = finalFormulas;
+
+        const table = sheet.tables.add(dataRange, true);
+        table.name = tableName;
+        table.style = "TableStyleLight9";
+
+        // Load column names before accessing them
+        table.columns.load("items/name");
+        await context.sync();
+
+        // Autofit first
+        sheet.getUsedRange().getEntireColumn().format.autofitColumns();
+        await context.sync();
+
+        // Then hide columns
+        if (hideLeftoverColumns) {
+            console.log("[DEBUG] Hiding unused columns for table:", tableName);
+            const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
+
+            table.columns.items.forEach((col, idx) => {
+                const colName = col.name.trim().toLowerCase();
+                if (!selectedColumnsSet.has(colName)) {
+                    try {
+                        console.log(`[DEBUG] Hiding worksheet column for "${col.name}"`);
+                        // Get the column from the table proxy object and hide it
+                        table.columns.getItemAt(idx).getRange().getEntireColumn().format.columnHidden = true;
+                    } catch (err) {
+                        console.warn(`Failed to hide worksheet column for "${col.name}":`, err);
+                    }
+                }
+            });
+            await context.sync();
+        }
+
+
+        const dateColumnsToFormat = ["lda", "dod", "expstartdate"];
+        dateColumnsToFormat.forEach(colName => {
+            const colIdx = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), [colName.toLowerCase()]);
+            if (colIdx !== -1) {
+                table.columns.getItemAt(colIdx).getRange().numberFormat = [
+                    ["m/d/yyyy"]
+                ];
+            }
+        });
+
+        return startRow + finalValues.length;
+    } else {
+        sheet.getRangeByIndexes(startRow, 0, 1, finalHeaders.length).values = [finalHeaders];
+        return startRow + 1;
+    }
 }
 
 
@@ -1293,4 +1309,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.22 u
+//Version 1.22 uw
