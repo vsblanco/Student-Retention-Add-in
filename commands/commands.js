@@ -118,11 +118,15 @@ function jsDateToExcelDate(date) {
  * Sends a status message back to the import dialog.
  * @param {string} status The message to send.
  * @param {string} type The type of message ('log', 'error', 'complete').
+ * @param {string[]} [details] Optional array of strings for collapsible details.
  */
-function sendMessageToDialog(status, type = 'log') {
+function sendMessageToDialog(status, type = 'log', details = []) {
     if (importDialog) {
         console.log(`[DIALOG LOG] ${type.toUpperCase()}: ${status}`);
-        importDialog.messageChild(JSON.stringify({ type, status }));
+        if (details.length > 0) {
+             console.log(details.map(d => `  - ${d}`).join('\n'));
+        }
+        importDialog.messageChild(JSON.stringify({ type, status, details }));
     }
 }
 
@@ -666,37 +670,39 @@ async function handleUpdateGrades(message) {
                     const normalizedName = normalizeName(masterName);
                     if (studentDataMap.has(normalizedName)) {
                         const importedData = studentDataMap.get(normalizedName);
-                        
-                        sendMessageToDialog(`Updating row ${i + 1}: ${masterName}`);
+                        const details = [];
                         
                         // Update grade
                         if (importedData.grade !== undefined && importedData.grade !== null) {
                             valuesToWrite[i][masterGradeCol] = importedData.grade;
-                            sendMessageToDialog(`  - Grade set to: ${importedData.grade}`);
+                            details.push(`- Grade set to: ${importedData.grade}`);
                             gradesUpdated++;
                         }
 
                         // Update assignments
                         if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
                             valuesToWrite[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
-                            sendMessageToDialog(`  - Missing Assignments set to: ${importedData.missingAssignments}`);
+                            details.push(`- Missing Assignments set to: ${importedData.missingAssignments}`);
                             missingUpdated++;
                         }
                         if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
                             valuesToWrite[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
-                            sendMessageToDialog(`  - Zero Assignments set to: ${importedData.zeroAssignments}`);
+                            details.push(`- Zero Assignments set to: ${importedData.zeroAssignments}`);
                             zerosUpdated++;
                         }
 
                         // Update hyperlink by setting a formula string in the values array
                         if (importedData.courseId && importedData.studentId) {
-                            sendMessageToDialog(`  - Found CourseID: ${importedData.courseId}, StudentID: ${importedData.studentId}`);
+                            details.push(`- Found CourseID: ${importedData.courseId}, StudentID: ${importedData.studentId}`);
                             const newGradebookLink = `https://nuc.instructure.com/courses/${importedData.courseId}/grades/${importedData.studentId}`;
                             valuesToWrite[i][masterGradebookCol] = `=HYPERLINK("${newGradebookLink}", "Gradebook")`;
-                            sendMessageToDialog(`  - Wrapped hyperlink: ${newGradebookLink}`);
+                            details.push(`- Wrapped hyperlink: ${newGradebookLink}`);
                             linksUpdated++;
                         }
                         
+                        if(details.length > 0) {
+                            sendMessageToDialog(`Updating row ${i + 1}: ${masterName}`, 'log', details);
+                        }
                         updatedCount++;
                     }
                 }
@@ -1380,4 +1386,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.26 cf
+//Version 1.dddd
