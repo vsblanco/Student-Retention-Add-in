@@ -1183,6 +1183,71 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
     }
 }
 
+/**
+ * Applies a 3-color scale conditional formatting to the grade column of a given table.
+ * @param {Excel.RequestContext} context The request context.
+ * @param {Excel.Table} table The table to apply formatting to.
+ */
+async function applyGradeConditionalFormattingToTable(context, table) {
+    // 1. Load table properties needed
+    table.load("name, showHeaders");
+    await context.sync();
+
+    if (!table.showHeaders) {
+        console.log(`Table '${table.name}' has no headers, skipping conditional formatting.`);
+        return;
+    }
+    
+    // 2. Get headers from the table
+    const headerRange = table.getHeaderRowRange();
+    headerRange.load("values");
+    await context.sync();
+    
+    const lowerCaseHeaders = headerRange.values[0].map(h => String(h || '').toLowerCase());
+    const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+
+    if (gradeColIdx === -1) {
+        console.log(`'Grade' column not found in table '${table.name}', skipping conditional formatting.`);
+        return;
+    }
+
+    // 3. Get the data body range for the grade column
+    const gradeColumn = table.columns.getItemAt(gradeColIdx);
+    const gradeColumnRange = gradeColumn.getDataBodyRange();
+    gradeColumnRange.load("values, rowCount");
+    await context.sync();
+
+    if (gradeColumnRange.rowCount === 0) {
+        console.log(`Table '${table.name}' has no data rows to format.`);
+        return;
+    }
+
+    // 4. Determine scale (0-1 or 0-100)
+    let isPercentScale = false;
+    for (let i = 0; i < Math.min(gradeColumnRange.rowCount, 10); i++) {
+        if (gradeColumnRange.values[i] && typeof gradeColumnRange.values[i][0] === 'number' && gradeColumnRange.values[i][0] > 1) {
+            isPercentScale = true;
+            break;
+        }
+    }
+    
+    console.log(`Detected grade scale for table '${table.name}': ${isPercentScale ? '0-100' : '0-1'}. Applying 3-color scale.`);
+
+    // 5. Apply formatting
+    gradeColumnRange.conditionalFormats.clearAll();
+    const conditionalFormat = gradeColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+    const criteria = {
+        minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
+        midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: isPercentScale ? "70" : "0.7", color: "#FFEB84" }, // Yellow
+        maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" } // Green
+    };
+    conditionalFormat.colorScale.criteria = criteria;
+
+    await context.sync();
+    console.log(`Conditional formatting applied to table '${table.name}'.`);
+}
+
+
 async function createAndFormatTable(context, options) {
     const {
         sheet,
@@ -1260,11 +1325,14 @@ async function createAndFormatTable(context, options) {
         // Load column names before accessing them
         table.columns.load("items/name");
         await context.sync();
-
+        
+        // Apply conditional formatting to the grade column in this new table
+        await applyGradeConditionalFormattingToTable(context, table);
+      
         // Autofit first
         sheet.getUsedRange().getEntireColumn().format.autofitColumns();
         await context.sync();
-
+      
         // Then hide columns
         if (hideLeftoverColumns) {
             console.log("[DEBUG] Hiding unused columns for table:", tableName);
@@ -1312,4 +1380,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.25
+//Version 1.26 cf
