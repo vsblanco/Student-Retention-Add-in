@@ -203,32 +203,34 @@ async function onWorksheetChanged(eventArgs) {
     await Excel.run(async (context) => {
         console.log("onWorksheetChanged event fired:", eventArgs);
 
-        // --- FIX START ---
-        // The address from the event is formatted like "'Sheet Name'!A1".
-        // We need to parse the sheet name correctly.
-        const sheetName = eventArgs.address.split('!')[0].replace(/'/g, '');
-        
-        // We only care about cell edits on the Master List sheet.
-        if (eventArgs.changeType !== "CellEdited" || sheetName !== CONSTANTS.MASTER_LIST_SHEET) {
-            console.log(`Change ignored. Type: ${eventArgs.changeType}, Sheet: ${sheetName}`);
+        // FIX 1: Handle both CellEdited and RangeEdited event types.
+        if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") {
+            console.log(`Change ignored. Type: ${eventArgs.changeType}`);
             return;
         }
-        // --- FIX END ---
 
-        const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
-
-        // Get headers to find the "Outreach", "StudentNumber", and "StudentName" columns.
+        // FIX 2: Work on the currently active sheet, not just a hardcoded one.
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        
+        // Get headers to find the necessary columns.
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
         headerRange.load("values");
         await context.sync();
         
-        const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+        const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
         const outreachColIndex = findColumnIndex(headers, CONSTANTS.OUTREACH_COLS);
+        
+        // FIX 3: If the active sheet does not have an "Outreach" column, do nothing.
+        if (outreachColIndex === -1) {
+            console.log(`No 'Outreach' column found on active sheet. Ignoring change.`);
+            return;
+        }
+
         const studentIdColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS);
         const studentNameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
 
-        if (outreachColIndex === -1 || studentIdColIndex === -1 || studentNameColIndex === -1) {
-            console.log("Required columns (Outreach, StudentNumber, StudentName) not found on Master List.");
+        if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+            console.log("Required columns (StudentNumber, StudentName) not found on active sheet.");
             return;
         }
 
@@ -1571,4 +1573,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 12.5
+//Version 1.dddd
