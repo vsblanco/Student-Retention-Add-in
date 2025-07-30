@@ -186,7 +186,7 @@
                         logEntry.className += ' text-gray-300';
                     }
 
-                    if (!message.details) {
+                    if (!message.details || message.details.length === 0) {
                        logContainer.appendChild(logEntry);
                     }
                     
