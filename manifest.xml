@@ -16,14 +16,14 @@
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
-  
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
+    <RequestedWidth>450</RequestedWidth>
+  </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Workbook">
-        <Runtimes>
-          <Runtime resid="Commands.Url" lifetime="long" />
-        </Runtimes>
         <DesktopFormFactor>
           <GetStarted>
             <Title resid="GetStarted.Title"/>
@@ -31,7 +31,7 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <!-- The FunctionFile tag is removed as it conflicts with the Runtimes tag -->
+          <FunctionFile resid="Commands.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
