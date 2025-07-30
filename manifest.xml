@@ -16,10 +16,9 @@
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
-  <DefaultSettings>
-    <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
-    <RequestedWidth>550</RequestedWidth>
-  </DefaultSettings>
+  
+  <!-- The DefaultSettings block is removed as it's legacy and conflicts with VersionOverrides -->
+
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
@@ -34,7 +33,6 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <!-- Re-introducing FunctionFile for compatibility -->
           <FunctionFile resid="Commands.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
