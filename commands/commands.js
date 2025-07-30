@@ -201,10 +201,19 @@ Office.onReady((info) => {
  */
 async function onWorksheetChanged(eventArgs) {
     await Excel.run(async (context) => {
+        console.log("onWorksheetChanged event fired:", eventArgs);
+
+        // --- FIX START ---
+        // The address from the event is formatted like "'Sheet Name'!A1".
+        // We need to parse the sheet name correctly.
+        const sheetName = eventArgs.address.split('!')[0].replace(/'/g, '');
+        
         // We only care about cell edits on the Master List sheet.
-        if (eventArgs.changeType !== "CellEdited" || !eventArgs.address.startsWith(CONSTANTS.MASTER_LIST_SHEET)) {
+        if (eventArgs.changeType !== "CellEdited" || sheetName !== CONSTANTS.MASTER_LIST_SHEET) {
+            console.log(`Change ignored. Type: ${eventArgs.changeType}, Sheet: ${sheetName}`);
             return;
         }
+        // --- FIX END ---
 
         const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
 
@@ -229,11 +238,15 @@ async function onWorksheetChanged(eventArgs) {
         
         // Check if the change was in the Outreach column and not in the header row.
         if (changedRange.columnIndex === outreachColIndex && changedRange.rowIndex > 0) {
+            console.log(`Change detected in Outreach column at row ${changedRange.rowIndex + 1}.`);
             const newValue = (changedRange.values[0][0] || "").toString().trim();
             const oldValue = (changedRange.valuesBefore[0][0] || "").toString().trim();
+            
+            console.log(`Old value: "${oldValue}", New value: "${newValue}"`);
 
             // Only proceed if the value has meaningfully changed and is not empty.
             if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
+                console.log("Value has changed. Proceeding to add comment.");
                 const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, Math.max(studentIdColIndex, studentNameColIndex) + 1);
                 studentInfoRange.load("values");
                 await context.sync();
@@ -243,7 +256,11 @@ async function onWorksheetChanged(eventArgs) {
 
                 if (studentId && studentName) {
                     await addOutreachComment(studentId, studentName, newValue);
+                } else {
+                    console.log("Could not find Student ID or Name in the changed row.");
                 }
+            } else {
+                 console.log("Value has not meaningfully changed or is empty. No action taken.");
             }
         }
     }).catch(errorHandler);
@@ -1554,4 +1571,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.dddd
+//Version 12.5
