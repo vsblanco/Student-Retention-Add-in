@@ -34,7 +34,8 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <!-- The FunctionFile tag is removed when using a shared runtime -->
+          <!-- Re-introducing FunctionFile for compatibility -->
+          <FunctionFile resid="Commands.Url"/>
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
