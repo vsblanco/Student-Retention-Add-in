@@ -24,11 +24,9 @@
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Workbook">
-        <!-- START: Added Runtimes for passive loading -->
         <Runtimes>
           <Runtime resid="Commands.Url" lifetime="long" />
         </Runtimes>
-        <!-- END: Added Runtimes for passive loading -->
         <DesktopFormFactor>
           <GetStarted>
             <Title resid="GetStarted.Title"/>
@@ -36,7 +34,7 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <FunctionFile resid="Commands.Url"/>
+          <!-- The FunctionFile tag is removed when using a shared runtime -->
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
