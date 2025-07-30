@@ -17,7 +17,7 @@
         href="https://static2.sharepointonline.com/files/fabric/office-ui-fabric-core/9.6.1/css/fabric.min.css" />
 
     <script type="text/javascript" src="exceljsmin.js"></script>
-    <script type="text/javascript" src="../settings/settings.js"></script>
+    <!-- The problematic script tag has been removed from here -->
 
     <style>
         /* Styles for the dialog */
@@ -113,18 +113,17 @@
     <script>
         (function () {
             "use strict";
+            // This variable would have been populated by the removed settings.js, 
+            // but the logic in commands.js will handle settings now.
             let SETTINGS;
 
             Office.onReady(function (info) {
                 if (info.host === Office.HostType.Excel) {
-                    loadSettings().then((settings) => {
-                        SETTINGS = settings;
-                        document.getElementById("loading-spinner").style.display = "none";
-                        document.getElementById("main-content").style.display = "block";
-                    }).catch(error => {
-                        document.getElementById("loading-spinner").innerHTML = `Error loading settings: ${error.message}`;
-                    });
-
+                    // The settings are now loaded within commands.js and passed to the dialog if needed.
+                    // For this dialog's purpose, we can just show the main content.
+                    document.getElementById("loading-spinner").style.display = "none";
+                    document.getElementById("main-content").style.display = "block";
+                    
                     document.getElementById("import-button").addEventListener("click", importData);
                 }
             });
@@ -175,6 +174,9 @@
                 logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll to the bottom
             }
 
+            // This function is no longer needed here as settings are handled in commands.js
+            // async function loadSettings() { ... }
+
             async function importData() {
                 const fileInput = document.getElementById("file-input");
                 if (fileInput.files.length === 0) {
@@ -190,129 +192,28 @@
 
                 reader.onload = async function (e) {
                     try {
+                        // The logic here is simplified as the main processing will be in commands.js
+                        // We just need to send the file data to the parent.
                         const arrayBuffer = e.target.result;
-                        const workbook = new ExcelJS.Workbook();
-                        await workbook.xlsx.load(arrayBuffer);
-                        sendMessageToDialog("File loaded successfully. Starting import process...", 'info');
+                        
+                        // Convert ArrayBuffer to a data URL to send to the parent
+                        let binary = '';
+                        const bytes = new Uint8Array(arrayBuffer);
+                        const len = bytes.byteLength;
+                        for (let i = 0; i < len; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        const dataUrl = 'data:application/octet-stream;base64,' + window.btoa(binary);
 
-                        await Excel.run(async (context) => {
-                            const masterSheet = workbook.getWorksheet(1);
-                            const currentSheet = context.workbook.worksheets.getActiveWorksheet();
+                        // Send the file data to the parent (commands.js) for processing
+                        Office.context.ui.messageParent(JSON.stringify({
+                            type: 'fileSelected',
+                            fileName: file.name,
+                            data: dataUrl
+                        }));
 
-                            // --- 1. Get headers and create column maps ---
-                            const masterHeaderRow = masterSheet.getRow(1);
-                            const currentSheetRange = currentSheet.getRange("A1").getEntireRow().load("values");
-                            await context.sync();
-                            const currentHeaders = currentSheetRange.values[0];
-
-                            const masterHeaderMap = {};
-                            masterHeaderRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-                                masterHeaderMap[cell.value.toString().trim()] = colNumber;
-                            });
-
-                            const currentHeaderMap = {};
-                            currentHeaders.forEach((header, index) => {
-                                if (header) {
-                                    currentHeaderMap[header.toString().trim()] = index;
-                                }
-                            });
-
-                            // --- 2. Validate key columns ---
-                            const keyColumnName = SETTINGS.keyColumn;
-                            const masterKeyColumnName = SETTINGS.masterKeyColumn;
-                            const keyColumnIndex = currentHeaderMap[keyColumnName];
-                            const masterKeyColumnIndex = masterHeaderMap[masterKeyColumnName];
-
-                            if (keyColumnIndex === undefined) {
-                                sendMessageToDialog(`Key column "${keyColumnName}" not found in the current sheet.`, "error");
-                                return;
-                            }
-                            if (!masterKeyColumnIndex) {
-                                sendMessageToDialog(`Master key column "${masterKeyColumnName}" not found in the master sheet.`, "error");
-                                return;
-                            }
-                            sendMessageToDialog(`Key columns validated: "${keyColumnName}" and "${masterKeyColumnName}".`, 'info');
-
-                            // --- 3. Create a map of keys in the current sheet for quick lookup ---
-                            const currentSheetDataRange = currentSheet.getUsedRange().load("values");
-                            await context.sync();
-                            const currentSheetData = currentSheetDataRange.values;
-
-                            const keyValueMap = {};
-                            currentSheetData.forEach((row, index) => {
-                                if (index > 0) { // Skip header row
-                                    const key = row[keyColumnIndex];
-                                    if (key) {
-                                        keyValueMap[key] = index;
-                                    }
-                                }
-                            });
-                            sendMessageToDialog(`Found ${Object.keys(keyValueMap).length} unique keys in the current sheet.`, 'info');
-
-                            // --- 4. Process master sheet and update current sheet in batches ---
-                            const rowCount = masterSheet.rowCount;
-                            const BATCH_SIZE = 50;
-                            let updatesInBatch = 0;
-                            let totalUpdates = 0;
-
-                            sendMessageToDialog(`Found ${rowCount - 1} data rows in master sheet. Starting import...`, 'info');
-
-                            for (let i = 2; i <= rowCount; i++) {
-                                const row = masterSheet.getRow(i);
-                                const masterKeyCell = row.getCell(masterKeyColumnIndex);
-                                const masterKey = masterKeyCell.value;
-
-                                if (masterKey && keyValueMap[masterKey] !== undefined) {
-                                    const rowIndex = keyValueMap[masterKey];
-                                    const masterNameColIndex = masterHeaderMap["Name"];
-                                    const masterName = masterNameColIndex ? row.getCell(masterNameColIndex).value : 'N/A';
-                                    let details = {};
-                                    let rowUpdated = false;
-
-                                    for (const setting of SETTINGS.settings) {
-                                        const masterColName = setting.masterColumn;
-                                        const currentSheetColName = setting.sheetColumn;
-                                        const masterColIndex = masterHeaderMap[masterColName];
-                                        const currentSheetColIndex = currentHeaderMap[currentSheetColName];
-
-                                        if (masterColIndex && currentSheetColIndex !== undefined) {
-                                            const valueToUpdate = row.getCell(masterColIndex).value;
-                                            if (valueToUpdate !== null && valueToUpdate !== undefined) {
-                                                currentSheet.getCell(rowIndex, currentSheetColIndex).values = [[valueToUpdate]];
-                                                details[currentSheetColName] = valueToUpdate;
-                                                rowUpdated = true;
-                                            }
-                                        }
-                                    }
-
-                                    if (rowUpdated) {
-                                        totalUpdates++;
-                                        updatesInBatch++;
-                                        sendMessageToDialog(`Updating row ${rowIndex + 1} for: ${masterName}`, 'log', details);
-                                    }
-                                }
-
-                                // Sync after a batch of rows to avoid timeouts
-                                if (updatesInBatch >= BATCH_SIZE) {
-                                    sendMessageToDialog(`Syncing batch of ${updatesInBatch} updates...`, 'info');
-                                    await context.sync();
-                                    updatesInBatch = 0; // Reset for next batch
-                                }
-                            }
-
-                            // Sync any remaining updates
-                            if (updatesInBatch > 0) {
-                                sendMessageToDialog(`Syncing final batch of ${updatesInBatch} updates...`, 'info');
-                                await context.sync();
-                            }
-
-                            sendMessageToDialog(`Import complete. Total rows updated: ${totalUpdates}.`, "success");
-                        });
                     } catch (error) {
                         sendMessageToDialog("An unexpected error occurred: " + error.toString(), "error");
-                        if (error instanceof OfficeExtension.Error) {
-                            sendMessageToDialog("Debug info: " + JSON.stringify(error.debugInfo), "error");
-                        }
                     }
                 };
 
