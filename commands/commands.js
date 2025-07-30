@@ -1274,9 +1274,12 @@ async function createAndFormatTable(context, options) {
                 const colName = col.name.trim().toLowerCase();
                 if (!selectedColumnsSet.has(colName)) {
                     try {
-                        console.log(`[DEBUG] Hiding worksheet column for "${col.name}"`);
-                        // Get the column from the table proxy object and hide it
-                        table.columns.getItemAt(idx).getRange().getEntireColumn().format.columnHidden = true;
+                        console.log(`[DEBUG] Hiding worksheet column at index ${idx} for "${col.name}"`);
+                        const columnLetter = String.fromCharCode(65 + idx); // A, B, C, ...
+                        const worksheetColumn = sheet.getRange(`${columnLetter}:${columnLetter}`);
+                        console.log(`[DEBUG] Column index ${idx} maps to letter ${columnLetter} for column "${col.name}"`);
+                        worksheetColumn.columnHidden = true;
+
                     } catch (err) {
                         console.warn(`Failed to hide worksheet column for "${col.name}":`, err);
                     }
@@ -1309,4 +1312,4 @@ Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
-//Version 1.22 uw
+//Version 1.25
