@@ -767,7 +767,9 @@ async function onWorksheetChanged(eventArgs) {
             for (let i = 0; i < changedRange.rowCount; i++) {
                 const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
                                  String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
-                const oldValue = (changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ? 
+                
+                // FIX: Add a check for changedRange.valuesBefore before accessing its properties
+                const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ?
                                  String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
 
                 if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
