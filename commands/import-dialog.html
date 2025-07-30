@@ -12,6 +12,20 @@
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* --- START: Added CSS for text selection control --- */
+        body {
+            -webkit-user-select: none; /* Safari */
+            -ms-user-select: none;     /* IE 10 and IE 11 */
+            user-select: none;         /* Standard syntax */
+        }
+
+        #log-container {
+            -webkit-user-select: text; /* Safari */
+            -ms-user-select: text;     /* IE 10 and IE 11 */
+            user-select: text;         /* Standard syntax */
+        }
+        /* --- END: Added CSS for text selection control --- */
+
         .collapsible-log {
             cursor: pointer;
         }
