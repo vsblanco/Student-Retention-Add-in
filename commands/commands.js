@@ -209,52 +209,57 @@ async function onWorksheetChanged(eventArgs) {
             return;
         }
 
-        // FIX 2: Work on the currently active sheet, not just a hardcoded one.
         const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const changedRange = sheet.getRange(eventArgs.address);
         
-        // Get headers to find the necessary columns.
+        // Load everything we might need about the changed cell and headers upfront.
+        changedRange.load("columnIndex, rowIndex, values, valuesBefore");
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
-        headerRange.load("values");
+        headerRange.load("values, columnCount");
+
         await context.sync();
         
         const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
         const outreachColIndex = findColumnIndex(headers, CONSTANTS.OUTREACH_COLS);
         
-        // FIX 3: If the active sheet does not have an "Outreach" column, do nothing.
         if (outreachColIndex === -1) {
             console.log(`No 'Outreach' column found on active sheet. Ignoring change.`);
             return;
         }
 
-        const studentIdColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS);
-        const studentNameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
-
-        if (studentIdColIndex === -1 || studentNameColIndex === -1) {
-            console.log("Required columns (StudentNumber, StudentName) not found on active sheet.");
-            return;
-        }
-
-        const changedRange = sheet.getRange(eventArgs.address);
-        changedRange.load("columnIndex, rowIndex, values, valuesBefore");
-        await context.sync();
-        
-        // Check if the change was in the Outreach column and not in the header row.
+        // Now, check if the change was in the right column and not the header.
         if (changedRange.columnIndex === outreachColIndex && changedRange.rowIndex > 0) {
             console.log(`Change detected in Outreach column at row ${changedRange.rowIndex + 1}.`);
-            const newValue = (changedRange.values[0][0] || "").toString().trim();
-            const oldValue = (changedRange.valuesBefore[0][0] || "").toString().trim();
+
+            const newValue = (changedRange.values && changedRange.values[0] ? changedRange.values[0][0] || "" : "").toString().trim();
+            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[0] ? changedRange.valuesBefore[0][0] || "" : "").toString().trim();
             
             console.log(`Old value: "${oldValue}", New value: "${newValue}"`);
 
-            // Only proceed if the value has meaningfully changed and is not empty.
             if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
                 console.log("Value has changed. Proceeding to add comment.");
-                const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, Math.max(studentIdColIndex, studentNameColIndex) + 1);
-                studentInfoRange.load("values");
+
+                const studentIdColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS);
+                const studentNameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
+                
+                if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+                    console.log("Required columns (StudentNumber, StudentName) not found on active sheet.");
+                    return;
+                }
+
+                // Get the entire row's data to ensure we have the student's info.
+                const studentInfoRowRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, headerRange.columnCount);
+                studentInfoRowRange.load("values");
                 await context.sync();
 
-                const studentId = studentInfoRange.values[0][studentIdColIndex];
-                const studentName = studentInfoRange.values[0][studentNameColIndex];
+                // FIX 2: Add a safeguard to ensure the row values were loaded correctly.
+                if (!studentInfoRowRange.values || !studentInfoRowRange.values[0]) {
+                    console.error("Could not load values for the changed row.");
+                    return;
+                }
+                const rowValues = studentInfoRowRange.values[0];
+                const studentId = rowValues[studentIdColIndex];
+                const studentName = rowValues[studentNameColIndex];
 
                 if (studentId && studentName) {
                     await addOutreachComment(studentId, studentName, newValue);
