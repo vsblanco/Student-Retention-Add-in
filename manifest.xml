@@ -18,12 +18,17 @@
   </Hosts>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
-    <RequestedWidth>650</RequestedWidth>
+    <RequestedWidth>550</RequestedWidth>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Workbook">
+        <!-- START: Added Runtimes for passive loading -->
+        <Runtimes>
+          <Runtime resid="Commands.Url" lifetime="long" />
+        </Runtimes>
+        <!-- END: Added Runtimes for passive loading -->
         <DesktopFormFactor>
           <GetStarted>
             <Title resid="GetStarted.Title"/>
