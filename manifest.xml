@@ -17,8 +17,6 @@
     <Host Name="Workbook"/>
   </Hosts>
   
-  <!-- The DefaultSettings block is removed as it's legacy and conflicts with VersionOverrides -->
-
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
@@ -33,7 +31,7 @@
             <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
           </GetStarted>
           
-          <FunctionFile resid="Commands.Url"/>
+          <!-- The FunctionFile tag is removed as it conflicts with the Runtimes tag -->
 
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
