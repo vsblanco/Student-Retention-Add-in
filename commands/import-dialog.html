@@ -11,6 +11,34 @@
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .collapsible-log {
+            cursor: pointer;
+        }
+        .collapsible-log .arrow {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-left: 6px solid #9ca3af; /* gray-400 */
+            transition: transform 0.2s ease-in-out;
+            margin-right: 8px;
+        }
+        .collapsible-log.open .arrow {
+            transform: rotate(90deg);
+        }
+        .collapsible-content {
+            display: none;
+            padding-left: 20px;
+            border-left: 1px solid #4b5563; /* gray-600 */
+            margin-left: 3px;
+            margin-top: 4px;
+        }
+        .collapsible-content.show {
+            display: block;
+        }
+    </style>
 </head>
 <body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
 
@@ -111,23 +139,57 @@
             closeButton.addEventListener('click', () => {
                 Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
             });
+            
+            logContainer.addEventListener('click', function(event) {
+                const header = event.target.closest('.collapsible-log');
+                if (header) {
+                    header.classList.toggle('open');
+                    const content = header.nextElementSibling;
+                    if (content && content.classList.contains('collapsible-content')) {
+                        content.classList.toggle('show');
+                    }
+                }
+            });
 
             // Listen for messages from the parent (commands.js)
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
                 
                 if (message.type === 'log' || message.type === 'error' || message.type === 'complete') {
-                    const logEntry = document.createElement('p');
-                    logEntry.textContent = message.status;
+                    const logEntry = document.createElement('div');
+                    
+                    if (message.details && message.details.length > 0) {
+                        logEntry.className = 'collapsible-log';
+                        logEntry.innerHTML = `<span class="arrow"></span><span>${message.status}</span>`;
+
+                        const content = document.createElement('div');
+                        content.className = 'collapsible-content';
+                        message.details.forEach(detail => {
+                            const p = document.createElement('p');
+                            p.textContent = detail;
+                            p.className = 'text-gray-400';
+                            content.appendChild(p);
+                        });
+                        logContainer.appendChild(logEntry);
+                        logContainer.appendChild(content);
+
+                    } else {
+                        logEntry.textContent = message.status;
+                    }
+
                     if (message.type === 'error') {
-                        logEntry.className = 'text-red-400';
+                        logEntry.className += ' text-red-400';
                     } else if (message.type === 'complete') {
-                        logEntry.className = 'text-green-400 font-bold';
+                        logEntry.className += ' text-green-400 font-bold';
                         closeButton.classList.remove('hidden');
                     } else {
-                        logEntry.className = 'text-gray-300';
+                        logEntry.className += ' text-gray-300';
                     }
-                    logContainer.appendChild(logEntry);
+
+                    if (!message.details) {
+                       logContainer.appendChild(logEntry);
+                    }
+                    
                     logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
                 } else {
                     // Initial file check response
