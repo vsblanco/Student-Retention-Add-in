@@ -27,11 +27,13 @@
         }
         /* Content styles */
         .tab-content h3 {
-            font-size: 1.125rem;
+            font-size: 1.25rem;
             font-weight: 600;
             color: #1f2937;
             margin-top: 1.5rem;
             margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
         }
         .tab-content p, .tab-content li {
             color: #4b5563;
@@ -71,14 +73,14 @@
                 <button id="tab-general" type="button" class="tab-button active group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm" aria-current="page">
                     General
                 </button>
-                <button id="tab-details" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Show Details
+                <button id="tab-getting-started" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    Getting Started
                 </button>
-                <button id="tab-import" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Import Data
+                <button id="tab-features" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    Features
                 </button>
-                <button id="tab-contacted" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Contacted
+                <button id="tab-settings" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    Settings
                 </button>
             </nav>
         </div>
@@ -98,56 +100,60 @@
                 </div>
             </div>
 
-            <!-- Show Details Panel -->
-            <div id="panel-details" class="tab-content hidden">
-                <h3>The "Show Details" Task Pane</h3>
-                <p>This is the main interface of the add-in, providing a comprehensive, at-a-glance view of the selected student. It opens when you click the "Show Details" button on the ribbon.</p>
-                
-                <h4>Student Details View</h4>
-                <p>When you select a student's row in your worksheet, this view automatically populates with their information:</p>
+            <!-- Getting Started Panel -->
+            <div id="panel-getting-started" class="tab-content hidden">
+                <h3>Initial Setup</h3>
+                <p>For the add-in to function correctly, your workbook must contain two specific sheets:</p>
                 <ul>
-                    <li><strong>Identity:</strong> A color-coded avatar (based on gender, if available), full name, assigned advisor, student ID, and last LDA.</li>
-                    <li><strong>Key Stats:</strong> "Days Out" and "Grade" are displayed prominently with color-coding for immediate status assessment (e.g., green for good, red for at-risk).</li>
-                    <li><strong>Contact Info:</strong> Phone numbers and email addresses are listed. Clicking on any of these will instantly copy the information to your clipboard.</li>
+                    <li><strong>Master List:</strong> This sheet should contain your main list of students, with a header row (row 1) that includes columns like <code>StudentName</code>, <code>StudentNumber</code>, <code>Grade</code>, etc.</li>
+                    <li><strong>Student History:</strong> This sheet is used to log all comments and outreach. It needs a header row with at least <code>StudentNumber</code>, <code>Comment</code>, and <code>Timestamp</code> columns.</li>
+                </ul>
+                <h3>First Use</h3>
+                <p>The first time you open the "Show Details" task pane, a welcome message will appear asking for your first and last name. This name will be used to automatically sign any comments you add to a student's history.</p>
+            </div>
+
+            <!-- Features Panel -->
+            <div id="panel-features" class="tab-content hidden">
+                <h3>Show Details</h3>
+                <p>This is the main interface of the add-in. When you select a student's row, this pane automatically populates with their information, including contact details, key stats, and a full interaction history.</p>
+
+                <h3>Import Data</h3>
+                <p>This feature opens a dialog to import data from <code>.csv</code> or <code>.xlsx</code> files. The add-in intelligently detects the file's content to offer the appropriate actions: "Update Master List" or "Update Grades".</p>
+
+                <h3>Create LDA</h3>
+                <p>Generates a new sheet named with the current date. This sheet contains two tables:</p>
+                <ul>
+                    <li>A list of students who are "at-risk" based on the "Days Out" filter you set in the Settings.</li>
+                    <li>A list of currently failing students who have been active in the last 4 days.</li>
                 </ul>
 
-                <h4>Student History View</h4>
-                <p>This view, accessible via a tab within the task pane, provides a complete interaction history for the selected student, pulled from the <strong>"Student History"</strong> sheet.</p>
-                <ul>
-                    <li><strong>View History:</strong> Displays all previously logged comments and outreach notes in reverse chronological order.</li>
-                    <li><strong>Add New Comment:</strong> Allows you to quickly add new comments or notes. These are saved to the "Student History" sheet with the current timestamp and your name.</li>
-                </ul>
+                <h3>Contacted</h3>
+                <p>A simple but effective tool for visual tracking. When you select a student's row and click this button, it toggles a yellow highlight across the main columns of that row.</p>
+                
+                <h3>Transfer Data</h3>
+                <p>Copies key data from the active sheet (Student Name, Gradebook link, Days Out, etc.) to your clipboard in JSON format, ready to be pasted into other applications.</p>
             </div>
             
-            <!-- Import Data Panel -->
-            <div id="panel-import" class="tab-content hidden">
-                <h3>Import Data Button</h3>
-                <p>This feature opens a dialog to import data from <code>.csv</code> or <code>.xlsx</code> files. The add-in intelligently detects the file's content to offer the appropriate actions.</p>
-                
-                <h4>Update Master List</h4>
+            <!-- Settings Panel -->
+            <div id="panel-settings" class="tab-content hidden">
+                <h3>Settings Pane</h3>
+                <p>Clicking the "Settings" button on the ribbon opens a task pane where you can customize the add-in's behavior.</p>
                 <ul>
-                    <li><strong>Functionality:</strong> Updates existing student records and adds new students from the import file.</li>
-                    <li><strong>Process:</strong> New students are inserted at the top of the "Master List" sheet (below the header) and highlighted in light blue for easy identification. Existing students are updated in place.</li>
-                    <li><strong>Requirement:</strong> The import file must contain a column for the student's name and student number/identifier.</li>
-                </ul>
-
-                <h4>Update Grades</h4>
-                <ul>
-                    <li><strong>Functionality:</strong> Updates grades, gradebook links, and assignment statuses for students already present in your "Master List".</li>
-                    <li><strong>Process:</strong> This function will <em>not</em> add new students. It only modifies the records of existing students.</li>
-                    <li><strong>Requirement:</strong> The import file must contain columns for student name, course, and current score/grade.</li>
+                    <li><strong>User Profile:</strong> Set the first and last name used to sign your comments.</li>
+                    <li><strong>LDA Report Settings:</strong>
+                        <ul>
+                            <li>Set the "Days Out" threshold for the at-risk student list.</li>
+                            <li>Toggle whether to include the "Failing Students" list in the report.</li>
+                            <li>Choose whether to treat empty cells in an imported grade file as a grade of 0.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Column Management:</strong> Drag and drop column names to customize which columns appear in the generated LDA report and in what order.</li>
                 </ul>
             </div>
-
-            <!-- Contacted Panel -->
-            <div id="panel-contacted" class="tab-content hidden">
-                <h3>Contacted Button</h3>
-                <p>A simple but effective tool for visual tracking. When you select a student's row and click the "Contacted" button, it toggles a yellow highlight across the main columns of that row.</p>
-                <div class="flex items-center p-3 bg-gray-50 rounded-md">
-                    <svg class="icon text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16l-4-4m0 0l4-4m-4 4h18" /></svg>
-                    <p class="mb-0">This provides a quick, visual way to see which students you've already reached out to during a session. Clicking the button again removes the highlight.</p>
-                </div>
-            </div>
+        </div>
+        
+        <div class="text-center mt-8 pt-4 border-t border-gray-200">
+            <p class="text-xs text-gray-400">Created by Victor Blanco</p>
         </div>
     </div>
 
@@ -155,9 +161,9 @@
         Office.onReady(() => {
             const tabs = [
                 { button: document.getElementById('tab-general'), panel: document.getElementById('panel-general') },
-                { button: document.getElementById('tab-details'), panel: document.getElementById('panel-details') },
-                { button: document.getElementById('tab-import'), panel: document.getElementById('panel-import') },
-                { button: document.getElementById('tab-contacted'), panel: document.getElementById('panel-contacted') }
+                { button: document.getElementById('tab-getting-started'), panel: document.getElementById('panel-getting-started') },
+                { button: document.getElementById('tab-features'), panel: document.getElementById('panel-features') },
+                { button: document.getElementById('tab-settings'), panel: document.getElementById('panel-settings') }
             ];
 
             tabs.forEach(tab => {
