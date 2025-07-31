@@ -62,10 +62,14 @@ let currentStudentId = null; // Variable to store the currently selected student
 let currentStudentName = null; // Variable to store the currently selected student's name
 let currentGradebookLink = null; // Variable to store the gradebook link
 let assignedColorMap = {}; // To cache colors for assigned people
+let currentUserName = "Unknown User"; // Variable to store the current user's name
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
+    // Get the current user's name
+    currentUserName = Office.context.displayName;
+
     // By the time Office is ready, the DOM should be loaded as well.
     setupTabs();
     setupCopyHandlers(); // Set up the copy-to-clipboard functionality
@@ -629,7 +633,7 @@ async function submitNewComment() {
             // Populate the data based on found column indices
             newRowData[idCol] = currentStudentId;
             if (studentCol !== -1) newRowData[studentCol] = currentStudentName;
-            if (createdByCol !== -1) newRowData[createdByCol] = "Victor Blanco"; // As per your name
+            if (createdByCol !== -1) newRowData[createdByCol] = currentUserName;
             if (tagCol !== -1) newRowData[tagCol] = "Comment";
             if (timestampCol !== -1) {
                 const now = new Date();
@@ -719,6 +723,12 @@ function jsDateToExcelDate(date) {
  */
 async function onWorksheetChanged(eventArgs) {
     await Excel.run(async (context) => {
+        // Only trigger for changes made by the local user
+        if (eventArgs.source !== Excel.EventSource.local) {
+            console.log("Change from remote source ignored.");
+            return;
+        }
+
         if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") {
             return;
         }
@@ -853,7 +863,7 @@ async function addOutreachComment(studentId, studentName, commentText) {
                 const newRowData = new Array(historyHeaders.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
-                if (createdByCol !== -1) newRowData[createdByCol] = "Victor Blanco";
+                if (createdByCol !== -1) newRowData[createdByCol] = currentUserName;
                 if (tagCol !== -1) newRowData[tagCol] = "Outreach";
                 newRowData[timestampCol] = excelNow;
                 newRowData[commentCol] = commentText;
@@ -869,7 +879,7 @@ async function addOutreachComment(studentId, studentName, commentText) {
             historySheet.getUsedRange().format.autofitColumns();
             await context.sync();
 
-            // NEW: Check if the updated student is the one currently displayed in the task pane
+            // Check if the updated student is the one currently displayed in the task pane
             // and if the history tab is active. If so, refresh the history.
             if (studentId && String(studentId) === String(currentStudentId)) {
                 const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
