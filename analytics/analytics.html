@@ -40,6 +40,9 @@
                     <button id="tab-projection" type="button" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
                         Projection
                     </button>
+                    <button id="tab-trends" type="button" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Trends
+                    </button>
                 </nav>
             </div>
 
@@ -54,22 +57,31 @@
                             <canvas id="ldaPieChart"></canvas>
                         </div>
                     </div>
+                    
+                    <!-- Engagement Pie Chart Card -->
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">LDA Engagement Status</h2>
+                        <p class="text-sm text-gray-500 mb-4">Based on green highlight in the 'StudentName' column of the latest LDA sheet.</p>
+                        <div class="relative h-64">
+                            <canvas id="engagementPieChart"></canvas>
+                        </div>
+                    </div>
 
                     <!-- Stats Card -->
-                    <div class="bg-white p-6 rounded-lg shadow flex flex-col justify-center">
+                    <div class="bg-white p-6 rounded-lg shadow md:col-span-2">
                          <h2 class="text-lg font-semibold text-gray-700 mb-4">Key Metrics</h2>
-                         <div class="space-y-4">
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-600">Total Students on Master List:</span>
-                                <span id="total-students" class="font-bold text-xl text-gray-800">--</span>
+                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
+                            <div>
+                                <span class="text-gray-600 block">Total Students</span>
+                                <span id="total-students" class="font-bold text-2xl text-gray-800">--</span>
                             </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-600">Students on Latest LDA:</span>
-                                <span id="lda-students" class="font-bold text-xl text-blue-600">--</span>
+                            <div>
+                                <span class="text-gray-600 block">Students on Latest LDA</span>
+                                <span id="lda-students" class="font-bold text-2xl text-blue-600">--</span>
                             </div>
-                             <div class="flex justify-between items-center">
-                                <span class="text-gray-600">Percentage on LDA:</span>
-                                <span id="lda-percentage" class="font-bold text-xl text-blue-600">--%</span>
+                             <div>
+                                <span class="text-gray-600 block">Percentage on LDA</span>
+                                <span id="lda-percentage" class="font-bold text-2xl text-blue-600">--%</span>
                             </div>
                          </div>
                     </div>
@@ -94,6 +106,17 @@
                             <span class="text-gray-800 font-semibold">Tomorrow's Total LDA:</span>
                             <span id="tomorrow-total-lda" class="font-bold text-2xl text-blue-600">--</span>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+             <!-- Trends Tab Panel -->
+            <div id="panel-trends" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">LDA & Engagement Trends</h2>
+                     <p class="text-sm text-gray-500 mb-4">Historical data from all LDA sheets found in this workbook.</p>
+                    <div class="relative h-96">
+                        <canvas id="trendsChart"></canvas>
                     </div>
                 </div>
             </div>
