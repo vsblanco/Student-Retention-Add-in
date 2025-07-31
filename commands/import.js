@@ -1,7 +1,7 @@
 /*
  * This file contains the logic for the "Import Data" ribbon button command.
  */
-import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex } from './utils.js';
+import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './utils.js';
 
 let importDialog = null;
 
@@ -394,6 +394,10 @@ async function handleUpdateMaster(message) {
 async function handleUpdateGrades(message) {
     sendMessageToDialog("Starting grade update process...");
     try {
+        const settings = await getSettings();
+        const { treatEmptyGradesAsZero } = settings.createlda;
+        sendMessageToDialog(`Setting 'Treat Empty Grades as 0' is ${treatEmptyGradesAsZero ? 'ON' : 'OFF'}.`);
+
         // Step 1: Parse the uploaded file using ExcelJS
         sendMessageToDialog("Parsing uploaded file for grade data...");
         const userArrayBuffer = dataUrlToArrayBuffer(message.data);
@@ -465,8 +469,12 @@ async function handleUpdateGrades(message) {
             const studentName = row[userStudentNameCol];
             if (studentName) {
                 const normalized = normalizeName(studentName);
+                let gradeValue = row[userGradeCol];
+                if ((gradeValue === null || gradeValue === undefined || gradeValue === '') && treatEmptyGradesAsZero) {
+                    gradeValue = 0;
+                }
                 studentDataMap.set(normalized, {
-                    grade: row[userGradeCol],
+                    grade: gradeValue,
                     courseId: row[userCourseIdCol],
                     studentId: row[userStudentIdCol],
                     missingAssignments: row[userMissingAssignmentsCol],
