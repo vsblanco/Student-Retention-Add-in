@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LDA Analytics</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4">LDA Analytics</h1>
+        
+        <div id="loading-message" class="text-center p-8">
+            <p class="text-gray-600">Loading analytics data...</p>
+        </div>
+
+        <div id="analytics-content" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Pie Chart Card -->
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-2">Students on LDA List</h2>
+                    <p class="text-sm text-gray-500 mb-4">Comparison of students on the latest LDA list vs. the total number of students.</p>
+                    <div class="relative h-64">
+                        <canvas id="ldaPieChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Stats Card -->
+                <div class="bg-white p-6 rounded-lg shadow flex flex-col justify-center">
+                     <h2 class="text-lg font-semibold text-gray-700 mb-4">Key Metrics</h2>
+                     <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Total Students on Master List:</span>
+                            <span id="total-students" class="font-bold text-xl text-gray-800">--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Students on Latest LDA:</span>
+                            <span id="lda-students" class="font-bold text-xl text-blue-600">--</span>
+                        </div>
+                         <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Percentage on LDA:</span>
+                            <span id="lda-percentage" class="font-bold text-xl text-blue-600">--%</span>
+                        </div>
+                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="error-message" class="hidden mt-6 p-4 bg-red-100 text-red-700 rounded-lg">
+            <p id="error-text"></p>
+        </div>
+    </div>
+
+    <!-- Your Add-in's Code -->
+    <script type="text/javascript" src="analytics.js"></script>
+</body>
+</html>
