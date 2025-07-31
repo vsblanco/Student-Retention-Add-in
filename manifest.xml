@@ -216,6 +216,7 @@
         <bt:Url id="Settings.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/settings/settings.html"/>
         <bt:Url id="TransferData.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html"/>
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html"/>
+        <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
