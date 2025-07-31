@@ -25,23 +25,31 @@ function loadSettingsAndPopulateUI() {
         }
     }
     
-    // Ensure settings object and createlda property exist with defaults
+    // Ensure settings objects exist with defaults
     if (!settings.createlda) {
         settings.createlda = {
             daysOutFilter: 6,
             includeFailingList: true,
-            hideLeftoverColumns: true, // Default to true
+            hideLeftoverColumns: true,
             ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
         };
     }
+    if (!settings.userProfile) {
+        settings.userProfile = {
+            name: Office.context.displayName || ""
+        };
+    }
 
-    // Populate UI for existing fields
+    // Populate UI for User Profile
+    document.getElementById("user-full-name").value = settings.userProfile.name || "";
+
+    // Populate UI for LDA Report settings
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
     document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
     document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
 
 
-    // Load and render the new column selector
+    // Load and render the LDA column selector
     loadAndRenderLdaColumns();
 }
 
@@ -111,6 +119,10 @@ function createColumnItem(header) {
 
 function saveSettings() {
     // Get values from the UI
+    // User Profile
+    settings.userProfile.name = document.getElementById("user-full-name").value.trim();
+
+    // LDA Report
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
     settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
