@@ -14,6 +14,13 @@
     
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-button.active {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 p-4">
     <div class="max-w-4xl mx-auto">
@@ -24,33 +31,70 @@
         </div>
 
         <div id="analytics-content" class="hidden">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Pie Chart Card -->
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h2 class="text-lg font-semibold text-gray-700 mb-2">Students on LDA List</h2>
-                    <p class="text-sm text-gray-500 mb-4">Comparison of students on the latest LDA list vs. the total number of students.</p>
-                    <div class="relative h-64">
-                        <canvas id="ldaPieChart"></canvas>
+            <!-- Tab Navigation -->
+            <div class="border-b border-gray-200 mb-4">
+                <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                    <button id="tab-current" type="button" class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">
+                        Current
+                    </button>
+                    <button id="tab-projection" type="button" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                        Projection
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Current Tab Panel -->
+            <div id="panel-current">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Pie Chart Card -->
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h2 class="text-lg font-semibold text-gray-700 mb-2">Students on LDA List</h2>
+                        <p class="text-sm text-gray-500 mb-4">Comparison of students on the latest LDA list vs. the total number of students.</p>
+                        <div class="relative h-64">
+                            <canvas id="ldaPieChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Stats Card -->
+                    <div class="bg-white p-6 rounded-lg shadow flex flex-col justify-center">
+                         <h2 class="text-lg font-semibold text-gray-700 mb-4">Key Metrics</h2>
+                         <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">Total Students on Master List:</span>
+                                <span id="total-students" class="font-bold text-xl text-gray-800">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-600">Students on Latest LDA:</span>
+                                <span id="lda-students" class="font-bold text-xl text-blue-600">--</span>
+                            </div>
+                             <div class="flex justify-between items-center">
+                                <span class="text-gray-600">Percentage on LDA:</span>
+                                <span id="lda-percentage" class="font-bold text-xl text-blue-600">--%</span>
+                            </div>
+                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Stats Card -->
-                <div class="bg-white p-6 rounded-lg shadow flex flex-col justify-center">
-                     <h2 class="text-lg font-semibold text-gray-700 mb-4">Key Metrics</h2>
-                     <div class="space-y-4">
+            <!-- Projection Tab Panel -->
+            <div id="panel-projection" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold text-gray-700 mb-4">LDA Projections for Tomorrow</h2>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center pb-2">
+                            <span class="text-gray-600">Students on Today's LDA:</span>
+                            <span id="lda-students-proj" class="font-bold text-xl text-gray-800">--</span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2">
+                            <span class="text-gray-600">Projected Incoming Students:</span>
+                            <span id="projected-students" class="font-bold text-xl text-green-600">--</span>
+                        </div>
+                        <div class="border-t border-gray-200 pt-4"></div>
                         <div class="flex justify-between items-center">
-                            <span class="text-gray-600">Total Students on Master List:</span>
-                            <span id="total-students" class="font-bold text-xl text-gray-800">--</span>
+                            <span class="text-gray-800 font-semibold">Tomorrow's Total LDA:</span>
+                            <span id="tomorrow-total-lda" class="font-bold text-2xl text-blue-600">--</span>
                         </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-600">Students on Latest LDA:</span>
-                            <span id="lda-students" class="font-bold text-xl text-blue-600">--</span>
-                        </div>
-                         <div class="flex justify-between items-center">
-                            <span class="text-gray-600">Percentage on LDA:</span>
-                            <span id="lda-percentage" class="font-bold text-xl text-blue-600">--%</span>
-                        </div>
-                     </div>
+                    </div>
                 </div>
             </div>
         </div>
