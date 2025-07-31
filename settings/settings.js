@@ -31,6 +31,7 @@ function loadSettingsAndPopulateUI() {
             daysOutFilter: 6,
             includeFailingList: true,
             hideLeftoverColumns: true,
+            treatEmptyGradesAsZero: false, // Default to false
             ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
         };
     }
@@ -47,6 +48,7 @@ function loadSettingsAndPopulateUI() {
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
     document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
     document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
+    document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
 
 
     // Load and render the LDA column selector
@@ -126,6 +128,7 @@ function saveSettings() {
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
     settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
+    settings.createlda.treatEmptyGradesAsZero = document.getElementById("treat-empty-grades-as-zero").checked;
 
     // Get selected columns from the "Included" list, preserving their order
     const includedContainer = document.getElementById("included-columns");
