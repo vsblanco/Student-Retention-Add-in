@@ -118,7 +118,7 @@ async function handleCreateLdaSheet() {
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
-                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders);
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx);
             }
             
         });
@@ -139,7 +139,7 @@ async function handleCreateLdaSheet() {
     }
 }
 
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx) {
     console.log("[DEBUG] Creating failing list table.");
     const originalLCHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -148,16 +148,24 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
         console.warn("'Grade' column not found, cannot create failing list.");
         return;
     }
+    
+    if (daysOutColIdx === -1) {
+        console.warn("'Days Out' column not found, cannot filter failing list by days out.");
+        return;
+    }
 
     const failingRows = masterDataWithIndex.filter(({ row }) => {
         const grade = row[gradeColIdx];
-        return typeof grade === 'number' && (grade < 0.60 || (grade >= 1 && grade < 60));
+        const daysOut = row[daysOutColIdx];
+        const isFailingGrade = typeof grade === 'number' && (grade < 0.60 || (grade >= 1 && grade < 60));
+        const isRecent = typeof daysOut === 'number' && daysOut <= 4;
+        return isFailingGrade && isRecent;
     });
     failingRows.sort((a, b) => (a.row[gradeColIdx] || 0) - (b.row[gradeColIdx] || 0));
 
     if (failingRows.length > 0) {
         const titleRange = sheet.getRangeByIndexes(startRow, 0, 1, 1);
-        titleRange.values = [["Failing Students"]];
+        titleRange.values = [["Failing Students (Active)"]];
         titleRange.format.font.bold = true;
         
         await createAndFormatTable(context, {
