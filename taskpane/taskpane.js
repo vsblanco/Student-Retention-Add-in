@@ -30,10 +30,6 @@ const CONSTANTS = {
     COPY_OTHER_PHONE: "copy-other-phone",
     COPY_STUDENT_EMAIL: "copy-student-email",
     COPY_PERSONAL_EMAIL: "copy-personal-email",
-    WELCOME_MODAL: "welcome-modal",
-    CLOSE_WELCOME_MODAL: "close-welcome-modal",
-    FIRST_NAME_INPUT: "first-name-input",
-    LAST_NAME_INPUT: "last-name-input",
 
     // Settings Keys
     SETTINGS_KEY: "studentRetentionSettings",
@@ -71,6 +67,7 @@ let currentGradebookLink = null; // Variable to store the gradebook link
 let assignedColorMap = {}; // To cache colors for assigned people
 let currentUserName = "Unknown User"; // Variable to store the current user's name
 let settings = {}; // To store all add-in settings
+let welcomeDialog = null;
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -138,7 +135,7 @@ function loadUserSettings() {
     
     // Show welcome message if needed
     if (!settings.userProfile.hasSeenWelcomeMessage) {
-        showWelcomeMessage();
+        showWelcomeDialogIfNeeded();
     }
 }
 
@@ -158,35 +155,41 @@ function saveUserSettings() {
 
 
 /**
- * Shows the welcome message and handles saving the user's name.
+ * Checks if the user has seen the welcome message and shows a dialog if not.
  */
-function showWelcomeMessage() {
-    const modal = document.getElementById(CONSTANTS.WELCOME_MODAL);
-    const closeButton = document.getElementById(CONSTANTS.CLOSE_WELCOME_MODAL);
-    const firstNameInput = document.getElementById(CONSTANTS.FIRST_NAME_INPUT);
-    const lastNameInput = document.getElementById(CONSTANTS.LAST_NAME_INPUT);
-
-    if (modal && closeButton && firstNameInput && lastNameInput) {
-        modal.classList.remove("hidden");
-
-        closeButton.addEventListener("click", () => {
-            const firstName = firstNameInput.value.trim();
-            const lastName = lastNameInput.value.trim();
-
-            if (firstName && lastName) {
-                currentUserName = `${firstName} ${lastName}`;
-                
-                settings.userProfile.name = currentUserName;
-                settings.userProfile.hasSeenWelcomeMessage = true;
-                
-                saveUserSettings();
-                
-                modal.classList.add("hidden");
-            } else {
-                // Optionally, show an error message
-                alert("Please enter both your first and last name.");
+function showWelcomeDialogIfNeeded() {
+    if (!settings.userProfile.hasSeenWelcomeMessage) {
+        Office.context.ui.displayDialogAsync(
+            'https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html',
+            { height: 40, width: 30, displayInIframe: true },
+            function (asyncResult) {
+                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                    console.error("Welcome dialog failed to open: " + asyncResult.error.message);
+                    return;
+                }
+                welcomeDialog = asyncResult.value;
+                welcomeDialog.addEventHandler(Office.EventType.DialogMessageReceived, processWelcomeDialogMessage);
             }
-        });
+        );
+    }
+}
+
+/**
+ * Handles messages from the welcome dialog.
+ * @param {Office.DialogMessageReceivedEventArgs} arg
+ */
+function processWelcomeDialogMessage(arg) {
+    const message = JSON.parse(arg.message);
+    if (message.type === 'userName' && message.name) {
+        currentUserName = message.name;
+        settings.userProfile.name = currentUserName;
+        settings.userProfile.hasSeenWelcomeMessage = true;
+        saveUserSettings();
+        
+        if (welcomeDialog) {
+            welcomeDialog.close();
+            welcomeDialog = null;
+        }
     }
 }
 
