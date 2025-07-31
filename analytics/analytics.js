@@ -222,9 +222,12 @@ async function getLdaEngagementData() {
         const colors = bodyRange.format.fill.color;
         if (colors) {
             for (let i = 0; i < totalLdaStudents; i++) {
-                const cellColor = colors[i][studentNameColIdx];
-                if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                    engagedCount++;
+                // FIX: Check if the row of colors exists before accessing a cell
+                if (colors[i]) {
+                    const cellColor = colors[i][studentNameColIdx];
+                    if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                        engagedCount++;
+                    }
                 }
             }
         }
@@ -287,9 +290,12 @@ async function getTrendsData() {
             const colors = bodyRange.format.fill.color;
             if (colors) {
                 for (let i = 0; i < totalLdaStudents; i++) {
-                    const cellColor = colors[i][studentNameColIdx];
-                    if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                        engagedCount++;
+                    // FIX: Check if the row of colors exists before accessing a cell
+                    if (colors[i]) {
+                        const cellColor = colors[i][studentNameColIdx];
+                        if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                            engagedCount++;
+                        }
                     }
                 }
             }
