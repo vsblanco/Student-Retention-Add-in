@@ -8,6 +8,7 @@ const CONSTANTS = {
     SETTINGS_KEY: "studentRetentionSettings",
     COLUMN_MAPPINGS: {
         daysOut: ["days out", "daysout"],
+        studentName: ["studentname", "student name"],
     }
 };
 
@@ -24,12 +25,15 @@ async function run() {
 function setupTabs() {
     const tabCurrent = document.getElementById('tab-current');
     const tabProjection = document.getElementById('tab-projection');
+    const tabTrends = document.getElementById('tab-trends');
     const panelCurrent = document.getElementById('panel-current');
     const panelProjection = document.getElementById('panel-projection');
+    const panelTrends = document.getElementById('panel-trends');
 
     const tabs = [
         { button: tabCurrent, panel: panelCurrent },
-        { button: tabProjection, panel: panelProjection }
+        { button: tabProjection, panel: panelProjection },
+        { button: tabTrends, panel: panelTrends }
     ];
 
     tabs.forEach(tab => {
@@ -64,10 +68,12 @@ async function loadAnalytics() {
     const analyticsContent = document.getElementById("analytics-content");
     
     try {
-        const [totalStudents, ldaStudents, projectedStudents] = await Promise.all([
+        const [totalStudents, ldaStudents, projectedStudents, engagementData, trendsData] = await Promise.all([
             getTotalStudentCount(),
             getLdaStudentCount(),
-            getProjectedLdaStudentCount()
+            getProjectedLdaStudentCount(),
+            getLdaEngagementData(),
+            getTrendsData()
         ]);
 
         loadingMessage.classList.add("hidden");
@@ -81,12 +87,16 @@ async function loadAnalytics() {
         document.getElementById("lda-students").textContent = ldaStudents;
         document.getElementById("lda-percentage").textContent = `${percentageOnLda}%`;
         renderPieChart(ldaStudents, notOnLda);
+        renderEngagementPieChart(engagementData.engaged, engagementData.notEngaged);
 
         // Populate Projection Tab
         const tomorrowTotal = ldaStudents + projectedStudents;
         document.getElementById("lda-students-proj").textContent = ldaStudents;
         document.getElementById("projected-students").textContent = projectedStudents;
         document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
+        
+        // Populate Trends Tab
+        renderTrendsChart(trendsData);
 
     } catch (error) {
         loadingMessage.classList.add("hidden");
@@ -106,28 +116,34 @@ async function getTotalStudentCount() {
     });
 }
 
-async function getLdaStudentCount() {
-    return await Excel.run(async (context) => {
-        const worksheets = context.workbook.worksheets;
-        worksheets.load("items/name");
-        await context.sync();
+async function getLatestLdaSheet(context) {
+    const worksheets = context.workbook.worksheets;
+    worksheets.load("items/name");
+    await context.sync();
 
-        let latestLdaSheet = null;
-        let latestDate = null;
+    let latestLdaSheet = null;
+    let latestDate = null;
 
-        worksheets.items.forEach(sheet => {
-            if (sheet.name.startsWith("LDA ")) {
-                const datePart = sheet.name.substring(4).split(" ")[0]; // Handle names like "LDA 7-31-2025 (2)"
-                const date = new Date(datePart.replace(/(\d{1,2})-(\d{1,2})-(\d{4})/, '$3-$1-$2'));
-                if (!isNaN(date.getTime())) {
-                    if (!latestDate || date > latestDate) {
-                        latestDate = date;
-                        latestLdaSheet = sheet;
-                    }
+    worksheets.items.forEach(sheet => {
+        if (sheet.name.startsWith("LDA ")) {
+            const datePart = sheet.name.substring(4).split(" ")[0]; // Handle names like "LDA 7-31-2025 (2)"
+            const date = new Date(datePart.replace(/(\d{1,2})-(\d{1,2})-(\d{4})/, '$3-$1-$2'));
+            if (!isNaN(date.getTime())) {
+                if (!latestDate || date > latestDate) {
+                    latestDate = date;
+                    latestLdaSheet = sheet;
                 }
             }
-        });
+        }
+    });
 
+    return latestLdaSheet;
+}
+
+
+async function getLdaStudentCount() {
+    return await Excel.run(async (context) => {
+        const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
             throw new Error("No LDA sheet found. Please create an LDA report first.");
         }
@@ -170,6 +186,124 @@ async function getProjectedLdaStudentCount() {
         return projectedCount;
     });
 }
+
+async function getLdaEngagementData() {
+    return await Excel.run(async (context) => {
+        const latestLdaSheet = await getLatestLdaSheet(context);
+        if (!latestLdaSheet) {
+            console.warn("No LDA sheet found for engagement analytics.");
+            return { engaged: 0, notEngaged: 0 };
+        }
+
+        const ldaTable = latestLdaSheet.tables.getItemAt(0);
+        const headerRange = ldaTable.getHeaderRowRange();
+        const bodyRange = ldaTable.getDataBodyRange();
+        headerRange.load("values");
+        bodyRange.load("rowCount");
+        await context.sync();
+
+        const totalLdaStudents = bodyRange.rowCount;
+        if (totalLdaStudents === 0) {
+            return { engaged: 0, notEngaged: 0 };
+        }
+
+        const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+        const studentNameColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.studentName);
+
+        if (studentNameColIdx === -1) {
+            throw new Error("'StudentName' column not found in the LDA sheet.");
+        }
+
+        const studentNameColumn = ldaTable.columns.getItemAt(studentNameColIdx).getDataBodyRange();
+        studentNameColumn.load("format/fill/color");
+        await context.sync();
+
+        let engagedCount = 0;
+        // Common Excel green fill colors for "Good"
+        const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"]; 
+
+        const colors = studentNameColumn.format.fill.color;
+        for (let i = 0; i < colors.length; i++) {
+            const cellColor = colors[i][0];
+            // Excel can return colors with an alpha prefix like #FFC6EFCE.
+            if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                engagedCount++;
+            }
+        }
+        
+        return {
+            engaged: engagedCount,
+            notEngaged: totalLdaStudents - engagedCount
+        };
+    });
+}
+
+async function getTrendsData() {
+    return await Excel.run(async (context) => {
+        const worksheets = context.workbook.worksheets;
+        worksheets.load("items/name");
+        await context.sync();
+
+        const ldaSheets = [];
+        worksheets.items.forEach(sheet => {
+            if (sheet.name.startsWith("LDA ")) {
+                const datePart = sheet.name.substring(4).split(" ")[0];
+                const date = new Date(datePart.replace(/(\d{1,2})-(\d{1,2})-(\d{4})/, '$3-$1-$2'));
+                if (!isNaN(date.getTime())) {
+                    ldaSheets.push({ sheet, date });
+                }
+            }
+        });
+
+        ldaSheets.sort((a, b) => a.date - b.date);
+
+        const trendsData = {
+            labels: [],
+            ldaCounts: [],
+            engagedCounts: []
+        };
+
+        for (const { sheet, date } of ldaSheets) {
+            trendsData.labels.push(date.toLocaleDateString());
+
+            const ldaTable = sheet.tables.getItemAt(0);
+            const headerRange = ldaTable.getHeaderRowRange();
+            const bodyRange = ldaTable.getDataBodyRange();
+            headerRange.load("values");
+            bodyRange.load("rowCount");
+            await context.sync();
+
+            const totalLdaStudents = bodyRange.rowCount;
+            trendsData.ldaCounts.push(totalLdaStudents);
+
+            const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+            const studentNameColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.studentName);
+
+            if (studentNameColIdx === -1) {
+                trendsData.engagedCounts.push(0);
+                continue;
+            }
+
+            const studentNameColumn = ldaTable.columns.getItemAt(studentNameColIdx).getDataBodyRange();
+            studentNameColumn.load("format/fill/color");
+            await context.sync();
+
+            let engagedCount = 0;
+            const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"];
+            const colors = studentNameColumn.format.fill.color;
+            for (let i = 0; i < colors.length; i++) {
+                const cellColor = colors[i][0];
+                if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                    engagedCount++;
+                }
+            }
+            trendsData.engagedCounts.push(engagedCount);
+        }
+
+        return trendsData;
+    });
+}
+
 
 function renderPieChart(ldaCount, notOnLdaCount) {
     const ctx = document.getElementById('ldaPieChart').getContext('2d');
@@ -216,6 +350,87 @@ function renderPieChart(ldaCount, notOnLdaCount) {
         }
     });
 }
+
+function renderEngagementPieChart(engagedCount, notEngagedCount) {
+    const ctx = document.getElementById('engagementPieChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Engaged', 'Not Engaged'],
+            datasets: [{
+                label: 'Engagement Status',
+                data: [engagedCount, notEngagedCount],
+                backgroundColor: [
+                    'rgba(34, 197, 94, 0.7)', // green-500
+                    'rgba(239, 68, 68, 0.7)'  // red-500
+                ],
+                borderColor: [
+                    'rgba(34, 197, 94, 1)',
+                    'rgba(239, 68, 68, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed !== null) {
+                                label += context.parsed;
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderTrendsChart(trendsData) {
+    const ctx = document.getElementById('trendsChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: trendsData.labels,
+            datasets: [{
+                label: 'Total on LDA',
+                data: trendsData.ldaCounts,
+                borderColor: 'rgba(59, 130, 246, 1)',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                fill: true,
+                tension: 0.1
+            }, {
+                label: 'Engaged Students',
+                data: trendsData.engagedCounts,
+                borderColor: 'rgba(34, 197, 94, 1)',
+                backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
 
 function showError(message) {
     const errorContainer = document.getElementById("error-message");
