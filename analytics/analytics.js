@@ -4,7 +4,15 @@ Office.onReady((info) => {
     }
 });
 
+const CONSTANTS = {
+    SETTINGS_KEY: "studentRetentionSettings",
+    COLUMN_MAPPINGS: {
+        daysOut: ["days out", "daysout"],
+    }
+};
+
 async function run() {
+    setupTabs();
     try {
         await loadAnalytics();
     } catch (error) {
@@ -13,27 +21,72 @@ async function run() {
     }
 }
 
+function setupTabs() {
+    const tabCurrent = document.getElementById('tab-current');
+    const tabProjection = document.getElementById('tab-projection');
+    const panelCurrent = document.getElementById('panel-current');
+    const panelProjection = document.getElementById('panel-projection');
+
+    const tabs = [
+        { button: tabCurrent, panel: panelCurrent },
+        { button: tabProjection, panel: panelProjection }
+    ];
+
+    tabs.forEach(tab => {
+        if (tab.button) {
+            tab.button.addEventListener('click', () => {
+                // Deactivate all tabs
+                tabs.forEach(item => {
+                    if (item.button) {
+                        item.button.classList.remove('active', 'border-blue-500', 'text-blue-600');
+                        item.button.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    }
+                    if (item.panel) {
+                       item.panel.classList.add('hidden');
+                    }
+                });
+
+                // Activate the clicked tab
+                if (tab.button) {
+                    tab.button.classList.add('active', 'border-blue-500', 'text-blue-600');
+                    tab.button.classList.remove('border-transparent', 'text-gray-500');
+                }
+                if (tab.panel) {
+                    tab.panel.classList.remove('hidden');
+                }
+            });
+        }
+    });
+}
+
 async function loadAnalytics() {
     const loadingMessage = document.getElementById("loading-message");
     const analyticsContent = document.getElementById("analytics-content");
     
     try {
-        const [totalStudents, ldaStudents] = await Promise.all([
+        const [totalStudents, ldaStudents, projectedStudents] = await Promise.all([
             getTotalStudentCount(),
-            getLdaStudentCount()
+            getLdaStudentCount(),
+            getProjectedLdaStudentCount()
         ]);
 
         loadingMessage.classList.add("hidden");
         analyticsContent.classList.remove("hidden");
 
+        // Populate Current Tab
         const notOnLda = totalStudents - ldaStudents;
         const percentageOnLda = totalStudents > 0 ? ((ldaStudents / totalStudents) * 100).toFixed(1) : 0;
 
         document.getElementById("total-students").textContent = totalStudents;
         document.getElementById("lda-students").textContent = ldaStudents;
         document.getElementById("lda-percentage").textContent = `${percentageOnLda}%`;
-
         renderPieChart(ldaStudents, notOnLda);
+
+        // Populate Projection Tab
+        const tomorrowTotal = ldaStudents + projectedStudents;
+        document.getElementById("lda-students-proj").textContent = ldaStudents;
+        document.getElementById("projected-students").textContent = projectedStudents;
+        document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
 
     } catch (error) {
         loadingMessage.classList.add("hidden");
@@ -64,7 +117,7 @@ async function getLdaStudentCount() {
 
         worksheets.items.forEach(sheet => {
             if (sheet.name.startsWith("LDA ")) {
-                const datePart = sheet.name.substring(4);
+                const datePart = sheet.name.substring(4).split(" ")[0]; // Handle names like "LDA 7-31-2025 (2)"
                 const date = new Date(datePart.replace(/(\d{1,2})-(\d{1,2})-(\d{4})/, '$3-$1-$2'));
                 if (!isNaN(date.getTime())) {
                     if (!latestDate || date > latestDate) {
@@ -85,6 +138,36 @@ async function getLdaStudentCount() {
         await context.sync();
         
         return bodyRange.rowCount;
+    });
+}
+
+async function getProjectedLdaStudentCount() {
+    return await Excel.run(async (context) => {
+        const settings = await getSettings();
+        const daysOutFilter = settings.createlda.daysOutFilter || 6;
+        const projectionThreshold = daysOutFilter - 1;
+
+        const sheet = context.workbook.worksheets.getItem("Master List");
+        const range = sheet.getUsedRange();
+        range.load("values");
+        await context.sync();
+
+        const values = range.values;
+        const headers = values[0].map(h => String(h || '').toLowerCase());
+        const daysOutColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut);
+
+        if (daysOutColIdx === -1) {
+            throw new Error("'Days Out' column not found in Master List.");
+        }
+
+        let projectedCount = 0;
+        for (let i = 1; i < values.length; i++) {
+            const daysOut = values[i][daysOutColIdx];
+            if (typeof daysOut === 'number' && daysOut === projectionThreshold) {
+                projectedCount++;
+            }
+        }
+        return projectedCount;
     });
 }
 
@@ -141,4 +224,55 @@ function showError(message) {
         errorText.textContent = `Error: ${message}`;
         errorContainer.classList.remove("hidden");
     }
+}
+
+// --- Helper Functions (from commands/utils.js) ---
+
+function findColumnIndex(headers, possibleNames) {
+    for (const name of possibleNames) {
+        const index = headers.indexOf(name);
+        if (index !== -1) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+async function getSettings() {
+    await new Promise((resolve) => {
+        Office.context.document.settings.refreshAsync(asyncResult => {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Error refreshing settings: " + asyncResult.error.message);
+            }
+            resolve();
+        });
+    });
+
+    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
+    const defaults = {
+        createlda: {
+            daysOutFilter: 6,
+            includeFailingList: true,
+            hideLeftoverColumns: true,
+            treatEmptyGradesAsZero: false,
+            ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
+        },
+        userProfile: {
+            name: Office.context.displayName || "",
+            hasSeenWelcomeMessage: false
+        }
+    };
+
+    if (settingsString) {
+        try {
+            const settings = JSON.parse(settingsString);
+            settings.createlda = { ...defaults.createlda, ...(settings.createlda || {}) };
+            settings.userProfile = { ...defaults.userProfile, ...(settings.userProfile || {}) };
+            return settings;
+        } catch (e) {
+            console.error("Error parsing settings, returning defaults:", e);
+            return defaults;
+        }
+    }
+    return defaults;
 }
