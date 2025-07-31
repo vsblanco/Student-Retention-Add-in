@@ -30,6 +30,11 @@ const CONSTANTS = {
     COPY_OTHER_PHONE: "copy-other-phone",
     COPY_STUDENT_EMAIL: "copy-student-email",
     COPY_PERSONAL_EMAIL: "copy-personal-email",
+    WELCOME_MODAL: "welcome-modal",
+    CLOSE_WELCOME_MODAL: "close-welcome-modal",
+
+    // Settings Keys
+    WELCOME_MESSAGE_KEY: "hasSeenWelcomeMessage",
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
@@ -74,6 +79,7 @@ Office.onReady((info) => {
     setupTabs();
     setupCopyHandlers(); // Set up the copy-to-clipboard functionality
     setupGradebookLinkHandler(); // Set up the gradebook link handler
+    showWelcomeMessageIfNeeded(); // Show the welcome message on first run
     
     // Add event listener for the new comment button
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
@@ -102,6 +108,35 @@ Office.onReady((info) => {
     onSelectionChange();
   }
 });
+
+/**
+ * Checks if the user has seen the welcome message and shows it if not.
+ */
+function showWelcomeMessageIfNeeded() {
+    const hasSeen = Office.context.document.settings.get(CONSTANTS.WELCOME_MESSAGE_KEY);
+
+    if (!hasSeen) {
+        const modal = document.getElementById(CONSTANTS.WELCOME_MODAL);
+        const closeButton = document.getElementById(CONSTANTS.CLOSE_WELCOME_MODAL);
+
+        if (modal && closeButton) {
+            modal.classList.remove("hidden");
+
+            closeButton.addEventListener("click", () => {
+                modal.classList.add("hidden");
+                Office.context.document.settings.set(CONSTANTS.WELCOME_MESSAGE_KEY, true);
+                Office.context.document.settings.saveAsync((asyncResult) => {
+                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                        console.error("Failed to save welcome message setting: " + asyncResult.error.message);
+                    } else {
+                        console.log("Welcome message setting saved.");
+                    }
+                });
+            });
+        }
+    }
+}
+
 
 /**
  * Sets up the event listeners for the tabbed interface.
