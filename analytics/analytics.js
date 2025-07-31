@@ -201,7 +201,7 @@ async function getLdaEngagementData() {
         const headerRange = ldaTable.getHeaderRowRange();
         const bodyRange = ldaTable.getDataBodyRange();
         headerRange.load("values");
-        bodyRange.load("rowCount");
+        bodyRange.load("rowCount, format/fill/color"); // Load colors for the whole body
         await context.sync();
 
         const totalLdaStudents = bodyRange.rowCount;
@@ -216,20 +216,16 @@ async function getLdaEngagementData() {
             throw new Error("'StudentName' column not found in the LDA sheet.");
         }
 
-        const studentNameColumn = ldaTable.columns.getItemAt(studentNameColIdx).getDataBodyRange();
-        studentNameColumn.load("format/fill/color");
-        await context.sync();
-
         let engagedCount = 0;
-        // Common Excel green fill colors for "Good"
         const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"]; 
 
-        const colors = studentNameColumn.format.fill.color;
-        for (let i = 0; i < colors.length; i++) {
-            const cellColor = colors[i][0];
-            // Excel can return colors with an alpha prefix like #FFC6EFCE.
-            if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                engagedCount++;
+        const colors = bodyRange.format.fill.color;
+        if (colors) {
+            for (let i = 0; i < totalLdaStudents; i++) {
+                const cellColor = colors[i][studentNameColIdx];
+                if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                    engagedCount++;
+                }
             }
         }
         
@@ -272,7 +268,7 @@ async function getTrendsData() {
             const headerRange = ldaTable.getHeaderRowRange();
             const bodyRange = ldaTable.getDataBodyRange();
             headerRange.load("values");
-            bodyRange.load("rowCount");
+            bodyRange.load("rowCount, format/fill/color");
             await context.sync();
 
             const totalLdaStudents = bodyRange.rowCount;
@@ -286,17 +282,15 @@ async function getTrendsData() {
                 continue;
             }
 
-            const studentNameColumn = ldaTable.columns.getItemAt(studentNameColIdx).getDataBodyRange();
-            studentNameColumn.load("format/fill/color");
-            await context.sync();
-
             let engagedCount = 0;
             const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"];
-            const colors = studentNameColumn.format.fill.color;
-            for (let i = 0; i < colors.length; i++) {
-                const cellColor = colors[i][0];
-                if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                    engagedCount++;
+            const colors = bodyRange.format.fill.color;
+            if (colors) {
+                for (let i = 0; i < totalLdaStudents; i++) {
+                    const cellColor = colors[i][studentNameColIdx];
+                    if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                        engagedCount++;
+                    }
                 }
             }
             trendsData.engagedCounts.push(engagedCount);
