@@ -267,6 +267,16 @@ async function getTrendsData() {
         for (const { sheet, date } of ldaSheets) {
             trendsData.labels.push(date.toLocaleDateString());
 
+            // FIX: Check if the sheet has a table before proceeding
+            sheet.tables.load("items/name");
+            await context.sync();
+
+            if (sheet.tables.items.length === 0) {
+                trendsData.ldaCounts.push(0);
+                trendsData.engagedCounts.push(0);
+                continue; // Skip to the next sheet
+            }
+
             const ldaTable = sheet.tables.getItemAt(0);
             const headerRange = ldaTable.getHeaderRowRange();
             const bodyRange = ldaTable.getDataBodyRange();
@@ -290,7 +300,6 @@ async function getTrendsData() {
             const colors = bodyRange.format.fill.color;
             if (colors) {
                 for (let i = 0; i < totalLdaStudents; i++) {
-                    // FIX: Check if the row of colors exists before accessing a cell
                     if (colors[i]) {
                         const cellColor = colors[i][studentNameColIdx];
                         if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
