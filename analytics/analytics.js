@@ -97,6 +97,8 @@ async function loadAnalytics() {
         
         // Populate Trends Tab
         renderTrendsChart(trendsData);
+        const medianEngagement = calculateMedian(trendsData.engagedCounts);
+        document.getElementById("median-engagement").textContent = medianEngagement;
 
     } catch (error) {
         loadingMessage.classList.add("hidden");
@@ -302,6 +304,23 @@ async function getTrendsData() {
 
         return trendsData;
     });
+}
+
+function calculateMedian(numbers) {
+    if (!numbers || numbers.length === 0) {
+        return 0;
+    }
+
+    const sorted = [...numbers].sort((a, b) => a - b);
+    const middleIndex = Math.floor(sorted.length / 2);
+
+    if (sorted.length % 2 === 0) {
+        // Even number of elements
+        return ((sorted[middleIndex - 1] + sorted[middleIndex]) / 2).toFixed(1);
+    } else {
+        // Odd number of elements
+        return sorted[middleIndex];
+    }
 }
 
 
