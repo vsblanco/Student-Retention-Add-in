@@ -32,9 +32,11 @@ const CONSTANTS = {
     COPY_PERSONAL_EMAIL: "copy-personal-email",
     WELCOME_MODAL: "welcome-modal",
     CLOSE_WELCOME_MODAL: "close-welcome-modal",
+    FIRST_NAME_INPUT: "first-name-input",
+    LAST_NAME_INPUT: "last-name-input",
 
     // Settings Keys
-    WELCOME_MESSAGE_KEY: "hasSeenWelcomeMessage",
+    SETTINGS_KEY: "studentRetentionSettings",
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
@@ -68,18 +70,17 @@ let currentStudentName = null; // Variable to store the currently selected stude
 let currentGradebookLink = null; // Variable to store the gradebook link
 let assignedColorMap = {}; // To cache colors for assigned people
 let currentUserName = "Unknown User"; // Variable to store the current user's name
+let settings = {}; // To store all add-in settings
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
-    // Get the current user's name
-    currentUserName = Office.context.displayName;
+    loadUserSettings();
 
     // By the time Office is ready, the DOM should be loaded as well.
     setupTabs();
     setupCopyHandlers(); // Set up the copy-to-clipboard functionality
     setupGradebookLinkHandler(); // Set up the gradebook link handler
-    showWelcomeMessageIfNeeded(); // Show the welcome message on first run
     
     // Add event listener for the new comment button
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
@@ -110,30 +111,82 @@ Office.onReady((info) => {
 });
 
 /**
- * Checks if the user has seen the welcome message and shows it if not.
+ * Loads all user settings from the document.
  */
-function showWelcomeMessageIfNeeded() {
-    const hasSeen = Office.context.document.settings.get(CONSTANTS.WELCOME_MESSAGE_KEY);
-
-    if (!hasSeen) {
-        const modal = document.getElementById(CONSTANTS.WELCOME_MODAL);
-        const closeButton = document.getElementById(CONSTANTS.CLOSE_WELCOME_MODAL);
-
-        if (modal && closeButton) {
-            modal.classList.remove("hidden");
-
-            closeButton.addEventListener("click", () => {
-                modal.classList.add("hidden");
-                Office.context.document.settings.set(CONSTANTS.WELCOME_MESSAGE_KEY, true);
-                Office.context.document.settings.saveAsync((asyncResult) => {
-                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                        console.error("Failed to save welcome message setting: " + asyncResult.error.message);
-                    } else {
-                        console.log("Welcome message setting saved.");
-                    }
-                });
-            });
+function loadUserSettings() {
+    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
+    if (settingsString) {
+        try {
+            settings = JSON.parse(settingsString);
+        } catch (e) {
+            console.error("Error parsing settings:", e);
+            settings = {};
         }
+    }
+    
+    // Ensure userProfile object exists
+    if (!settings.userProfile) {
+        settings.userProfile = {};
+    }
+
+    // Load user name
+    if (settings.userProfile.name) {
+        currentUserName = settings.userProfile.name;
+    } else {
+        currentUserName = Office.context.displayName;
+    }
+    
+    // Show welcome message if needed
+    if (!settings.userProfile.hasSeenWelcomeMessage) {
+        showWelcomeMessage();
+    }
+}
+
+/**
+ * Saves all user settings to the document.
+ */
+function saveUserSettings() {
+    Office.context.document.settings.set(CONSTANTS.SETTINGS_KEY, JSON.stringify(settings));
+    Office.context.document.settings.saveAsync((asyncResult) => {
+        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+            console.error("Failed to save settings: " + asyncResult.error.message);
+        } else {
+            console.log("Settings saved successfully.");
+        }
+    });
+}
+
+
+/**
+ * Shows the welcome message and handles saving the user's name.
+ */
+function showWelcomeMessage() {
+    const modal = document.getElementById(CONSTANTS.WELCOME_MODAL);
+    const closeButton = document.getElementById(CONSTANTS.CLOSE_WELCOME_MODAL);
+    const firstNameInput = document.getElementById(CONSTANTS.FIRST_NAME_INPUT);
+    const lastNameInput = document.getElementById(CONSTANTS.LAST_NAME_INPUT);
+
+    if (modal && closeButton && firstNameInput && lastNameInput) {
+        modal.classList.remove("hidden");
+
+        closeButton.addEventListener("click", () => {
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+
+            if (firstName && lastName) {
+                currentUserName = `${firstName} ${lastName}`;
+                
+                settings.userProfile.name = currentUserName;
+                settings.userProfile.hasSeenWelcomeMessage = true;
+                
+                saveUserSettings();
+                
+                modal.classList.add("hidden");
+            } else {
+                // Optionally, show an error message
+                alert("Please enter both your first and last name.");
+            }
+        });
     }
 }
 
