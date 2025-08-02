@@ -122,55 +122,63 @@ function loadUserSettings() {
             console.error("Error parsing document settings:", e);
         }
     }
-    
-    // Load user-specific settings (user profile) from roaming settings
-    Office.context.roamingSettings.refreshAsync(function(asyncResult) {
-        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-            const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
-            if (userSettingsString) {
-                try {
-                    settings.userProfile = JSON.parse(userSettingsString);
-                } catch (e) {
-                    console.error("Error parsing user settings:", e);
-                }
-            }
-        } else {
-            console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
-        }
 
-        // Ensure userProfile object exists
+    const finalizeSetup = () => {
+        // This part runs after attempting to load roaming settings or if they are unavailable
         if (!settings.userProfile) {
             settings.userProfile = {};
         }
-
-        // Set user name, falling back to Office display name
         if (settings.userProfile.name) {
             currentUserName = settings.userProfile.name;
         } else {
             currentUserName = Office.context.displayName;
         }
-        
-        // Show welcome dialog if this user hasn't seen it
         if (!settings.userProfile.hasSeenWelcomeMessage) {
             showWelcomeDialogIfNeeded();
         }
-    });
+    };
+    
+    // Load user-specific settings (user profile) from roaming settings, if available
+    if (Office.context.roamingSettings) {
+        Office.context.roamingSettings.refreshAsync(function(asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
+                if (userSettingsString) {
+                    try {
+                        settings.userProfile = JSON.parse(userSettingsString);
+                    } catch (e) {
+                        console.error("Error parsing user settings:", e);
+                    }
+                }
+            } else {
+                console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
+            }
+            finalizeSetup(); // Call finalize here after async operation
+        });
+    } else {
+        console.warn("Roaming settings not supported in this environment.");
+        finalizeSetup(); // Call finalize here if roaming settings are not available
+    }
 }
 
 
 /**
- * Saves user-specific settings to roaming settings.
+ * Saves user-specific settings to roaming settings, if available.
  */
 function saveUserSettings() {
-    const userProfile = settings.userProfile;
-    Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfile));
-    Office.context.roamingSettings.saveAsync((asyncResult) => {
-        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-            console.error("Failed to save user settings: " + asyncResult.error.message);
-        } else {
-            console.log("User settings saved successfully.");
-        }
-    });
+    if (Office.context.roamingSettings) {
+        const userProfile = settings.userProfile;
+        Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfile));
+        Office.context.roamingSettings.saveAsync((asyncResult) => {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Failed to save user settings: " + asyncResult.error.message);
+            } else {
+                console.log("User settings saved successfully.");
+            }
+        });
+    } else {
+        console.warn("Roaming settings not supported. User profile settings will not be saved.");
+    }
 }
 
 
