@@ -11,8 +11,36 @@ Office.onReady((info) => {
 
         // Add event listeners
         document.getElementById("save-button").onclick = saveSettings;
+        document.getElementById("reset-button").onclick = resetSettings;
     }
 });
+
+function resetSettings() {
+    // This function will remove the settings key from the document,
+    // then reload the UI which will populate it with the default values.
+    Office.context.document.settings.remove(CONSTANTS.SETTINGS_KEY);
+    Office.context.document.settings.saveAsync(function (asyncResult) {
+        const status = document.getElementById('status');
+        if (asyncResult.status == Office.AsyncResultStatus.Failed) {
+            console.log('Settings failed to reset. Error: ' + asyncResult.error.message);
+            status.textContent = 'Error resetting settings.';
+            status.className = 'status-message status-error visible';
+        } else {
+            console.log('Settings reset successfully.');
+            status.textContent = 'Settings have been reset to default.';
+            status.className = 'status-message status-success visible';
+            
+            // Reload the UI with default settings
+            loadSettingsAndPopulateUI();
+        }
+        // Clear the message after a few seconds
+        setTimeout(() => {
+            status.textContent = '';
+            status.className = 'status-message';
+        }, 3000);
+    });
+}
+
 
 function loadSettingsAndPopulateUI() {
     const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
@@ -23,6 +51,9 @@ function loadSettingsAndPopulateUI() {
             console.error("Error parsing settings:", e);
             settings = {}; // Reset to avoid issues
         }
+    } else {
+        // If no settings string, initialize with empty object
+        settings = {};
     }
     
     // Ensure settings objects exist with defaults
