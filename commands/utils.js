@@ -96,15 +96,20 @@ export function parseDate(dateValue) {
         return dateValue;
     }
     if (typeof dateValue === 'number') {
-        // Excel serial date number. This calculation correctly handles timezone offset.
+        // Excel serial date number
         if (dateValue > 25569) { // Corresponds to 1970-01-01
-            const utcDate = new Date(Date.UTC(0, 0, dateValue - 1));
-            return utcDate;
+            // This calculation gives milliseconds since Unix epoch (UTC)
+            const utcMilliseconds = (dateValue - 25569) * 86400 * 1000;
+            const date = new Date(utcMilliseconds);
+            // We need to create a new date that represents the same "wall clock" time in the local timezone.
+            // We do this by adding the timezone offset that was implicitly subtracted by `new Date()`.
+            const correctedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
+            return correctedDate;
         }
     }
     if (typeof dateValue === 'string') {
-        // For strings like "MM/DD/YYYY", treat them as local time, not UTC, to prevent timezone shifts.
-        // Replace dashes with slashes for better cross-browser compatibility.
+        // For strings like "MM/DD/YYYY", treat them as local time.
+        // The jsDateToExcelDate function will handle converting this to the correct serial number.
         const parsed = new Date(dateValue.replace(/-/g, '/'));
         if (!isNaN(parsed.getTime())) {
             return parsed;
@@ -115,15 +120,25 @@ export function parseDate(dateValue) {
 
 
 /**
- * Converts a JavaScript Date object to an Excel serial date number.
+ * Converts a JavaScript Date object to an Excel serial date number, preserving the "wall clock" time.
  * @param {Date} date The JavaScript Date object.
  * @returns {number} The Excel serial date number.
  */
 export function jsDateToExcelDate(date) {
-    // Get the timezone offset in minutes and convert it to days.
-    const timezoneOffset = date.getTimezoneOffset() / 1440; // 1440 minutes in a day
-    // The core calculation + the timezone offset to align with UTC-based Excel serial numbers.
-    return (date.getTime() / 86400000) + 25569 + timezoneOffset;
+    // Create a UTC timestamp using the local components of the date (year, month, day, time).
+    // This effectively strips the timezone information and preserves the "wall clock" time.
+    const utcTimestamp = Date.UTC(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        date.getHours(),
+        date.getMinutes(),
+        date.getSeconds(),
+        date.getMilliseconds()
+    );
+    // Convert UTC timestamp to Excel serial number.
+    // The 25569 is the day difference between Excel epoch (1900) and Unix epoch (1970).
+    return (utcTimestamp / 86400000) + 25569;
 }
 
 
