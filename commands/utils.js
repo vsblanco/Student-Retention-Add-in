@@ -84,26 +84,28 @@ export async function getSettings() {
 
 
 /**
- * Parses a date value from various possible formats (Date object, string, Excel serial number).
+ * Parses a date value from various possible formats (Date object, string, Excel serial number),
+ * correcting for timezone issues.
  * @param {*} dateValue The value to parse.
  * @returns {Date|null} A valid Date object or null.
  */
 export function parseDate(dateValue) {
     if (!dateValue) return null;
     if (dateValue instanceof Date) {
-        // ExcelJS can return Date objects for .xlsx
+        // ExcelJS can return Date objects for .xlsx. These are usually timezone-aware.
         return dateValue;
     }
     if (typeof dateValue === 'number') {
-        // Excel serial date number
-        // Check for a reasonable range to avoid treating random numbers as dates
+        // Excel serial date number. This calculation correctly handles timezone offset.
         if (dateValue > 25569) { // Corresponds to 1970-01-01
-            return new Date((dateValue - 25569) * 86400 * 1000);
+            const utcDate = new Date(Date.UTC(0, 0, dateValue - 1));
+            return utcDate;
         }
     }
     if (typeof dateValue === 'string') {
-        // Try parsing common date formats
-        const parsed = new Date(dateValue);
+        // For strings like "MM/DD/YYYY", treat them as local time, not UTC, to prevent timezone shifts.
+        // Replace dashes with slashes for better cross-browser compatibility.
+        const parsed = new Date(dateValue.replace(/-/g, '/'));
         if (!isNaN(parsed.getTime())) {
             return parsed;
         }
@@ -111,13 +113,17 @@ export function parseDate(dateValue) {
     return null;
 }
 
+
 /**
  * Converts a JavaScript Date object to an Excel serial date number.
  * @param {Date} date The JavaScript Date object.
  * @returns {number} The Excel serial date number.
  */
 export function jsDateToExcelDate(date) {
-    return (date.getTime() / 86400000) + 25569;
+    // Get the timezone offset in minutes and convert it to days.
+    const timezoneOffset = date.getTimezoneOffset() / 1440; // 1440 minutes in a day
+    // The core calculation + the timezone offset to align with UTC-based Excel serial numbers.
+    return (date.getTime() / 86400000) + 25569 + timezoneOffset;
 }
 
 
