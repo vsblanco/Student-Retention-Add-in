@@ -26,24 +26,8 @@ function loadSettingsAndPopulateUI() {
         }
     }
     
-    // Load user-specific settings (per-user)
-    Office.context.roamingSettings.refreshAsync(function(asyncResult) {
-        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-            const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
-            if (userSettingsString) {
-                try {
-                    settings.userProfile = JSON.parse(userSettingsString);
-                } catch (e) {
-                    console.error("Error parsing user settings:", e);
-                }
-            }
-        } else {
-            console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
-        }
-
-        // --- After loading both, ensure defaults and populate UI ---
-        
-        // Ensure settings objects exist with defaults
+    const finalizeSetup = () => {
+        // This part runs after attempting to load roaming settings or if they are unavailable
         if (!settings.createlda) {
             settings.createlda = {
                 daysOutFilter: 6,
@@ -70,7 +54,29 @@ function loadSettingsAndPopulateUI() {
 
         // Load and render the LDA column selector
         loadAndRenderLdaColumns();
-    });
+    };
+
+    // Load user-specific settings (per-user) from roaming settings, if available
+    if (Office.context.roamingSettings) {
+        Office.context.roamingSettings.refreshAsync(function(asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+                const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
+                if (userSettingsString) {
+                    try {
+                        settings.userProfile = JSON.parse(userSettingsString);
+                    } catch (e) {
+                        console.error("Error parsing user settings:", e);
+                    }
+                }
+            } else {
+                console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
+            }
+            finalizeSetup(); // Call finalize here after async operation
+        });
+    } else {
+        console.warn("Roaming settings not supported in this environment.");
+        finalizeSetup(); // Call finalize here if roaming settings are not available
+    }
 }
 
 
@@ -156,26 +162,36 @@ function saveSettings() {
     };
 
     // --- Save to respective locations ---
+    const savePromises = [];
+
+    // Always save document settings
     Office.context.document.settings.set(CONSTANTS.DOC_SETTINGS_KEY, JSON.stringify(docSettings));
-    Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfileSettings));
+    savePromises.push(new Promise(resolve => Office.context.document.settings.saveAsync(resolve)));
+
+    // Conditionally save user settings if roaming settings are available
+    if (Office.context.roamingSettings) {
+        Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfileSettings));
+        savePromises.push(new Promise(resolve => Office.context.roamingSettings.saveAsync(resolve)));
+    } else {
+        console.warn("Roaming settings not supported. User profile settings will not be saved.");
+    }
 
     // Save both and provide a single status update
-    Promise.all([
-        new Promise(resolve => Office.context.document.settings.saveAsync(resolve)),
-        new Promise(resolve => Office.context.roamingSettings.saveAsync(resolve))
-    ]).then(results => {
+    Promise.all(savePromises).then(results => {
         const status = document.getElementById('status');
-        const docResult = results[0];
-        const userResult = results[1];
+        const allSucceeded = results.every(res => res.status === Office.AsyncResultStatus.Succeeded);
 
-        if (docResult.status === Office.AsyncResultStatus.Succeeded && userResult.status === Office.AsyncResultStatus.Succeeded) {
+        if (allSucceeded) {
             console.log('All settings saved successfully.');
             status.textContent = 'Settings saved!';
             status.className = 'status-message status-success visible';
         } else {
             console.log('One or more settings failed to save.');
-            if (docResult.status !== Office.AsyncResultStatus.Succeeded) console.error('Document settings error: ' + docResult.error.message);
-            if (userResult.status !== Office.AsyncResultStatus.Succeeded) console.error('User settings error: ' + userResult.error.message);
+            results.forEach(res => {
+                if (res.status !== Office.AsyncResultStatus.Succeeded) {
+                    console.error('Settings error: ' + res.error.message);
+                }
+            });
             status.textContent = 'Error saving settings.';
             status.className = 'status-message status-error visible';
         }
