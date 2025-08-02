@@ -191,6 +191,23 @@ input:checked + .slider:before {
     background-color: #1d4ed8;
 }
 
+.button-danger {
+    background-color: #ef4444; /* red-500 */
+    color: white;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+    transition: background-color 0.2s;
+    margin-top: 10px;
+}
+
+.button-danger:hover {
+    background-color: #dc2626; /* red-600 */
+}
+
 .status-message {
     margin-top: 15px;
     padding: 10px;
