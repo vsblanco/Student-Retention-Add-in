@@ -1,7 +1,8 @@
 let settings = {};
 const CONSTANTS = {
     MASTER_LIST_SHEET: "Master List",
-    SETTINGS_KEY: "studentRetentionSettings"
+    DOC_SETTINGS_KEY: "studentRetentionDocSettings",
+    USER_SETTINGS_KEY: "studentRetentionUserSettings"
 };
 
 Office.onReady((info) => {
@@ -15,45 +16,63 @@ Office.onReady((info) => {
 });
 
 function loadSettingsAndPopulateUI() {
-    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
-    if (settingsString) {
+    // Load document-specific settings (shared)
+    const docSettingsString = Office.context.document.settings.get(CONSTANTS.DOC_SETTINGS_KEY);
+    if (docSettingsString) {
         try {
-            settings = JSON.parse(settingsString);
+            settings.createlda = JSON.parse(docSettingsString).createlda;
         } catch (e) {
-            console.error("Error parsing settings:", e);
-            settings = {}; // Reset to avoid issues
+            console.error("Error parsing document settings:", e);
         }
     }
     
-    // Ensure settings objects exist with defaults
-    if (!settings.createlda) {
-        settings.createlda = {
-            daysOutFilter: 6,
-            includeFailingList: true,
-            hideLeftoverColumns: true,
-            treatEmptyGradesAsZero: false, // Default to false
-            ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
-        };
-    }
-    if (!settings.userProfile) {
-        settings.userProfile = {
-            name: Office.context.displayName || ""
-        };
-    }
+    // Load user-specific settings (per-user)
+    Office.context.roamingSettings.refreshAsync(function(asyncResult) {
+        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+            const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
+            if (userSettingsString) {
+                try {
+                    settings.userProfile = JSON.parse(userSettingsString);
+                } catch (e) {
+                    console.error("Error parsing user settings:", e);
+                }
+            }
+        } else {
+            console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
+        }
 
-    // Populate UI for User Profile
-    document.getElementById("user-full-name").value = settings.userProfile.name || "";
+        // --- After loading both, ensure defaults and populate UI ---
+        
+        // Ensure settings objects exist with defaults
+        if (!settings.createlda) {
+            settings.createlda = {
+                daysOutFilter: 6,
+                includeFailingList: true,
+                hideLeftoverColumns: true,
+                treatEmptyGradesAsZero: false,
+                ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
+            };
+        }
+        if (!settings.userProfile) {
+            settings.userProfile = {
+                name: Office.context.displayName || ""
+            };
+        }
 
-    // Populate UI for LDA Report settings
-    document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
-    document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
-    document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
-    document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
+        // Populate UI for User Profile
+        document.getElementById("user-full-name").value = settings.userProfile.name || "";
 
+        // Populate UI for LDA Report settings
+        document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
+        document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
+        document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
+        document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
 
-    // Load and render the LDA column selector
-    loadAndRenderLdaColumns();
+        // Load and render the LDA column selector
+        loadAndRenderLdaColumns();
+    });
 }
+
 
 async function loadAndRenderLdaColumns() {
     const includedContainer = document.getElementById("included-columns");
@@ -120,35 +139,47 @@ function createColumnItem(header) {
 
 
 function saveSettings() {
-    // Get values from the UI
-    // User Profile
-    settings.userProfile.name = document.getElementById("user-full-name").value.trim();
+    // --- Gather Document-Specific Settings ---
+    const createldaSettings = {
+        daysOutFilter: parseInt(document.getElementById("days-out-filter").value, 10),
+        includeFailingList: document.getElementById("include-failing-list").checked,
+        hideLeftoverColumns: document.getElementById("hide-leftover-columns").checked,
+        treatEmptyGradesAsZero: document.getElementById("treat-empty-grades-as-zero").checked,
+        ldaColumns: Array.from(document.querySelectorAll("#included-columns .column-item")).map(item => item.dataset.columnName)
+    };
+    const docSettings = { createlda: createldaSettings };
+    
+    // --- Gather User-Specific Settings ---
+    const userProfileSettings = {
+        ...settings.userProfile, // Preserve existing properties like hasSeenWelcomeMessage
+        name: document.getElementById("user-full-name").value.trim()
+    };
 
-    // LDA Report
-    settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
-    settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
-    settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
-    settings.createlda.treatEmptyGradesAsZero = document.getElementById("treat-empty-grades-as-zero").checked;
+    // --- Save to respective locations ---
+    Office.context.document.settings.set(CONSTANTS.DOC_SETTINGS_KEY, JSON.stringify(docSettings));
+    Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfileSettings));
 
-    // Get selected columns from the "Included" list, preserving their order
-    const includedContainer = document.getElementById("included-columns");
-    const selectedItems = includedContainer.querySelectorAll(".column-item");
-    settings.createlda.ldaColumns = Array.from(selectedItems).map(item => item.dataset.columnName);
-
-    // Save the updated settings object
-    Office.context.document.settings.set(CONSTANTS.SETTINGS_KEY, JSON.stringify(settings));
-    Office.context.document.settings.saveAsync(function (asyncResult) {
+    // Save both and provide a single status update
+    Promise.all([
+        new Promise(resolve => Office.context.document.settings.saveAsync(resolve)),
+        new Promise(resolve => Office.context.roamingSettings.saveAsync(resolve))
+    ]).then(results => {
         const status = document.getElementById('status');
-        if (asyncResult.status == Office.AsyncResultStatus.Failed) {
-            console.log('Settings failed to save. Error: ' + asyncResult.error.message);
-            status.textContent = 'Error saving settings.';
-            status.className = 'status-message status-error visible';
-        } else {
-            console.log('Settings saved successfully.');
+        const docResult = results[0];
+        const userResult = results[1];
+
+        if (docResult.status === Office.AsyncResultStatus.Succeeded && userResult.status === Office.AsyncResultStatus.Succeeded) {
+            console.log('All settings saved successfully.');
             status.textContent = 'Settings saved!';
             status.className = 'status-message status-success visible';
+        } else {
+            console.log('One or more settings failed to save.');
+            if (docResult.status !== Office.AsyncResultStatus.Succeeded) console.error('Document settings error: ' + docResult.error.message);
+            if (userResult.status !== Office.AsyncResultStatus.Succeeded) console.error('User settings error: ' + userResult.error.message);
+            status.textContent = 'Error saving settings.';
+            status.className = 'status-message status-error visible';
         }
-        // Clear the message after a few seconds
+        
         setTimeout(() => {
             status.textContent = '';
             status.className = 'status-message';
