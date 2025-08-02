@@ -8,59 +8,35 @@
 
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    
+    <!-- SortableJS for drag-and-drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* --- START: Added CSS for text selection control --- */
-        body {
-            -webkit-user-select: none; /* Safari */
-            -ms-user-select: none;     /* IE 10 and IE 11 */
-            user-select: none;         /* Standard syntax */
-        }
-
-        #log-container {
-            -webkit-user-select: text; /* Safari */
-            -ms-user-select: text;     /* IE 10 and IE 11 */
-            user-select: text;         /* Standard syntax */
-        }
-        /* --- END: Added CSS for text selection control --- */
-
-        .collapsible-log {
-            cursor: pointer;
-        }
-        .collapsible-log .arrow {
-            display: inline-block;
-            width: 0;
-            height: 0;
-            border-top: 4px solid transparent;
-            border-bottom: 4px solid transparent;
-            border-left: 6px solid #9ca3af; /* gray-400 */
-            transition: transform 0.2s ease-in-out;
-            margin-right: 8px;
-        }
-        .collapsible-log.open .arrow {
-            transform: rotate(90deg);
-        }
-        .collapsible-content {
-            display: none;
-            padding-left: 20px;
-            border-left: 1px solid #4b5563; /* gray-600 */
-            margin-left: 3px;
-            margin-top: 4px;
-        }
-        .collapsible-content.show {
-            display: block;
-        }
+        body { -webkit-user-select: none; -ms-user-select: none; user-select: none; }
+        #log-container { -webkit-user-select: text; -ms-user-select: text; user-select: text; }
+        .collapsible-log { cursor: pointer; }
+        .collapsible-log .arrow { display: inline-block; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid #9ca3af; transition: transform 0.2s ease-in-out; margin-right: 8px; }
+        .collapsible-log.open .arrow { transform: rotate(90deg); }
+        .collapsible-content { display: none; padding-left: 20px; border-left: 1px solid #4b5563; margin-left: 3px; margin-top: 4px; }
+        .collapsible-content.show { display: block; }
+        .columns-management { display: flex; gap: 20px; }
+        .column-box { flex: 1; }
+        .column-box h3 { font-size: 1rem; color: #374151; margin-top: 0; margin-bottom: 12px; }
+        .column-list { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; min-height: 200px; height: 300px; overflow-y: auto; }
+        .column-item { background-color: #ffffff; padding: 10px; margin-bottom: 8px; border: 1px solid #d1d5db; border-radius: 4px; cursor: grab; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .column-item:last-child { margin-bottom: 0; }
+        .sortable-ghost { opacity: 0.4; background-color: #dbeafe; }
     </style>
 </head>
 <body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
 
-    <div id="initial-view" class="w-full max-w-sm text-center">
+    <!-- Initial File Import View -->
+    <div id="initial-view" class="w-full max-w-sm text-center hidden">
         <label for="file-input" class="block text-sm font-medium text-gray-700 mb-2">Select a file to import:</label>
-        
         <input type="file" id="file-input" accept=".csv, .xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-0"/>
-        
         <div id="button-container" class="mt-4 space-y-2">
             <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Master List
@@ -72,16 +48,43 @@
         <p id="status" class="text-xs text-gray-500 mt-2 h-4"></p>
     </div>
 
+    <!-- No Master List View -->
+    <div id="no-master-list-view" class="w-full max-w-sm text-center hidden">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">"Master List" Not Found</h3>
+        <p class="text-sm text-gray-600 mb-4">A "Master List" sheet is required to import data. Would you like to create one now?</p>
+        <button id="create-master-list-prompt-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
+            Create Master List
+        </button>
+    </div>
+
+    <!-- Column Mapping View -->
+    <div id="column-mapping-view" class="w-full max-w-2xl hidden">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2 text-center">Configure "Master List" Columns</h3>
+        <p class="text-sm text-gray-600 mb-4 text-center">Drag and drop to include and order the columns for your new sheet.</p>
+        <div class="columns-management">
+            <div class="column-box">
+                <h3>Included Columns</h3>
+                <div id="included-columns" class="column-list"></div>
+            </div>
+            <div class="column-box">
+                <h3>Available Columns</h3>
+                <div id="available-columns" class="column-list"></div>
+            </div>
+        </div>
+        <button id="finalize-sheet-button" class="mt-4 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200">
+            Finalize Sheet
+        </button>
+        <p id="creation-status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
+    </div>
+
+    <!-- Progress View -->
     <div id="progress-view" class="w-full max-w-sm text-left hidden">
         <h3 class="text-lg font-semibold text-gray-800 mb-2">Importing Data...</h3>
-        <div id="log-container" class="w-full h-48 p-2 bg-gray-800 text-white font-mono text-xs rounded-md overflow-y-auto border border-gray-600">
-            <!-- Log messages will be appended here -->
-        </div>
+        <div id="log-container" class="w-full h-48 p-2 bg-gray-800 text-white font-mono text-xs rounded-md overflow-y-auto border border-gray-600"></div>
         <button id="close-button" class="mt-4 w-full bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200 hidden">
             Close
         </button>
     </div>
-
 
     <script>
         let selectedFile = null;
@@ -89,21 +92,46 @@
         Office.onReady(() => {
             console.log("Import dialog HTML page loaded successfully.");
 
+            // Views
             const initialView = document.getElementById("initial-view");
             const progressView = document.getElementById("progress-view");
+            const noMasterListView = document.getElementById("no-master-list-view");
+            const columnMappingView = document.getElementById("column-mapping-view");
+
+            // Elements
             const logContainer = document.getElementById("log-container");
             const closeButton = document.getElementById("close-button");
-
             const fileInput = document.getElementById("file-input");
             const updateMasterButton = document.getElementById("update-master-list-button");
             const updateGradesButton = document.getElementById("update-grades-button");
             const status = document.getElementById("status");
+            const createMasterListPromptButton = document.getElementById("create-master-list-prompt-button");
+            const finalizeSheetButton = document.getElementById("finalize-sheet-button");
+            const creationStatus = document.getElementById("creation-status");
+            const includedColumnsContainer = document.getElementById("included-columns");
+            const availableColumnsContainer = document.getElementById("available-columns");
 
-            // Disable buttons initially
+            // Initial state
             updateMasterButton.disabled = true;
             updateGradesButton.disabled = true;
+            
+            // Tell parent we're ready
+            Office.context.ui.messageParent(JSON.stringify({ type: 'dialogReady' }));
 
-            // Listen for file selection
+            // --- Event Listeners ---
+
+            createMasterListPromptButton.addEventListener('click', () => {
+                noMasterListView.classList.add('hidden');
+                columnMappingView.classList.remove('hidden');
+                setupColumnMapping();
+            });
+
+            finalizeSheetButton.addEventListener('click', () => {
+                creationStatus.textContent = "Creating sheet...";
+                const includedColumns = Array.from(includedColumnsContainer.querySelectorAll(".column-item")).map(item => item.dataset.columnName);
+                Office.context.ui.messageParent(JSON.stringify({ type: 'createMasterList', columns: includedColumns }));
+            });
+
             fileInput.addEventListener('change', () => {
                 updateMasterButton.classList.add('hidden');
                 updateGradesButton.classList.add('hidden');
@@ -116,11 +144,7 @@
                     
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        Office.context.ui.messageParent(JSON.stringify({
-                            type: 'fileSelected',
-                            fileName: selectedFile.name,
-                            data: event.target.result
-                        }));
+                        Office.context.ui.messageParent(JSON.stringify({ type: 'fileSelected', fileName: selectedFile.name, data: event.target.result }));
                     };
                     reader.readAsDataURL(selectedFile);
                 } else {
@@ -133,16 +157,12 @@
                 if (selectedFile) {
                     initialView.classList.add('hidden');
                     progressView.classList.remove('hidden');
-                    logContainer.innerHTML = ''; // Clear previous logs
+                    logContainer.innerHTML = '';
                     closeButton.classList.add('hidden');
 
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        Office.context.ui.messageParent(JSON.stringify({
-                            type: actionType,
-                            fileName: selectedFile.name,
-                            data: event.target.result
-                        }));
+                        Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: selectedFile.name, data: event.target.result }));
                     };
                     reader.readAsDataURL(selectedFile);
                 }
@@ -165,65 +185,106 @@
                 }
             });
 
-            // Listen for messages from the parent (commands.js)
+            // --- Functions ---
+            
+            function createColumnItem(header) {
+                const colItem = document.createElement("div");
+                colItem.className = "column-item";
+                colItem.textContent = header;
+                colItem.dataset.columnName = header;
+                return colItem;
+            }
+
+            function setupColumnMapping() {
+                const defaultIncluded = ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'Grade', 'Phone', 'Outreach'];
+                const defaultAvailable = ['Gender', 'Course', 'Course ID', 'Course Last Access', 'Primary Phone', 'Other Phone', 'Student Email', 'Personal Email', 'Grade Book', 'Course Missing Assignments', 'Course Zero Assignments'];
+                
+                includedColumnsContainer.innerHTML = '';
+                availableColumnsContainer.innerHTML = '';
+
+                defaultIncluded.forEach(header => includedColumnsContainer.appendChild(createColumnItem(header)));
+                defaultAvailable.forEach(header => availableColumnsContainer.appendChild(createColumnItem(header)));
+
+                const sharedSortableOptions = { group: 'shared-columns', animation: 150, ghostClass: 'sortable-ghost' };
+                new Sortable(includedColumnsContainer, sharedSortableOptions);
+                new Sortable(availableColumnsContainer, sharedSortableOptions);
+            }
+
+            // --- Parent Message Handler ---
+
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
                 
-                if (message.type === 'log' || message.type === 'error' || message.type === 'complete') {
-                    const logEntry = document.createElement('div');
+                switch (message.type) {
+                    case 'masterListCheckResult':
+                        if (message.exists) {
+                            initialView.classList.remove('hidden');
+                        } else {
+                            noMasterListView.classList.remove('hidden');
+                        }
+                        break;
                     
-                    if (message.details && message.details.length > 0) {
-                        logEntry.className = 'collapsible-log';
-                        logEntry.innerHTML = `<span class="arrow"></span><span>${message.status}</span>`;
+                    case 'masterListCreated':
+                        creationStatus.textContent = "Sheet created successfully!";
+                        setTimeout(() => {
+                            columnMappingView.classList.add('hidden');
+                            initialView.classList.remove('hidden');
+                        }, 1500);
+                        break;
 
-                        const content = document.createElement('div');
-                        content.className = 'collapsible-content';
-                        message.details.forEach(detail => {
-                            const p = document.createElement('p');
-                            p.textContent = detail;
-                            p.className = 'text-gray-400';
-                            content.appendChild(p);
-                        });
-                        logContainer.appendChild(logEntry);
-                        logContainer.appendChild(content);
+                    case 'log':
+                    case 'error':
+                    case 'complete':
+                        // ... existing log handling logic ...
+                        const logEntry = document.createElement('div');
+                        if (message.details && message.details.length > 0) {
+                            logEntry.className = 'collapsible-log';
+                            logEntry.innerHTML = `<span class="arrow"></span><span>${message.status}</span>`;
+                            const content = document.createElement('div');
+                            content.className = 'collapsible-content';
+                            message.details.forEach(detail => {
+                                const p = document.createElement('p');
+                                p.textContent = detail;
+                                p.className = 'text-gray-400';
+                                content.appendChild(p);
+                            });
+                            logContainer.appendChild(logEntry);
+                            logContainer.appendChild(content);
+                        } else {
+                            logEntry.textContent = message.status;
+                        }
+                        if (message.type === 'error') {
+                            logEntry.className += ' text-red-400';
+                        } else if (message.type === 'complete') {
+                            logEntry.className += ' text-green-400 font-bold';
+                            closeButton.classList.remove('hidden');
+                        } else {
+                            logEntry.className += ' text-gray-300';
+                        }
+                        if (!message.details || message.details.length === 0) {
+                           logContainer.appendChild(logEntry);
+                        }
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                        break;
 
-                    } else {
-                        logEntry.textContent = message.status;
-                    }
-
-                    if (message.type === 'error') {
-                        logEntry.className += ' text-red-400';
-                    } else if (message.type === 'complete') {
-                        logEntry.className += ' text-green-400 font-bold';
-                        closeButton.classList.remove('hidden');
-                    } else {
-                        logEntry.className += ' text-gray-300';
-                    }
-
-                    if (!message.details || message.details.length === 0) {
-                       logContainer.appendChild(logEntry);
-                    }
-                    
-                    logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
-                } else {
-                    // Initial file check response
-                    status.textContent = message.status || "";
-
-                    if (message.canUpdateMaster) {
-                        updateMasterButton.classList.remove('hidden');
-                        updateMasterButton.disabled = false;
-                    } else {
-                        updateMasterButton.classList.add('hidden');
-                        updateMasterButton.disabled = true;
-                    }
-
-                    if (message.canUpdateGrades) {
-                        updateGradesButton.classList.remove('hidden');
-                        updateGradesButton.disabled = false;
-                    } else {
-                        updateGradesButton.classList.add('hidden');
-                        updateGradesButton.disabled = true;
-                    }
+                    default:
+                        // Initial file check response
+                        status.textContent = message.status || "";
+                        if (message.canUpdateMaster) {
+                            updateMasterButton.classList.remove('hidden');
+                            updateMasterButton.disabled = false;
+                        } else {
+                            updateMasterButton.classList.add('hidden');
+                            updateMasterButton.disabled = true;
+                        }
+                        if (message.canUpdateGrades) {
+                            updateGradesButton.classList.remove('hidden');
+                            updateGradesButton.disabled = false;
+                        } else {
+                            updateGradesButton.classList.add('hidden');
+                            updateGradesButton.disabled = true;
+                        }
+                        break;
                 }
             });
         });
