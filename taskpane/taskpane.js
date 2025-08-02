@@ -32,7 +32,9 @@ const CONSTANTS = {
     COPY_PERSONAL_EMAIL: "copy-personal-email",
 
     // Settings Keys
-    SETTINGS_KEY: "studentRetentionSettings",
+    DOC_SETTINGS_KEY: "studentRetentionDocSettings",
+    USER_SETTINGS_KEY: "studentRetentionUserSettings",
+
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
@@ -108,47 +110,65 @@ Office.onReady((info) => {
 });
 
 /**
- * Loads all user settings from the document.
+ * Loads settings from both the document (shared) and roaming settings (per-user).
  */
 function loadUserSettings() {
-    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
-    if (settingsString) {
+    // Load document-specific settings (e.g., LDA report columns)
+    const docSettingsString = Office.context.document.settings.get(CONSTANTS.DOC_SETTINGS_KEY);
+    if (docSettingsString) {
         try {
-            settings = JSON.parse(settingsString);
+            settings.createlda = JSON.parse(docSettingsString).createlda;
         } catch (e) {
-            console.error("Error parsing settings:", e);
-            settings = {};
+            console.error("Error parsing document settings:", e);
         }
     }
     
-    // Ensure userProfile object exists
-    if (!settings.userProfile) {
-        settings.userProfile = {};
-    }
+    // Load user-specific settings (user profile) from roaming settings
+    Office.context.roamingSettings.refreshAsync(function(asyncResult) {
+        if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+            const userSettingsString = Office.context.roamingSettings.get(CONSTANTS.USER_SETTINGS_KEY);
+            if (userSettingsString) {
+                try {
+                    settings.userProfile = JSON.parse(userSettingsString);
+                } catch (e) {
+                    console.error("Error parsing user settings:", e);
+                }
+            }
+        } else {
+            console.error("Failed to refresh roaming settings: " + asyncResult.error.message);
+        }
 
-    // Load user name
-    if (settings.userProfile.name) {
-        currentUserName = settings.userProfile.name;
-    } else {
-        currentUserName = Office.context.displayName;
-    }
-    
-    // Show welcome message if needed
-    if (!settings.userProfile.hasSeenWelcomeMessage) {
-        showWelcomeDialogIfNeeded();
-    }
+        // Ensure userProfile object exists
+        if (!settings.userProfile) {
+            settings.userProfile = {};
+        }
+
+        // Set user name, falling back to Office display name
+        if (settings.userProfile.name) {
+            currentUserName = settings.userProfile.name;
+        } else {
+            currentUserName = Office.context.displayName;
+        }
+        
+        // Show welcome dialog if this user hasn't seen it
+        if (!settings.userProfile.hasSeenWelcomeMessage) {
+            showWelcomeDialogIfNeeded();
+        }
+    });
 }
 
+
 /**
- * Saves all user settings to the document.
+ * Saves user-specific settings to roaming settings.
  */
 function saveUserSettings() {
-    Office.context.document.settings.set(CONSTANTS.SETTINGS_KEY, JSON.stringify(settings));
-    Office.context.document.settings.saveAsync((asyncResult) => {
+    const userProfile = settings.userProfile;
+    Office.context.roamingSettings.set(CONSTANTS.USER_SETTINGS_KEY, JSON.stringify(userProfile));
+    Office.context.roamingSettings.saveAsync((asyncResult) => {
         if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-            console.error("Failed to save settings: " + asyncResult.error.message);
+            console.error("Failed to save user settings: " + asyncResult.error.message);
         } else {
-            console.log("Settings saved successfully.");
+            console.log("User settings saved successfully.");
         }
     });
 }
@@ -184,7 +204,7 @@ function processWelcomeDialogMessage(arg) {
         currentUserName = message.name;
         settings.userProfile.name = currentUserName;
         settings.userProfile.hasSeenWelcomeMessage = true;
-        saveUserSettings();
+        saveUserSettings(); // This now saves to roaming settings
         
         if (welcomeDialog) {
             welcomeDialog.close();
