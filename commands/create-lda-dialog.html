@@ -9,7 +9,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
-    <div id="confirmation-view" class="w-full max-w-sm text-center">
+    
+    <!-- Confirmation View (if Master List exists) -->
+    <div id="confirmation-view" class="w-full max-w-sm text-center hidden">
         <h3 class="text-lg font-semibold text-gray-800 mb-2">Create New LDA Sheet</h3>
         <p class="text-sm text-gray-600 mb-4">Are you sure you want to create a new sheet for today's date?</p>
         <div class="flex space-x-2">
@@ -23,26 +25,49 @@
         <p id="status" class="text-xs text-gray-500 mt-2 h-4"></p>
     </div>
 
+    <!-- No Master List View -->
+    <div id="no-master-list-view" class="w-full max-w-sm text-center hidden">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">"Master List" Not Found</h3>
+        <p class="text-sm text-gray-600 mb-4">
+            A "Master List" sheet is required to create an LDA report.
+        </p>
+        <p class="text-sm text-gray-600 mb-4">
+            Please click the "Import Data" button in the ribbon to create one.
+        </p>
+        <div class="flex justify-center items-center p-4 bg-gray-200 rounded-lg">
+            <img src="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png" alt="Import Data Icon" class="w-8 h-8 mr-3">
+            <span class="font-semibold text-gray-700">Import Data</span>
+        </div>
+        <button id="close-no-master-button" class="mt-4 w-full bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
+            Close
+        </button>
+    </div>
+
+
     <script>
         Office.onReady(() => {
+            const confirmationView = document.getElementById('confirmation-view');
+            const noMasterListView = document.getElementById('no-master-list-view');
+            
             const createButton = document.getElementById('create-button');
             const cancelButton = document.getElementById('cancel-button');
+            const closeNoMasterButton = document.getElementById('close-no-master-button');
             const status = document.getElementById('status');
 
-            createButton.addEventListener('click', () => {
-                status.textContent = "Creating sheet...";
-                createButton.disabled = true;
-                cancelButton.disabled = true;
-                Office.context.ui.messageParent(JSON.stringify({ type: 'createLdaSheet' }));
-            });
+            // Tell parent we are ready
+            Office.context.ui.messageParent(JSON.stringify({ type: 'dialogReady' }));
 
-            cancelButton.addEventListener('click', () => {
-                Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
-            });
-            
+            // Listen for messages from parent
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
-                if (message.type === 'creationSuccess') {
+                
+                if (message.type === 'masterListCheckResult') {
+                    if (message.exists) {
+                        confirmationView.classList.remove('hidden');
+                    } else {
+                        noMasterListView.classList.remove('hidden');
+                    }
+                } else if (message.type === 'creationSuccess') {
                     status.textContent = "Sheet created successfully!";
                     status.className = 'text-xs text-green-600 font-semibold mt-2 h-4';
                     setTimeout(() => {
@@ -55,6 +80,20 @@
                     cancelButton.disabled = false;
                 }
             });
+
+            createButton.addEventListener('click', () => {
+                status.textContent = "Creating sheet...";
+                createButton.disabled = true;
+                cancelButton.disabled = true;
+                Office.context.ui.messageParent(JSON.stringify({ type: 'createLdaSheet' }));
+            });
+
+            const closeDialog = () => {
+                Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
+            };
+
+            cancelButton.addEventListener('click', closeDialog);
+            closeNoMasterButton.addEventListener('click', closeDialog);
         });
     </script>
 </body>
