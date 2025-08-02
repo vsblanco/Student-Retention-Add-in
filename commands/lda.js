@@ -6,13 +6,32 @@ import { CONSTANTS, getSettings, findColumnIndex } from './utils.js';
 let createLdaDialog = null;
 
 /**
- * Opens a dialog to confirm creating a new LDA sheet.
+ * Checks for Master List and opens a dialog to guide the user.
  * @param {Office.AddinCommands.Event} event
  */
-export function openCreateLdaDialog(event) {
+export async function openCreateLdaDialog(event) {
+    let masterListExists = false;
+    try {
+        await Excel.run(async (context) => {
+            // Check if "Master List" sheet exists
+            const sheetNames = context.workbook.worksheets.load("items/name");
+            await context.sync();
+            for (let i = 0; i < sheetNames.items.length; i++) {
+                if (sheetNames.items[i].name === CONSTANTS.MASTER_LIST_SHEET) {
+                    masterListExists = true;
+                    break;
+                }
+            }
+        });
+    } catch (error) {
+        console.error("Error checking for Master List sheet:", error);
+        // Assume it doesn't exist if there's an error
+        masterListExists = false;
+    }
+
     Office.context.ui.displayDialogAsync(
         'https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html',
-        { height: 25, width: 30, displayInIframe: true },
+        { height: 35, width: 35, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
                 console.error("Create LDA dialog failed to open: " + asyncResult.error.message);
@@ -20,11 +39,23 @@ export function openCreateLdaDialog(event) {
                 return;
             }
             createLdaDialog = asyncResult.value;
-            createLdaDialog.addEventHandler(Office.EventType.DialogMessageReceived, processCreateLdaMessage);
+            createLdaDialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
+                 const messageFromDialog = JSON.parse(arg.message);
+                 if (messageFromDialog.type === 'dialogReady') {
+                     // Dialog is ready, now send the result of our check.
+                     if (createLdaDialog) {
+                        createLdaDialog.messageChild(JSON.stringify({ type: 'masterListCheckResult', exists: masterListExists }));
+                     }
+                 } else {
+                     // Handle other messages like 'createLdaSheet' or 'closeDialog'
+                     processCreateLdaMessage(arg);
+                 }
+            });
             event.completed();
         }
     );
 }
+
 
 /**
  * Handles messages from the create LDA dialog.
