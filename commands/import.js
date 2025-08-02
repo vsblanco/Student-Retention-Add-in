@@ -29,7 +29,7 @@ function sendMessageToDialog(status, type = 'log', details = []) {
 export function openImportDialog(event) {
     Office.context.ui.displayDialogAsync(
         'https://vsblanco.github.io/Student-Retention-Add-in/commands/import-dialog.html',
-        { height: 45, width: 35, displayInIframe: true },
+        { height: 55, width: 45, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
                 console.error("Dialog failed to open: " + asyncResult.error.message);
@@ -51,6 +51,12 @@ async function processImportMessage(arg) {
     const message = JSON.parse(arg.message);
 
     switch (message.type) {
+        case 'dialogReady':
+            await handleDialogReady();
+            break;
+        case 'createMasterList':
+            await handleCreateMasterList(message.columns);
+            break;
         case 'fileSelected':
             await handleFileSelected(message);
             break;
@@ -72,6 +78,58 @@ async function processImportMessage(arg) {
             }
     }
 }
+
+/**
+ * Checks if the "Master List" sheet exists and tells the dialog which UI to show.
+ */
+async function handleDialogReady() {
+    try {
+        await Excel.run(async (context) => {
+            const sheetNames = context.workbook.worksheets.load("items/name");
+            await context.sync();
+            let masterListExists = false;
+            for (let i = 0; i < sheetNames.items.length; i++) {
+                if (sheetNames.items[i].name === CONSTANTS.MASTER_LIST_SHEET) {
+                    masterListExists = true;
+                    break;
+                }
+            }
+            if (importDialog) {
+                importDialog.messageChild(JSON.stringify({ type: 'masterListCheckResult', exists: masterListExists }));
+            }
+        });
+    } catch (error) {
+        console.error("Error checking for Master List:", error);
+        if (importDialog) {
+            importDialog.messageChild(JSON.stringify({ type: 'masterListCheckResult', exists: false }));
+        }
+    }
+}
+
+/**
+ * Creates the "Master List" sheet with the specified columns.
+ * @param {string[]} columns An array of column header names.
+ */
+async function handleCreateMasterList(columns) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.add(CONSTANTS.MASTER_LIST_SHEET);
+            const headerRange = sheet.getRangeByIndexes(0, 0, 1, columns.length);
+            headerRange.values = [columns];
+            headerRange.format.font.bold = true;
+            sheet.getUsedRange().format.autofitColumns();
+            sheet.activate();
+            await context.sync();
+        });
+        if (importDialog) {
+            importDialog.messageChild(JSON.stringify({ type: 'masterListCreated' }));
+        }
+    } catch (error) {
+        console.error("Error creating Master List:", error);
+        // We don't have a specific UI for this error in the dialog, but we could add one.
+    }
+}
+
 
 /**
  * Handles the file selection event from the dialog.
