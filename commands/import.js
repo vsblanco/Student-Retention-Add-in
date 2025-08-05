@@ -374,6 +374,7 @@ async function handleUpdateMaster(message) {
             sendMessageToDialog(`Preparing to write ${allStudentsToWrite.length} students...`);
             const dataToWrite = [];
             const formulasToWrite = []; // Array to hold formulas
+            let gradebookLinksPreservedCount = 0;
 
             allStudentsToWrite.forEach(userRow => {
                 const newRow = new Array(masterHeaders.length).fill("");
@@ -403,6 +404,9 @@ async function handleUpdateMaster(message) {
                             // Set a display value for the hyperlink
                             const match = existingData.gradebookFormula.match(/, *"([^"]+)"\)/i);
                             newRow[masterGradebookColIdx] = match ? match[1] : "Gradebook";
+                            
+                            gradebookLinksPreservedCount++;
+                            sendMessageToDialog(`Preserving Gradebook link for ${studentName}`, 'log', [`- Formula: ${existingData.gradebookFormula}`]);
                         }
                     }
                 }
@@ -431,12 +435,17 @@ async function handleUpdateMaster(message) {
                 formulasToWrite.push(formulaRow);
             });
 
+            if (gradebookLinksPreservedCount > 0) {
+                sendMessageToDialog(`A total of ${gradebookLinksPreservedCount} Gradebook links were preserved.`);
+            }
+
             // 5. Write all data and formulas in separate batches
             sendMessageToDialog("Writing data and formulas to the sheet...");
             const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
             writeRange.values = dataToWrite;
             writeRange.formulas = formulasToWrite; // Write formulas
             await context.sync();
+            sendMessageToDialog("Data write completed.");
 
             // 6. Highlight new students
             if (newStudents.length > 0) {
