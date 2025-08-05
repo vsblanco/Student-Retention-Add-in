@@ -1,5 +1,4 @@
 let settings = {};
-let userBeforeEdit = ""; // To track the original name being edited
 const CONSTANTS = {
     MASTER_LIST_SHEET: "Master List",
     SETTINGS_KEY: "studentRetentionSettings"
@@ -13,20 +12,8 @@ Office.onReady((info) => {
         // Add event listeners
         document.getElementById("save-button").onclick = saveSettings;
         document.getElementById("reset-button").onclick = resetSettings;
-        document.getElementById("current-user-select").onchange = handleUserSwitch;
     }
 });
-
-function handleUserSwitch() {
-    const dropdown = document.getElementById("current-user-select");
-    const editInput = document.getElementById("edit-user-name");
-    const selectedUser = dropdown.value;
-    
-    editInput.value = selectedUser;
-    userBeforeEdit = selectedUser; // Update the user being edited
-    renderUserList(); // Re-render to update the "Current User" badge
-}
-
 
 function resetSettings() {
     // This function will remove the settings key from the document,
@@ -96,23 +83,6 @@ function loadSettingsAndPopulateUI() {
         settings.userProfile.userList.push(currentName);
     }
 
-    userBeforeEdit = currentName; // Store the name for editing purposes
-
-    // Populate UI for User Profile
-    const userDropdown = document.getElementById("current-user-select");
-    userDropdown.innerHTML = '';
-    settings.userProfile.userList.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user;
-        option.textContent = user;
-        if (user === currentName) {
-            option.selected = true;
-        }
-        userDropdown.appendChild(option);
-    });
-    document.getElementById("edit-user-name").value = currentName;
-
-
     // Populate UI for LDA Report settings
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
     document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
@@ -129,40 +99,72 @@ function renderUserList() {
     const container = document.getElementById('user-list-container');
     container.innerHTML = ''; // Clear existing list
     const userList = (settings.userProfile && settings.userProfile.userList) || [];
-    const currentUser = document.getElementById("current-user-select").value;
+    const activeUser = settings.userProfile.name || Office.context.displayName;
 
     if (userList.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm">No users found.</p>';
+        container.innerHTML = '<p class="text-gray-500 text-sm">No users found. Save settings to add the current user.</p>';
         return;
     }
 
     userList.forEach(user => {
         const userItem = document.createElement('div');
-        userItem.className = 'setting-item';
+        userItem.className = 'user-item';
         
-        const userName = document.createElement('span');
-        userName.textContent = user;
-        userItem.appendChild(userName);
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'active-user';
+        radio.value = user;
+        radio.id = `user-radio-${user.replace(/\s+/g, '-')}`;
+        radio.checked = (user === activeUser);
+        
+        const label = document.createElement('label');
+        label.htmlFor = radio.id;
+        label.textContent = user;
 
-        if (user !== currentUser) {
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = 'Remove';
-            deleteButton.className = 'button-danger-small'; // A new smaller button style
-            deleteButton.onclick = () => {
-                // Remove user from settings and re-render
-                settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== user);
-                loadSettingsAndPopulateUI(); // Reload everything to ensure consistency
-            };
-            userItem.appendChild(deleteButton);
-        } else {
-             const currentUserBadge = document.createElement('span');
-             currentUserBadge.textContent = 'Current User';
-             currentUserBadge.className = 'current-user-badge'; // A new badge style
-             userItem.appendChild(currentUserBadge);
-        }
+        const actions = document.createElement('div');
+        actions.className = 'user-item-actions';
+        
+        const editButton = document.createElement('button');
+        editButton.className = 'icon-button';
+        editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+        editButton.onclick = () => editUser(user);
+        
+        const removeButton = document.createElement('button');
+        removeButton.className = 'icon-button';
+        removeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+        removeButton.onclick = () => removeUser(user);
+        removeButton.disabled = (user === activeUser);
 
+        userItem.appendChild(radio);
+        userItem.appendChild(label);
+        actions.appendChild(editButton);
+        actions.appendChild(removeButton);
+        userItem.appendChild(actions);
         container.appendChild(userItem);
     });
+}
+
+function editUser(oldName) {
+    const newName = prompt("Enter the new name for this user:", oldName);
+    if (newName && newName.trim() !== "" && newName !== oldName) {
+        const userList = settings.userProfile.userList;
+        const index = userList.indexOf(oldName);
+        if (index > -1) {
+            userList[index] = newName;
+            // If the edited user was the active user, update the active name
+            if (settings.userProfile.name === oldName) {
+                settings.userProfile.name = newName;
+            }
+            saveSettings(); // Save and reload the UI
+        }
+    }
+}
+
+function removeUser(nameToRemove) {
+    if (confirm(`Are you sure you want to remove "${nameToRemove}" from the list?`)) {
+        settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== nameToRemove);
+        saveSettings(); // Save and reload the UI
+    }
 }
 
 
@@ -232,29 +234,12 @@ function createColumnItem(header) {
 
 function saveSettings() {
     // --- User Profile ---
-    const editedName = document.getElementById("edit-user-name").value.trim();
-    const selectedUser = document.getElementById("current-user-select").value;
-
-    // If the name was edited, update it in the user list
-    if (editedName && editedName !== userBeforeEdit) {
-        const userList = settings.userProfile.userList || [];
-        const index = userList.indexOf(userBeforeEdit);
-        if (index > -1) {
-            userList[index] = editedName;
-        }
-        // If the edited user was the current user, update the current user name
-        if (settings.userProfile.name === userBeforeEdit) {
-            settings.userProfile.name = editedName;
-        }
+    // The user list is modified directly by the edit/remove functions.
+    // We just need to find the selected active user.
+    const selectedRadio = document.querySelector('input[name="active-user"]:checked');
+    if (selectedRadio) {
+        settings.userProfile.name = selectedRadio.value;
     }
-    
-    // Set the active user based on the dropdown selection
-    settings.userProfile.name = selectedUser;
-    // If the name was edited, the dropdown value might be stale, so we find the new name
-    if (editedName && editedName !== userBeforeEdit && selectedUser === userBeforeEdit) {
-        settings.userProfile.name = editedName;
-    }
-
 
     // --- LDA Report ---
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
