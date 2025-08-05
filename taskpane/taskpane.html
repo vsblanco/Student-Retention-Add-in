@@ -141,7 +141,7 @@
         </div>
     </div>
 
-    <!-- User Selection Modal (New) -->
+    <!-- User Selection Modal -->
     <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
         <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
             <div class="mt-3 text-center">
@@ -159,6 +159,22 @@
                         Confirm
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Picker Modal -->
+    <div id="date-picker-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-4 w-72">
+            <div id="calendar-header" class="flex justify-between items-center mb-2">
+                <button id="prev-month" class="p-1 rounded-full hover:bg-gray-200">&lt;</button>
+                <h3 id="month-year" class="font-bold text-lg"></h3>
+                <button id="next-month" class="p-1 rounded-full hover:bg-gray-200">&gt;</button>
+            </div>
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="cancel-date" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                <button id="confirm-date" class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700" disabled>Confirm</button>
             </div>
         </div>
     </div>
