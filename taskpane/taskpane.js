@@ -734,7 +734,13 @@ async function displayStudentHistory(studentId) {
                        dateText = comment.timestamp;
                        if (!isNaN(dateText) && dateText > 25569) {
                            const date = new Date((dateText - 25569) * 86400 * 1000);
-                           dateText = date.toLocaleString();
+                           dateText = date.toLocaleString('en-US', {
+                               year: 'numeric',
+                               month: 'numeric',
+                               day: 'numeric',
+                               hour: 'numeric',
+                               minute: '2-digit'
+                           });
                        }
                     } else {
                         dateText = 'Unknown Time';
