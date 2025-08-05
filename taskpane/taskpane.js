@@ -157,6 +157,9 @@ function loadUserSettings() {
     if (!settings.userProfile.userList) {
         settings.userProfile.userList = [];
     }
+    if (!settings.taskpane) {
+        settings.taskpane = { smartNavigation: true };
+    }
 
     // Load user name from settings, fallback to Office context display name
     currentUserName = settings.userProfile.name || Office.context.displayName;
@@ -243,36 +246,44 @@ function processWelcomeDialogMessage(arg) {
 function setupTabs() {
     const tabDetails = document.getElementById(CONSTANTS.TAB_DETAILS);
     const tabHistory = document.getElementById(CONSTANTS.TAB_HISTORY);
+    
+    tabDetails.addEventListener("click", () => switchTab(CONSTANTS.TAB_DETAILS));
+    tabHistory.addEventListener("click", () => switchTab(CONSTANTS.TAB_HISTORY));
+}
+
+/**
+ * Handles the logic for switching between tabs.
+ * @param {string} tabId The ID of the tab to switch to.
+ */
+function switchTab(tabId) {
+    const tabDetails = document.getElementById(CONSTANTS.TAB_DETAILS);
+    const tabHistory = document.getElementById(CONSTANTS.TAB_HISTORY);
     const panelDetails = document.getElementById(CONSTANTS.PANEL_DETAILS);
     const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
 
-    tabDetails.addEventListener("click", () => {
+    if (tabId === CONSTANTS.TAB_DETAILS) {
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelDetails.classList.remove("hidden");
         panelHistory.classList.add("hidden");
-    });
-
-    tabHistory.addEventListener("click", () => {
+    } else { // Switching to History
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
         
-        // Enable or disable submit button based on whether a student is selected
         if (submitButton) {
             submitButton.disabled = !currentStudentId;
         }
 
-        // Fetch and display history when the tab is clicked
         if (currentStudentId) {
             displayStudentHistory(currentStudentId);
         } else {
             const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
             historyContent.innerHTML = '<p class="text-gray-500">Select a student row to see their history.</p>';
         }
-    });
+    }
 }
 
 
@@ -347,7 +358,7 @@ async function onSelectionChange() {
     try {
         await Excel.run(async (context) => {
             const selectedRange = context.workbook.getSelectedRange();
-            selectedRange.load(["rowIndex", "address"]);
+            selectedRange.load(["rowIndex", "columnIndex", "address"]);
             
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
@@ -396,6 +407,17 @@ async function onSelectionChange() {
                 personalEmail: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.personalEmail),
                 gradeBook: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook)
             };
+
+            // Smart Navigation Logic
+            if (settings.taskpane && settings.taskpane.smartNavigation !== false) {
+                const selectedCol = selectedRange.columnIndex;
+                if (selectedCol === colIdx.primaryPhone || selectedCol === colIdx.otherPhone) {
+                    switchTab(CONSTANTS.TAB_HISTORY);
+                } else {
+                    switchTab(CONSTANTS.TAB_DETAILS);
+                }
+            }
+
 
             const studentAvatar = document.getElementById(CONSTANTS.STUDENT_AVATAR);
             const studentNameDisplay = document.getElementById(CONSTANTS.STUDENT_NAME_DISPLAY);
