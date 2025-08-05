@@ -68,9 +68,21 @@ function loadSettingsAndPopulateUI() {
     }
     if (!settings.userProfile) {
         settings.userProfile = {
-            name: Office.context.displayName || ""
+            name: Office.context.displayName || "",
+            userList: [] // Initialize user list
         };
     }
+    // Handle older settings objects that might not have userList
+    if (!settings.userProfile.userList) {
+        settings.userProfile.userList = [];
+    }
+    
+    // Add current user to the list if not already present
+    const currentName = settings.userProfile.name || Office.context.displayName;
+    if (currentName && !settings.userProfile.userList.includes(currentName)) {
+        settings.userProfile.userList.push(currentName);
+    }
+
 
     // Populate UI for User Profile
     document.getElementById("user-full-name").value = settings.userProfile.name || "";
@@ -81,10 +93,52 @@ function loadSettingsAndPopulateUI() {
     document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
     document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
 
-
+    // Render the user list management UI
+    renderUserList();
     // Load and render the LDA column selector
     loadAndRenderLdaColumns();
 }
+
+function renderUserList() {
+    const container = document.getElementById('user-list-container');
+    container.innerHTML = ''; // Clear existing list
+    const userList = (settings.userProfile && settings.userProfile.userList) || [];
+    const currentLoggedInUser = settings.userProfile.name || Office.context.displayName;
+
+    if (userList.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm">No users found.</p>';
+        return;
+    }
+
+    userList.forEach(user => {
+        const userItem = document.createElement('div');
+        userItem.className = 'setting-item';
+        
+        const userName = document.createElement('span');
+        userName.textContent = user;
+        userItem.appendChild(userName);
+
+        if (user !== currentLoggedInUser) {
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Remove';
+            deleteButton.className = 'button-danger-small'; // A new smaller button style
+            deleteButton.onclick = () => {
+                // Remove user from settings and re-render
+                settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== user);
+                renderUserList(); // Re-render the list
+            };
+            userItem.appendChild(deleteButton);
+        } else {
+             const currentUserBadge = document.createElement('span');
+             currentUserBadge.textContent = 'Current User';
+             currentUserBadge.className = 'current-user-badge'; // A new badge style
+             userItem.appendChild(currentUserBadge);
+        }
+
+        container.appendChild(userItem);
+    });
+}
+
 
 async function loadAndRenderLdaColumns() {
     const includedContainer = document.getElementById("included-columns");
@@ -154,6 +208,8 @@ function saveSettings() {
     // Get values from the UI
     // User Profile
     settings.userProfile.name = document.getElementById("user-full-name").value.trim();
+    // The userList is already updated in the `settings` object by the delete buttons,
+    // so just saving the settings object is enough.
 
     // LDA Report
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
