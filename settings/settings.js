@@ -1,4 +1,5 @@
 let settings = {};
+let userBeforeEdit = ""; // To track the original name being edited
 const CONSTANTS = {
     MASTER_LIST_SHEET: "Master List",
     SETTINGS_KEY: "studentRetentionSettings"
@@ -12,8 +13,20 @@ Office.onReady((info) => {
         // Add event listeners
         document.getElementById("save-button").onclick = saveSettings;
         document.getElementById("reset-button").onclick = resetSettings;
+        document.getElementById("current-user-select").onchange = handleUserSwitch;
     }
 });
+
+function handleUserSwitch() {
+    const dropdown = document.getElementById("current-user-select");
+    const editInput = document.getElementById("edit-user-name");
+    const selectedUser = dropdown.value;
+    
+    editInput.value = selectedUser;
+    userBeforeEdit = selectedUser; // Update the user being edited
+    renderUserList(); // Re-render to update the "Current User" badge
+}
+
 
 function resetSettings() {
     // This function will remove the settings key from the document,
@@ -83,9 +96,22 @@ function loadSettingsAndPopulateUI() {
         settings.userProfile.userList.push(currentName);
     }
 
+    userBeforeEdit = currentName; // Store the name for editing purposes
 
     // Populate UI for User Profile
-    document.getElementById("user-full-name").value = settings.userProfile.name || "";
+    const userDropdown = document.getElementById("current-user-select");
+    userDropdown.innerHTML = '';
+    settings.userProfile.userList.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user;
+        option.textContent = user;
+        if (user === currentName) {
+            option.selected = true;
+        }
+        userDropdown.appendChild(option);
+    });
+    document.getElementById("edit-user-name").value = currentName;
+
 
     // Populate UI for LDA Report settings
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
@@ -103,7 +129,7 @@ function renderUserList() {
     const container = document.getElementById('user-list-container');
     container.innerHTML = ''; // Clear existing list
     const userList = (settings.userProfile && settings.userProfile.userList) || [];
-    const currentLoggedInUser = settings.userProfile.name || Office.context.displayName;
+    const currentUser = document.getElementById("current-user-select").value;
 
     if (userList.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-sm">No users found.</p>';
@@ -118,14 +144,14 @@ function renderUserList() {
         userName.textContent = user;
         userItem.appendChild(userName);
 
-        if (user !== currentLoggedInUser) {
+        if (user !== currentUser) {
             const deleteButton = document.createElement('button');
             deleteButton.textContent = 'Remove';
             deleteButton.className = 'button-danger-small'; // A new smaller button style
             deleteButton.onclick = () => {
                 // Remove user from settings and re-render
                 settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== user);
-                renderUserList(); // Re-render the list
+                loadSettingsAndPopulateUI(); // Reload everything to ensure consistency
             };
             userItem.appendChild(deleteButton);
         } else {
@@ -205,13 +231,32 @@ function createColumnItem(header) {
 
 
 function saveSettings() {
-    // Get values from the UI
-    // User Profile
-    settings.userProfile.name = document.getElementById("user-full-name").value.trim();
-    // The userList is already updated in the `settings` object by the delete buttons,
-    // so just saving the settings object is enough.
+    // --- User Profile ---
+    const editedName = document.getElementById("edit-user-name").value.trim();
+    const selectedUser = document.getElementById("current-user-select").value;
 
-    // LDA Report
+    // If the name was edited, update it in the user list
+    if (editedName && editedName !== userBeforeEdit) {
+        const userList = settings.userProfile.userList || [];
+        const index = userList.indexOf(userBeforeEdit);
+        if (index > -1) {
+            userList[index] = editedName;
+        }
+        // If the edited user was the current user, update the current user name
+        if (settings.userProfile.name === userBeforeEdit) {
+            settings.userProfile.name = editedName;
+        }
+    }
+    
+    // Set the active user based on the dropdown selection
+    settings.userProfile.name = selectedUser;
+    // If the name was edited, the dropdown value might be stale, so we find the new name
+    if (editedName && editedName !== userBeforeEdit && selectedUser === userBeforeEdit) {
+        settings.userProfile.name = editedName;
+    }
+
+
+    // --- LDA Report ---
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
     settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
@@ -234,6 +279,8 @@ function saveSettings() {
             console.log('Settings saved successfully.');
             status.textContent = 'Settings saved!';
             status.className = 'status-message status-success visible';
+            // Reload UI to reflect all changes consistently
+            loadSettingsAndPopulateUI();
         }
         // Clear the message after a few seconds
         setTimeout(() => {
