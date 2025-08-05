@@ -20,11 +20,25 @@
                 <h2>User Profile</h2>
             </div>
             <div class="setting-item">
-                <label for="user-full-name">Full Name:</label>
+                <label for="user-full-name">Your Full Name:</label>
                 <input type="text" id="user-full-name" placeholder="e.g., Jane Doe" style="width: 200px; text-align: left; padding-left: 8px;">
             </div>
              <p class="setting-description">
                 This name is used to sign your comments in the "Student History" sheet.
+            </p>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <!-- Users Icon SVG -->
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-users"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <h2>User List Management</h2>
+            </div>
+            <div id="user-list-container" class="space-y-2">
+                <!-- User list will be populated here by settings.js -->
+            </div>
+            <p class="setting-description" style="margin-top: 1rem;">
+                This list is populated automatically. You can remove users here, but you cannot remove yourself.
             </p>
         </div>
 
