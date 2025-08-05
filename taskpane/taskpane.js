@@ -30,6 +30,10 @@ const CONSTANTS = {
     COPY_OTHER_PHONE: "copy-other-phone",
     COPY_STUDENT_EMAIL: "copy-student-email",
     COPY_PERSONAL_EMAIL: "copy-personal-email",
+    USER_SELECTION_MODAL: "user-selection-modal",
+    USER_SELECTION_DROPDOWN: "user-selection-dropdown",
+    CONFIRM_USER_BUTTON: "confirm-user-button",
+    CANCEL_USER_BUTTON: "cancel-user-button",
 
     // Settings Keys
     SETTINGS_KEY: "studentRetentionSettings",
@@ -69,6 +73,7 @@ let assignedColorMap = {}; // To cache colors for assigned people
 let currentUserName = "Unknown User"; // Variable to store the current user's name
 let settings = {}; // To store all add-in settings
 let welcomeDialog = null;
+let sessionCommentUser = null; // Cache the user for the current session
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -84,6 +89,18 @@ Office.onReady((info) => {
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
     if (submitButton) {
         submitButton.addEventListener("click", submitNewComment);
+    }
+    
+    // Add listeners for the new user selection modal buttons
+    const confirmUserButton = document.getElementById(CONSTANTS.CONFIRM_USER_BUTTON);
+    if (confirmUserButton) {
+        confirmUserButton.addEventListener('click', handleUserSelection);
+    }
+    const cancelUserButton = document.getElementById(CONSTANTS.CANCEL_USER_BUTTON);
+    if (cancelUserButton) {
+        cancelUserButton.addEventListener('click', () => {
+            document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
+        });
     }
 
     // Add event handler for selection changes to update the task pane
@@ -122,16 +139,21 @@ function loadUserSettings() {
         }
     }
     
-    // Ensure userProfile object exists
+    // Ensure userProfile object and userList exist
     if (!settings.userProfile) {
-        settings.userProfile = {};
+        settings.userProfile = { userList: [] };
+    }
+    if (!settings.userProfile.userList) {
+        settings.userProfile.userList = [];
     }
 
-    // Load user name
-    if (settings.userProfile.name) {
-        currentUserName = settings.userProfile.name;
-    } else {
-        currentUserName = Office.context.displayName;
+    // Load user name from settings, fallback to Office context display name
+    currentUserName = settings.userProfile.name || Office.context.displayName;
+
+    // Add the current user to the list if not already present, then save
+    if (currentUserName && !settings.userProfile.userList.includes(currentUserName)) {
+        settings.userProfile.userList.push(currentUserName);
+        saveUserSettings();
     }
     
     // Show welcome message if needed
@@ -185,6 +207,15 @@ function processWelcomeDialogMessage(arg) {
         currentUserName = message.name;
         settings.userProfile.name = currentUserName;
         settings.userProfile.hasSeenWelcomeMessage = true;
+
+        // Add the new name to the user list if it's not already there
+        if (!settings.userProfile.userList) {
+            settings.userProfile.userList = [];
+        }
+        if (!settings.userProfile.userList.includes(currentUserName)) {
+            settings.userProfile.userList.push(currentUserName);
+        }
+        
         saveUserSettings();
         
         if (welcomeDialog) {
@@ -679,9 +710,57 @@ async function displayStudentHistory(studentId) {
 }
 
 /**
- * Submits a new comment to the "Student History" sheet.
+ * Main entry point for submitting a comment. Decides whether to prompt for a user or proceed.
  */
 async function submitNewComment() {
+    if (sessionCommentUser) {
+        await executeSubmitComment(sessionCommentUser);
+    } else {
+        promptForUserAndSubmit();
+    }
+}
+
+/**
+ * Displays a modal to ask the user who they are commenting as.
+ */
+function promptForUserAndSubmit() {
+    const modal = document.getElementById(CONSTANTS.USER_SELECTION_MODAL);
+    const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
+    
+    dropdown.innerHTML = ''; // Clear previous options
+
+    const userList = (settings.userProfile && settings.userProfile.userList) || [currentUserName];
+    userList.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user;
+        option.textContent = user;
+        if (user === currentUserName) {
+            option.selected = true; // Default to the current user
+        }
+        dropdown.appendChild(option);
+    });
+
+    modal.classList.remove('hidden');
+}
+
+/**
+ * Handles the user's selection from the modal, caches it, and proceeds with submission.
+ */
+function handleUserSelection() {
+    const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
+    const selectedUser = dropdown.value;
+    sessionCommentUser = selectedUser; // Cache the selection for the session
+    document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
+    
+    // Now that we have the user, proceed with the submission
+    executeSubmitComment(sessionCommentUser);
+}
+
+/**
+ * Executes the logic to add a new comment to the "Student History" sheet.
+ * @param {string} commentingUser The name of the user to attribute the comment to.
+ */
+async function executeSubmitComment(commentingUser) {
     const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
     const statusDisplay = document.getElementById(CONSTANTS.COMMENT_STATUS);
     const commentText = commentInput.value.trim();
@@ -719,17 +798,14 @@ async function submitNewComment() {
                 return;
             }
             
-            // Create an array with the correct number of columns
             const newRowData = new Array(headers.length).fill("");
             
-            // Populate the data based on found column indices
             newRowData[idCol] = currentStudentId;
             if (studentCol !== -1) newRowData[studentCol] = currentStudentName;
-            if (createdByCol !== -1) newRowData[createdByCol] = currentUserName;
+            if (createdByCol !== -1) newRowData[createdByCol] = commentingUser; // Use selected user
             if (tagCol !== -1) newRowData[tagCol] = "Comment";
             if (timestampCol !== -1) {
                 const now = new Date();
-                // Convert JS date to Excel date number
                 newRowData[timestampCol] = (now.getTime() / 86400000) + 25569;
             }
             newRowData[commentCol] = commentText;
@@ -737,7 +813,6 @@ async function submitNewComment() {
             const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, headers.length);
             newRowRange.values = [newRowData];
             
-            // Auto-fit columns for better readability
             historySheet.getUsedRange().getEntireColumn().format.autofitColumns();
             
             await context.sync();
@@ -745,10 +820,8 @@ async function submitNewComment() {
 
         commentInput.value = "";
         statusDisplay.textContent = "Comment added successfully!";
-        // Refresh the history view
         await displayStudentHistory(currentStudentId);
 
-        // Clear the status message after a few seconds
         setTimeout(() => {
             statusDisplay.textContent = "";
         }, 3000);
