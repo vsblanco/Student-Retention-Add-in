@@ -38,6 +38,7 @@ const CONSTANTS = {
     CONFIRM_USER_BUTTON: "confirm-user-button",
     CANCEL_USER_BUTTON: "cancel-user-button",
     TAG_PILLS_CONTAINER: "tag-pills-container",
+    TAG_PLACEHOLDER: "tag-placeholder",
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
 
@@ -84,8 +85,9 @@ let pendingOutreachAction = null; // Cache outreach data while waiting for user 
 let newCommentTags = []; // To store tags for the new comment
 
 const availableTags = [
-    { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
-    { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' }
+    { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
+    { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800' },
+    { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
 
 // The initialize function must be run each time a new page is loaded.
@@ -139,6 +141,14 @@ function initializeAddIn() {
         });
     }
     
+    // Add paste event listener to the comment input to automatically add the "Quote" tag
+    const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
+    if (commentInput) {
+        commentInput.addEventListener('paste', () => {
+            addTag('Quote');
+        });
+    }
+
     // Initialize the tagging UI
     setupTaggingUI();
 
@@ -973,30 +983,39 @@ function setupTaggingUI() {
 
 function renderTagPills() {
     const container = document.getElementById(CONSTANTS.TAG_PILLS_CONTAINER);
-    container.innerHTML = ''; // Clear existing pills
+    const placeholder = document.getElementById(CONSTANTS.TAG_PLACEHOLDER);
 
-    newCommentTags.forEach(tagName => {
-        const tagInfo = availableTags.find(t => t.name === tagName) || { bg: 'bg-gray-200', text: 'text-gray-800' };
-        const pill = document.createElement('span');
-        pill.className = `px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
-        pill.textContent = tagName;
+    // Remove existing pills, but not the placeholder
+    container.querySelectorAll('.tag-pill').forEach(pill => pill.remove());
 
-        const removeButton = document.createElement('button');
-        removeButton.type = 'button';
-        removeButton.innerHTML = '&times;';
-        removeButton.className = 'font-bold';
-        removeButton.onclick = () => removeTag(tagName);
+    if (newCommentTags.length === 0) {
+        placeholder.classList.remove('hidden');
+    } else {
+        placeholder.classList.add('hidden');
+        newCommentTags.forEach(tagName => {
+            const tagInfo = availableTags.find(t => t.name === tagName) || { bg: 'bg-gray-200', text: 'text-gray-800' };
+            const pill = document.createElement('span');
+            // Add a class to identify these as generated pills
+            pill.className = `tag-pill px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
+            pill.textContent = tagName;
 
-        pill.appendChild(removeButton);
-        container.appendChild(pill);
-    });
+            const removeButton = document.createElement('button');
+            removeButton.type = 'button';
+            removeButton.innerHTML = '&times;';
+            removeButton.className = 'font-bold';
+            removeButton.onclick = () => removeTag(tagName);
+
+            pill.appendChild(removeButton);
+            container.appendChild(pill);
+        });
+    }
 }
 
 function populateTagDropdown() {
     const dropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
     dropdown.innerHTML = '';
 
-    const tagsToShow = availableTags.filter(tag => !newCommentTags.includes(tag.name) && tag.name !== 'Outreach');
+    const tagsToShow = availableTags.filter(tag => !tag.hidden && !newCommentTags.includes(tag.name) && tag.name !== 'Outreach');
 
     if (tagsToShow.length === 0) {
         const noTagsItem = document.createElement('span');
@@ -1009,8 +1028,13 @@ function populateTagDropdown() {
     tagsToShow.forEach(tag => {
         const item = document.createElement('a');
         item.href = '#';
-        item.className = 'block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100';
-        item.textContent = tag.name;
+        item.className = 'block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100';
+        
+        const pill = document.createElement('span');
+        pill.className = `px-2 py-0.5 text-xs font-semibold rounded-full ${tag.bg} ${tag.text}`;
+        pill.textContent = tag.name;
+        item.appendChild(pill);
+
         item.onclick = (e) => {
             e.preventDefault();
             addTag(tag.name);
