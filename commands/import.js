@@ -289,19 +289,20 @@ async function handleUpdateMaster(message) {
             throw new Error("Imported file is missing a 'Student Name' column.");
         }
 
-        // 2. Read existing Master List to identify new students before clearing
+        // 2. Read existing Master List to identify new students and save gradebook links
         let newStudents = [];
         let existingStudents = [];
         let masterHeaders;
         let lowerCaseMasterHeaders;
         let masterStudentNameCol;
         let colMapping;
+        const masterDataMap = new Map();
 
         await Excel.run(async (context) => {
-            sendMessageToDialog("Reading current 'Master List' to identify new students...");
+            sendMessageToDialog("Reading current 'Master List' to identify new students and save links...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values");
+            usedRange.load("values, formulas"); // Load formulas as well
             await context.sync();
 
             if (usedRange.values.length < 1) {
@@ -311,20 +312,23 @@ async function handleUpdateMaster(message) {
             masterHeaders = usedRange.values[0].map(h => String(h || ''));
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
             sendMessageToDialog(`'Master List' headers: [${masterHeaders.join(', ')}]`);
 
             if (masterStudentNameCol === -1) {
                 throw new Error("'Master List' is missing a 'StudentName' column.");
             }
 
-            const masterNameMap = new Map();
             for (let i = 1; i < usedRange.values.length; i++) {
                 const name = usedRange.values[i][masterStudentNameCol];
                 if (name) {
-                    masterNameMap.set(normalizeName(name), i);
+                    const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
+                    masterDataMap.set(normalizeName(name), {
+                        gradebookFormula: gradebookFormula
+                    });
                 }
             }
-            sendMessageToDialog(`Created map of ${masterNameMap.size} students from 'Master List'.`);
+            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving gradebook links.`);
 
             colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
@@ -335,7 +339,7 @@ async function handleUpdateMaster(message) {
                 const studentName = userRow[userStudentNameCol];
                 const normalizedName = normalizeName(studentName);
 
-                if (masterNameMap.has(normalizedName)) {
+                if (masterDataMap.has(normalizedName)) {
                     existingStudents.push(userRow);
                 } else {
                     newStudents.push(userRow);
@@ -368,8 +372,13 @@ async function handleUpdateMaster(message) {
             }
 
             sendMessageToDialog(`Preparing to write ${allStudentsToWrite.length} students...`);
-            const dataToWrite = allStudentsToWrite.map(userRow => {
+            const dataToWrite = [];
+            const formulasToWrite = []; // Array to hold formulas
+
+            allStudentsToWrite.forEach(userRow => {
                 const newRow = new Array(masterHeaders.length).fill("");
+                const formulaRow = new Array(masterHeaders.length).fill(null);
+
                 for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
                     const masterColIdx = colMapping[userColIdx];
                     if (masterColIdx !== -1) {
@@ -381,39 +390,52 @@ async function handleUpdateMaster(message) {
                     }
                 }
                 
-                // *** FIX START: Timezone bug fix for LDA dates ***
+                // *** FEATURE START: Preserve Gradebook Link ***
+                const studentName = userRow[userStudentNameCol];
+                const normalizedName = normalizeName(studentName);
+                if (masterDataMap.has(normalizedName)) {
+                    const existingData = masterDataMap.get(normalizedName);
+                    if (existingData.gradebookFormula) {
+                        const masterGradebookColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+                        if (masterGradebookColIdx !== -1 && !newRow[masterGradebookColIdx]) {
+                             // Only restore if the import doesn't provide a new value.
+                            formulaRow[masterGradebookColIdx] = existingData.gradebookFormula;
+                            // Set a display value for the hyperlink
+                            const match = existingData.gradebookFormula.match(/, *"([^"]+)"\)/i);
+                            newRow[masterGradebookColIdx] = match ? match[1] : "Gradebook";
+                        }
+                    }
+                }
+                // *** FEATURE END ***
+
                 const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
                 if (userLdaColIdx !== -1) {
                     const ldaValue = userRow[userLdaColIdx];
                     const ldaDate = parseDate(ldaValue);
                     if (ldaDate) {
-                        // Get today's date at midnight UTC to ensure correct "days out" calculation
                         const today = new Date();
                         const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-                        
-                        // The ldaDate from parseDate is already a UTC date object (representing midnight UTC).
                         const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
                         const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
 
                         if (masterLdaColIdx !== -1) {
-                            // jsDateToExcelDate uses getTime(), which is UTC based, so this is correct.
                             newRow[masterLdaColIdx] = jsDateToExcelDate(ldaDate);
                         }
                         if (masterDaysOutColIdx !== -1) {
-                            // Calculate difference in days based on UTC timestamps to avoid timezone errors.
                             const daysOut = Math.floor((todayUTC.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
-                            newRow[masterDaysOutColIdx] = daysOut >= 0 ? daysOut : 0; // Ensure days out is not negative
+                            newRow[masterDaysOutColIdx] = daysOut >= 0 ? daysOut : 0;
                         }
                     }
                 }
-                // *** FIX END ***
-                return newRow;
+                dataToWrite.push(newRow);
+                formulasToWrite.push(formulaRow);
             });
 
-            // 5. Write all data in a single batch
-            sendMessageToDialog("Writing data to the sheet...");
+            // 5. Write all data and formulas in separate batches
+            sendMessageToDialog("Writing data and formulas to the sheet...");
             const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
             writeRange.values = dataToWrite;
+            writeRange.formulas = formulasToWrite; // Write formulas
             await context.sync();
 
             // 6. Highlight new students
