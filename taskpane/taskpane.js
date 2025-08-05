@@ -41,6 +41,7 @@ const CONSTANTS = {
     TAG_PLACEHOLDER: "tag-placeholder",
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
+    DATE_PICKER_MODAL: "date-picker-modal",
 
     // Settings Keys
     SETTINGS_KEY: "studentRetentionSettings",
@@ -83,9 +84,11 @@ let welcomeDialog = null;
 let sessionCommentUser = null; // Cache the user for the current session
 let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
 let newCommentTags = []; // To store tags for the new comment
+let selectedDate = null; // For the date picker
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
+    { name: 'LDA', bg: 'bg-green-100', text: 'text-green-800', requiresDate: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800' },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
@@ -151,6 +154,9 @@ function initializeAddIn() {
 
     // Initialize the tagging UI
     setupTaggingUI();
+    
+    // Initialize the date picker
+    setupDatePicker();
 
     // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
@@ -751,7 +757,8 @@ async function displayStudentHistory(studentId) {
                         const tags = String(comment.tag).split(',').map(t => t.trim());
                         tags.forEach(tagName => {
                             if (tagName && tagName.toLowerCase() !== 'comment') {
-                                const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagName.toLowerCase()) || 
+                                const tagPrefix = tagName.split(' ')[0];
+                                const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagPrefix.toLowerCase()) || 
                                                 { bg: 'bg-blue-100', text: 'text-blue-800' }; // Default color
                                 html += `<span class="px-2 py-0.5 font-semibold rounded-full ${tagInfo.bg} ${tagInfo.text}">${tagName}</span>`;
                             }
@@ -998,7 +1005,8 @@ function renderTagPills() {
     } else {
         placeholder.classList.add('hidden');
         newCommentTags.forEach(tagName => {
-            const tagInfo = availableTags.find(t => t.name === tagName) || { bg: 'bg-gray-200', text: 'text-gray-800' };
+            const tagPrefix = tagName.split(' ')[0];
+            const tagInfo = availableTags.find(t => t.name === tagPrefix) || { bg: 'bg-gray-200', text: 'text-gray-800' };
             const pill = document.createElement('span');
             // Add a class to identify these as generated pills
             pill.className = `tag-pill px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
@@ -1021,7 +1029,7 @@ function populateTagDropdown() {
     if (!dropdown) return; // Guard clause
     dropdown.innerHTML = '';
 
-    const tagsToShow = availableTags.filter(tag => !tag.hidden && !newCommentTags.includes(tag.name) && tag.name !== 'Outreach');
+    const tagsToShow = availableTags.filter(tag => !tag.hidden && !newCommentTags.some(t => t.startsWith(tag.name)));
 
     if (tagsToShow.length === 0) {
         const noTagsItem = document.createElement('span');
@@ -1043,7 +1051,11 @@ function populateTagDropdown() {
 
         item.onclick = (e) => {
             e.preventDefault();
-            addTag(tag.name);
+            if (tag.requiresDate) {
+                promptForLdaDate();
+            } else {
+                addTag(tag.name);
+            }
         };
         dropdown.appendChild(item);
     });
@@ -1066,6 +1078,92 @@ function removeTag(tagName) {
 
 
 // --- END: Tagging UI Functions ---
+
+// --- START: Date Picker Functions ---
+
+function setupDatePicker() {
+    let currentDate = new Date();
+    
+    document.getElementById('prev-month').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar(currentDate);
+    });
+
+    document.getElementById('next-month').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar(currentDate);
+    });
+    
+    document.getElementById('cancel-date').addEventListener('click', () => {
+        document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.add('hidden');
+    });
+    
+    document.getElementById('confirm-date').addEventListener('click', () => {
+        if (selectedDate) {
+            const formattedDate = `${selectedDate.getMonth() + 1}/${selectedDate.getDate()}/${String(selectedDate.getFullYear()).slice(-2)}`;
+            addTag(`LDA ${formattedDate}`);
+            document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.add('hidden');
+        }
+    });
+}
+
+function promptForLdaDate() {
+    selectedDate = null; // Reset selection
+    document.getElementById('confirm-date').disabled = true;
+    renderCalendar(new Date());
+    document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.remove('hidden');
+    document.getElementById(CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+}
+
+function renderCalendar(date) {
+    const grid = document.getElementById('calendar-grid');
+    const header = document.getElementById('month-year');
+    
+    grid.innerHTML = ''; // Clear old calendar
+    const month = date.getMonth();
+    const year = date.getFullYear();
+
+    header.textContent = `${date.toLocaleString('default', { month: 'long' })} ${year}`;
+
+    // Day headers
+    ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(day => {
+        const dayEl = document.createElement('div');
+        dayEl.className = 'font-bold text-gray-500';
+        dayEl.textContent = day;
+        grid.appendChild(dayEl);
+    });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Blank spaces for the first week
+    for (let i = 0; i < firstDay; i++) {
+        grid.appendChild(document.createElement('div'));
+    }
+
+    // Date cells
+    for (let i = 1; i <= daysInMonth; i++) {
+        const dayEl = document.createElement('button');
+        dayEl.textContent = i;
+        dayEl.className = 'p-1 rounded-full hover:bg-blue-200';
+        
+        const dayDate = new Date(year, month, i);
+        
+        if (selectedDate && dayDate.getTime() === selectedDate.getTime()) {
+            dayEl.classList.add('bg-blue-500', 'text-white');
+        }
+        
+        dayEl.onclick = () => {
+            selectedDate = dayDate;
+            document.getElementById('confirm-date').disabled = false;
+            renderCalendar(date); // Re-render to show selection
+        };
+        grid.appendChild(dayEl);
+    }
+}
+
+
+// --- END: Date Picker Functions ---
 
 
 // --- START: Code moved from commands.js ---
