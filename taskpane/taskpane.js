@@ -36,6 +36,7 @@ const CONSTANTS = {
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
+    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit"], // Phrases that trigger auto-highlight
     COLUMN_MAPPINGS: {
         name: ["studentname", "student name"],
         id: ["student id", "studentnumber", "student identifier"],
@@ -50,7 +51,7 @@ const CONSTANTS = {
         studentEmail: ["student email", "school email", "email"],
         personalEmail: ["personal email", "otheremail"],
         gradeBook: ["grade book", "gradebook"],
-        outreach: ["outreach"], // Added from commands.js
+        outreach: ["outreach"],
         comment: "comment",
         tag: "tag",
         timestamp: "timestamp",
@@ -809,6 +810,43 @@ function jsDateToExcelDate(date) {
 }
 
 /**
+ * Applies a yellow highlight to a specific row to mark it as contacted.
+ * This is a non-toggle version of the function in actions.js.
+ * @param {number} rowIndex The zero-based index of the row to highlight.
+ */
+async function applyContactedHighlight(rowIndex) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const headerRange = sheet.getRange("1:1").getUsedRange(true);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
+            const studentNameColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.name);
+            const outreachColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach);
+
+            if (studentNameColIndex === -1 || outreachColIndex === -1) {
+                console.error("Could not find 'StudentName' and/or 'Outreach' columns for highlighting.");
+                return;
+            }
+
+            const startCol = Math.min(studentNameColIndex, outreachColIndex);
+            const endCol = Math.max(studentNameColIndex, outreachColIndex);
+            const colCount = endCol - startCol + 1;
+
+            const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
+            highlightRange.format.fill.color = "yellow";
+            await context.sync();
+        });
+    } catch (error) {
+        errorHandler(error);
+    }
+}
+
+
+/**
  * Event handler for when the worksheet changes. Now handles bulk pastes.
  * @param {Excel.WorksheetChangedEventArgs} eventArgs
  */
@@ -869,7 +907,6 @@ async function onWorksheetChanged(eventArgs) {
                 const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
                                  String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
                 
-                // FIX: Add a check for changedRange.valuesBefore before accessing its properties
                 const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ?
                                  String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
 
@@ -880,6 +917,14 @@ async function onWorksheetChanged(eventArgs) {
                     if (studentId && studentName) {
                         console.log(`Processing pasted value for ${studentName}: "${newValue}"`);
                         await addOutreachComment(studentId, studentName, newValue);
+
+                        // Check for trigger phrases and apply highlight
+                        const lowerNewValue = newValue.toLowerCase();
+                        if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
+                            const rowIndex = changedRange.rowIndex + i;
+                            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+                            await applyContactedHighlight(rowIndex);
+                        }
                     }
                 }
             }
