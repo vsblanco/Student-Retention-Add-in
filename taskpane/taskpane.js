@@ -985,6 +985,11 @@ function renderTagPills() {
     const container = document.getElementById(CONSTANTS.TAG_PILLS_CONTAINER);
     const placeholder = document.getElementById(CONSTANTS.TAG_PLACEHOLDER);
 
+    // Add a guard clause to prevent errors if elements aren't found
+    if (!container || !placeholder) {
+        return;
+    }
+
     // Remove existing pills, but not the placeholder
     container.querySelectorAll('.tag-pill').forEach(pill => pill.remove());
 
@@ -1013,6 +1018,7 @@ function renderTagPills() {
 
 function populateTagDropdown() {
     const dropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+    if (!dropdown) return; // Guard clause
     dropdown.innerHTML = '';
 
     const tagsToShow = availableTags.filter(tag => !tag.hidden && !newCommentTags.includes(tag.name) && tag.name !== 'Outreach');
