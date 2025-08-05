@@ -381,28 +381,32 @@ async function handleUpdateMaster(message) {
                     }
                 }
                 
-                // Calculate Days Out and format LDA date
+                // *** FIX START: Timezone bug fix for LDA dates ***
                 const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
                 if (userLdaColIdx !== -1) {
                     const ldaValue = userRow[userLdaColIdx];
                     const ldaDate = parseDate(ldaValue);
                     if (ldaDate) {
+                        // Get today's date at midnight UTC to ensure correct "days out" calculation
                         const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        ldaDate.setHours(0, 0, 0, 0);
-
+                        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+                        
+                        // The ldaDate from parseDate is already a UTC date object (representing midnight UTC).
                         const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
                         const masterDaysOutColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
 
                         if (masterLdaColIdx !== -1) {
+                            // jsDateToExcelDate uses getTime(), which is UTC based, so this is correct.
                             newRow[masterLdaColIdx] = jsDateToExcelDate(ldaDate);
                         }
                         if (masterDaysOutColIdx !== -1) {
-                            const daysOut = Math.floor((today.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
-                            newRow[masterDaysOutColIdx] = daysOut;
+                            // Calculate difference in days based on UTC timestamps to avoid timezone errors.
+                            const daysOut = Math.floor((todayUTC.getTime() - ldaDate.getTime()) / (1000 * 60 * 60 * 24));
+                            newRow[masterDaysOutColIdx] = daysOut >= 0 ? daysOut : 0; // Ensure days out is not negative
                         }
                     }
                 }
+                // *** FIX END ***
                 return newRow;
             });
 
