@@ -362,34 +362,13 @@ async function onSelectionChange() {
             
             const sheet = context.workbook.worksheets.getActiveWorksheet();
             const usedRange = sheet.getUsedRange();
-            // Load formulas to detect hyperlinks
             usedRange.load(["rowIndex", "values", "formulas"]);
             
             await context.sync();
 
-            if (selectedRange.rowIndex === lastSelectedRow) {
-                return; 
-            }
-            lastSelectedRow = selectedRange.rowIndex;
-
-            if (selectedRange.rowIndex < usedRange.rowIndex) {
-                currentStudentId = null;
-                currentStudentName = null;
-                return;
-            }
-
-            const headers = usedRange.values[0];
-            const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
-
-            if (rowDataIndex < 0 || rowDataIndex >= usedRange.values.length) {
-                console.error("Selected row is outside the bounds of the used range data.");
-                currentStudentId = null;
-                currentStudentName = null;
-                return;
-            }
-            const rowData = usedRange.values[rowDataIndex];
-            const rowFormulas = usedRange.formulas[rowDataIndex];
+            // --- Smart Navigation & Data Loading Logic ---
             
+            const headers = usedRange.values[0];
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
             const colIdx = {
@@ -408,7 +387,7 @@ async function onSelectionChange() {
                 gradeBook: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook)
             };
 
-            // Smart Navigation Logic
+            // Smart Navigation: This runs on every selection change.
             if (settings.taskpane && settings.taskpane.smartNavigation !== false) {
                 const selectedCol = selectedRange.columnIndex;
                 if (selectedCol === colIdx.primaryPhone || selectedCol === colIdx.otherPhone) {
@@ -418,6 +397,27 @@ async function onSelectionChange() {
                 }
             }
 
+            // Data Loading: This part only runs if the row has changed.
+            if (selectedRange.rowIndex === lastSelectedRow) {
+                return; 
+            }
+            lastSelectedRow = selectedRange.rowIndex;
+
+            if (selectedRange.rowIndex < usedRange.rowIndex) {
+                currentStudentId = null;
+                currentStudentName = null;
+                return;
+            }
+
+            const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
+            if (rowDataIndex < 0 || rowDataIndex >= usedRange.values.length) {
+                console.error("Selected row is outside the bounds of the used range data.");
+                currentStudentId = null;
+                currentStudentName = null;
+                return;
+            }
+            const rowData = usedRange.values[rowDataIndex];
+            const rowFormulas = usedRange.formulas[rowDataIndex];
 
             const studentAvatar = document.getElementById(CONSTANTS.STUDENT_AVATAR);
             const studentNameDisplay = document.getElementById(CONSTANTS.STUDENT_NAME_DISPLAY);
