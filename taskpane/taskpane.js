@@ -74,6 +74,7 @@ let currentUserName = "Unknown User"; // Variable to store the current user's na
 let settings = {}; // To store all add-in settings
 let welcomeDialog = null;
 let sessionCommentUser = null; // Cache the user for the current session
+let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -100,6 +101,7 @@ Office.onReady((info) => {
     if (cancelUserButton) {
         cancelUserButton.addEventListener('click', () => {
             document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
+            pendingOutreachAction = null; // Clear any pending action
         });
     }
 
@@ -746,14 +748,32 @@ function promptForUserAndSubmit() {
 /**
  * Handles the user's selection from the modal, caches it, and proceeds with submission.
  */
-function handleUserSelection() {
+async function handleUserSelection() {
     const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
     const selectedUser = dropdown.value;
     sessionCommentUser = selectedUser; // Cache the selection for the session
     document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
     
-    // Now that we have the user, proceed with the submission
-    executeSubmitComment(sessionCommentUser);
+    // Check if there's a pending outreach action to complete
+    if (pendingOutreachAction) {
+        const { studentId, studentName, commentText, rowIndex } = pendingOutreachAction;
+        
+        // Add the comment
+        await addOutreachComment(studentId, studentName, commentText, sessionCommentUser);
+
+        // Check for highlight triggers
+        const lowerCommentText = commentText.toLowerCase();
+        if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
+            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+            await applyContactedHighlight(rowIndex);
+        }
+
+        // Clear the pending action
+        pendingOutreachAction = null;
+    } else {
+        // If no pending action, it was triggered by the submit button
+        await executeSubmitComment(sessionCommentUser);
+    }
 }
 
 /**
@@ -925,15 +945,8 @@ async function applyContactedHighlight(rowIndex) {
  */
 async function onWorksheetChanged(eventArgs) {
     await Excel.run(async (context) => {
-        // Only trigger for changes made by the local user
-        if (eventArgs.source !== Excel.EventSource.local) {
-            console.log("Change from remote source ignored.");
-            return;
-        }
-
-        if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") {
-            return;
-        }
+        if (eventArgs.source !== Excel.EventSource.local) return;
+        if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") return;
 
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const changedRange = sheet.getRange(eventArgs.address);
@@ -941,24 +954,19 @@ async function onWorksheetChanged(eventArgs) {
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
         headerRange.load("values, columnCount");
         changedRange.load("address, rowIndex, columnIndex, rowCount, columnCount, values, valuesBefore");
-
         await context.sync();
         
         const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
         const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
         
-        if (outreachColIndex === -1) {
-            return;
-        }
+        if (outreachColIndex === -1) return;
 
-        // Check if the change is in the data area and intersects with the outreach column
         if (changedRange.rowIndex > 0 && 
             changedRange.columnIndex <= outreachColIndex && 
             (changedRange.columnIndex + changedRange.columnCount - 1) >= outreachColIndex) {
 
             const outreachColumnOffset = outreachColIndex - changedRange.columnIndex;
             
-            // Load all necessary data for the affected rows in one go
             const studentInfoRange = sheet.getRangeByIndexes(
                 changedRange.rowIndex, 0, 
                 changedRange.rowCount, headerRange.columnCount
@@ -970,12 +978,8 @@ async function onWorksheetChanged(eventArgs) {
             const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
             const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
 
-            if (studentIdColIndex === -1 || studentNameColIndex === -1) {
-                console.log("Required columns (StudentNumber, StudentName) not found.");
-                return;
-            }
+            if (studentIdColIndex === -1 || studentNameColIndex === -1) return;
 
-            // Loop through each row in the changed range
             for (let i = 0; i < changedRange.rowCount; i++) {
                 const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
                                  String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
@@ -986,17 +990,20 @@ async function onWorksheetChanged(eventArgs) {
                 if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
                     const studentId = allRowValues[i][studentIdColIndex];
                     const studentName = allRowValues[i][studentNameColIndex];
+                    const rowIndex = changedRange.rowIndex + i;
 
                     if (studentId && studentName) {
-                        console.log(`Processing pasted value for ${studentName}: "${newValue}"`);
-                        await addOutreachComment(studentId, studentName, newValue);
-
-                        // Check for trigger phrases and apply highlight
-                        const lowerNewValue = newValue.toLowerCase();
-                        if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
-                            const rowIndex = changedRange.rowIndex + i;
-                            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
-                            await applyContactedHighlight(rowIndex);
+                        if (sessionCommentUser) {
+                            await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
+                            const lowerNewValue = newValue.toLowerCase();
+                            if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
+                                console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+                                await applyContactedHighlight(rowIndex);
+                            }
+                        } else {
+                            // Cache the action and prompt the user
+                            pendingOutreachAction = { studentId, studentName, commentText: newValue, rowIndex };
+                            promptForUserAndSubmit();
                         }
                     }
                 }
@@ -1011,8 +1018,9 @@ async function onWorksheetChanged(eventArgs) {
  * @param {string|number} studentId The student's ID.
  * @param {string} studentName The student's name.
  * @param {string} commentText The new comment text from the Outreach column.
+ * @param {string} commentingUser The user making the comment.
  */
-async function addOutreachComment(studentId, studentName, commentText) {
+async function addOutreachComment(studentId, studentName, commentText, commentingUser) {
     await Excel.run(async (context) => {
         try {
             const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
@@ -1072,7 +1080,7 @@ async function addOutreachComment(studentId, studentName, commentText) {
                 const newRowData = new Array(historyHeaders.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
-                if (createdByCol !== -1) newRowData[createdByCol] = currentUserName;
+                if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
                 if (tagCol !== -1) newRowData[tagCol] = "Outreach";
                 newRowData[timestampCol] = excelNow;
                 newRowData[commentCol] = commentText;
@@ -1088,13 +1096,10 @@ async function addOutreachComment(studentId, studentName, commentText) {
             historySheet.getUsedRange().format.autofitColumns();
             await context.sync();
 
-            // Check if the updated student is the one currently displayed in the task pane
-            // and if the history tab is active. If so, refresh the history.
             if (studentId && String(studentId) === String(currentStudentId)) {
                 const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
                 if (panelHistory && !panelHistory.classList.contains("hidden")) {
                     console.log(`Refreshing history for student ${studentName} after outreach update.`);
-                    // Use a brief timeout to allow the UI to process the sheet change before refreshing.
                     setTimeout(() => displayStudentHistory(currentStudentId), 100);
                 }
             }
