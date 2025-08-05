@@ -61,14 +61,22 @@ body {
 }
 
 input[type="number"],
-input[type="text"] {
+input[type="text"],
+select.user-select-dropdown {
     padding: 8px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
-    width: 80px;
+    width: 200px;
     box-sizing: border-box;
+    text-align: left;
+    padding-left: 8px;
+}
+
+input[type="number"] {
+    width: 80px;
     text-align: center;
 }
+
 
 /* Toggle Switch Styles */
 .switch {
