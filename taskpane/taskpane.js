@@ -37,6 +37,9 @@ const CONSTANTS = {
     USER_SELECTION_DROPDOWN: "user-selection-dropdown",
     CONFIRM_USER_BUTTON: "confirm-user-button",
     CANCEL_USER_BUTTON: "cancel-user-button",
+    TAG_PILLS_CONTAINER: "tag-pills-container",
+    ADD_TAG_BUTTON: "add-tag-button",
+    TAG_DROPDOWN: "tag-dropdown",
 
     // Settings Keys
     SETTINGS_KEY: "studentRetentionSettings",
@@ -78,6 +81,12 @@ let settings = {}; // To store all add-in settings
 let welcomeDialog = null;
 let sessionCommentUser = null; // Cache the user for the current session
 let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
+let newCommentTags = []; // To store tags for the new comment
+
+const availableTags = [
+    { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
+    { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' }
+];
 
 // The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
@@ -130,6 +139,9 @@ function initializeAddIn() {
         });
     }
     
+    // Initialize the tagging UI
+    setupTaggingUI();
+
     // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -722,10 +734,20 @@ async function displayStudentHistory(studentId) {
                             <p class="text-sm text-gray-800">${comment.text}</p>`;
                     
                     html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
-                    html += `<div>`; // Left side container
+                    html += `<div class="flex items-center gap-2">`; // Left side container
+                    
+                    // Tag rendering logic
                     if (comment.tag) {
-                        html += `<span class="px-2 py-0.5 font-semibold text-blue-800 bg-blue-100 rounded-full mr-2">${comment.tag}</span>`;
+                        const tags = String(comment.tag).split(',').map(t => t.trim());
+                        tags.forEach(tagName => {
+                            if (tagName && tagName.toLowerCase() !== 'comment') {
+                                const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagName.toLowerCase()) || 
+                                                { bg: 'bg-blue-100', text: 'text-blue-800' }; // Default color
+                                html += `<span class="px-2 py-0.5 font-semibold rounded-full ${tagInfo.bg} ${tagInfo.text}">${tagName}</span>`;
+                            }
+                        });
                     }
+                    
                     html += `<span class="font-medium">${comment.createdBy}</span>`;
                     html += `</div>`; // End left side
 
@@ -883,8 +905,12 @@ async function executeSubmitComment(commentingUser) {
             
             newRowData[idCol] = currentStudentId;
             if (studentCol !== -1) newRowData[studentCol] = currentStudentName;
-            if (createdByCol !== -1) newRowData[createdByCol] = commentingUser; // Use selected user
-            if (tagCol !== -1) newRowData[tagCol] = "Comment";
+            if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
+            
+            // Join the selected tags, or default to "Comment" if none are selected
+            const tagsToSave = newCommentTags.length > 0 ? newCommentTags.join(', ') : "Comment";
+            if (tagCol !== -1) newRowData[tagCol] = tagsToSave;
+
             if (timestampCol !== -1) {
                 const now = new Date();
                 newRowData[timestampCol] = (now.getTime() / 86400000) + 25569;
@@ -901,6 +927,11 @@ async function executeSubmitComment(commentingUser) {
 
         commentInput.value = "";
         statusDisplay.textContent = "Comment added successfully!";
+        
+        // Reset tags and refresh history
+        newCommentTags = [];
+        renderTagPills();
+        populateTagDropdown();
         await displayStudentHistory(currentStudentId);
 
         setTimeout(() => {
@@ -916,6 +947,96 @@ async function executeSubmitComment(commentingUser) {
         console.error("Error in submitNewComment: " + error);
     }
 }
+
+// --- START: Tagging UI Functions ---
+
+function setupTaggingUI() {
+    const addTagButton = document.getElementById(CONSTANTS.ADD_TAG_BUTTON);
+    const tagDropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+
+    addTagButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        populateTagDropdown();
+        tagDropdown.classList.toggle('hidden');
+    });
+
+    // Hide dropdown if clicked outside
+    document.addEventListener('click', (event) => {
+        if (!tagDropdown.contains(event.target) && !addTagButton.contains(event.target)) {
+            tagDropdown.classList.add('hidden');
+        }
+    });
+
+    renderTagPills();
+    populateTagDropdown();
+}
+
+function renderTagPills() {
+    const container = document.getElementById(CONSTANTS.TAG_PILLS_CONTAINER);
+    container.innerHTML = ''; // Clear existing pills
+
+    newCommentTags.forEach(tagName => {
+        const tagInfo = availableTags.find(t => t.name === tagName) || { bg: 'bg-gray-200', text: 'text-gray-800' };
+        const pill = document.createElement('span');
+        pill.className = `px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
+        pill.textContent = tagName;
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.innerHTML = '&times;';
+        removeButton.className = 'font-bold';
+        removeButton.onclick = () => removeTag(tagName);
+
+        pill.appendChild(removeButton);
+        container.appendChild(pill);
+    });
+}
+
+function populateTagDropdown() {
+    const dropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+    dropdown.innerHTML = '';
+
+    const tagsToShow = availableTags.filter(tag => !newCommentTags.includes(tag.name) && tag.name !== 'Outreach');
+
+    if (tagsToShow.length === 0) {
+        const noTagsItem = document.createElement('span');
+        noTagsItem.className = 'block px-4 py-2 text-sm text-gray-500';
+        noTagsItem.textContent = 'No more tags';
+        dropdown.appendChild(noTagsItem);
+        return;
+    }
+
+    tagsToShow.forEach(tag => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100';
+        item.textContent = tag.name;
+        item.onclick = (e) => {
+            e.preventDefault();
+            addTag(tag.name);
+        };
+        dropdown.appendChild(item);
+    });
+}
+
+function addTag(tagName) {
+    if (!newCommentTags.includes(tagName)) {
+        newCommentTags.push(tagName);
+        renderTagPills();
+        populateTagDropdown();
+        document.getElementById(CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+    }
+}
+
+function removeTag(tagName) {
+    newCommentTags = newCommentTags.filter(t => t !== tagName);
+    renderTagPills();
+    populateTagDropdown();
+}
+
+
+// --- END: Tagging UI Functions ---
+
 
 // --- START: Code moved from commands.js ---
 
