@@ -84,33 +84,26 @@ export async function getSettings() {
 
 
 /**
- * Parses a date value from various possible formats (Date object, string, Excel serial number),
- * correcting for timezone issues.
+ * Parses a date value from various possible formats (Date object, string, Excel serial number).
  * @param {*} dateValue The value to parse.
  * @returns {Date|null} A valid Date object or null.
  */
 export function parseDate(dateValue) {
     if (!dateValue) return null;
     if (dateValue instanceof Date) {
-        // ExcelJS can return Date objects for .xlsx. These are usually timezone-aware.
+        // ExcelJS can return Date objects for .xlsx
         return dateValue;
     }
     if (typeof dateValue === 'number') {
         // Excel serial date number
+        // Check for a reasonable range to avoid treating random numbers as dates
         if (dateValue > 25569) { // Corresponds to 1970-01-01
-            // This calculation gives milliseconds since Unix epoch (UTC)
-            const utcMilliseconds = (dateValue - 25569) * 86400 * 1000;
-            const date = new Date(utcMilliseconds);
-            // We need to create a new date that represents the same "wall clock" time in the local timezone.
-            // We do this by adding the timezone offset that was implicitly subtracted by `new Date()`.
-            const correctedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
-            return correctedDate;
+            return new Date((dateValue - 25569) * 86400 * 1000);
         }
     }
     if (typeof dateValue === 'string') {
-        // For strings like "MM/DD/YYYY", treat them as local time.
-        // The jsDateToExcelDate function will handle converting this to the correct serial number.
-        const parsed = new Date(dateValue.replace(/-/g, '/'));
+        // Try parsing common date formats
+        const parsed = new Date(dateValue);
         if (!isNaN(parsed.getTime())) {
             return parsed;
         }
@@ -118,27 +111,13 @@ export function parseDate(dateValue) {
     return null;
 }
 
-
 /**
- * Converts a JavaScript Date object to an Excel serial date number, preserving the "wall clock" time.
+ * Converts a JavaScript Date object to an Excel serial date number.
  * @param {Date} date The JavaScript Date object.
  * @returns {number} The Excel serial date number.
  */
 export function jsDateToExcelDate(date) {
-    // Create a UTC timestamp using the local components of the date (year, month, day, time).
-    // This effectively strips the timezone information and preserves the "wall clock" time.
-    const utcTimestamp = Date.UTC(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        date.getHours(),
-        date.getMinutes(),
-        date.getSeconds(),
-        date.getMilliseconds()
-    );
-    // Convert UTC timestamp to Excel serial number.
-    // The 25569 is the day difference between Excel epoch (1900) and Unix epoch (1970).
-    return (utcTimestamp / 86400000) + 25569;
+    return (date.getTime() / 86400000) + 25569;
 }
 
 
