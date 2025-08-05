@@ -77,6 +77,52 @@ input[type="number"] {
     text-align: center;
 }
 
+/* User List Styles */
+.user-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+}
+
+.user-item:hover {
+    background-color: #f9fafb;
+}
+
+.user-item input[type="radio"] {
+    margin-right: 12px;
+}
+
+.user-item label {
+    flex-grow: 1;
+    cursor: pointer;
+}
+
+.user-item-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #6b7280;
+    border-radius: 4px;
+}
+
+.icon-button:hover {
+    color: #1f2937;
+    background-color: #f3f4f6;
+}
+
+.icon-button:disabled {
+    color: #d1d5db;
+    cursor: not-allowed;
+}
+
 
 /* Toggle Switch Styles */
 .switch {
@@ -215,32 +261,6 @@ input:checked + .slider:before {
 
 .button-danger:hover {
     background-color: #dc2626; /* red-600 */
-}
-
-.button-danger-small {
-    background-color: #fee2e2;
-    color: #b91c1c;
-    padding: 4px 10px;
-    border: 1px solid #fca5a5;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-
-.button-danger-small:hover {
-    background-color: #fecaca;
-    color: #991b1b;
-}
-
-.current-user-badge {
-    font-size: 12px;
-    font-weight: 500;
-    color: #1e40af;
-    background-color: #dbeafe;
-    padding: 4px 10px;
-    border-radius: 9999px;
 }
 
 .status-message {
