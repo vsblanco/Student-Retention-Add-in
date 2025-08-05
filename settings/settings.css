@@ -60,7 +60,8 @@ body {
     padding-left: 5px;
 }
 
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
     padding: 8px;
     border: 1px solid #d1d5db;
     border-radius: 6px;
@@ -206,6 +207,32 @@ input:checked + .slider:before {
 
 .button-danger:hover {
     background-color: #dc2626; /* red-600 */
+}
+
+.button-danger-small {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    padding: 4px 10px;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.button-danger-small:hover {
+    background-color: #fecaca;
+    color: #991b1b;
+}
+
+.current-user-badge {
+    font-size: 12px;
+    font-weight: 500;
+    color: #1e40af;
+    background-color: #dbeafe;
+    padding: 4px 10px;
+    border-radius: 9999px;
 }
 
 .status-message {
