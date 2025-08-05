@@ -11,6 +11,8 @@ const CONSTANTS = {
     PANEL_DETAILS: "panel-details",
     PANEL_HISTORY: "panel-history",
     SUBMIT_COMMENT_BUTTON: "submit-comment-button",
+    NEW_COMMENT_SECTION: "new-comment-section",
+    ADD_COMMENT_BUTTON: "add-comment-button",
     NEW_COMMENT_INPUT: "new-comment-input",
     COMMENT_STATUS: "comment-status",
     HISTORY_CONTENT: "history-content",
@@ -113,6 +115,14 @@ function initializeAddIn() {
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
     if (submitButton) {
         submitButton.addEventListener("click", submitNewComment);
+    }
+    
+    // Add event listener for the floating action button to toggle the new comment section
+    const addCommentButton = document.getElementById(CONSTANTS.ADD_COMMENT_BUTTON);
+    if (addCommentButton) {
+        addCommentButton.addEventListener('click', () => {
+            document.getElementById(CONSTANTS.NEW_COMMENT_SECTION).classList.toggle('hidden');
+        });
     }
     
     // Add event handler for selection changes to update the task pane
