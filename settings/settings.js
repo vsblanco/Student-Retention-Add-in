@@ -62,19 +62,23 @@ function loadSettingsAndPopulateUI() {
             daysOutFilter: 6,
             includeFailingList: true,
             hideLeftoverColumns: true,
-            treatEmptyGradesAsZero: false, // Default to false
+            treatEmptyGradesAsZero: false,
             ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
         };
     }
     if (!settings.userProfile) {
         settings.userProfile = {
             name: Office.context.displayName || "",
-            userList: [] // Initialize user list
+            userList: []
         };
     }
-    // Handle older settings objects that might not have userList
     if (!settings.userProfile.userList) {
         settings.userProfile.userList = [];
+    }
+    if (!settings.taskpane) {
+        settings.taskpane = {
+            smartNavigation: true // Default to true
+        };
     }
     
     // Add current user to the list if not already present
@@ -82,6 +86,9 @@ function loadSettingsAndPopulateUI() {
     if (currentName && !settings.userProfile.userList.includes(currentName)) {
         settings.userProfile.userList.push(currentName);
     }
+
+    // Populate UI for Task Pane settings
+    document.getElementById("smart-navigation-toggle").checked = settings.taskpane.smartNavigation !== false;
 
     // Populate UI for LDA Report settings
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
@@ -234,12 +241,13 @@ function createColumnItem(header) {
 
 function saveSettings() {
     // --- User Profile ---
-    // The user list is modified directly by the edit/remove functions.
-    // We just need to find the selected active user.
     const selectedRadio = document.querySelector('input[name="active-user"]:checked');
     if (selectedRadio) {
         settings.userProfile.name = selectedRadio.value;
     }
+
+    // --- Task Pane ---
+    settings.taskpane.smartNavigation = document.getElementById("smart-navigation-toggle").checked;
 
     // --- LDA Report ---
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
