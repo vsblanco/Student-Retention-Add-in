@@ -121,7 +121,12 @@ function initializeAddIn() {
     const addCommentButton = document.getElementById(CONSTANTS.ADD_COMMENT_BUTTON);
     if (addCommentButton) {
         addCommentButton.addEventListener('click', () => {
-            document.getElementById(CONSTANTS.NEW_COMMENT_SECTION).classList.toggle('hidden');
+            const commentSection = document.getElementById(CONSTANTS.NEW_COMMENT_SECTION);
+            commentSection.classList.toggle('hidden');
+            // If the section is now visible, focus the input
+            if (!commentSection.classList.contains('hidden')) {
+                document.getElementById(CONSTANTS.NEW_COMMENT_INPUT).focus();
+            }
         });
     }
     
@@ -271,17 +276,20 @@ function switchTab(tabId) {
     const panelDetails = document.getElementById(CONSTANTS.PANEL_DETAILS);
     const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
+    const addCommentButton = document.getElementById(CONSTANTS.ADD_COMMENT_BUTTON);
 
     if (tabId === CONSTANTS.TAB_DETAILS) {
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelDetails.classList.remove("hidden");
         panelHistory.classList.add("hidden");
+        if (addCommentButton) addCommentButton.classList.add('hidden');
     } else { // Switching to History
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelHistory.classList.remove("hidden");
         panelDetails.classList.add("hidden");
+        if (addCommentButton) addCommentButton.classList.remove('hidden');
         
         if (submitButton) {
             submitButton.disabled = !currentStudentId;
