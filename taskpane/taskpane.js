@@ -144,12 +144,14 @@ function initializeAddIn() {
         });
     }
     
-    // Add paste event listener to the comment input to automatically add the "Quote" tag
     const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
     if (commentInput) {
+        // Add paste event listener to the comment input to automatically add the "Quote" tag
         commentInput.addEventListener('paste', () => {
             addTag('Quote');
         });
+        // Add input event listener for smart LDA tag detection
+        commentInput.addEventListener('input', handleCommentInputChange);
     }
 
     // Initialize the tagging UI
@@ -1063,7 +1065,7 @@ function populateTagDropdown() {
 }
 
 function addTag(tagName) {
-    if (!newCommentTags.includes(tagName)) {
+    if (!newCommentTags.some(t => t.startsWith(tagName.split(' ')[0]))) {
         newCommentTags.push(tagName);
         renderTagPills();
         populateTagDropdown();
@@ -1165,6 +1167,82 @@ function renderCalendar(date) {
 
 
 // --- END: Date Picker Functions ---
+
+// --- START: Smart Tag Functions ---
+
+/**
+ * Handles the input event on the comment box to check for smart tags.
+ * @param {Event} event The input event.
+ */
+function handleCommentInputChange(event) {
+    const text = event.target.value.toLowerCase();
+    const triggerWords = ['engage', 'submit'];
+
+    if (triggerWords.some(word => text.includes(word))) {
+        const date = parseDateFromText(text);
+        if (date) {
+            // Check if an LDA tag already exists to avoid duplicates
+            if (!newCommentTags.some(tag => tag.startsWith('LDA'))) {
+                const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
+                addTag(`LDA ${formattedDate}`);
+            }
+        }
+    }
+}
+
+/**
+ * Parses a date from a string of text, understanding relative terms.
+ * @param {string} text The text to parse.
+ * @returns {Date|null} A Date object or null if no date is found.
+ */
+function parseDateFromText(text) {
+    const now = new Date();
+    text = text.toLowerCase();
+
+    // Check for "tomorrow"
+    if (text.includes('tomorrow')) {
+        const tomorrow = new Date();
+        tomorrow.setDate(now.getDate() + 1);
+        return tomorrow;
+    }
+
+    // Check for days of the week
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    for (let i = 0; i < days.length; i++) {
+        if (text.includes(days[i])) {
+            const targetDay = i;
+            const today = now.getDay();
+            let daysToAdd = targetDay - today;
+            if (daysToAdd <= 0) {
+                daysToAdd += 7; // Get the next occurrence
+            }
+            const nextDate = new Date();
+            nextDate.setDate(now.getDate() + daysToAdd);
+            return nextDate;
+        }
+    }
+    
+    // Check for "Month Day" format (e.g., "August 20th")
+    const monthDayRegex = /(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})/;
+    const monthDayMatch = text.match(monthDayRegex);
+    if (monthDayMatch) {
+        const months = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11,
+                         january:0, february:1, march:2, april:3, may:4, june:5, july:6, august:7, september:8, october:9, november:10, december:11 };
+        const month = months[monthDayMatch[1]];
+        const day = parseInt(monthDayMatch[2], 10);
+        let year = now.getFullYear();
+        const date = new Date(year, month, day);
+        if (date < now) { // If the date is in the past, assume next year
+            date.setFullYear(year + 1);
+        }
+        return date;
+    }
+
+    return null;
+}
+
+
+// --- END: Smart Tag Functions ---
 
 
 // --- START: Code moved from commands.js ---
