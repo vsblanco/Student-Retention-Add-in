@@ -54,7 +54,7 @@ Office.onReady((info) => {
                 return;
             }
 
-            const formattedName = `${lastName}, ${firstName}`;
+            const formattedName = `${firstName} ${lastName}`;
 
             if (settings.userProfile.userList.includes(formattedName)) {
                 addUserStatus.textContent = `User "${formattedName}" already exists.`;
