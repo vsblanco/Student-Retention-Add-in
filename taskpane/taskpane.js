@@ -703,6 +703,29 @@ function setupGradebookLinkHandler() {
 }
 
 /**
+ * Finds and highlights date-related text within a comment.
+ * @param {string} text The comment text.
+ * @returns {string} The comment text with the date part bolded.
+ */
+function highlightDateInText(text) {
+    // Regex to find days of the week, tomorrow, or month-day combinations.
+    // It's case-insensitive and handles optional suffixes like 'st', 'nd', 'rd', 'th'.
+    const dateRegex = /\b(tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|january|february|march|april|may|june|july|august|september|october|november|december)\b(\s+\d{1,2}(st|nd|rd|th)?)?/i;
+
+    const match = text.match(dateRegex);
+
+    if (match) {
+        // Replace the first occurrence of the matched date string with a bolded version.
+        return text.replace(dateRegex, (matchedText) => {
+            return `<strong class="font-bold text-gray-900">${matchedText}</strong>`;
+        });
+    }
+
+    return text; // Return original text if no date found
+}
+
+
+/**
  * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
  */
 async function displayStudentHistory(studentId) {
@@ -787,10 +810,15 @@ async function displayStudentHistory(studentId) {
                 sortedComments.forEach(comment => {
                     const isPriority = comment.ldaDate && comment.ldaDate >= today;
                     const bgColor = isPriority ? 'bg-orange-100' : 'bg-gray-100';
+                    let displayText = comment.text;
+                    if (isPriority) {
+                        displayText = highlightDateInText(comment.text);
+                    }
+
 
                     html += `
                         <li class="p-3 ${bgColor} rounded-lg shadow-sm">
-                            <p class="text-sm text-gray-800">${comment.text}</p>`;
+                            <p class="text-sm text-gray-800">${displayText}</p>`;
                     
                     html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
                     html += `<div class="flex items-center gap-2">`; // Left side container
