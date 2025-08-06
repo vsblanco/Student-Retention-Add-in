@@ -430,13 +430,14 @@ async function onSelectionChange() {
                 otherPhone: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.otherPhone),
                 studentEmail: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.studentEmail),
                 personalEmail: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.personalEmail),
-                gradeBook: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook)
+                gradeBook: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
+                outreach: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach)
             };
 
             // Smart Navigation: This runs on every selection change.
             if (settings.taskpane && settings.taskpane.smartNavigation !== false) {
                 const selectedCol = selectedRange.columnIndex;
-                if (selectedCol === colIdx.primaryPhone || selectedCol === colIdx.otherPhone) {
+                if (selectedCol === colIdx.primaryPhone || selectedCol === colIdx.otherPhone || selectedCol === colIdx.outreach) {
                     switchTab(CONSTANTS.TAB_HISTORY);
                 } else {
                     switchTab(CONSTANTS.TAB_DETAILS);
