@@ -85,6 +85,7 @@ let sessionCommentUser = null; // Cache the user for the current session
 let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
 let newCommentTags = []; // To store tags for the new comment
 let selectedDate = null; // For the date picker
+let smartLdaTag = null; // To track the automatically added LDA tag
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
@@ -989,6 +990,7 @@ async function executeSubmitComment(commentingUser) {
         
         // Reset tags and refresh history
         newCommentTags = [];
+        smartLdaTag = null; 
         renderTagPills();
         populateTagDropdown();
         await displayStudentHistory(currentStudentId);
@@ -1114,6 +1116,9 @@ function addTag(tagName) {
 
 function removeTag(tagName) {
     newCommentTags = newCommentTags.filter(t => t !== tagName);
+    if (tagName === smartLdaTag) {
+        smartLdaTag = null;
+    }
     renderTagPills();
     populateTagDropdown();
 }
@@ -1217,14 +1222,31 @@ function handleCommentInputChange(event) {
     const text = event.target.value.toLowerCase();
     const triggerWords = ['engage', 'submit'];
 
-    if (triggerWords.some(word => text.includes(word))) {
-        const date = parseDateFromText(text);
-        if (date) {
-            // Check if an LDA tag already exists to avoid duplicates
+    const hasTrigger = triggerWords.some(word => text.includes(word));
+    const date = hasTrigger ? parseDateFromText(text) : null;
+
+    // If a date is found, add or update the smart LDA tag
+    if (date) {
+        const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
+        const newLdaTag = `LDA ${formattedDate}`;
+
+        // If a smart tag already exists but is different, remove the old one
+        if (smartLdaTag && smartLdaTag !== newLdaTag) {
+            removeTag(smartLdaTag);
+        }
+
+        // If no smart tag exists (or it was just removed), add the new one
+        if (!smartLdaTag) {
+            // Also check if a manual LDA tag was added, don't add if so
             if (!newCommentTags.some(tag => tag.startsWith('LDA'))) {
-                const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
-                addTag(`LDA ${formattedDate}`);
+                 addTag(newLdaTag);
+                 smartLdaTag = newLdaTag;
             }
+        }
+    } else {
+        // If no date is found, but we had a smart tag, remove it
+        if (smartLdaTag) {
+            removeTag(smartLdaTag);
         }
     }
 }
