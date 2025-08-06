@@ -160,24 +160,16 @@ function renderUserList() {
     const container = document.getElementById('user-list-container');
     container.innerHTML = ''; // Clear existing list
     const userList = (settings.userProfile && settings.userProfile.userList) || [];
-    const activeUser = settings.userProfile.name || Office.context.displayName;
 
     if (userList.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm">No users found. Save settings to add the current user.</p>';
+        container.innerHTML = '<p class="text-gray-500 text-sm">No users found. Add a user to get started.</p>';
         return;
     }
 
     userList.forEach(user => {
         const userItem = document.createElement('div');
         userItem.className = 'user-item';
-        
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = 'active-user';
-        radio.value = user;
-        radio.id = `user-radio-${user.replace(/\s+/g, '-')}`;
-        radio.checked = (user === activeUser);
-        
+
         const nameContainer = document.createElement('div');
         nameContainer.className = 'user-name-container';
 
@@ -215,7 +207,7 @@ function renderUserList() {
         removeButton.className = 'icon-button remove-button';
         removeButton.title = 'Remove User';
         removeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-        removeButton.disabled = (user === activeUser);
+        removeButton.disabled = userList.length <= 1;
 
         editButton.onclick = () => {
             nameDisplay.classList.add('hidden');
@@ -277,7 +269,6 @@ function renderUserList() {
 
         removeButton.onclick = () => removeUser(user);
 
-        userItem.appendChild(radio);
         userItem.appendChild(nameContainer);
         actions.appendChild(editButton);
         actions.appendChild(saveButton);
@@ -289,10 +280,16 @@ function renderUserList() {
 }
 
 function removeUser(nameToRemove) {
-    // `confirm` is also not supported, so we'll just remove without confirmation for now.
-    // A proper solution would be a custom confirmation modal.
-    settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== nameToRemove);
-    saveSettings(); // Save and reload the UI
+    const userList = settings.userProfile.userList;
+    if (userList.length <= 1) {
+        console.warn("Cannot remove the last user.");
+        return;
+    }
+    settings.userProfile.userList = userList.filter(u => u !== nameToRemove);
+    if (settings.userProfile.name === nameToRemove) {
+        settings.userProfile.name = settings.userProfile.userList[0] || "";
+    }
+    saveSettings(); 
 }
 
 
@@ -361,13 +358,8 @@ function createColumnItem(header) {
 
 
 function saveSettings() {
-    // --- User Profile ---
-    // The user list is modified directly by the edit/remove functions.
-    // We just need to find the selected active user.
-    const selectedRadio = document.querySelector('input[name="active-user"]:checked');
-    if (selectedRadio) {
-        settings.userProfile.name = selectedRadio.value;
-    }
+    // Note: The active user is no longer set from this pane.
+    // The user list is modified directly by the add/edit/remove functions.
 
     // --- Task Pane ---
     settings.taskpane.smartNavigation = document.getElementById("smart-navigation-toggle").checked;
