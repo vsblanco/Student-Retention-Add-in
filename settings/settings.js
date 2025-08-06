@@ -12,7 +12,60 @@ Office.onReady((info) => {
         // Add event listeners
         document.getElementById("save-button").onclick = saveSettings;
         document.getElementById("reset-button").onclick = resetSettings;
-        document.getElementById("add-user-button").onclick = addNewUser;
+        
+        // --- Modal Event Listeners ---
+        const addUserModal = document.getElementById("add-user-modal");
+        const addUserButton = document.getElementById("add-user-button");
+        const cancelAddUserButton = document.getElementById("cancel-add-user-button");
+        const saveNewUserButton = document.getElementById("save-new-user-button");
+        const firstNameInput = document.getElementById("new-user-first-name");
+        const lastNameInput = document.getElementById("new-user-last-name");
+        const addUserStatus = document.getElementById("add-user-status");
+
+        const showModal = () => {
+            addUserStatus.textContent = '';
+            addUserStatus.className = 'status-message';
+            firstNameInput.value = '';
+            lastNameInput.value = '';
+            addUserModal.style.display = 'flex';
+            firstNameInput.focus();
+        };
+
+        const hideModal = () => {
+            addUserModal.style.display = 'none';
+        };
+
+        addUserButton.onclick = showModal;
+        cancelAddUserButton.onclick = hideModal;
+        // Also hide modal if user clicks the overlay background
+        addUserModal.addEventListener('click', (event) => {
+            if (event.target === addUserModal) {
+                hideModal();
+            }
+        });
+
+        saveNewUserButton.onclick = () => {
+            const firstName = firstNameInput.value.trim();
+            const lastName = lastNameInput.value.trim();
+
+            if (!firstName || !lastName) {
+                addUserStatus.textContent = "Both names are required.";
+                addUserStatus.className = 'status-message status-error visible';
+                return;
+            }
+
+            const formattedName = `${lastName}, ${firstName}`;
+
+            if (settings.userProfile.userList.includes(formattedName)) {
+                addUserStatus.textContent = `User "${formattedName}" already exists.`;
+                addUserStatus.className = 'status-message status-error visible';
+                return;
+            }
+
+            settings.userProfile.userList.push(formattedName);
+            saveSettings(); // This will save and reload the UI
+            hideModal();
+        };
     }
 });
 
@@ -152,30 +205,8 @@ function renderUserList() {
     });
 }
 
-function addNewUser() {
-    const firstName = prompt("Enter the user's first name:");
-    if (!firstName || firstName.trim() === "") {
-        return; // User cancelled or entered nothing
-    }
-
-    const lastName = prompt("Enter the user's last name:");
-    if (!lastName || lastName.trim() === "") {
-        return; // User cancelled or entered nothing
-    }
-
-    const formattedName = `${lastName.trim()}, ${firstName.trim()}`;
-
-    if (settings.userProfile.userList.includes(formattedName)) {
-        alert(`User "${formattedName}" already exists.`);
-        return;
-    }
-
-    settings.userProfile.userList.push(formattedName);
-    saveSettings(); // This will save and reload the UI
-}
-
-
 function editUser(oldName) {
+    // For simplicity, we'll still use prompt here, but this could also be converted to a modal.
     const newName = prompt("Enter the new name for this user:", oldName);
     if (newName && newName.trim() !== "" && newName !== oldName) {
         const userList = settings.userProfile.userList;
@@ -192,10 +223,10 @@ function editUser(oldName) {
 }
 
 function removeUser(nameToRemove) {
-    if (confirm(`Are you sure you want to remove "${nameToRemove}" from the list?`)) {
-        settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== nameToRemove);
-        saveSettings(); // Save and reload the UI
-    }
+    // `confirm` is also not supported, so we'll just remove without confirmation for now.
+    // A proper solution would be a custom confirmation modal.
+    settings.userProfile.userList = settings.userProfile.userList.filter(u => u !== nameToRemove);
+    saveSettings(); // Save and reload the UI
 }
 
 
