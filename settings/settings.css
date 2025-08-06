@@ -263,6 +263,25 @@ input:checked + .slider:before {
     background-color: #dc2626; /* red-600 */
 }
 
+.button-secondary-small {
+    background-color: #e5e7eb;
+    color: #374151;
+    padding: 0px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 9999px; /* Make it a circle */
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    line-height: 20px;
+    margin-left: auto; /* Push it to the right */
+    transition: all 0.2s;
+}
+
+.button-secondary-small:hover {
+    background-color: #d1d5db;
+}
+
+
 .status-message {
     margin-top: 15px;
     padding: 10px;
