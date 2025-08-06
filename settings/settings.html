@@ -107,5 +107,24 @@
         <button id="reset-button" class="button-danger">Reset to Default</button>
         <div id="status" class="status-message"></div>
     </div>
+
+    <!-- Add User Modal -->
+    <div id="add-user-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Add New User</h3>
+            <p class="setting-description" style="margin-top: 0.5rem; margin-bottom: 1rem;">Enter the user's first and last name.</p>
+            <div class="modal-form">
+                <label for="new-user-first-name">First Name:</label>
+                <input type="text" id="new-user-first-name">
+                <label for="new-user-last-name">Last Name:</label>
+                <input type="text" id="new-user-last-name">
+            </div>
+            <p id="add-user-status" class="status-message" style="height: 16px; margin-top: 10px;"></p>
+            <div class="modal-actions">
+                <button id="cancel-add-user-button" class="button-secondary">Cancel</button>
+                <button id="save-new-user-button" class="button-primary">Save User</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
