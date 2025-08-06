@@ -263,6 +263,22 @@ input:checked + .slider:before {
     background-color: #dc2626; /* red-600 */
 }
 
+.button-secondary {
+    background-color: #e5e7eb;
+    color: #374151;
+    padding: 10px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.button-secondary:hover {
+    background-color: #d1d5db;
+}
+
+
 .button-secondary-small {
     background-color: #e5e7eb;
     color: #374151;
@@ -305,4 +321,63 @@ input:checked + .slider:before {
 .status-error {
     background-color: #fee2e2;
     color: #991b1b;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: #fff;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    width: 90%;
+    max-width: 400px;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #111827;
+}
+
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.modal-form label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #4b5563;
+}
+
+.modal-form input {
+    width: 100%;
+}
+
+.modal-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.modal-actions .button-primary {
+    width: auto;
+    margin-top: 0;
+    font-size: 14px;
+    padding: 10px 16px;
 }
