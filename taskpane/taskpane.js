@@ -1558,7 +1558,16 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
                 if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
-                if (tagCol !== -1) newRowData[tagCol] = "Outreach";
+                
+                let tagsToSave = "Outreach";
+                const date = parseDateFromText(commentText);
+                if (date) {
+                    const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
+                    const ldaTag = `LDA ${formattedDate}`;
+                    tagsToSave += `, ${ldaTag}`;
+                }
+
+                if (tagCol !== -1) newRowData[tagCol] = tagsToSave;
                 newRowData[timestampCol] = excelNow;
                 newRowData[commentCol] = commentText;
                 
