@@ -6,9 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>About - Student Retention Add-in</title>
 
-    <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -16,35 +13,24 @@
             font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: #f9fafb;
         }
-        /* Tab styles */
-        .tab-button {
-            transition: all 0.2s ease-in-out;
-        }
-        .tab-button.active {
-            border-color: #3b82f6;
-            color: #2563eb;
-            background-color: #eff6ff;
-        }
-        /* Content styles */
-        .tab-content h3 {
+        .chapter-content h3 {
             font-size: 1.25rem;
             font-weight: 600;
             color: #1f2937;
-            margin-top: 1.5rem;
             margin-bottom: 0.75rem;
             padding-bottom: 0.5rem;
             border-bottom: 1px solid #e5e7eb;
         }
-        .tab-content p, .tab-content li {
+        .chapter-content p, .chapter-content li {
             color: #4b5563;
             line-height: 1.6;
             margin-bottom: 0.75rem;
         }
-        .tab-content ul {
+        .chapter-content ul {
             list-style-type: disc;
             padding-left: 1.5rem;
         }
-        .tab-content code {
+        .chapter-content code {
             background-color: #f3f4f6;
             color: #4b5563;
             padding: 0.125rem 0.375rem;
@@ -52,103 +38,127 @@
             font-family: monospace;
             font-size: 0.875rem;
         }
-        .icon {
-            width: 1.25rem;
-            height: 1.25rem;
-            margin-right: 0.5rem;
-            flex-shrink: 0;
-        }
     </style>
 </head>
 <body class="p-4">
     <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-sm">
         <div class="text-center mb-6">
             <h1 class="text-2xl font-bold text-gray-800">About the Student Retention Add-in</h1>
-            <p class="text-sm text-gray-500">Version 1.0</p>
+            <p class="text-sm text-gray-500">Version Beta 3.0</p>
         </div>
 
-        <!-- Tab Navigation -->
-        <div class="border-b border-gray-200">
-            <nav class="-mb-px flex space-x-4" aria-label="Tabs">
-                <button id="tab-general" type="button" class="tab-button active group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm" aria-current="page">
-                    General
-                </button>
-                <button id="tab-getting-started" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Getting Started
-                </button>
-                <button id="tab-features" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Features
-                </button>
-                <button id="tab-settings" type="button" class="tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Settings
-                </button>
-            </nav>
-        </div>
-
-        <!-- Tab Content Panels -->
-        <div class="pt-5">
-            <!-- General Panel -->
-            <div id="panel-general" class="tab-content">
-                <h3>Overview</h3>
-                <p>This add-in is designed to streamline the process of tracking and managing student retention by integrating key data directly within your Excel workbook.</p>
-                
-                <h3>The "Retention" Ribbon</h3>
-                <p>After installation, a new "Retention" tab will appear on the Excel ribbon. This tab contains all the tools you need to interact with your student data.</p>
-                <div class="flex items-center p-3 bg-gray-50 rounded-md">
-                    <svg class="icon text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg>
-                    <p class="mb-0">All features of this add-in are accessible from this central location on the ribbon.</p>
+        <!-- Main Content Area -->
+        <div id="main-content">
+            <!-- Table of Contents Panel (Visible by default) -->
+            <div id="panel-toc" class="p-8">
+                <h3 class="text-xl font-semibold text-gray-700 mb-6 text-center">Table of Contents</h3>
+                <div class="space-y-6">
+                    <!-- Module 1 -->
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-600 mb-2">Module 1: Getting Started</h4>
+                        <ul class="space-y-2 pl-4">
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="1">Creating Your Username</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="2">Sheet Setup</a></li>
+                        </ul>
+                    </div>
+                    <!-- Module 2 -->
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-600 mb-2">Module 2: Features</h4>
+                        <ul class="space-y-2 pl-4">
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="3">Show Details & Student History</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="4">Smart Commenting & Tagging</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="5">Import Data</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="6">Create LDA Report</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="7">Mark as Contacted</a></li>
+                            <li><a href="#" class="text-blue-600 hover:underline" data-chapter="8">Transfer Data</a></li>
+                        </ul>
+                    </div>
+                    <!-- Module 3 -->
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-600 mb-2">Module 3: Settings</h4>
+                        <ul class="space-y-2 pl-4">
+                             <li><a href="#" class="text-blue-600 hover:underline" data-chapter="9">Settings Pane</a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
-            <!-- Getting Started Panel -->
-            <div id="panel-getting-started" class="tab-content hidden">
-                <h3>Initial Setup</h3>
-                <p>For the add-in to function correctly, your workbook must contain two specific sheets:</p>
-                <ul>
-                    <li><strong>Master List:</strong> This sheet should contain your main list of students, with a header row (row 1) that includes columns like <code>StudentName</code>, <code>StudentNumber</code>, <code>Grade</code>, etc.</li>
-                    <li><strong>Student History:</strong> This sheet is used to log all comments and outreach. It needs a header row with at least <code>StudentNumber</code>, <code>Comment</code>, and <code>Timestamp</code> columns.</li>
-                </ul>
-                <h3>First Use</h3>
-                <p>The first time you open the "Show Details" task pane, a welcome message will appear asking for your first and last name. This name will be used to automatically sign any comments you add to a student's history.</p>
-            </div>
+            <!-- Chapter Panels (Hidden by default) -->
+            <div id="chapters-container" class="hidden">
+                 <!-- Chapter 1 -->
+                <div id="panel-chapter-1" class="chapter-content">
+                    <h3>Chapter 1: Creating Your Username</h3>
+                    <p>Your username is essential for accountability and clear communication. It's used to automatically sign every comment you add, ensuring that everyone knows who made which note.</p>
+                    <p>The first time you open the "Show Details" task pane, a welcome message should appear asking for your first and last name. If you miss it, or need to add a colleague, you can manually add users at any time in the <strong>Settings</strong> pane.</p>
+                </div>
+                <!-- Chapter 2 -->
+                <div id="panel-chapter-2" class="chapter-content">
+                    <h3>Chapter 2: Sheet Setup</h3>
+                    <p>The add-in relies on a specific workbook structure to function correctly. You must have two sheets with the exact names and required columns:</p>
+                    <ul>
+                        <li><strong>Master List:</strong> This is your main student roster. The first row must be a header with column names like <code>StudentName</code>, <code>StudentNumber</code>, <code>Grade</code>, <code>Phone</code>, etc.</li>
+                        <li><strong>Student History:</strong> This sheet acts as a centralized log for all interactions. The header row must include <code>StudentNumber</code>, <code>Student</code>, <code>Comment</code>, <code>Tag</code>, and <code>Timestamp</code>.</li>
+                    </ul>
+                     <p class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800"><strong>Pro Tip:</strong> To ensure consistency across your team, create a template workbook with these two sheets already set up and formatted.</p>
+                </div>
+                 <!-- Chapter 3 -->
+                <div id="panel-chapter-3" class="chapter-content">
+                    <h3>Chapter 3: Show Details & Student History</h3>
+                    <p>This is your command center for student information. When you select a student in the <strong>Master List</strong>, this task pane instantly displays their key data points.</p>
+                    <p>The <strong>Student History</strong> tab is now enhanced with a priority system. Any comment that includes a future follow-up date (an LDA) is automatically pushed to the top of the list and highlighted in orange. This ensures that critical tasks are always visible and addressed first. The specific date within the comment text is also bolded for immediate recognition.</p>
+                </div>
+                 <!-- Chapter 4 -->
+                <div id="panel-chapter-4" class="chapter-content">
+                    <h3>Chapter 4: Smart Commenting & Tagging</h3>
+                    <p>To save you time and improve consistency, the add-in intelligently analyzes what you type. When you write a comment that implies a future action, the system automatically tags it for you.</p>
+                     <ul>
+                        <li><strong>Automatic LDA Tagging:</strong> Typing a trigger phrase like <code>"will submit"</code> followed by a date (e.g., <code>"tomorrow"</code>, <code>"on Friday"</code>, or <code>"August 20th"</code>) will automatically add an <code>LDA</code> tag to the comment.</li>
+                        <li><strong>Dynamic Updates:</strong> If you change your mind and remove the date from your comment, the smart tag will be removed automatically.</li>
+                        <li><strong>Outreach Logging:</strong> This same intelligence applies when you type notes directly into the <code>Outreach</code> column on your Master List, creating a seamless logging experience.</li>
+                    </ul>
+                </div>
+                 <!-- Chapter 5 -->
+                <div id="panel-chapter-5" class="chapter-content">
+                    <h3>Chapter 5: Import Data</h3>
+                    <p>This feature is designed for efficient bulk updates. You can import data from external <code>.csv</code> or <code>.xlsx</code> files to update your master list or student grades without manual entry.</p>
+                    <p>The add-in is smart enough to analyze the headers of the file you select and will automatically suggest the correct action, whether it's updating the <strong>Master List</strong> with new contact information or updating student <strong>Grades</strong>.</p>
+                </div>
+                 <!-- Chapter 6 -->
+                <div id="panel-chapter-6" class="chapter-content">
+                    <h3>Chapter 6: Create LDA Report</h3>
+                    <p>LDA stands for "Last Date of Attendance." This powerful feature generates a new, focused worksheet with two critical tables for your retention efforts:</p>
+                    <ul>
+                        <li><strong>At-Risk Students:</strong> A list of students who have not attended recently, based on the "Days Out" filter you configure in the Settings. This is your primary list for immediate outreach.</li>
+                        <li><strong>Failing Students:</strong> A supplementary list of students who may be attending but are currently failing. This allows you to proactively intervene before they become an attendance risk.</li>
+                    </ul>
+                </div>
+                 <!-- Chapter 7 -->
+                <div id="panel-chapter-7" class="chapter-content">
+                    <h3>Chapter 7: Mark as Contacted</h3>
+                    <p>This is a simple but effective visual tool for tracking daily tasks. When you've finished reaching out to a student, select their row and click the <strong>Contacted</strong> button.</p>
+                    <p>This toggles a yellow highlight across the student's main columns, giving you and your team a clear, at-a-glance indicator of who has been contacted for the day. Clicking the button again will remove the highlight.</p>
+                </div>
+                 <!-- Chapter 8 -->
+                <div id="panel-chapter-8" class="chapter-content">
+                    <h3>Chapter 8: Transfer Data</h3>
+                    <p>This utility feature allows you to quickly export a single student's data for use in other applications. When you have a student selected, clicking <strong>Transfer Data</strong> copies their key information (Name, ID, Gradebook Link, etc.) to your clipboard in a structured JSON format.</p>
+                    <p>This is useful for pasting into other reporting tools, sending a summary to a colleague, or using the data in an email template.</p>
+                </div>
+                 <!-- Chapter 9 -->
+                <div id="panel-chapter-9" class="chapter-content">
+                    <h3>Chapter 9: Settings Pane</h3>
+                    <p>The Settings pane allows you to customize the add-in to fit your team's workflow. Here you can manage:</p>
+                    <ul>
+                        <li><strong>User Management:</strong> Add, edit, or remove users who can sign comments. The active user is selected in the "Show Details" task pane.</li>
+                        <li><strong>LDA Report Settings:</strong> Fine-tune the criteria for your generated reports, including the "Days Out" threshold and whether to include the failing students list.</li>
+                        <li><strong>Import Settings:</strong> Choose whether to treat blank cells as a zero when importing grade files.</li>
+                        <li><strong>Column Management:</strong> Customize the LDA report by dragging and dropping to include, exclude, and reorder columns.</li>
+                    </ul>
+                </div>
 
-            <!-- Features Panel -->
-            <div id="panel-features" class="tab-content hidden">
-                <h3>Show Details</h3>
-                <p>This is the main interface of the add-in. When you select a student's row, this pane automatically populates with their information, including contact details, key stats, and a full interaction history.</p>
-
-                <h3>Import Data</h3>
-                <p>This feature opens a dialog to import data from <code>.csv</code> or <code>.xlsx</code> files. The add-in intelligently detects the file's content to offer the appropriate actions: "Update Master List" or "Update Grades".</p>
-
-                <h3>Create LDA</h3>
-                <p>Generates a new sheet named with the current date. This sheet contains two tables:</p>
-                <ul>
-                    <li>A list of students who are "at-risk" based on the "Days Out" filter you set in the Settings.</li>
-                    <li>A list of currently failing students who have been active in the last 4 days.</li>
-                </ul>
-
-                <h3>Contacted</h3>
-                <p>A simple but effective tool for visual tracking. When you select a student's row and click this button, it toggles a yellow highlight across the main columns of that row.</p>
-                
-                <h3>Transfer Data</h3>
-                <p>Copies key data from the active sheet (Student Name, Gradebook link, Days Out, etc.) to your clipboard in JSON format, ready to be pasted into other applications.</p>
-            </div>
-            
-            <!-- Settings Panel -->
-            <div id="panel-settings" class="tab-content hidden">
-                <h3>Settings Pane</h3>
-                <p>Clicking the "Settings" button on the ribbon opens a task pane where you can customize the add-in's behavior.</p>
-                <ul>
-                    <li><strong>User Profile:</strong> Set the first and last name used to sign your comments.</li>
-                    <li><strong>LDA Report Settings:</strong>
-                        <ul>
-                            <li>Set the "Days Out" threshold for the at-risk student list.</li>
-                            <li>Toggle whether to include the "Failing Students" list in the report.</li>
-                            <li>Choose whether to treat empty cells in an imported grade file as a grade of 0.</li>
-                        </ul>
-                    </li>
-                    <li><strong>Column Management:</strong> Drag and drop column names to customize which columns appear in the generated LDA report and in what order.</li>
-                </ul>
+                <button id="back-to-toc" class="mt-6 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    &larr; Back to Table of Contents
+                </button>
             </div>
         </div>
         
@@ -158,30 +168,41 @@
     </div>
 
     <script>
-        Office.onReady(() => {
-            const tabs = [
-                { button: document.getElementById('tab-general'), panel: document.getElementById('panel-general') },
-                { button: document.getElementById('tab-getting-started'), panel: document.getElementById('panel-getting-started') },
-                { button: document.getElementById('tab-features'), panel: document.getElementById('panel-features') },
-                { button: document.getElementById('tab-settings'), panel: document.getElementById('panel-settings') }
-            ];
+        window.addEventListener('DOMContentLoaded', () => {
+            const tocPanel = document.getElementById('panel-toc');
+            const chaptersContainer = document.getElementById('chapters-container');
+            const allChapterPanels = chaptersContainer.querySelectorAll('.chapter-content');
+            const tocLinks = tocPanel.querySelectorAll('a');
+            const backButton = document.getElementById('back-to-toc');
 
-            tabs.forEach(tab => {
-                tab.button.addEventListener('click', () => {
-                    // Deactivate all tabs
-                    tabs.forEach(item => {
-                        item.button.classList.remove('active');
-                        item.button.setAttribute('aria-current', 'false');
-                        item.button.className = 'tab-button group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300';
-                        item.panel.classList.add('hidden');
-                    });
+            const showToc = () => {
+                chaptersContainer.classList.add('hidden');
+                allChapterPanels.forEach(panel => panel.classList.add('hidden'));
+                tocPanel.classList.remove('hidden');
+            };
 
-                    // Activate the clicked tab
-                    tab.button.classList.add('active');
-                    tab.button.setAttribute('aria-current', 'page');
-                    tab.button.className = 'tab-button active group inline-flex items-center py-3 px-1 border-b-2 font-medium text-sm';
-                    tab.panel.classList.remove('hidden');
+            const showChapter = (chapterNumber) => {
+                tocPanel.classList.add('hidden');
+                allChapterPanels.forEach(panel => panel.classList.add('hidden'));
+                
+                const chapterToShow = document.getElementById(`panel-chapter-${chapterNumber}`);
+                if (chapterToShow) {
+                    chapterToShow.classList.remove('hidden');
+                    chaptersContainer.classList.remove('hidden');
+                }
+            };
+
+            tocLinks.forEach(link => {
+                link.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const chapterNumber = link.getAttribute('data-chapter');
+                    showChapter(chapterNumber);
                 });
+            });
+
+            backButton.addEventListener('click', (event) => {
+                event.preventDefault();
+                showToc();
             });
         });
     </script>
