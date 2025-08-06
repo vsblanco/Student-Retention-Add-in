@@ -178,48 +178,114 @@ function renderUserList() {
         radio.id = `user-radio-${user.replace(/\s+/g, '-')}`;
         radio.checked = (user === activeUser);
         
-        const label = document.createElement('label');
-        label.htmlFor = radio.id;
-        label.textContent = user;
+        const nameContainer = document.createElement('div');
+        nameContainer.className = 'user-name-container';
+
+        const nameDisplay = document.createElement('span');
+        nameDisplay.textContent = user;
+        nameDisplay.className = 'user-name-display';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = user;
+        nameInput.className = 'user-name-input hidden';
+
+        nameContainer.appendChild(nameDisplay);
+        nameContainer.appendChild(nameInput);
 
         const actions = document.createElement('div');
         actions.className = 'user-item-actions';
         
         const editButton = document.createElement('button');
-        editButton.className = 'icon-button';
+        editButton.className = 'icon-button edit-button';
+        editButton.title = 'Edit User';
         editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-        editButton.onclick = () => editUser(user);
         
+        const saveButton = document.createElement('button');
+        saveButton.className = 'icon-button save-button hidden';
+        saveButton.title = 'Save Changes';
+        saveButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        
+        const cancelButton = document.createElement('button');
+        cancelButton.className = 'icon-button cancel-button hidden';
+        cancelButton.title = 'Cancel Edit';
+        cancelButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
         const removeButton = document.createElement('button');
-        removeButton.className = 'icon-button';
+        removeButton.className = 'icon-button remove-button';
+        removeButton.title = 'Remove User';
         removeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-        removeButton.onclick = () => removeUser(user);
         removeButton.disabled = (user === activeUser);
 
+        editButton.onclick = () => {
+            nameDisplay.classList.add('hidden');
+            editButton.classList.add('hidden');
+            removeButton.classList.add('hidden');
+            
+            nameInput.classList.remove('hidden');
+            saveButton.classList.remove('hidden');
+            cancelButton.classList.remove('hidden');
+            nameInput.focus();
+            nameInput.select();
+        };
+
+        cancelButton.onclick = () => {
+            nameInput.classList.add('hidden');
+            saveButton.classList.add('hidden');
+            cancelButton.classList.add('hidden');
+
+            nameDisplay.classList.remove('hidden');
+            editButton.classList.remove('hidden');
+            removeButton.classList.remove('hidden');
+            
+            nameInput.value = user;
+        };
+
+        saveButton.onclick = () => {
+            const oldName = user;
+            const newName = nameInput.value.trim();
+
+            if (newName && newName !== oldName) {
+                const userList = settings.userProfile.userList;
+                if (userList.includes(newName)) {
+                    console.error(`User "${newName}" already exists.`);
+                    nameInput.style.borderColor = 'red';
+                    setTimeout(() => { nameInput.style.borderColor = ''; }, 2000);
+                    return;
+                }
+
+                const index = userList.indexOf(oldName);
+                if (index > -1) {
+                    userList[index] = newName;
+                    if (settings.userProfile.name === oldName) {
+                        settings.userProfile.name = newName;
+                    }
+                    saveSettings();
+                }
+            } else {
+                cancelButton.onclick();
+            }
+        };
+
+        nameInput.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                saveButton.onclick();
+            } else if (event.key === 'Escape') {
+                cancelButton.onclick();
+            }
+        };
+
+        removeButton.onclick = () => removeUser(user);
+
         userItem.appendChild(radio);
-        userItem.appendChild(label);
+        userItem.appendChild(nameContainer);
         actions.appendChild(editButton);
+        actions.appendChild(saveButton);
+        actions.appendChild(cancelButton);
         actions.appendChild(removeButton);
         userItem.appendChild(actions);
         container.appendChild(userItem);
     });
-}
-
-function editUser(oldName) {
-    // For simplicity, we'll still use prompt here, but this could also be converted to a modal.
-    const newName = prompt("Enter the new name for this user:", oldName);
-    if (newName && newName.trim() !== "" && newName !== oldName) {
-        const userList = settings.userProfile.userList;
-        const index = userList.indexOf(oldName);
-        if (index > -1) {
-            userList[index] = newName;
-            // If the edited user was the active user, update the active name
-            if (settings.userProfile.name === oldName) {
-                settings.userProfile.name = newName;
-            }
-            saveSettings(); // Save and reload the UI
-        }
-    }
 }
 
 function removeUser(nameToRemove) {
