@@ -94,10 +94,29 @@ input[type="number"] {
     margin-right: 12px;
 }
 
-.user-item label {
+.user-name-container {
     flex-grow: 1;
-    cursor: pointer;
+    display: flex;
+    align-items: center;
 }
+
+.user-name-display {
+    cursor: default;
+}
+
+.user-name-input {
+    padding: 4px 6px;
+    border: 1px solid #a0aec0; /* gray-500 */
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.hidden {
+    display: none;
+}
+
 
 .user-item-actions {
     display: flex;
