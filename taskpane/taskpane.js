@@ -735,21 +735,60 @@ async function displayStudentHistory(studentId) {
                 if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
                     const commentText = row[commentColIdx];
                     if (commentText && String(commentText).trim() !== "") {
-                        comments.push({
+                        const comment = {
                             text: commentText,
                             tag: tagColIdx !== -1 ? row[tagColIdx] : null,
                             timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
-                            createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown'
-                        });
+                            createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown',
+                            ldaDate: null // New property for priority sorting
+                        };
+
+                        // Check for future LDA tag
+                        if (comment.tag) {
+                            const tags = String(comment.tag).split(',').map(t => t.trim());
+                            const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
+                            if (ldaTag) {
+                                const dateStr = ldaTag.substring(4);
+                                const ldaDate = new Date(dateStr);
+                                if (!isNaN(ldaDate.getTime())) {
+                                    ldaDate.setHours(0, 0, 0, 0); // Normalize to start of day for comparison
+                                    comment.ldaDate = ldaDate;
+                                }
+                            }
+                        }
+                        comments.push(comment);
                     }
                 }
             }
             
             if (comments.length > 0) {
+                // --- New Sorting Logic ---
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today);
+                const regularComments = comments.filter(c => !c.ldaDate || c.ldaDate < today);
+
+                // Sort priority comments by LDA date, ascending (soonest first)
+                priorityComments.sort((a, b) => a.ldaDate - b.ldaDate);
+
+                // Sort regular comments by timestamp, descending (most recent first)
+                regularComments.sort((a, b) => {
+                    const dateA = parseDate(a.timestamp) || 0;
+                    const dateB = parseDate(b.timestamp) || 0;
+                    return dateB - dateA;
+                });
+
+                const sortedComments = [...priorityComments, ...regularComments];
+                // --- End New Sorting Logic ---
+
                 let html = '<ul class="space-y-4">';
-                comments.reverse().forEach(comment => {
+                sortedComments.forEach(comment => {
+                    const isPriority = comment.ldaDate && comment.ldaDate >= today;
+                    const bgColor = isPriority ? 'bg-orange-100' : 'bg-gray-100';
+
                     html += `
-                        <li class="p-3 bg-gray-100 rounded-lg shadow-sm">
+                        <li class="p-3 ${bgColor} rounded-lg shadow-sm">
                             <p class="text-sm text-gray-800">${comment.text}</p>`;
                     
                     html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
