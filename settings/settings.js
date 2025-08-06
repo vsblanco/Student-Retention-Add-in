@@ -12,6 +12,7 @@ Office.onReady((info) => {
         // Add event listeners
         document.getElementById("save-button").onclick = saveSettings;
         document.getElementById("reset-button").onclick = resetSettings;
+        document.getElementById("add-user-button").onclick = addNewUser;
     }
 });
 
@@ -151,6 +152,29 @@ function renderUserList() {
     });
 }
 
+function addNewUser() {
+    const firstName = prompt("Enter the user's first name:");
+    if (!firstName || firstName.trim() === "") {
+        return; // User cancelled or entered nothing
+    }
+
+    const lastName = prompt("Enter the user's last name:");
+    if (!lastName || lastName.trim() === "") {
+        return; // User cancelled or entered nothing
+    }
+
+    const formattedName = `${lastName.trim()}, ${firstName.trim()}`;
+
+    if (settings.userProfile.userList.includes(formattedName)) {
+        alert(`User "${formattedName}" already exists.`);
+        return;
+    }
+
+    settings.userProfile.userList.push(formattedName);
+    saveSettings(); // This will save and reload the UI
+}
+
+
 function editUser(oldName) {
     const newName = prompt("Enter the new name for this user:", oldName);
     if (newName && newName.trim() !== "" && newName !== oldName) {
@@ -241,6 +265,8 @@ function createColumnItem(header) {
 
 function saveSettings() {
     // --- User Profile ---
+    // The user list is modified directly by the edit/remove functions.
+    // We just need to find the selected active user.
     const selectedRadio = document.querySelector('input[name="active-user"]:checked');
     if (selectedRadio) {
         settings.userProfile.name = selectedRadio.value;
