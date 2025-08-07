@@ -289,7 +289,7 @@ async function handleUpdateMaster(message) {
             throw new Error("Imported file is missing a 'Student Name' column.");
         }
 
-        // 2. Read existing Master List to identify new students and save gradebook links
+        // 2. Read existing Master List to identify new students and save gradebook links and assigned users
         let newStudents = [];
         let existingStudents = [];
         let masterHeaders;
@@ -299,7 +299,7 @@ async function handleUpdateMaster(message) {
         const masterDataMap = new Map();
 
         await Excel.run(async (context) => {
-            sendMessageToDialog("Reading current 'Master List' to identify new students and save links...");
+            sendMessageToDialog("Reading current 'Master List' to identify new students and save links/assignments...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values, formulas"); // Load formulas as well
@@ -313,6 +313,7 @@ async function handleUpdateMaster(message) {
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const masterAssignedCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
             sendMessageToDialog(`'Master List' headers: [${masterHeaders.join(', ')}]`);
 
             if (masterStudentNameCol === -1) {
@@ -323,12 +324,14 @@ async function handleUpdateMaster(message) {
                 const name = usedRange.values[i][masterStudentNameCol];
                 if (name) {
                     const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
+                    const assignedValue = (masterAssignedCol !== -1) ? usedRange.values[i][masterAssignedCol] : null;
                     masterDataMap.set(normalizeName(name), {
-                        gradebookFormula: gradebookFormula
+                        gradebookFormula: gradebookFormula,
+                        assigned: assignedValue
                     });
                 }
             }
-            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving gradebook links.`);
+            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving gradebook links and assignments.`);
 
             colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
@@ -375,6 +378,7 @@ async function handleUpdateMaster(message) {
             const dataToWrite = [];
             const formulasToWrite = []; // Array to hold formulas
             let gradebookLinksPreservedCount = 0;
+            let assignedUsersPreservedCount = 0;
 
             allStudentsToWrite.forEach(userRow => {
                 const newRow = new Array(masterHeaders.length).fill("");
@@ -391,11 +395,12 @@ async function handleUpdateMaster(message) {
                     }
                 }
                 
-                // *** FEATURE START: Preserve Gradebook Link ***
                 const studentName = userRow[userStudentNameCol];
                 const normalizedName = normalizeName(studentName);
                 if (masterDataMap.has(normalizedName)) {
                     const existingData = masterDataMap.get(normalizedName);
+                    
+                    // *** FEATURE START: Preserve Gradebook Link ***
                     if (existingData.gradebookFormula) {
                         const masterGradebookColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
                         if (masterGradebookColIdx !== -1 && !newRow[masterGradebookColIdx]) {
@@ -409,8 +414,19 @@ async function handleUpdateMaster(message) {
                             sendMessageToDialog(`Preserving Gradebook link for ${studentName}`, 'log', [`- Formula: ${existingData.gradebookFormula}`]);
                         }
                     }
+                    // *** FEATURE END ***
+
+                    // *** FEATURE START: Preserve Assigned User ***
+                    if (existingData.assigned) {
+                        const masterAssignedColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+                        if (masterAssignedColIdx !== -1 && !newRow[masterAssignedColIdx]) { // Only restore if import is blank
+                            newRow[masterAssignedColIdx] = existingData.assigned;
+                            assignedUsersPreservedCount++;
+                            sendMessageToDialog(`Preserving Assigned user '${existingData.assigned}' for ${studentName}`);
+                        }
+                    }
+                    // *** FEATURE END ***
                 }
-                // *** FEATURE END ***
 
                 const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
                 if (userLdaColIdx !== -1) {
@@ -438,6 +454,10 @@ async function handleUpdateMaster(message) {
             if (gradebookLinksPreservedCount > 0) {
                 sendMessageToDialog(`A total of ${gradebookLinksPreservedCount} Gradebook links were preserved.`);
             }
+            if (assignedUsersPreservedCount > 0) {
+                sendMessageToDialog(`A total of ${assignedUsersPreservedCount} Assigned users were preserved.`);
+            }
+
 
             // 5. Write all data and formulas in separate batches
             sendMessageToDialog("Writing data and formulas to the sheet...");
