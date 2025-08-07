@@ -151,7 +151,8 @@ function applyTrendFilter(period) {
         labels: [],
         ldaCounts: [],
         engagedCounts: [],
-        dates: []
+        dates: [],
+        sheetNames: [] // Added sheetNames to filtered data
     };
 
     for (let i = 0; i < fullTrendsData.dates.length; i++) {
@@ -160,6 +161,7 @@ function applyTrendFilter(period) {
             filteredData.ldaCounts.push(fullTrendsData.ldaCounts[i]);
             filteredData.engagedCounts.push(fullTrendsData.engagedCounts[i]);
             filteredData.dates.push(fullTrendsData.dates[i]);
+            filteredData.sheetNames.push(fullTrendsData.sheetNames[i]); // Populate sheetNames
         }
     }
 
@@ -316,11 +318,12 @@ async function getTrendsData() {
 
         ldaSheets.sort((a, b) => a.date - b.date);
 
-        const trendsData = { labels: [], ldaCounts: [], engagedCounts: [], dates: [] };
+        const trendsData = { labels: [], ldaCounts: [], engagedCounts: [], dates: [], sheetNames: [] };
 
         for (const { sheet, date } of ldaSheets) {
             trendsData.labels.push(date.toLocaleDateString());
             trendsData.dates.push(date);
+            trendsData.sheetNames.push(sheet.name); // Store the sheet name
 
             sheet.tables.load("items/name");
             await context.sync();
@@ -453,9 +456,37 @@ function renderTrendsChart(trendsData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: { y: { beginAtZero: true } }
+            scales: { y: { beginAtZero: true } },
+            onClick: (event) => {
+                const points = trendsChartInstance.getElementsAtEventForMode(event, 'nearest', { intersect: true }, true);
+                if (points.length) {
+                    const firstPoint = points[0];
+                    const index = firstPoint.index;
+                    const sheetName = trendsData.sheetNames[index];
+                    if (sheetName) {
+                        navigateToSheet(sheetName);
+                    }
+                }
+            }
         }
     });
+}
+
+/**
+ * Navigates to a specific worksheet by its name.
+ * @param {string} sheetName The name of the sheet to activate.
+ */
+async function navigateToSheet(sheetName) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(sheetName);
+            sheet.activate();
+            await context.sync();
+        });
+    } catch (error) {
+        console.error(`Error navigating to sheet "${sheetName}":`, error);
+        showError(`Could not navigate to sheet: ${sheetName}`);
+    }
 }
 
 
