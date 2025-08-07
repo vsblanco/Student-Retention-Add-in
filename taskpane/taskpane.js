@@ -29,6 +29,7 @@ const CONSTANTS = {
     OTHER_PHONE_DISPLAY: "other-phone-display",
     STUDENT_EMAIL_DISPLAY: "student-email-display",
     PERSONAL_EMAIL_DISPLAY: "personal-email-display",
+    COPY_STUDENT_ID: "copy-student-id",
     COPY_PRIMARY_PHONE: "copy-primary-phone",
     COPY_OTHER_PHONE: "copy-other-phone",
     COPY_STUDENT_EMAIL: "copy-student-email",
@@ -669,6 +670,7 @@ function copyToClipboard(text, triggerElement) {
  */
 function setupCopyHandlers() {
     const contactInfoIds = [
+        CONSTANTS.COPY_STUDENT_ID,
         CONSTANTS.COPY_PRIMARY_PHONE,
         CONSTANTS.COPY_OTHER_PHONE,
         CONSTANTS.COPY_STUDENT_EMAIL,
@@ -679,7 +681,11 @@ function setupCopyHandlers() {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('click', () => {
-                const displayEl = el.querySelector('.font-semibold');
+                // For the student ID, the text is in a different child element
+                const displayEl = id === CONSTANTS.COPY_STUDENT_ID
+                    ? el.querySelector('#' + CONSTANTS.STUDENT_ID_DISPLAY)
+                    : el.querySelector('.font-semibold');
+                
                 if (displayEl) {
                     copyToClipboard(displayEl.textContent, el);
                 }
