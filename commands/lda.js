@@ -85,7 +85,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v14");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v15");
     try {
         const settings = await getSettings();
         const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns, includeLdaTagFollowup } = settings.createlda;
@@ -124,7 +124,7 @@ async function handleCreateLdaSheet() {
                 console.log("[DEBUG] Processing Student History for LDA follow-ups.");
                 historyData = historyRange.values;
                 const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
-                const histIdCol = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.studentNumber);
+                const histIdCol = findColumnIndex(historyHeaders, CONSTANTS.STUDENT_NUMBER_COLS);
                 const histTagCol = findColumnIndex(historyHeaders, ["tag"]);
 
                 if (histIdCol !== -1 && histTagCol !== -1) {
@@ -389,8 +389,8 @@ async function createAndFormatTable(context, options) {
     const indicesToKeep = finalHeaders.map(h => originalHeaders.indexOf(h));
     const originalLCHeaders = originalHeaders.map(h => String(h ?? '').toLowerCase());
     const gradeBookColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
-    const studentNumberColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.studentNumber);
-    const outreachColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach);
+    const studentNumberColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.STUDENT_NUMBER_COLS);
+    const outreachColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.OUTREACH_COLS);
 
     const dataToWrite = [];
     const formulasToWrite = [];
@@ -421,7 +421,7 @@ async function createAndFormatTable(context, options) {
             const studentId = row[studentNumberColIdx];
             if (studentId && ldaFollowUpMap.has(studentId)) {
                 const followUp = ldaFollowUpMap.get(studentId);
-                const outreachColInFinal = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.outreach);
+                const outreachColInFinal = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.OUTREACH_COLS);
                 if (outreachColInFinal !== -1) {
                     const formattedDate = `${followUp.date.getMonth() + 1}-${followUp.date.getDate()}-${String(followUp.date.getFullYear()).slice(-2)}`;
                     newRow[outreachColInFinal] = `[${followUp.tag}] Will Engage ${formattedDate}`;
