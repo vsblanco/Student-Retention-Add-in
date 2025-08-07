@@ -297,13 +297,14 @@ async function handleUpdateMaster(message) {
         let masterStudentNameCol;
         let colMapping;
         const masterDataMap = new Map();
-        const assignedColorMap = new Map(); // Separate map for colors, keyed by student name
+        const valueToColorMap = new Map(); // Map to store color for each unique 'Assigned' value
 
         await Excel.run(async (context) => {
             sendMessageToDialog("Reading current 'Master List' to preserve cell data...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, formulas, format/fill/color");
+            // Load values and formulas first. We will get colors in a separate, targeted step.
+            usedRange.load("values, formulas, rowIndex, columnIndex");
             await context.sync();
 
             if (usedRange.values.length < 1) {
@@ -321,6 +322,7 @@ async function handleUpdateMaster(message) {
                 throw new Error("'Master List' is missing a 'StudentName' column.");
             }
 
+            // First pass: Get all data except colors
             for (let i = 1; i < usedRange.values.length; i++) {
                 const name = usedRange.values[i][masterStudentNameCol];
                 if (name) {
@@ -328,22 +330,44 @@ async function handleUpdateMaster(message) {
                     const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
                     const assignedValue = (masterAssignedCol !== -1) ? usedRange.values[i][masterAssignedCol] : null;
                     
-                    // Store general data
                     masterDataMap.set(normalizedName, {
                         gradebookFormula: gradebookFormula,
-                        assigned: assignedValue,
+                        assigned: assignedValue
                     });
-
-                    // Store individual cell color separately, keyed by student name
-                    if (masterAssignedCol !== -1 && usedRange.format.fill.color && usedRange.format.fill.color[i]) {
-                        const assignedColor = usedRange.format.fill.color[i][masterAssignedCol];
-                        if (assignedColor && assignedColor !== '#ffffff' && assignedColor !== '#000000') {
-                            assignedColorMap.set(normalizedName, assignedColor);
-                        }
-                    }
                 }
             }
-            sendMessageToDialog(`Created map of ${masterDataMap.size} students and preserved ${assignedColorMap.size} individual cell colors.`);
+            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving data.`);
+            
+            // Get colors based on unique values in the "Assigned" column, using the user-provided method
+            if (masterAssignedCol !== -1) {
+                const allAssignedValues = usedRange.values.map(row => row[masterAssignedCol]);
+                const uniqueValues = [...new Set(allAssignedValues.slice(1).filter(v => v && String(v).trim() !== ""))];
+                
+                if (uniqueValues.length > 0) {
+                    sendMessageToDialog(`Found ${uniqueValues.length} unique values in 'Assigned' column. Fetching their colors...`);
+                    const cellsToLoad = [];
+                    uniqueValues.forEach(value => {
+                        const firstInstanceIndex = allAssignedValues.indexOf(value);
+                        if (firstInstanceIndex > 0) { // Ensure it's not the header
+                            const absoluteRowIndex = usedRange.rowIndex + firstInstanceIndex;
+                            const absoluteColIndex = usedRange.columnIndex + masterAssignedCol;
+                            const cell = sheet.getCell(absoluteRowIndex, absoluteColIndex);
+                            cell.load("format/fill/color");
+                            cellsToLoad.push({ value: value, cell: cell });
+                        }
+                    });
+
+                    await context.sync();
+
+                    cellsToLoad.forEach(item => {
+                        const color = item.cell.format.fill.color;
+                        if (color && color !== '#ffffff' && color !== '#000000') {
+                            valueToColorMap.set(item.value, color);
+                        }
+                    });
+                    sendMessageToDialog(`Cached colors for ${valueToColorMap.size} unique values.`);
+                }
+            }
 
             colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
@@ -410,7 +434,6 @@ async function handleUpdateMaster(message) {
                 
                 const studentName = userRow[userStudentNameCol];
                 const normalizedName = normalizeName(studentName);
-
                 if (masterDataMap.has(normalizedName)) {
                     const existingData = masterDataMap.get(normalizedName);
                     
@@ -433,14 +456,15 @@ async function handleUpdateMaster(message) {
                     }
                 }
 
-                // Check for a preserved color for this specific student
-                if (assignedColorMap.has(normalizedName)) {
-                    const masterAssignedColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
-                    if (masterAssignedColIdx !== -1) {
+                // Check for a preserved color based on the value in the 'Assigned' column
+                const masterAssignedColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+                if (masterAssignedColIdx !== -1) {
+                    const assignedValue = newRow[masterAssignedColIdx];
+                    if (assignedValue && valueToColorMap.has(assignedValue)) {
                         cellsToColor.push({
                             rowIndex: index + 1, // +1 because data starts at row 1
                             colIndex: masterAssignedColIdx,
-                            color: assignedColorMap.get(normalizedName)
+                            color: valueToColorMap.get(assignedValue)
                         });
                     }
                 }
@@ -470,7 +494,7 @@ async function handleUpdateMaster(message) {
 
             if (gradebookLinksPreservedCount > 0) sendMessageToDialog(`A total of ${gradebookLinksPreservedCount} Gradebook links were preserved.`);
             if (assignedUsersPreservedCount > 0) sendMessageToDialog(`A total of ${assignedUsersPreservedCount} Assigned users were preserved.`);
-            if (cellsToColor.length > 0) sendMessageToDialog(`Preparing to re-apply ${cellsToColor.length} individual cell colors.`);
+            if (cellsToColor.length > 0) sendMessageToDialog(`Preparing to re-apply ${cellsToColor.length} cell colors.`);
 
 
             // 5. Write all data and formulas in separate batches
