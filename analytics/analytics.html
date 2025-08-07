@@ -123,10 +123,16 @@
                                 <h2 class="text-lg font-semibold text-gray-700">LDA & Engagement Trends</h2>
                                 <p class="text-sm text-gray-500">Historical data from all LDA sheets found in this workbook.</p>
                             </div>
-                            <div class="flex space-x-1 bg-gray-200 p-1 rounded-lg">
-                                <button id="filter-week" class="filter-button px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Week</button>
-                                <button id="filter-month" class="filter-button active px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Month</button>
-                                <button id="filter-year" class="filter-button px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Year</button>
+                            <div class="flex items-center space-x-4">
+                                <div class="flex items-center space-x-2">
+                                    <label for="trends-days-out-filter" class="text-sm font-medium text-gray-600">Days Out ≥</label>
+                                    <input type="number" id="trends-days-out-filter" class="w-16 p-1 border border-gray-300 rounded-md text-sm">
+                                </div>
+                                <div class="flex space-x-1 bg-gray-200 p-1 rounded-lg">
+                                    <button id="filter-week" class="filter-button px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Week</button>
+                                    <button id="filter-month" class="filter-button active px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Month</button>
+                                    <button id="filter-year" class="filter-button px-3 py-1 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-300">Year</button>
+                                </div>
                             </div>
                         </div>
                         <div class="relative h-96">
