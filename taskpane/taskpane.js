@@ -370,6 +370,7 @@ function findColumnIndex(headers, possibleNames) {
 
 /**
  * Converts an Excel date serial number to a formatted string (e.g., "June 1st, 2025").
+ * This version uses UTC methods to prevent timezone-related date shifts.
  * @param {number} excelDate The Excel date serial number.
  * @returns {string} The formatted date string or "N/A".
  */
@@ -379,15 +380,17 @@ function formatExcelDate(excelDate) {
     }
     // Excel's epoch starts on 1900-01-01, but it incorrectly thinks 1900 is a leap year.
     // The JavaScript epoch starts on 1970-01-01. The difference is 25569 days.
+    // The calculation correctly gives UTC milliseconds.
     const date = new Date((excelDate - 25569) * 86400 * 1000);
     
     if (isNaN(date.getTime())) {
         return "N/A";
     }
 
-    const day = date.getDate();
-    const year = date.getFullYear();
-    const month = date.toLocaleString('default', { month: 'long' });
+    // Use UTC methods to avoid timezone shifts.
+    const day = date.getUTCDate();
+    const year = date.getUTCFullYear();
+    const month = date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
 
     let daySuffix = 'th';
     if (day === 1 || day === 21 || day === 31) {
@@ -400,6 +403,7 @@ function formatExcelDate(excelDate) {
 
     return `${month} ${day}${daySuffix}, ${year}`;
 }
+
 
 /**
  * Handles the document selection change event.
