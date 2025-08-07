@@ -1492,6 +1492,8 @@ async function onWorksheetChanged(eventArgs) {
 
 /**
  * Adds or updates a comment in the "Student History" sheet based on an outreach entry.
+ * If an outreach comment for the student exists for the current day, it updates it.
+ * Otherwise, it adds a new comment.
  * @param {string|number} studentId The student's ID.
  * @param {string} studentName The student's name.
  * @param {string} commentText The new comment text from the Outreach column.
@@ -1515,45 +1517,49 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
             const createdByCol = findColumnIndex(historyHeaders, ["created by"]);
             const studentCol = findColumnIndex(historyHeaders, ["student"]);
 
-            if (idCol === -1 || commentCol === -1 || timestampCol === -1) {
-                console.log("Student History sheet is missing required columns (StudentNumber, Comment, Timestamp).");
+            if (idCol === -1 || commentCol === -1 || timestampCol === -1 || tagCol === -1) {
+                console.log("Student History sheet is missing required columns (StudentNumber, Comment, Timestamp, Tag).");
                 return;
             }
 
-            let lastCommentRowIndex = -1;
-            let lastCommentTimestamp = 0;
+            let todaysCommentRowIndex = -1;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
+            // Search backwards for the most recent entry for this student today
             for (let i = historyData.length - 1; i > 0; i--) {
                 const row = historyData[i];
                 if (row[idCol] && String(row[idCol]) === String(studentId)) {
-                    lastCommentRowIndex = historyRange.rowIndex + i;
-                    lastCommentTimestamp = row[timestampCol];
-                    break;
+                    const tags = String(row[tagCol] || '').toLowerCase();
+                    if (tags.includes('outreach')) {
+                        const commentDate = parseDate(row[timestampCol]);
+                        if (commentDate) {
+                            commentDate.setHours(0, 0, 0, 0);
+                            if (commentDate.getTime() === today.getTime()) {
+                                todaysCommentRowIndex = historyRange.rowIndex + i;
+                                break; // Found today's outreach comment
+                            }
+                        }
+                    }
                 }
             }
 
             const now = new Date();
             const excelNow = jsDateToExcelDate(now);
-            const oneMinuteInMillis = 60 * 1000;
-            let updateExisting = false;
 
-            if (lastCommentRowIndex !== -1) {
-                const lastCommentDate = parseDate(lastCommentTimestamp);
-                if (lastCommentDate && (now.getTime() - lastCommentDate.getTime()) < oneMinuteInMillis) {
-                    updateExisting = true;
-                }
-            }
-
-            if (updateExisting) {
-                console.log(`Updating existing comment for ${studentName} at row ${lastCommentRowIndex + 1}`);
-                const commentCell = historySheet.getCell(lastCommentRowIndex, commentCol);
+            if (todaysCommentRowIndex !== -1) {
+                // Update existing comment
+                console.log(`Updating existing outreach comment for ${studentName} at row ${todaysCommentRowIndex + 1}`);
+                const commentCell = historySheet.getCell(todaysCommentRowIndex, commentCol);
+                const timestampCell = historySheet.getCell(todaysCommentRowIndex, timestampCol);
+                
                 commentCell.values = [[commentText]];
-                const timestampCell = historySheet.getCell(lastCommentRowIndex, timestampCol);
                 timestampCell.values = [[excelNow]];
                 timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
 
             } else {
-                console.log(`Adding new comment for ${studentName}`);
+                // Add new comment
+                console.log(`Adding new outreach comment for ${studentName}`);
                 const newRowData = new Array(historyHeaders.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
@@ -1567,7 +1573,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                     tagsToSave += `, ${ldaTag}`;
                 }
 
-                if (tagCol !== -1) newRowData[tagCol] = tagsToSave;
+                newRowData[tagCol] = tagsToSave;
                 newRowData[timestampCol] = excelNow;
                 newRowData[commentCol] = commentText;
                 
@@ -1582,6 +1588,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
             historySheet.getUsedRange().format.autofitColumns();
             await context.sync();
 
+            // Refresh the history pane if it's open for the current student
             if (studentId && String(studentId) === String(currentStudentId)) {
                 const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
                 if (panelHistory && !panelHistory.classList.contains("hidden")) {
