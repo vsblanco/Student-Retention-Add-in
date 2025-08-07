@@ -115,6 +115,7 @@ function loadSettingsAndPopulateUI() {
         settings.createlda = {
             daysOutFilter: 6,
             includeFailingList: true,
+            includeLdaTagFollowup: true, // New setting default
             hideLeftoverColumns: true,
             treatEmptyGradesAsZero: false,
             ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
@@ -147,6 +148,7 @@ function loadSettingsAndPopulateUI() {
     // Populate UI for LDA Report settings
     document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
     document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
+    document.getElementById("include-lda-tag-followup").checked = settings.createlda.includeLdaTagFollowup !== false; // Populate new toggle
     document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
     document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
 
@@ -367,6 +369,7 @@ function saveSettings() {
     // --- LDA Report ---
     settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
     settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
+    settings.createlda.includeLdaTagFollowup = document.getElementById("include-lda-tag-followup").checked; // Save new setting
     settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
     settings.createlda.treatEmptyGradesAsZero = document.getElementById("treat-empty-grades-as-zero").checked;
 
