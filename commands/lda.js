@@ -1,7 +1,7 @@
 /*
  * This file contains the logic for the "Create LDA" ribbon button command.
  */
-import { CONSTANTS, getSettings, findColumnIndex } from './utils.js';
+import { CONSTANTS, getSettings, findColumnIndex, parseDate } from './utils.js';
 
 let createLdaDialog = null;
 
@@ -85,12 +85,12 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v13");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v14");
     try {
         const settings = await getSettings();
-        const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns } = settings.createlda;
+        const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns, includeLdaTagFollowup } = settings.createlda;
         
-        console.log(`[DEBUG] Settings: DaysOut=${daysOutFilter}, FailingList=${includeFailingList}, HideUnused=${hideLeftoverColumns}`);
+        console.log(`[DEBUG] Settings: DaysOut=${daysOutFilter}, FailingList=${includeFailingList}, HideUnused=${hideLeftoverColumns}, LdaFollowup=${includeLdaTagFollowup}`);
         if (!ldaColumns || ldaColumns.length === 0) {
             console.warn("No columns selected for LDA report. Aborting.");
             if (createLdaDialog) createLdaDialog.messageChild(JSON.stringify({ type: 'creationError', error: "No columns selected in settings." }));
@@ -98,11 +98,61 @@ async function handleCreateLdaSheet() {
         }
 
         await Excel.run(async (context) => {
+            // --- Start: Read Master List and History Data ---
             console.log("[DEBUG] Reading data from Master List.");
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
             masterRange.load("values, formulas, rowIndex, columnIndex");
+            
+            let historySheet, historyRange, historyData;
+            const ldaFollowUpMap = new Map();
+
+            if (includeLdaTagFollowup) {
+                try {
+                    historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+                    historyRange = historySheet.getUsedRange();
+                    historyRange.load("values");
+                } catch (e) {
+                    console.warn("Student History sheet not found, cannot process LDA follow-ups.");
+                }
+            }
+            
             await context.sync();
+            
+            // --- Process History for LDA Follow-ups ---
+            if (includeLdaTagFollowup && historySheet) {
+                console.log("[DEBUG] Processing Student History for LDA follow-ups.");
+                historyData = historyRange.values;
+                const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
+                const histIdCol = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.studentNumber);
+                const histTagCol = findColumnIndex(historyHeaders, ["tag"]);
+
+                if (histIdCol !== -1 && histTagCol !== -1) {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    for (let i = historyData.length - 1; i > 0; i--) { // Iterate backwards to get the most recent
+                        const row = historyData[i];
+                        const studentId = row[histIdCol];
+                        if (studentId && !ldaFollowUpMap.has(studentId)) {
+                            const tags = String(row[histTagCol] || '').split(',').map(t => t.trim());
+                            const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
+                            if (ldaTag) {
+                                const dateStr = ldaTag.substring(4);
+                                const ldaDate = new Date(dateStr);
+                                if (!isNaN(ldaDate.getTime())) {
+                                    ldaDate.setHours(0, 0, 0, 0);
+                                    if (ldaDate >= today) {
+                                        ldaFollowUpMap.set(studentId, { tag: ldaTag, date: ldaDate });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    console.log(`[DEBUG] Found ${ldaFollowUpMap.size} students with future LDA follow-ups.`);
+                }
+            }
+
 
             const masterData = masterRange.values;
             const masterFormulas = masterRange.formulas;
@@ -112,7 +162,7 @@ async function handleCreateLdaSheet() {
             const daysOutColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
             if (daysOutColIdx === -1) throw new Error("'Days Out' column not found in Master List.");
 
-            // --- Start: New Color Caching Logic ---
+            // --- Start: Color Caching Logic ---
             const valueToColorMap = new Map();
             const masterAssignedCol = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
             if (masterAssignedCol !== -1) {
@@ -144,7 +194,7 @@ async function handleCreateLdaSheet() {
                     console.log(`[DEBUG] Cached colors for ${valueToColorMap.size} unique values.`);
                 }
             }
-            // --- End: New Color Caching Logic ---
+            // --- End: Color Caching Logic ---
             
             const dataRowsWithIndex = masterData.slice(1).map((row, index) => ({ row, originalIndex: index + 1 }));
 
@@ -178,13 +228,14 @@ async function handleCreateLdaSheet() {
                 ldaColumns,
                 hideLeftoverColumns,
                 originalHeaders,
-                valueToColorMap // Pass the color map
+                valueToColorMap,
+                ldaFollowUpMap
             });
             
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
-                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap);
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap);
             }
             
         });
@@ -205,7 +256,7 @@ async function handleCreateLdaSheet() {
     }
 }
 
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap) {
     console.log("[DEBUG] Creating failing list table.");
     const originalLCHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -243,7 +294,8 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             ldaColumns,
             hideLeftoverColumns,
             originalHeaders,
-            valueToColorMap // Pass the color map
+            valueToColorMap,
+            ldaFollowUpMap
         });
     }
 }
@@ -317,36 +369,34 @@ async function createAndFormatTable(context, options) {
         ldaColumns,
         hideLeftoverColumns,
         originalHeaders,
-        valueToColorMap
+        valueToColorMap,
+        ldaFollowUpMap
     } = options;
 
     let finalHeaders;
     if (hideLeftoverColumns) {
-        // Start with the user-defined order
         finalHeaders = [...ldaColumns];
         const ldaColumnsSet = new Set(ldaColumns);
-        // Add any other columns from the master list that weren't in the user's list
         originalHeaders.forEach(h => {
             if (!ldaColumnsSet.has(h)) {
                 finalHeaders.push(h);
             }
         });
     } else {
-        // Only use the columns specified in settings
         finalHeaders = ldaColumns;
     }
 
     const indicesToKeep = finalHeaders.map(h => originalHeaders.indexOf(h));
     const originalLCHeaders = originalHeaders.map(h => String(h ?? '').toLowerCase());
     const gradeBookColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+    const studentNumberColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.studentNumber);
+    const outreachColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach);
 
     const dataToWrite = [];
     const formulasToWrite = [];
+    const rowsToHighlight = [];
 
-    dataRows.forEach(({
-        row,
-        originalIndex
-    }) => {
+    dataRows.forEach(({ row, originalIndex }) => {
         const newRow = [];
         const formulaRow = new Array(finalHeaders.length).fill(null);
 
@@ -366,6 +416,21 @@ async function createAndFormatTable(context, options) {
             }
         });
 
+        // --- New LDA Follow-up Logic ---
+        if (ldaFollowUpMap && studentNumberColIdx !== -1) {
+            const studentId = row[studentNumberColIdx];
+            if (studentId && ldaFollowUpMap.has(studentId)) {
+                const followUp = ldaFollowUpMap.get(studentId);
+                const outreachColInFinal = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.outreach);
+                if (outreachColInFinal !== -1) {
+                    const formattedDate = `${followUp.date.getMonth() + 1}-${followUp.date.getDate()}-${String(followUp.date.getFullYear()).slice(-2)}`;
+                    newRow[outreachColInFinal] = `[${followUp.tag}] Will Engage ${formattedDate}`;
+                    rowsToHighlight.push({ rowIndex: dataToWrite.length, color: "#FFEDD5" }); // Light Orange
+                }
+            }
+        }
+        // --- End New LDA Follow-up Logic ---
+
         dataToWrite.push(newRow);
         formulasToWrite.push(formulaRow);
     });
@@ -382,9 +447,8 @@ async function createAndFormatTable(context, options) {
         table.name = tableName;
         table.style = "TableStyleLight9";
         
-        await context.sync(); // Sync after table creation
+        await context.sync();
 
-        // --- Start: Apply Preserved Colors ---
         if (valueToColorMap.size > 0) {
             const assignedColIdxInTable = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.assigned);
             if (assignedColIdxInTable !== -1) {
@@ -402,7 +466,15 @@ async function createAndFormatTable(context, options) {
                 }
             }
         }
-        // --- End: Apply Preserved Colors ---
+        
+        // Apply LDA Follow-up Highlights
+        if (rowsToHighlight.length > 0) {
+            console.log(`[DEBUG] Applying ${rowsToHighlight.length} LDA follow-up highlights.`);
+            for (const item of rowsToHighlight) {
+                const rowRange = table.getDataBodyRange().getRow(item.rowIndex);
+                rowRange.format.fill.color = item.color;
+            }
+        }
 
         await applyGradeConditionalFormattingToTable(context, table);
       
@@ -421,7 +493,7 @@ async function createAndFormatTable(context, options) {
                 if (!selectedColumnsSet.has(colName)) {
                     try {
                         console.log(`[DEBUG] Hiding worksheet column at index ${idx} for "${col.name}"`);
-                        const columnLetter = String.fromCharCode(65 + idx); // A, B, C, ...
+                        const columnLetter = String.fromCharCode(65 + idx);
                         const worksheetColumn = sheet.getRange(`${columnLetter}:${columnLetter}`);
                         console.log(`[DEBUG] Column index ${idx} maps to letter ${columnLetter} for column "${col.name}"`);
                         worksheetColumn.columnHidden = true;
