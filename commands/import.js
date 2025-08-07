@@ -333,10 +333,13 @@ async function handleUpdateMaster(message) {
 
                     // Cache the fill color for the assigned user
                     if (assignedValue && masterAssignedCol !== -1) {
-                        const assignedColor = usedRange.format.fill.color[i][masterAssignedCol];
-                        // Only cache if it's a real color and we haven't cached this user yet
-                        if (assignedColor && assignedColor !== '#ffffff' && !assignedColorCache.has(assignedValue)) {
-                            assignedColorCache.set(assignedValue, assignedColor);
+                        // FIX: Ensure the format.fill.color array and its row exist before access
+                        if (usedRange.format.fill.color && usedRange.format.fill.color[i]) {
+                            const assignedColor = usedRange.format.fill.color[i][masterAssignedCol];
+                            // Only cache if it's a real color and we haven't cached this user yet
+                            if (assignedColor && assignedColor !== '#ffffff' && !assignedColorCache.has(assignedValue)) {
+                                assignedColorCache.set(assignedValue, assignedColor);
+                            }
                         }
                     }
                 }
