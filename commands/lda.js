@@ -85,7 +85,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v15");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v16");
     try {
         const settings = await getSettings();
         const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns, includeLdaTagFollowup } = settings.createlda;
@@ -390,7 +390,6 @@ async function createAndFormatTable(context, options) {
     const originalLCHeaders = originalHeaders.map(h => String(h ?? '').toLowerCase());
     const gradeBookColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
     const studentNumberColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.STUDENT_NUMBER_COLS);
-    const outreachColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.OUTREACH_COLS);
 
     const dataToWrite = [];
     const formulasToWrite = [];
@@ -416,7 +415,7 @@ async function createAndFormatTable(context, options) {
             }
         });
 
-        // --- New LDA Follow-up Logic ---
+        // --- LDA Follow-up Logic ---
         if (ldaFollowUpMap && studentNumberColIdx !== -1) {
             const studentId = row[studentNumberColIdx];
             if (studentId && ldaFollowUpMap.has(studentId)) {
@@ -424,12 +423,12 @@ async function createAndFormatTable(context, options) {
                 const outreachColInFinal = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.OUTREACH_COLS);
                 if (outreachColInFinal !== -1) {
                     const formattedDate = `${followUp.date.getMonth() + 1}-${followUp.date.getDate()}-${String(followUp.date.getFullYear()).slice(-2)}`;
-                    newRow[outreachColInFinal] = `[${followUp.tag}] Will Engage ${formattedDate}`;
+                    newRow[outreachColInFinal] = `[Retention Add-In] Will Engage ${formattedDate}`;
                     rowsToHighlight.push({ rowIndex: dataToWrite.length, color: "#FFEDD5" }); // Light Orange
                 }
             }
         }
-        // --- End New LDA Follow-up Logic ---
+        // --- End LDA Follow-up Logic ---
 
         dataToWrite.push(newRow);
         formulasToWrite.push(formulaRow);
@@ -467,12 +466,29 @@ async function createAndFormatTable(context, options) {
             }
         }
         
-        // Apply LDA Follow-up Highlights
+        // Apply LDA Follow-up Highlights to the specified range
         if (rowsToHighlight.length > 0) {
             console.log(`[DEBUG] Applying ${rowsToHighlight.length} LDA follow-up highlights.`);
-            for (const item of rowsToHighlight) {
-                const rowRange = table.getDataBodyRange().getRow(item.rowIndex);
-                rowRange.format.fill.color = item.color;
+            const finalLCHeaders = finalHeaders.map(h => h.toLowerCase());
+            const studentNameColIdxInTable = findColumnIndex(finalLCHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const outreachColIdxInTable = findColumnIndex(finalLCHeaders, CONSTANTS.OUTREACH_COLS);
+
+            if (studentNameColIdxInTable !== -1 && outreachColIdxInTable !== -1) {
+                const startCol = Math.min(studentNameColIdxInTable, outreachColIdxInTable);
+                const colCount = Math.abs(studentNameColIdxInTable - outreachColIdxInTable) + 1;
+
+                for (const item of rowsToHighlight) {
+                    const rowRange = table.getDataBodyRange().getRow(item.rowIndex);
+                    const highlightRange = rowRange.getCell(0, startCol).getResizedRange(0, colCount - 1);
+                    highlightRange.format.fill.color = item.color;
+                }
+            } else {
+                console.warn("[DEBUG] Could not find 'StudentName' and/or 'Outreach' columns in the final table to apply highlights.");
+                // Fallback to highlighting the whole row if columns aren't found
+                for (const item of rowsToHighlight) {
+                    const rowRange = table.getDataBodyRange().getRow(item.rowIndex);
+                    rowRange.format.fill.color = item.color;
+                }
             }
         }
 
