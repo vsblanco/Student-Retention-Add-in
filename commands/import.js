@@ -297,12 +297,13 @@ async function handleUpdateMaster(message) {
         let masterStudentNameCol;
         let colMapping;
         const masterDataMap = new Map();
+        const assignedColorCache = new Map();
 
         await Excel.run(async (context) => {
             sendMessageToDialog("Reading current 'Master List' to identify new students and save links/assignments...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, formulas"); // Load formulas as well
+            usedRange.load("values, formulas, format/fill/color"); // Load formulas and colors
             await context.sync();
 
             if (usedRange.values.length < 1) {
@@ -329,9 +330,19 @@ async function handleUpdateMaster(message) {
                         gradebookFormula: gradebookFormula,
                         assigned: assignedValue
                     });
+
+                    // Cache the fill color for the assigned user
+                    if (assignedValue && masterAssignedCol !== -1) {
+                        const assignedColor = usedRange.format.fill.color[i][masterAssignedCol];
+                        // Only cache if it's a real color and we haven't cached this user yet
+                        if (assignedColor && assignedColor !== '#ffffff' && !assignedColorCache.has(assignedValue)) {
+                            assignedColorCache.set(assignedValue, assignedColor);
+                        }
+                    }
                 }
             }
-            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving gradebook links and assignments.`);
+            sendMessageToDialog(`Created map of ${masterDataMap.size} students from 'Master List', preserving data.`);
+            sendMessageToDialog(`Cached ${assignedColorCache.size} unique colors for assigned users.`);
 
             colMapping = lowerCaseUserHeaders.map(userHeader =>
                 lowerCaseMasterHeaders.indexOf(userHeader)
@@ -377,10 +388,11 @@ async function handleUpdateMaster(message) {
             sendMessageToDialog(`Preparing to write ${allStudentsToWrite.length} students...`);
             const dataToWrite = [];
             const formulasToWrite = []; // Array to hold formulas
+            const cellsToColor = []; // Array to hold formatting requests
             let gradebookLinksPreservedCount = 0;
             let assignedUsersPreservedCount = 0;
 
-            allStudentsToWrite.forEach(userRow => {
+            allStudentsToWrite.forEach((userRow, index) => {
                 const newRow = new Array(masterHeaders.length).fill("");
                 const formulaRow = new Array(masterHeaders.length).fill(null);
 
@@ -400,32 +412,36 @@ async function handleUpdateMaster(message) {
                 if (masterDataMap.has(normalizedName)) {
                     const existingData = masterDataMap.get(normalizedName);
                     
-                    // *** FEATURE START: Preserve Gradebook Link ***
                     if (existingData.gradebookFormula) {
                         const masterGradebookColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
                         if (masterGradebookColIdx !== -1 && !newRow[masterGradebookColIdx]) {
-                             // Only restore if the import doesn't provide a new value.
                             formulaRow[masterGradebookColIdx] = existingData.gradebookFormula;
-                            // Set a display value for the hyperlink
                             const match = existingData.gradebookFormula.match(/, *"([^"]+)"\)/i);
                             newRow[masterGradebookColIdx] = match ? match[1] : "Gradebook";
-                            
                             gradebookLinksPreservedCount++;
-                            sendMessageToDialog(`Preserving Gradebook link for ${studentName}`, 'log', [`- Formula: ${existingData.gradebookFormula}`]);
                         }
                     }
-                    // *** FEATURE END ***
-
-                    // *** FEATURE START: Preserve Assigned User ***
+                    
                     if (existingData.assigned) {
                         const masterAssignedColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
-                        if (masterAssignedColIdx !== -1 && !newRow[masterAssignedColIdx]) { // Only restore if import is blank
+                        if (masterAssignedColIdx !== -1 && !newRow[masterAssignedColIdx]) {
                             newRow[masterAssignedColIdx] = existingData.assigned;
                             assignedUsersPreservedCount++;
-                            sendMessageToDialog(`Preserving Assigned user '${existingData.assigned}' for ${studentName}`);
                         }
                     }
-                    // *** FEATURE END ***
+                }
+
+                // Check for coloring the 'Assigned' cell
+                const masterAssignedColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+                if (masterAssignedColIdx !== -1) {
+                    const assignedValue = newRow[masterAssignedColIdx];
+                    if (assignedValue && assignedColorCache.has(assignedValue)) {
+                        cellsToColor.push({
+                            rowIndex: index + 1, // +1 because data starts at row 1
+                            colIndex: masterAssignedColIdx,
+                            color: assignedColorCache.get(assignedValue)
+                        });
+                    }
                 }
 
                 const userLdaColIdx = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
@@ -451,30 +467,35 @@ async function handleUpdateMaster(message) {
                 formulasToWrite.push(formulaRow);
             });
 
-            if (gradebookLinksPreservedCount > 0) {
-                sendMessageToDialog(`A total of ${gradebookLinksPreservedCount} Gradebook links were preserved.`);
-            }
-            if (assignedUsersPreservedCount > 0) {
-                sendMessageToDialog(`A total of ${assignedUsersPreservedCount} Assigned users were preserved.`);
-            }
+            if (gradebookLinksPreservedCount > 0) sendMessageToDialog(`A total of ${gradebookLinksPreservedCount} Gradebook links were preserved.`);
+            if (assignedUsersPreservedCount > 0) sendMessageToDialog(`A total of ${assignedUsersPreservedCount} Assigned users were preserved.`);
+            if (cellsToColor.length > 0) sendMessageToDialog(`Preparing to re-apply ${cellsToColor.length} cell colors.`);
 
 
             // 5. Write all data and formulas in separate batches
             sendMessageToDialog("Writing data and formulas to the sheet...");
             const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
             writeRange.values = dataToWrite;
-            writeRange.formulas = formulasToWrite; // Write formulas
+            writeRange.formulas = formulasToWrite;
             await context.sync();
             sendMessageToDialog("Data write completed.");
 
-            // 6. Highlight new students
+            // 6. Apply colors
+            if (cellsToColor.length > 0) {
+                sendMessageToDialog("Applying preserved cell colors...");
+                for (const cell of cellsToColor) {
+                    sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+                }
+            }
+
+            // 7. Highlight new students
             if (newStudents.length > 0) {
                 sendMessageToDialog(`Highlighting ${newStudents.length} new students...`);
                 const highlightRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
             
-            // 7. Final formatting and autofit
+            // 8. Final formatting and autofit
             const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
             if (masterLdaColIdx !== -1) {
                 sendMessageToDialog("Formatting 'LDA' column as date...");
