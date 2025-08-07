@@ -14,10 +14,12 @@ const CONSTANTS = {
 
 let trendsChartInstance = null;
 let fullTrendsData = null;
+let currentTrendPeriod = 'month'; // Keep track of the current time filter
 
 async function run() {
     setupTabs();
     setupTrendFilters();
+    await setupDaysOutFilter(); // Make async to await settings
     try {
         await loadAnalytics();
     } catch (error) {
@@ -71,15 +73,26 @@ function setupTrendFilters() {
         const button = document.getElementById(filter.id);
         if (button) {
             button.addEventListener('click', () => {
-                applyTrendFilter(filter.period);
-                // Update active button style
+                currentTrendPeriod = filter.period;
+                applyTrendFilter();
                 document.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
-                // Update median range text
                 document.getElementById('median-engagement-range').textContent = `for ${filter.text}`;
             });
         }
     });
+}
+
+async function setupDaysOutFilter() {
+    const filterInput = document.getElementById('trends-days-out-filter');
+    if (filterInput) {
+        const settings = await getSettings();
+        filterInput.value = settings.createlda.daysOutFilter || 6;
+        
+        filterInput.addEventListener('change', () => {
+            applyTrendFilter();
+        });
+    }
 }
 
 
@@ -96,12 +109,11 @@ async function loadAnalytics() {
             getTrendsData()
         ]);
         
-        fullTrendsData = trendsData; // Store the full dataset
+        fullTrendsData = trendsData;
 
         loadingMessage.classList.add("hidden");
         analyticsContent.classList.remove("hidden");
 
-        // Populate Current Tab
         const notOnLda = totalStudents - ldaStudents;
         const percentageOnLda = totalStudents > 0 ? ((ldaStudents / totalStudents) * 100).toFixed(1) : 0;
 
@@ -111,14 +123,12 @@ async function loadAnalytics() {
         renderPieChart(ldaStudents, notOnLda);
         renderEngagementPieChart(engagementData.engaged, engagementData.notEngaged);
 
-        // Populate Projection Tab
         const tomorrowTotal = ldaStudents + projectedStudents;
         document.getElementById("lda-students-proj").textContent = ldaStudents;
         document.getElementById("projected-students").textContent = projectedStudents;
         document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
         
-        // Populate Trends Tab with default filter
-        applyTrendFilter('month');
+        applyTrendFilter();
 
     } catch (error) {
         loadingMessage.classList.add("hidden");
@@ -127,46 +137,52 @@ async function loadAnalytics() {
     }
 }
 
-function applyTrendFilter(period) {
+function applyTrendFilter() {
     if (!fullTrendsData) return;
+
+    const period = currentTrendPeriod;
+    const daysOutFilter = parseInt(document.getElementById('trends-days-out-filter').value, 10) || 0;
 
     const now = new Date();
     let startDate;
 
     switch (period) {
         case 'week':
-            startDate = new Date(now.setDate(now.getDate() - 7));
+            startDate = new Date(new Date().setDate(now.getDate() - 7));
             break;
         case 'month':
-            startDate = new Date(now.setMonth(now.getMonth() - 1));
+            startDate = new Date(new Date().setMonth(now.getMonth() - 1));
             break;
         case 'year':
-            startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+            startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
             break;
         default:
-            startDate = new Date(0); // All time
+            startDate = new Date(0);
     }
     
-    const filteredData = {
+    const chartData = {
         labels: [],
         ldaCounts: [],
         engagedCounts: [],
-        dates: [],
-        sheetNames: [] // Added sheetNames to filtered data
+        sheetNames: []
     };
+    
+    const sheetsInPeriod = fullTrendsData.filter(sheetData => sheetData.date >= startDate);
 
-    for (let i = 0; i < fullTrendsData.dates.length; i++) {
-        if (fullTrendsData.dates[i] >= startDate) {
-            filteredData.labels.push(fullTrendsData.labels[i]);
-            filteredData.ldaCounts.push(fullTrendsData.ldaCounts[i]);
-            filteredData.engagedCounts.push(fullTrendsData.engagedCounts[i]);
-            filteredData.dates.push(fullTrendsData.dates[i]);
-            filteredData.sheetNames.push(fullTrendsData.sheetNames[i]); // Populate sheetNames
-        }
-    }
+    sheetsInPeriod.forEach(sheetData => {
+        const filteredStudents = sheetData.students.filter(student => student.daysOut >= daysOutFilter);
+        
+        const ldaCount = filteredStudents.length;
+        const engagedCount = filteredStudents.filter(student => student.isEngaged).length;
 
-    renderTrendsChart(filteredData);
-    const medianEngagement = calculateMedian(filteredData.engagedCounts);
+        chartData.labels.push(sheetData.label);
+        chartData.ldaCounts.push(ldaCount);
+        chartData.engagedCounts.push(engagedCount);
+        chartData.sheetNames.push(sheetData.sheetName);
+    });
+
+    renderTrendsChart(chartData);
+    const medianEngagement = calculateMedian(chartData.engagedCounts);
     document.getElementById("median-engagement").textContent = medianEngagement;
 }
 
@@ -318,19 +334,21 @@ async function getTrendsData() {
 
         ldaSheets.sort((a, b) => a.date - b.date);
 
-        const trendsData = { labels: [], ldaCounts: [], engagedCounts: [], dates: [], sheetNames: [] };
+        const trendsData = [];
 
         for (const { sheet, date } of ldaSheets) {
-            trendsData.labels.push(date.toLocaleDateString());
-            trendsData.dates.push(date);
-            trendsData.sheetNames.push(sheet.name); // Store the sheet name
+            const sheetData = {
+                label: date.toLocaleDateString(),
+                date: date,
+                sheetName: sheet.name,
+                students: []
+            };
 
             sheet.tables.load("items/name");
             await context.sync();
 
             if (sheet.tables.items.length === 0) {
-                trendsData.ldaCounts.push(0);
-                trendsData.engagedCounts.push(0);
+                trendsData.push(sheetData);
                 continue;
             }
 
@@ -338,34 +356,33 @@ async function getTrendsData() {
             const headerRange = ldaTable.getHeaderRowRange();
             const bodyRange = ldaTable.getDataBodyRange();
             headerRange.load("values");
-            bodyRange.load("rowCount, format/fill/color");
+            bodyRange.load("values, format/fill/color");
             await context.sync();
-
-            const totalLdaStudents = bodyRange.rowCount;
-            trendsData.ldaCounts.push(totalLdaStudents);
 
             const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
             const studentNameColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.studentName);
+            const daysOutColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut);
 
-            if (studentNameColIdx === -1) {
-                trendsData.engagedCounts.push(0);
+            if (studentNameColIdx === -1 || daysOutColIdx === -1) {
+                trendsData.push(sheetData);
                 continue;
             }
 
-            let engagedCount = 0;
             const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"];
             const colors = bodyRange.format.fill.color;
-            if (colors) {
-                for (let i = 0; i < totalLdaStudents; i++) {
-                    if (colors[i]) {
-                        const cellColor = colors[i][studentNameColIdx];
-                        if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                            engagedCount++;
-                        }
-                    }
-                }
+            const values = bodyRange.values;
+
+            for (let i = 0; i < values.length; i++) {
+                const cellColor = colors && colors[i] ? colors[i][studentNameColIdx] : null;
+                const isEngaged = cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()));
+                const daysOut = values[i][daysOutColIdx];
+                
+                sheetData.students.push({
+                    daysOut: typeof daysOut === 'number' ? daysOut : 0,
+                    isEngaged: isEngaged
+                });
             }
-            trendsData.engagedCounts.push(engagedCount);
+            trendsData.push(sheetData);
         }
 
         return trendsData;
