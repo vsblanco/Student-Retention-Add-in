@@ -480,6 +480,13 @@ async function navigateToSheet(sheetName) {
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
+            sheet.load("visibility");
+            await context.sync();
+            
+            if (sheet.visibility !== Excel.SheetVisibility.visible) {
+                sheet.visibility = Excel.SheetVisibility.visible;
+            }
+            
             sheet.activate();
             await context.sync();
         });
