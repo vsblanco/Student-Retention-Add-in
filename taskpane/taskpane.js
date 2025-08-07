@@ -786,7 +786,7 @@ async function displayStudentHistory(studentId) {
             }
             
             if (comments.length > 0) {
-                // --- New Sorting Logic ---
+                // --- Sorting Logic ---
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
@@ -804,7 +804,7 @@ async function displayStudentHistory(studentId) {
                 });
 
                 const sortedComments = [...priorityComments, ...regularComments];
-                // --- End New Sorting Logic ---
+                // --- End Sorting Logic ---
 
                 let html = '<ul class="space-y-4">';
                 sortedComments.forEach(comment => {
