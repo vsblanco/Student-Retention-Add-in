@@ -85,7 +85,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v12");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v13");
     try {
         const settings = await getSettings();
         const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns } = settings.createlda;
@@ -101,7 +101,7 @@ async function handleCreateLdaSheet() {
             console.log("[DEBUG] Reading data from Master List.");
             const masterSheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const masterRange = masterSheet.getUsedRange();
-            masterRange.load("values, formulas");
+            masterRange.load("values, formulas, rowIndex, columnIndex");
             await context.sync();
 
             const masterData = masterRange.values;
@@ -111,6 +111,40 @@ async function handleCreateLdaSheet() {
             
             const daysOutColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.daysOut);
             if (daysOutColIdx === -1) throw new Error("'Days Out' column not found in Master List.");
+
+            // --- Start: New Color Caching Logic ---
+            const valueToColorMap = new Map();
+            const masterAssignedCol = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+            if (masterAssignedCol !== -1) {
+                const allAssignedValues = masterRange.values.map(row => row[masterAssignedCol]);
+                const uniqueValues = [...new Set(allAssignedValues.slice(1).filter(v => v && String(v).trim() !== ""))];
+                
+                if (uniqueValues.length > 0) {
+                    console.log(`[DEBUG] Found ${uniqueValues.length} unique values in 'Assigned' column. Fetching their colors...`);
+                    const cellsToLoad = [];
+                    uniqueValues.forEach(value => {
+                        const firstInstanceIndex = allAssignedValues.indexOf(value);
+                        if (firstInstanceIndex > 0) { // Ensure it's not the header
+                            const absoluteRowIndex = masterRange.rowIndex + firstInstanceIndex;
+                            const absoluteColIndex = masterRange.columnIndex + masterAssignedCol;
+                            const cell = masterSheet.getCell(absoluteRowIndex, absoluteColIndex);
+                            cell.load("format/fill/color");
+                            cellsToLoad.push({ value: value, cell: cell });
+                        }
+                    });
+
+                    await context.sync();
+
+                    cellsToLoad.forEach(item => {
+                        const color = item.cell.format.fill.color;
+                        if (color && color !== '#ffffff' && color !== '#000000') {
+                            valueToColorMap.set(item.value, color);
+                        }
+                    });
+                    console.log(`[DEBUG] Cached colors for ${valueToColorMap.size} unique values.`);
+                }
+            }
+            // --- End: New Color Caching Logic ---
             
             const dataRowsWithIndex = masterData.slice(1).map((row, index) => ({ row, originalIndex: index + 1 }));
 
@@ -143,13 +177,14 @@ async function handleCreateLdaSheet() {
                 masterFormulas,
                 ldaColumns,
                 hideLeftoverColumns,
-                originalHeaders
+                originalHeaders,
+                valueToColorMap // Pass the color map
             });
             
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
-                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx);
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap);
             }
             
         });
@@ -170,7 +205,7 @@ async function handleCreateLdaSheet() {
     }
 }
 
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap) {
     console.log("[DEBUG] Creating failing list table.");
     const originalLCHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -207,7 +242,8 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             masterFormulas,
             ldaColumns,
             hideLeftoverColumns,
-            originalHeaders
+            originalHeaders,
+            valueToColorMap // Pass the color map
         });
     }
 }
@@ -280,7 +316,8 @@ async function createAndFormatTable(context, options) {
         masterFormulas,
         ldaColumns,
         hideLeftoverColumns,
-        originalHeaders
+        originalHeaders,
+        valueToColorMap
     } = options;
 
     let finalHeaders;
@@ -344,22 +381,40 @@ async function createAndFormatTable(context, options) {
         const table = sheet.tables.add(dataRange, true);
         table.name = tableName;
         table.style = "TableStyleLight9";
-
-        // Load column names before accessing them
-        table.columns.load("items/name");
-        await context.sync();
         
-        // Apply conditional formatting to the grade column in this new table
+        await context.sync(); // Sync after table creation
+
+        // --- Start: Apply Preserved Colors ---
+        if (valueToColorMap.size > 0) {
+            const assignedColIdxInTable = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.assigned);
+            if (assignedColIdxInTable !== -1) {
+                const tableBodyRange = table.getDataBodyRange();
+                tableBodyRange.load("values");
+                await context.sync();
+                
+                for (let i = 0; i < tableBodyRange.values.length; i++) {
+                    const assignedValue = tableBodyRange.values[i][assignedColIdxInTable];
+                    if (assignedValue && valueToColorMap.has(assignedValue)) {
+                        const color = valueToColorMap.get(assignedValue);
+                        const cellToColor = table.getDataBodyRange().getCell(i, assignedColIdxInTable);
+                        cellToColor.format.fill.color = color;
+                    }
+                }
+            }
+        }
+        // --- End: Apply Preserved Colors ---
+
         await applyGradeConditionalFormattingToTable(context, table);
       
-        // Autofit first
         sheet.getUsedRange().getEntireColumn().format.autofitColumns();
         await context.sync();
       
-        // Then hide columns
         if (hideLeftoverColumns) {
             console.log("[DEBUG] Hiding unused columns for table:", tableName);
             const selectedColumnsSet = new Set(ldaColumns.map(h => h.toLowerCase()));
+
+            table.columns.load("items/name");
+            await context.sync();
 
             table.columns.items.forEach((col, idx) => {
                 const colName = col.name.trim().toLowerCase();
