@@ -40,6 +40,7 @@ async function run() {
 
     setupTabs();
     setupTrendFilters();
+    setupLogToggle();
     await setupDaysOutFilter();
     try {
         await loadAnalytics();
@@ -132,6 +133,18 @@ async function setupDaysOutFilter() {
     }
 }
 
+function setupLogToggle() {
+    const toggleButton = document.getElementById('toggle-log-button');
+    const logPanel = document.getElementById('loading-message');
+
+    if (toggleButton && logPanel) {
+        toggleButton.addEventListener('click', () => {
+            const isHidden = logPanel.classList.toggle('hidden');
+            toggleButton.textContent = isHidden ? 'Show Logs' : 'Hide Logs';
+        });
+    }
+}
+
 
 async function loadAnalytics() {
     const loadingMessage = document.getElementById("loading-message");
@@ -155,6 +168,7 @@ async function loadAnalytics() {
         allDataLoaded = false;
 
         loadingMessage.classList.add("hidden");
+        document.getElementById('toggle-log-button').textContent = 'Show Logs'; // Set button text
         analyticsContent.classList.remove("hidden");
 
         const notOnLda = totalStudents - ldaStudents;
