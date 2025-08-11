@@ -17,6 +17,16 @@ let fullTrendsData = null;
 let currentTrendPeriod = 'month'; // Keep track of the current time filter
 let allDataLoaded = false; // Flag to track if all data has been loaded
 
+function logAnalyticsProgress(message) {
+    const logContainer = document.getElementById('log-container');
+    if (logContainer) {
+        const p = document.createElement('p');
+        p.textContent = `> ${message}`;
+        logContainer.appendChild(p);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+}
+
 async function run() {
     setupTabs();
     setupTrendFilters();
@@ -78,9 +88,11 @@ function setupTrendFilters() {
 
                 if (filter.period === 'year' && !allDataLoaded) {
                     showChartLoading(true);
+                    logAnalyticsProgress("Year filter selected. Fetching all historical data...");
                     try {
-                        fullTrendsData = await getTrendsData('year'); // Fetch all data
+                        fullTrendsData = await getTrendsData('year', logAnalyticsProgress); // Fetch all data
                         allDataLoaded = true;
+                        logAnalyticsProgress("Full historical data loaded.");
                     } catch (error) {
                         showError("Failed to load full year data.");
                         console.error(error);
@@ -116,16 +128,21 @@ async function loadAnalytics() {
     const analyticsContent = document.getElementById("analytics-content");
     
     try {
-        const [totalStudents, ldaStudents, projectedStudents, engagementData, trendsData] = await Promise.all([
+        logAnalyticsProgress("Fetching data for Current and Projection tabs...");
+        const [totalStudents, ldaStudents, projectedStudents, engagementData] = await Promise.all([
             getTotalStudentCount(),
             getLdaStudentCount(),
             getProjectedLdaStudentCount(),
-            getLdaEngagementData(),
-            getTrendsData('month') // Initially load only the last month's data
+            getLdaEngagementData()
         ]);
+        logAnalyticsProgress("Current and Projection data loaded.");
+
+        logAnalyticsProgress("Fetching trends data for the last month...");
+        const trendsData = await getTrendsData('month', logAnalyticsProgress);
+        logAnalyticsProgress("Initial trends data loaded.");
         
         fullTrendsData = trendsData;
-        allDataLoaded = false; // Set flag to indicate only partial data is loaded
+        allDataLoaded = false;
 
         loadingMessage.classList.add("hidden");
         analyticsContent.classList.remove("hidden");
@@ -155,6 +172,7 @@ async function loadAnalytics() {
 
 function applyTrendFilter() {
     if (!fullTrendsData) return;
+    logAnalyticsProgress("Applying filters and re-rendering trends chart...");
 
     const period = currentTrendPeriod;
     const daysOutFilter = parseInt(document.getElementById('trends-days-out-filter').value, 10) || 0;
@@ -204,17 +222,21 @@ function applyTrendFilter() {
     showChartLoading(false); // Hide loader after rendering
     const medianEngagement = calculateMedian(chartData.engagedCounts);
     document.getElementById("median-engagement").textContent = medianEngagement;
+    logAnalyticsProgress("Trends chart updated.");
 }
 
 
 async function getTotalStudentCount() {
-    return await Excel.run(async (context) => {
+    logAnalyticsProgress("Counting total students in Master List...");
+    const count = await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getItem("Master List");
         const range = sheet.getUsedRange();
         range.load("rowCount");
         await context.sync();
         return range.rowCount > 0 ? range.rowCount - 1 : 0;
     });
+    logAnalyticsProgress(`Found ${count} total students.`);
+    return count;
 }
 
 async function getLatestLdaSheet(context) {
@@ -243,11 +265,13 @@ async function getLatestLdaSheet(context) {
 
 
 async function getLdaStudentCount() {
-    return await Excel.run(async (context) => {
+    logAnalyticsProgress("Finding latest LDA sheet and counting students...");
+    const count = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
             throw new Error("No LDA sheet found. Please create an LDA report first.");
         }
+        logAnalyticsProgress(`Latest LDA sheet found: ${latestLdaSheet.name}`);
         latestLdaSheet.tables.load("items/name");
         await context.sync();
         if (latestLdaSheet.tables.items.length === 0) return 0;
@@ -259,10 +283,13 @@ async function getLdaStudentCount() {
         
         return bodyRange.rowCount;
     });
+    logAnalyticsProgress(`Found ${count} students on the latest LDA list.`);
+    return count;
 }
 
 async function getProjectedLdaStudentCount() {
-    return await Excel.run(async (context) => {
+    logAnalyticsProgress("Calculating projected LDA students for tomorrow...");
+    const count = await Excel.run(async (context) => {
         const settings = await getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
         const projectionThreshold = daysOutFilter - 1;
@@ -287,10 +314,13 @@ async function getProjectedLdaStudentCount() {
         }
         return projectedCount;
     });
+    logAnalyticsProgress(`Found ${count} projected students.`);
+    return count;
 }
 
 async function getLdaEngagementData() {
-    return await Excel.run(async (context) => {
+    logAnalyticsProgress("Calculating engagement on latest LDA sheet...");
+    const data = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
             console.warn("No LDA sheet found for engagement analytics.");
@@ -333,10 +363,14 @@ async function getLdaEngagementData() {
         
         return { engaged: engagedCount, notEngaged: totalLdaStudents - engagedCount };
     });
+    logAnalyticsProgress(`Found ${data.engaged} engaged students.`);
+    return data;
 }
 
-async function getTrendsData(period = 'year') {
+async function getTrendsData(period = 'year', logger) {
+    const log = logger || (() => {}); // Use provided logger or a no-op
     return await Excel.run(async (context) => {
+        log("Searching for all LDA sheets in the workbook...");
         const worksheets = context.workbook.worksheets;
         worksheets.load("items/name");
         await context.sync();
@@ -351,11 +385,13 @@ async function getTrendsData(period = 'year') {
                 }
             }
         });
+        log(`Found ${ldaSheets.length} total LDA sheets.`);
 
         if (period === 'month') {
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             ldaSheets = ldaSheets.filter(s => s.date >= oneMonthAgo);
+            log(`Filtering to ${ldaSheets.length} sheets from the last month.`);
         }
 
         ldaSheets.sort((a, b) => a.date - b.date);
@@ -363,6 +399,7 @@ async function getTrendsData(period = 'year') {
         const trendsData = [];
 
         for (const { sheet, date } of ldaSheets) {
+            log(`Processing sheet: ${sheet.name}...`);
             const sheetData = {
                 label: date.toLocaleDateString(),
                 date: date,
