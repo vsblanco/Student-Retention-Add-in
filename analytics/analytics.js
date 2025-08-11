@@ -15,11 +15,12 @@ const CONSTANTS = {
 let trendsChartInstance = null;
 let fullTrendsData = null;
 let currentTrendPeriod = 'month'; // Keep track of the current time filter
+let allDataLoaded = false; // Flag to track if all data has been loaded
 
 async function run() {
     setupTabs();
     setupTrendFilters();
-    await setupDaysOutFilter(); // Make async to await settings
+    await setupDaysOutFilter();
     try {
         await loadAnalytics();
     } catch (error) {
@@ -72,8 +73,22 @@ function setupTrendFilters() {
     filters.forEach(filter => {
         const button = document.getElementById(filter.id);
         if (button) {
-            button.addEventListener('click', () => {
+            button.addEventListener('click', async () => {
                 currentTrendPeriod = filter.period;
+
+                if (filter.period === 'year' && !allDataLoaded) {
+                    showChartLoading(true);
+                    try {
+                        fullTrendsData = await getTrendsData('year'); // Fetch all data
+                        allDataLoaded = true;
+                    } catch (error) {
+                        showError("Failed to load full year data.");
+                        console.error(error);
+                        showChartLoading(false);
+                        return;
+                    }
+                }
+
                 applyTrendFilter();
                 document.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
                 button.classList.add('active');
@@ -106,10 +121,11 @@ async function loadAnalytics() {
             getLdaStudentCount(),
             getProjectedLdaStudentCount(),
             getLdaEngagementData(),
-            getTrendsData()
+            getTrendsData('month') // Initially load only the last month's data
         ]);
         
         fullTrendsData = trendsData;
+        allDataLoaded = false; // Set flag to indicate only partial data is loaded
 
         loadingMessage.classList.add("hidden");
         analyticsContent.classList.remove("hidden");
@@ -180,8 +196,12 @@ function applyTrendFilter() {
         chartData.engagedCounts.push(engagedCount);
         chartData.sheetNames.push(sheetData.sheetName);
     });
+    
+    const averageLda = chartData.ldaCounts.length > 0 ? (chartData.ldaCounts.reduce((a, b) => a + b, 0) / chartData.ldaCounts.length) : 0;
+    chartData.averageLda = averageLda.toFixed(1);
 
     renderTrendsChart(chartData);
+    showChartLoading(false); // Hide loader after rendering
     const medianEngagement = calculateMedian(chartData.engagedCounts);
     document.getElementById("median-engagement").textContent = medianEngagement;
 }
@@ -315,13 +335,13 @@ async function getLdaEngagementData() {
     });
 }
 
-async function getTrendsData() {
+async function getTrendsData(period = 'year') {
     return await Excel.run(async (context) => {
         const worksheets = context.workbook.worksheets;
         worksheets.load("items/name");
         await context.sync();
 
-        const ldaSheets = [];
+        let ldaSheets = [];
         worksheets.items.forEach(sheet => {
             if (sheet.name.startsWith("LDA ")) {
                 const datePart = sheet.name.substring(4).split(" ")[0];
@@ -331,6 +351,12 @@ async function getTrendsData() {
                 }
             }
         });
+
+        if (period === 'month') {
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            ldaSheets = ldaSheets.filter(s => s.date >= oneMonthAgo);
+        }
 
         ldaSheets.sort((a, b) => a.date - b.date);
 
@@ -450,6 +476,9 @@ function renderTrendsChart(trendsData) {
     if (trendsChartInstance) {
         trendsChartInstance.destroy();
     }
+
+    const averageData = new Array(trendsData.labels.length).fill(trendsData.averageLda);
+
     trendsChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -468,6 +497,14 @@ function renderTrendsChart(trendsData) {
                 backgroundColor: 'rgba(34, 197, 94, 0.2)',
                 fill: true,
                 tension: 0.1
+            }, {
+                label: `Average LDA (${trendsData.averageLda})`,
+                data: averageData,
+                borderColor: 'rgba(239, 68, 68, 0.8)',
+                borderDash: [5, 5],
+                fill: false,
+                tension: 0.1,
+                pointRadius: 0
             }]
         },
         options: {
@@ -565,4 +602,24 @@ async function getSettings() {
         }
     }
     return defaults;
+}
+
+function showChartLoading(isLoading) {
+    const canvas = document.getElementById('trendsChart');
+    const container = canvas.parentElement;
+    
+    let loader = container.querySelector('.chart-loader');
+    if (isLoading) {
+        if (!loader) {
+            loader = document.createElement('div');
+            loader.className = 'chart-loader absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center';
+            loader.innerHTML = `<p class="text-gray-600">Loading full year data...</p>`;
+            container.appendChild(loader);
+        }
+        loader.style.display = 'flex';
+    } else {
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
 }
