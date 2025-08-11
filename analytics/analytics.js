@@ -149,11 +149,11 @@ async function setupDaysOutFilter() {
 
 function setupLogToggle() {
     const toggleButton = document.getElementById('toggle-log-button');
-    const logContainer = document.getElementById('log-container');
+    const logPanel = document.getElementById('loading-message'); // Target the parent panel
 
-    if (toggleButton && logContainer) {
+    if (toggleButton && logPanel) {
         toggleButton.addEventListener('click', () => {
-            const isHidden = logContainer.classList.toggle('hidden');
+            const isHidden = logPanel.classList.toggle('hidden');
             toggleButton.textContent = isHidden ? 'Show Logs' : 'Hide Logs';
         });
     }
@@ -178,9 +178,14 @@ async function loadAnalytics() {
         
         fullTrendsData = trendsData;
         allDataLoaded = false;
-
+        
+        // Hide progress elements and show log container, then hide the parent panel
+        document.getElementById('progress-status-text').classList.add('hidden');
+        document.getElementById('progress-bar-fill').parentElement.classList.add('hidden');
+        document.getElementById('log-container').classList.remove('hidden');
         loadingMessage.classList.add("hidden");
-        document.getElementById('toggle-log-button').textContent = 'Show Logs'; // Set button text
+        
+        document.getElementById('toggle-log-button').textContent = 'Show Logs';
         analyticsContent.classList.remove("hidden");
 
         const notOnLda = totalStudents - ldaStudents;
@@ -215,7 +220,7 @@ async function loadAnalytics() {
 
 function applyTrendFilter() {
     if (!fullTrendsData) return;
-    updateProgressBar(0, 0, "Applying filters and re-rendering trends chart...");
+    logAnalyticsProgress("Applying filters and re-rendering trends chart...");
 
     const period = currentTrendPeriod;
     const daysOutFilter = parseInt(document.getElementById('trends-days-out-filter').value, 10) || 0;
@@ -265,7 +270,7 @@ function applyTrendFilter() {
     showChartLoading(false); // Hide loader after rendering
     const medianEngagement = calculateMedian(chartData.engagedCounts);
     document.getElementById("median-engagement").textContent = medianEngagement;
-    updateProgressBar(1, 1, "Analytics loaded.");
+    logAnalyticsProgress("Trends chart updated.");
 }
 
 
