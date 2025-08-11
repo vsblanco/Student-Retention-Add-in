@@ -9,6 +9,7 @@ const CONSTANTS = {
     COLUMN_MAPPINGS: {
         daysOut: ["days out", "daysout"],
         studentName: ["studentname", "student name"],
+        outreach: ["outreach"]
     }
 };
 
@@ -351,9 +352,9 @@ async function getLdaEngagementData() {
         if (totalLdaStudents === 0) return { engaged: 0, notEngaged: 0 };
 
         const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
-        const studentNameColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.studentName);
+        const outreachColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
 
-        if (studentNameColIdx === -1) throw new Error("'StudentName' column not found in the LDA sheet.");
+        if (outreachColIdx === -1) throw new Error("'Outreach' column not found in the LDA sheet.");
 
         let engagedCount = 0;
         const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"]; 
@@ -362,7 +363,7 @@ async function getLdaEngagementData() {
         if (colors) {
             for (let i = 0; i < totalLdaStudents; i++) {
                 if (colors[i]) {
-                    const cellColor = colors[i][studentNameColIdx];
+                    const cellColor = colors[i][outreachColIdx];
                     if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
                         engagedCount++;
                     }
@@ -432,10 +433,10 @@ async function getTrendsData(period = 'year', logger) {
             await context.sync();
 
             const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
-            const studentNameColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.studentName);
+            const outreachColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
             const daysOutColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut);
 
-            if (studentNameColIdx === -1 || daysOutColIdx === -1) {
+            if (outreachColIdx === -1 || daysOutColIdx === -1) {
                 trendsData.push(sheetData);
                 continue;
             }
@@ -445,7 +446,7 @@ async function getTrendsData(period = 'year', logger) {
             const values = bodyRange.values;
 
             for (let i = 0; i < values.length; i++) {
-                const cellColor = colors && colors[i] ? colors[i][studentNameColIdx] : null;
+                const cellColor = colors && colors[i] ? colors[i][outreachColIdx] : null;
                 const isEngaged = cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()));
                 const daysOut = values[i][daysOutColIdx];
                 
