@@ -152,11 +152,12 @@ async function loadAnalytics() {
     
     try {
         logAnalyticsProgress("Fetching data for Current and Projection tabs...");
-        const [totalStudents, ldaStudents, projectedStudents, engagementData] = await Promise.all([
+        const [totalStudents, ldaStudents, projectedStudents, engagementData, monthlyEngagementRate] = await Promise.all([
             getTotalStudentCount(),
             getLdaStudentCount(),
             getProjectedLdaStudentCount(),
-            getLdaEngagementData()
+            getLdaEngagementData(),
+            getMonthlyEngagementRate()
         ]);
         logAnalyticsProgress("Current and Projection data loaded.");
 
@@ -180,10 +181,17 @@ async function loadAnalytics() {
         renderPieChart(ldaStudents, notOnLda);
         renderEngagementPieChart(engagementData.engaged, engagementData.notEngaged);
 
+        // Projection Tab Calculations
         const tomorrowTotal = ldaStudents + projectedStudents;
+        const projectedEngaged = Math.round(tomorrowTotal * monthlyEngagementRate);
+        const projectedNetLda = tomorrowTotal - projectedEngaged;
+
         document.getElementById("lda-students-proj").textContent = ldaStudents;
         document.getElementById("projected-students").textContent = projectedStudents;
         document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
+        document.getElementById("monthly-engagement-rate").textContent = `${(monthlyEngagementRate * 100).toFixed(1)}%`;
+        document.getElementById("projected-engaged").textContent = projectedEngaged;
+        document.getElementById("projected-net-lda").textContent = projectedNetLda;
         
         applyTrendFilter();
 
@@ -478,6 +486,73 @@ async function getTrendsData(period = 'year', logger) {
 
         return trendsData;
     });
+}
+
+async function getMonthlyEngagementRate() {
+    logAnalyticsProgress("Calculating historical monthly engagement rate...");
+    const rate = await Excel.run(async (context) => {
+        const worksheets = context.workbook.worksheets;
+        worksheets.load("items/name");
+        await context.sync();
+
+        let ldaSheets = [];
+        const oneMonthAgo = new Date();
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+        worksheets.items.forEach(sheet => {
+            if (sheet.name.startsWith("LDA ")) {
+                const datePart = sheet.name.substring(4).split(" ")[0];
+                const date = new Date(datePart.replace(/(\d{1,2})-(\d{1,2})-(\d{4})/, '$3-$1-$2'));
+                if (!isNaN(date.getTime()) && date >= oneMonthAgo) {
+                    ldaSheets.push(sheet);
+                }
+            }
+        });
+
+        if (ldaSheets.length === 0) {
+            logAnalyticsProgress("No LDA sheets found in the last month to calculate engagement rate.");
+            return 0;
+        }
+
+        let totalStudentsInMonth = 0;
+        let totalEngagedInMonth = 0;
+        const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"];
+
+        for (const sheet of ldaSheets) {
+            sheet.tables.load("items/name");
+            await context.sync();
+            if (sheet.tables.items.length === 0) continue;
+
+            const table = sheet.tables.getItemAt(0);
+            const headerRange = table.getHeaderRowRange();
+            const bodyRange = table.getDataBodyRange();
+            headerRange.load("values");
+            bodyRange.load("rowCount");
+            await context.sync();
+
+            const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+            const outreachColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
+            if (outreachColIdx === -1) continue;
+
+            const rowCount = bodyRange.rowCount;
+            totalStudentsInMonth += rowCount;
+
+            for (let i = 0; i < rowCount; i++) {
+                const cell = bodyRange.getRow(i).getCell(0, outreachColIdx);
+                cell.load("format/fill/color");
+                await context.sync();
+                const cellColor = cell.format.fill.color;
+                if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                    totalEngagedInMonth++;
+                }
+            }
+        }
+
+        if (totalStudentsInMonth === 0) return 0;
+        return totalEngagedInMonth / totalStudentsInMonth;
+    });
+    logAnalyticsProgress(`Monthly engagement rate: ${(rate * 100).toFixed(1)}%`);
+    return rate;
 }
 
 function calculateMedian(numbers) {
