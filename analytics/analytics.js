@@ -359,7 +359,7 @@ async function getLdaEngagementData() {
         const headerRange = ldaTable.getHeaderRowRange();
         const bodyRange = ldaTable.getDataBodyRange();
         headerRange.load("values");
-        bodyRange.load("rowCount, format/fill/color");
+        bodyRange.load("rowCount");
         await context.sync();
 
         const totalLdaStudents = bodyRange.rowCount;
@@ -373,15 +373,15 @@ async function getLdaEngagementData() {
         let engagedCount = 0;
         const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"]; 
 
-        const colors = bodyRange.format.fill.color;
-        if (colors) {
-            for (let i = 0; i < totalLdaStudents; i++) {
-                if (colors[i]) {
-                    const cellColor = colors[i][outreachColIdx];
-                    if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
-                        engagedCount++;
-                    }
-                }
+        for (let i = 0; i < totalLdaStudents; i++) {
+            const rowRange = bodyRange.getRow(i);
+            const outreachCell = rowRange.getCell(0, outreachColIdx);
+            outreachCell.load("format/fill/color");
+            await context.sync();
+
+            const cellColor = outreachCell.format.fill.color;
+            if (cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()))) {
+                engagedCount++;
             }
         }
         
@@ -443,7 +443,7 @@ async function getTrendsData(period = 'year', logger) {
             const headerRange = ldaTable.getHeaderRowRange();
             const bodyRange = ldaTable.getDataBodyRange();
             headerRange.load("values");
-            bodyRange.load("values, format/fill/color");
+            bodyRange.load("values, rowCount");
             await context.sync();
 
             const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
@@ -456,11 +456,15 @@ async function getTrendsData(period = 'year', logger) {
             }
 
             const greenShades = ["#C6EFCE", "#92D050", "#00B050", "#90EE90"];
-            const colors = bodyRange.format.fill.color;
             const values = bodyRange.values;
 
             for (let i = 0; i < values.length; i++) {
-                const cellColor = colors && colors[i] ? colors[i][outreachColIdx] : null;
+                const rowRange = bodyRange.getRow(i);
+                const outreachCell = rowRange.getCell(0, outreachColIdx);
+                outreachCell.load("format/fill/color");
+                await context.sync();
+                
+                const cellColor = outreachCell.format.fill.color;
                 const isEngaged = cellColor && greenShades.some(shade => cellColor.toUpperCase().includes(shade.toUpperCase()));
                 const daysOut = values[i][daysOutColIdx];
                 
@@ -510,7 +514,7 @@ function renderPieChart(ldaCount, notOnLdaCount) {
     });
 }
 
-function renderEngagementPieChart(engagedCount, notEngagedCount) {
+function renderEngagementPieChart(engagedCount, notOnLdaCount) {
     const ctx = document.getElementById('engagementPieChart').getContext('2d');
     new Chart(ctx, {
         type: 'pie',
