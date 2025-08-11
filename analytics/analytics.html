@@ -51,9 +51,13 @@
             <button id="toggle-log-button" class="px-3 py-1 text-xs font-medium text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300">Show Logs</button>
         </div>
         
-        <div id="loading-message" class="text-left p-4 font-mono text-xs rounded-lg shadow-lg bg-black/30 backdrop-blur-md border border-white/20 text-white mb-4">
-            <div id="log-container" class="h-96 overflow-y-auto">
-                <p>> Initializing analytics...</p>
+        <div id="loading-message" class="text-left p-6 font-mono text-xs rounded-lg shadow-lg bg-black/30 backdrop-blur-md border border-white/20 text-white mb-4">
+            <p id="progress-status-text" class="mb-2 text-white/90">Initializing analytics...</p>
+            <div class="w-full bg-white/20 rounded-full h-2.5">
+                <div id="progress-bar-fill" class="bg-blue-400 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+            <div id="log-container" class="h-64 overflow-y-auto mt-4 hidden bg-black/20 p-2 rounded-md">
+                <!-- Log messages will be appended here -->
             </div>
         </div>
 
