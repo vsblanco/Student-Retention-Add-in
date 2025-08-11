@@ -6,6 +6,7 @@ Office.onReady((info) => {
 
 const CONSTANTS = {
     SETTINGS_KEY: "studentRetentionSettings",
+    ANALYTICS_DATA_KEY: "analyticsCacheData",
     COLUMN_MAPPINGS: {
         daysOut: ["days out", "daysout"],
         studentName: ["studentname", "student name"],
@@ -63,13 +64,10 @@ async function run() {
     setupTabs();
     setupTrendFilters();
     setupLogToggle();
+    setupRefreshButton();
     await setupDaysOutFilter();
-    try {
-        await loadAnalytics();
-    } catch (error) {
-        showError(error.message);
-        console.error(error);
-    }
+    
+    loadInitialData();
 }
 
 function setupTabs() {
@@ -165,11 +163,37 @@ function setupLogToggle() {
     }
 }
 
+function setupRefreshButton() {
+    const refreshButton = document.getElementById('refresh-analytics-button');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', () => {
+            fetchAndProcessData(true); // true indicates a manual refresh
+        });
+    }
+}
 
-async function loadAnalytics() {
+async function loadInitialData() {
+    const cachedDataString = Office.context.document.settings.get(CONSTANTS.ANALYTICS_DATA_KEY);
+    if (cachedDataString) {
+        try {
+            const cachedData = JSON.parse(cachedDataString);
+            processAndRender(cachedData);
+        } catch (e) {
+            console.error("Error parsing cached analytics data. Fetching fresh data.", e);
+            fetchAndProcessData();
+        }
+    } else {
+        fetchAndProcessData();
+    }
+}
+
+async function fetchAndProcessData(isManualRefresh = false) {
     const loadingMessage = document.getElementById("loading-message");
-    const analyticsContent = document.getElementById("analytics-content");
-    
+    if (isManualRefresh) {
+        document.getElementById('analytics-content').classList.add('hidden');
+    }
+    loadingMessage.classList.remove('hidden');
+
     try {
         const [totalStudents, ldaStudents, projectedStudents, engagementData, monthlyEngagementRate] = await Promise.all([
             getTotalStudentCount(),
@@ -181,40 +205,26 @@ async function loadAnalytics() {
         
         const trendsData = await getTrendsData('month', reportProgress);
         
-        fullTrendsData = trendsData;
-        allDataLoaded = false;
+        const analyticsPayload = {
+            timestamp: new Date().toISOString(),
+            totalStudents,
+            ldaStudents,
+            projectedStudents,
+            engagementData,
+            monthlyEngagementRate,
+            trendsData
+        };
+
+        Office.context.document.settings.set(CONSTANTS.ANALYTICS_DATA_KEY, JSON.stringify(analyticsPayload));
+        Office.context.document.settings.saveAsync((asyncResult) => {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("Failed to save analytics data: " + asyncResult.error.message);
+            } else {
+                console.log("Analytics data saved successfully.");
+            }
+        });
         
-        // Hide progress elements and show log container, then hide the parent panel
-        document.getElementById('progress-status-text').classList.add('hidden');
-        document.getElementById('progress-bar-fill').parentElement.classList.add('hidden');
-        document.getElementById('log-container').classList.remove('hidden');
-        loadingMessage.classList.add("hidden");
-        
-        document.getElementById('toggle-log-button').textContent = 'Show Logs';
-        analyticsContent.classList.remove("hidden");
-
-        const notOnLda = totalStudents - ldaStudents;
-        const percentageOnLda = totalStudents > 0 ? ((ldaStudents / totalStudents) * 100).toFixed(1) : 0;
-
-        document.getElementById("total-students").textContent = totalStudents;
-        document.getElementById("lda-students").textContent = ldaStudents;
-        document.getElementById("lda-percentage").textContent = `${percentageOnLda}%`;
-        renderPieChart(ldaStudents, notOnLda);
-        renderEngagementPieChart(engagementData.engaged, engagementData.notEngaged);
-
-        // Projection Tab Calculations
-        const tomorrowTotal = ldaStudents + projectedStudents;
-        const projectedEngaged = Math.round(tomorrowTotal * monthlyEngagementRate);
-        const projectedNetLda = tomorrowTotal - projectedEngaged;
-
-        document.getElementById("lda-students-proj").textContent = ldaStudents;
-        document.getElementById("projected-students").textContent = projectedStudents;
-        document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
-        document.getElementById("monthly-engagement-rate").textContent = `${(monthlyEngagementRate * 100).toFixed(1)}%`;
-        document.getElementById("projected-engaged").textContent = projectedEngaged;
-        document.getElementById("projected-net-lda").textContent = projectedNetLda;
-        
-        applyTrendFilter();
+        processAndRender(analyticsPayload);
 
     } catch (error) {
         loadingMessage.classList.add("hidden");
@@ -222,6 +232,46 @@ async function loadAnalytics() {
         console.error(error);
     }
 }
+
+function processAndRender(data) {
+    fullTrendsData = data.trendsData;
+    allDataLoaded = false; // Reset since we only cache monthly trend data initially
+
+    document.getElementById('loading-message').classList.add('hidden');
+    document.getElementById('analytics-content').classList.remove('hidden');
+    
+    // Update timestamp
+    const timestampEl = document.getElementById('last-updated-timestamp');
+    if (timestampEl) {
+        const date = new Date(data.timestamp);
+        timestampEl.textContent = `Last updated: ${date.toLocaleString()}`;
+    }
+
+    // Populate Current Tab
+    const notOnLda = data.totalStudents - data.ldaStudents;
+    const percentageOnLda = data.totalStudents > 0 ? ((data.ldaStudents / data.totalStudents) * 100).toFixed(1) : 0;
+
+    document.getElementById("total-students").textContent = data.totalStudents;
+    document.getElementById("lda-students").textContent = data.ldaStudents;
+    document.getElementById("lda-percentage").textContent = `${percentageOnLda}%`;
+    renderPieChart(data.ldaStudents, notOnLda);
+    renderEngagementPieChart(data.engagementData.engaged, data.engagementData.notEngaged);
+
+    // Populate Projection Tab
+    const tomorrowTotal = data.ldaStudents + data.projectedStudents;
+    const projectedEngaged = Math.round(tomorrowTotal * data.monthlyEngagementRate);
+    const projectedNetLda = tomorrowTotal - projectedEngaged;
+
+    document.getElementById("lda-students-proj").textContent = data.ldaStudents;
+    document.getElementById("projected-students").textContent = data.projectedStudents;
+    document.getElementById("tomorrow-total-lda").textContent = tomorrowTotal;
+    document.getElementById("monthly-engagement-rate").textContent = `${(data.monthlyEngagementRate * 100).toFixed(1)}%`;
+    document.getElementById("projected-engaged").textContent = projectedEngaged;
+    document.getElementById("projected-net-lda").textContent = projectedNetLda;
+    
+    applyTrendFilter();
+}
+
 
 function applyTrendFilter() {
     if (!fullTrendsData) return;
@@ -254,7 +304,7 @@ function applyTrendFilter() {
         sheetNames: []
     };
     
-    const sheetsInPeriod = fullTrendsData.filter(sheetData => sheetData.date >= startDate);
+    const sheetsInPeriod = fullTrendsData.filter(sheetData => new Date(sheetData.date) >= startDate);
 
     sheetsInPeriod.forEach(sheetData => {
         const filteredStudents = sheetData.students.filter(student => student.daysOut >= daysOutFilter);
