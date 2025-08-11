@@ -28,6 +28,22 @@ function logAnalyticsProgress(message) {
     }
 }
 
+function updateProgressBar(processed, total, statusText) {
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const statusTextElement = document.getElementById('progress-status-text');
+    
+    if (progressBarFill && statusTextElement) {
+        const percentage = total > 0 ? (processed / total) * 100 : 0;
+        progressBarFill.style.width = `${percentage}%`;
+        
+        let text = statusText;
+        if (total > 0) {
+            text += ` (${processed}/${total})`;
+        }
+        statusTextElement.textContent = text;
+    }
+}
+
 async function run() {
     // Reset state variables on each run to prevent issues on re-opening the pane
     if (trendsChartInstance) {
@@ -99,11 +115,9 @@ function setupTrendFilters() {
 
                 if (filter.period === 'year' && !allDataLoaded) {
                     showChartLoading(true);
-                    logAnalyticsProgress("Year filter selected. Fetching all historical data...");
                     try {
-                        fullTrendsData = await getTrendsData('year', logAnalyticsProgress); // Fetch all data
+                        fullTrendsData = await getTrendsData('year', updateProgressBar); // Fetch all data
                         allDataLoaded = true;
-                        logAnalyticsProgress("Full historical data loaded.");
                     } catch (error) {
                         showError("Failed to load full year data.");
                         console.error(error);
@@ -135,11 +149,11 @@ async function setupDaysOutFilter() {
 
 function setupLogToggle() {
     const toggleButton = document.getElementById('toggle-log-button');
-    const logPanel = document.getElementById('loading-message');
+    const logContainer = document.getElementById('log-container');
 
-    if (toggleButton && logPanel) {
+    if (toggleButton && logContainer) {
         toggleButton.addEventListener('click', () => {
-            const isHidden = logPanel.classList.toggle('hidden');
+            const isHidden = logContainer.classList.toggle('hidden');
             toggleButton.textContent = isHidden ? 'Show Logs' : 'Hide Logs';
         });
     }
@@ -151,7 +165,7 @@ async function loadAnalytics() {
     const analyticsContent = document.getElementById("analytics-content");
     
     try {
-        logAnalyticsProgress("Fetching data for Current and Projection tabs...");
+        updateProgressBar(0, 0, "Fetching data for Current and Projection tabs...");
         const [totalStudents, ldaStudents, projectedStudents, engagementData, monthlyEngagementRate] = await Promise.all([
             getTotalStudentCount(),
             getLdaStudentCount(),
@@ -159,11 +173,8 @@ async function loadAnalytics() {
             getLdaEngagementData(),
             getMonthlyEngagementRate()
         ]);
-        logAnalyticsProgress("Current and Projection data loaded.");
-
-        logAnalyticsProgress("Fetching trends data for the last month...");
-        const trendsData = await getTrendsData('month', logAnalyticsProgress);
-        logAnalyticsProgress("Initial trends data loaded.");
+        
+        const trendsData = await getTrendsData('month', updateProgressBar);
         
         fullTrendsData = trendsData;
         allDataLoaded = false;
@@ -204,7 +215,7 @@ async function loadAnalytics() {
 
 function applyTrendFilter() {
     if (!fullTrendsData) return;
-    logAnalyticsProgress("Applying filters and re-rendering trends chart...");
+    updateProgressBar(0, 0, "Applying filters and re-rendering trends chart...");
 
     const period = currentTrendPeriod;
     const daysOutFilter = parseInt(document.getElementById('trends-days-out-filter').value, 10) || 0;
@@ -254,12 +265,12 @@ function applyTrendFilter() {
     showChartLoading(false); // Hide loader after rendering
     const medianEngagement = calculateMedian(chartData.engagedCounts);
     document.getElementById("median-engagement").textContent = medianEngagement;
-    logAnalyticsProgress("Trends chart updated.");
+    updateProgressBar(1, 1, "Analytics loaded.");
 }
 
 
 async function getTotalStudentCount() {
-    logAnalyticsProgress("Counting total students in Master List...");
+    updateProgressBar(0, 0, "Counting total students in Master List...");
     const count = await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getItem("Master List");
         const range = sheet.getUsedRange();
@@ -267,7 +278,6 @@ async function getTotalStudentCount() {
         await context.sync();
         return range.rowCount > 0 ? range.rowCount - 1 : 0;
     });
-    logAnalyticsProgress(`Found ${count} total students.`);
     return count;
 }
 
@@ -297,13 +307,12 @@ async function getLatestLdaSheet(context) {
 
 
 async function getLdaStudentCount() {
-    logAnalyticsProgress("Finding latest LDA sheet and counting students...");
+    updateProgressBar(0, 0, "Finding latest LDA sheet and counting students...");
     const count = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
             throw new Error("No LDA sheet found. Please create an LDA report first.");
         }
-        logAnalyticsProgress(`Latest LDA sheet found: ${latestLdaSheet.name}`);
         latestLdaSheet.tables.load("items/name");
         await context.sync();
         if (latestLdaSheet.tables.items.length === 0) return 0;
@@ -315,12 +324,11 @@ async function getLdaStudentCount() {
         
         return bodyRange.rowCount;
     });
-    logAnalyticsProgress(`Found ${count} students on the latest LDA list.`);
     return count;
 }
 
 async function getProjectedLdaStudentCount() {
-    logAnalyticsProgress("Calculating projected LDA students for tomorrow...");
+    updateProgressBar(0, 0, "Calculating projected LDA students for tomorrow...");
     const count = await Excel.run(async (context) => {
         const settings = await getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
@@ -346,12 +354,11 @@ async function getProjectedLdaStudentCount() {
         }
         return projectedCount;
     });
-    logAnalyticsProgress(`Found ${count} projected students.`);
     return count;
 }
 
 async function getLdaEngagementData() {
-    logAnalyticsProgress("Calculating engagement on latest LDA sheet...");
+    updateProgressBar(0, 0, "Calculating engagement on latest LDA sheet...");
     const data = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
@@ -395,14 +402,13 @@ async function getLdaEngagementData() {
         
         return { engaged: engagedCount, notEngaged: totalLdaStudents - engagedCount };
     });
-    logAnalyticsProgress(`Found ${data.engaged} engaged students.`);
     return data;
 }
 
-async function getTrendsData(period = 'year', logger) {
-    const log = logger || (() => {}); // Use provided logger or a no-op
+async function getTrendsData(period = 'year', progressCallback) {
+    const callback = progressCallback || (() => {}); // Use provided callback or a no-op
     return await Excel.run(async (context) => {
-        log("Searching for all LDA sheets in the workbook...");
+        callback(0, 0, "Searching for all LDA sheets in the workbook...");
         const worksheets = context.workbook.worksheets;
         worksheets.load("items/name");
         await context.sync();
@@ -417,21 +423,22 @@ async function getTrendsData(period = 'year', logger) {
                 }
             }
         });
-        log(`Found ${ldaSheets.length} total LDA sheets.`);
-
+        
         if (period === 'month') {
             const oneMonthAgo = new Date();
             oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
             ldaSheets = ldaSheets.filter(s => s.date >= oneMonthAgo);
-            log(`Filtering to ${ldaSheets.length} sheets from the last month.`);
         }
 
         ldaSheets.sort((a, b) => a.date - b.date);
+        const totalSheets = ldaSheets.length;
+        callback(0, totalSheets, `Found ${totalSheets} LDA sheets to process.`);
 
         const trendsData = [];
+        let processedSheets = 0;
 
         for (const { sheet, date } of ldaSheets) {
-            log(`Processing sheet: ${sheet.name}...`);
+            callback(processedSheets, totalSheets, `Processing sheet: ${sheet.name}...`);
             const sheetData = {
                 label: date.toLocaleDateString(),
                 date: date,
@@ -444,6 +451,7 @@ async function getTrendsData(period = 'year', logger) {
 
             if (sheet.tables.items.length === 0) {
                 trendsData.push(sheetData);
+                processedSheets++;
                 continue;
             }
 
@@ -460,6 +468,7 @@ async function getTrendsData(period = 'year', logger) {
 
             if (outreachColIdx === -1 || daysOutColIdx === -1) {
                 trendsData.push(sheetData);
+                processedSheets++;
                 continue;
             }
 
@@ -482,14 +491,15 @@ async function getTrendsData(period = 'year', logger) {
                 });
             }
             trendsData.push(sheetData);
+            processedSheets++;
         }
-
+        callback(processedSheets, totalSheets, "Finished processing sheets.");
         return trendsData;
     });
 }
 
 async function getMonthlyEngagementRate() {
-    logAnalyticsProgress("Calculating historical monthly engagement rate...");
+    updateProgressBar(0, 0, "Calculating historical monthly engagement rate...");
     const rate = await Excel.run(async (context) => {
         const worksheets = context.workbook.worksheets;
         worksheets.load("items/name");
@@ -510,7 +520,6 @@ async function getMonthlyEngagementRate() {
         });
 
         if (ldaSheets.length === 0) {
-            logAnalyticsProgress("No LDA sheets found in the last month to calculate engagement rate.");
             return 0;
         }
 
@@ -551,7 +560,6 @@ async function getMonthlyEngagementRate() {
         if (totalStudentsInMonth === 0) return 0;
         return totalEngagedInMonth / totalStudentsInMonth;
     });
-    logAnalyticsProgress(`Monthly engagement rate: ${(rate * 100).toFixed(1)}%`);
     return rate;
 }
 
@@ -584,7 +592,24 @@ function renderPieChart(ldaCount, notOnLdaCount) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'top' } }
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            const value = context.raw;
+                            const sum = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percentage = sum > 0 ? (value / sum * 100).toFixed(1) : 0;
+                            label += `${percentage}%`;
+                            return label;
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -598,15 +623,32 @@ function renderEngagementPieChart(engagedCount, notEngagedCount) {
             datasets: [{
                 label: 'Engagement Status',
                 data: [engagedCount, notEngagedCount],
-                backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)'],
-                borderColor: ['rgba(34, 197, 94, 1)', 'rgba(239, 68, 68, 1)'],
+                backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(209, 213, 219, 0.7)'],
+                borderColor: ['rgba(34, 197, 94, 1)', 'rgba(209, 213, 219, 1)'],
                 borderWidth: 1
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'top' } }
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            const value = context.raw;
+                            const sum = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const percentage = sum > 0 ? (value / sum * 100).toFixed(1) : 0;
+                            label += `${percentage}%`;
+                            return label;
+                        }
+                    }
+                }
+            }
         }
     });
 }
