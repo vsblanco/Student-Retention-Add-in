@@ -44,6 +44,12 @@ function updateProgressBar(processed, total, statusText) {
     }
 }
 
+// Combined function to update both progress bar and logs
+function reportProgress(processed, total, statusText) {
+    updateProgressBar(processed, total, statusText);
+    logAnalyticsProgress(statusText);
+}
+
 async function run() {
     // Reset state variables on each run to prevent issues on re-opening the pane
     if (trendsChartInstance) {
@@ -116,7 +122,7 @@ function setupTrendFilters() {
                 if (filter.period === 'year' && !allDataLoaded) {
                     showChartLoading(true);
                     try {
-                        fullTrendsData = await getTrendsData('year', updateProgressBar); // Fetch all data
+                        fullTrendsData = await getTrendsData('year', reportProgress); // Fetch all data
                         allDataLoaded = true;
                     } catch (error) {
                         showError("Failed to load full year data.");
@@ -165,7 +171,6 @@ async function loadAnalytics() {
     const analyticsContent = document.getElementById("analytics-content");
     
     try {
-        updateProgressBar(0, 0, "Fetching data for Current and Projection tabs...");
         const [totalStudents, ldaStudents, projectedStudents, engagementData, monthlyEngagementRate] = await Promise.all([
             getTotalStudentCount(),
             getLdaStudentCount(),
@@ -174,7 +179,7 @@ async function loadAnalytics() {
             getMonthlyEngagementRate()
         ]);
         
-        const trendsData = await getTrendsData('month', updateProgressBar);
+        const trendsData = await getTrendsData('month', reportProgress);
         
         fullTrendsData = trendsData;
         allDataLoaded = false;
@@ -275,7 +280,7 @@ function applyTrendFilter() {
 
 
 async function getTotalStudentCount() {
-    updateProgressBar(0, 0, "Counting total students in Master List...");
+    reportProgress(0, 0, "Counting total students in Master List...");
     const count = await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getItem("Master List");
         const range = sheet.getUsedRange();
@@ -312,7 +317,7 @@ async function getLatestLdaSheet(context) {
 
 
 async function getLdaStudentCount() {
-    updateProgressBar(0, 0, "Finding latest LDA sheet and counting students...");
+    reportProgress(0, 0, "Finding latest LDA sheet and counting students...");
     const count = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
@@ -333,7 +338,7 @@ async function getLdaStudentCount() {
 }
 
 async function getProjectedLdaStudentCount() {
-    updateProgressBar(0, 0, "Calculating projected LDA students for tomorrow...");
+    reportProgress(0, 0, "Calculating projected LDA students for tomorrow...");
     const count = await Excel.run(async (context) => {
         const settings = await getSettings();
         const daysOutFilter = settings.createlda.daysOutFilter || 6;
@@ -363,7 +368,7 @@ async function getProjectedLdaStudentCount() {
 }
 
 async function getLdaEngagementData() {
-    updateProgressBar(0, 0, "Calculating engagement on latest LDA sheet...");
+    reportProgress(0, 0, "Calculating engagement on latest LDA sheet...");
     const data = await Excel.run(async (context) => {
         const latestLdaSheet = await getLatestLdaSheet(context);
         if (!latestLdaSheet) {
@@ -410,8 +415,8 @@ async function getLdaEngagementData() {
     return data;
 }
 
-async function getTrendsData(period = 'year', progressCallback) {
-    const callback = progressCallback || (() => {}); // Use provided callback or a no-op
+async function getTrendsData(period = 'year', reportProgressCallback) {
+    const callback = reportProgressCallback || (() => {}); // Use provided callback or a no-op
     return await Excel.run(async (context) => {
         callback(0, 0, "Searching for all LDA sheets in the workbook...");
         const worksheets = context.workbook.worksheets;
@@ -504,7 +509,7 @@ async function getTrendsData(period = 'year', progressCallback) {
 }
 
 async function getMonthlyEngagementRate() {
-    updateProgressBar(0, 0, "Calculating historical monthly engagement rate...");
+    reportProgress(0, 0, "Calculating historical monthly engagement rate...");
     const rate = await Excel.run(async (context) => {
         const worksheets = context.workbook.worksheets;
         worksheets.load("items/name");
