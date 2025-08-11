@@ -514,7 +514,7 @@ function renderPieChart(ldaCount, notOnLdaCount) {
     });
 }
 
-function renderEngagementPieChart(engagedCount, notOnLdaCount) {
+function renderEngagementPieChart(engagedCount, notEngagedCount) {
     const ctx = document.getElementById('engagementPieChart').getContext('2d');
     new Chart(ctx, {
         type: 'pie',
