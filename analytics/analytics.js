@@ -1,6 +1,6 @@
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        document.addEventListener("DOMContentLoaded", run);
+        run();
     }
 });
 
@@ -14,8 +14,8 @@ const CONSTANTS = {
 
 let trendsChartInstance = null;
 let fullTrendsData = null;
-let currentTrendPeriod = 'month'; // Keep track of the current time filter
-let allDataLoaded = false; // Flag to track if all data has been loaded
+let currentTrendPeriod = 'month';
+let allDataLoaded = false;
 
 function logAnalyticsProgress(message) {
     const logContainer = document.getElementById('log-container');
@@ -28,6 +28,15 @@ function logAnalyticsProgress(message) {
 }
 
 async function run() {
+    // Reset state variables on each run to prevent issues on re-opening the pane
+    if (trendsChartInstance) {
+        trendsChartInstance.destroy();
+    }
+    trendsChartInstance = null;
+    fullTrendsData = null;
+    allDataLoaded = false;
+    currentTrendPeriod = 'month'; // Reset to default
+
     setupTabs();
     setupTrendFilters();
     await setupDaysOutFilter();
