@@ -1,0 +1,85 @@
+{
+  "modelName": "Re-entry Risk Model v1",
+  "description": "A risk index model that uses specific point mappings for academic factors and includes a significant modifier for re-entry students.",
+  "version": "1.0",
+  "maxScore": 150,
+  "components": [
+    {
+      "name": "Current Grade",
+      "weight": 20,
+      "column": "Grade",
+      "type": "value-map",
+      "map": {
+        "A": 0,
+        "B": 0,
+        "C": 5,
+        "D": 10,
+        "F": 20
+      },
+      "notes": "Assigns a fixed risk score based on the letter grade. C is included as a neutral midpoint."
+    },
+    {
+      "name": "Last Date of Attendance (LDA)",
+      "weight": 42,
+      "column": "Days Out",
+      "type": "linear-multiplier",
+      "multiplier": 3,
+      "notes": "Calculates risk by multiplying the 'Days Out' by 3. The final score is capped at the component's weight."
+    },
+    {
+      "name": "Contact Success Rate",
+      "weight": 16,
+      "type": "inverse-ratio",
+      "columns": {
+        "numerator": "Contact Attempts",
+        "denominator": "Times Contacted"
+      },
+      "notes": "Calculates risk based on the ratio of contact attempts to successful contacts."
+    },
+    {
+      "name": "Previous Grade",
+      "weight": 11,
+      "column": "Prev. Grade",
+      "type": "inverse-linear",
+      "notes": "Calculates risk based on the student's grade in a previous term."
+    },
+    {
+      "name": "Overall GPA",
+      "weight": 11,
+      "column": "GPA",
+      "type": "value-map",
+      "map": {
+        "4": 0,
+        "3": 2,
+        "2": 6,
+        "1": 8,
+        "0": 11
+      },
+      "notes": "Assigns a fixed risk score based on the student's GPA."
+    }
+  ],
+  "postCalculationModifiers": [
+    {
+      "name": "Re-entry Status",
+      "conditionColumn": "Re-entry",
+      "conditionValue": true,
+      "operations": [
+        { "operator": "/", "value": 2 },
+        { "operator": "+", "value": 50 }
+      ],
+      "notes": "If the student is marked as a re-entry, the subtotal of all components is divided by 2, and then 50 points are added."
+    }
+  ],
+  "howToRead": [
+    "1. The application will load this JSON file.",
+    "2. It will iterate through the 'components' array, calculating a subtotal score.",
+    "3. For each component, it uses the 'column' or 'columns' property to find the student's data.",
+    "4. The 'type' property determines the calculation method:",
+    "   - 'value-map': Looks up the student's value (e.g., 'A' or '4') in the 'map' and returns the corresponding score.",
+    "   - 'linear-multiplier': Takes the student's value from the column, multiplies it by the 'multiplier', and the result becomes the score (capped at the component's 'weight').",
+    "   - 'inverse-ratio' and 'inverse-linear' are calculated as in the previous model.",
+    "5. After calculating the subtotal from all components, it checks the 'postCalculationModifiers'.",
+    "6. If a student's value in the 'conditionColumn' ('Re-entry') matches the 'conditionValue' (true), it applies the specified 'operations' in order to the subtotal.",
+    "7. The final result is the 'Risk Index' score."
+  ]
+}
