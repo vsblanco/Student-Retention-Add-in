@@ -1,5 +1,6 @@
 {
   "modelName": "Re-entry Risk Model",
+  "author": "Academics Team",
   "description": "A risk index model that uses specific point mappings for academic factors and includes a significant modifier for re-entry students.",
   "version": "1.1",
   "maxScore": 150,
