@@ -43,11 +43,7 @@ async function loadFormulaOptions() {
         }
     }
 
-    // Automatically display the first formula if available
-    if (selector.options.length > 1) {
-        selector.selectedIndex = 1;
-        displayFormula(selector.value);
-    } else {
+    if (selector.options.length <= 1) {
         selector.innerHTML = '<option>No formulas found</option>';
     }
 }
@@ -65,21 +61,25 @@ async function displayFormula(fileName) {
         return;
     }
 
+    // Hide container, show spinner, and clear previous content
+    container.classList.add('hidden');
     spinner.classList.remove('hidden');
-    container.innerHTML = ''; // Clear previous content
+    container.innerHTML = ''; 
 
     try {
         const response = await fetch(`${FORMULAS_PATH}${fileName}`);
         if (!response.ok) throw new Error(`Failed to fetch ${fileName}`);
         const formula = await response.json();
         
-        spinner.classList.add('hidden');
         renderFormulaDetails(formula, container);
 
     } catch (error) {
-        spinner.classList.add('hidden');
         container.innerHTML = `<p class="text-center text-red-500">Error loading formula: ${error.message}</p>`;
         console.error(error);
+    } finally {
+        // Always hide spinner and show container after operation
+        spinner.classList.add('hidden');
+        container.classList.remove('hidden');
     }
 }
 
