@@ -1,5 +1,6 @@
 {
   "modelName": "Standard Risk Model",
+  "author": "Academics Team",
   "description": "A baseline risk index model that calculates a student's risk score based on several key academic and engagement factors.",
   "version": "1.0",
   "maxScore": 100,
