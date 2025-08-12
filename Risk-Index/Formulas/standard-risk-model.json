@@ -1,0 +1,51 @@
+{
+  "modelName": "Standard Risk Model",
+  "description": "A baseline risk index model that calculates a student's risk score based on several key academic and engagement factors.",
+  "version": "1.0",
+  "maxScore": 100,
+  "components": [
+    {
+      "name": "Current Grade",
+      "displayName": "Current Grade",
+      "weight": 20,
+      "column": "Grade",
+      "type": "inverse-linear",
+      "calculation": "Risk is calculated as (1 - Grade %) * 20."
+    },
+    {
+      "name": "Last Date of Attendance (LDA)",
+      "displayName": "Days Since LDA",
+      "weight": 28,
+      "column": "Days Out",
+      "type": "linear",
+      "calculation": "Risk is calculated based on the number of days out, scaled to a max of 28 points."
+    },
+    {
+      "name": "Contact Success Rate",
+      "displayName": "Contact Success Rate",
+      "weight": 16,
+      "type": "inverse-ratio",
+      "columns": {
+        "numerator": "Contact Attempts",
+        "denominator": "Times Contacted"
+      },
+      "calculation": "Risk is calculated as (1 - (Times Contacted / Contact Attempts)) * 16."
+    },
+    {
+      "name": "Previous Grade",
+      "displayName": "Previous Grade",
+      "weight": 11,
+      "column": "Prev. Grade",
+      "type": "inverse-linear",
+      "calculation": "Risk is calculated as (1 - Prev. Grade %) * 11."
+    },
+    {
+      "name": "Overall GPA",
+      "displayName": "Overall GPA",
+      "weight": 11,
+      "column": "GPA",
+      "type": "inverse-linear",
+      "calculation": "Risk is calculated as (1 - (GPA / 4.0)) * 11."
+    }
+  ]
+}
