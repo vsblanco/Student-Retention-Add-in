@@ -9,7 +9,8 @@ Office.onReady((info) => {
 // For this add-in, we'll list the known formula files here.
 const FORMULA_FILES = [
     "standard-risk-model.json",
-    "re-entry-risk-model.json"
+    "re-entry-risk-model.json",
+    "engagement-momentum-model.json"
 ];
 
 const FORMULAS_PATH = "Formulas/";
