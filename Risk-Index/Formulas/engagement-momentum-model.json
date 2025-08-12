@@ -1,0 +1,57 @@
+{
+  "modelName": "Engagement Momentum Model",
+  "author": "Gemini",
+  "description": "This model focuses on recent changes in student engagement and performance to identify at-risk students before their overall grade drops significantly. It prioritizes assignment submission trends and recent attendance.",
+  "version": "1.0",
+  "maxScore": 100,
+  "components": [
+    {
+      "name": "Grade Trend",
+      "displayName": "Grade Trend (Last 2 Weeks)",
+      "weight": 30,
+      "column": "Grade Trend",
+      "type": "value-map",
+      "map": {
+        "Declining": 30,
+        "Stagnant": 15,
+        "Improving": 0
+      },
+      "calculation": "Assigns risk based on the recent trend of the student's grade. Requires a column that calculates if the grade is 'Declining', 'Stagnant', or 'Improving'."
+    },
+    {
+      "name": "Assignment Velocity",
+      "displayName": "Assignment Velocity",
+      "weight": 35,
+      "column": "Course Missing Assignments",
+      "type": "linear",
+      "calculation": "Risk is calculated based on the number of missing assignments. A higher number of missing assignments significantly increases the risk score, scaled up to 35 points."
+    },
+    {
+      "name": "Recent Attendance",
+      "displayName": "Recent Attendance (Last 7 Days)",
+      "weight": 25,
+      "column": "Days Out",
+      "type": "value-map",
+      "map": {
+        "0": 0,
+        "1": 5,
+        "2": 10,
+        "3": 15,
+        "4": 20,
+        "5": 25,
+        "6": 25,
+        "7": 25
+      },
+      "calculation": "Assigns points for each day of absence within the last week, capping at 25 points for 5 or more days out."
+    },
+    {
+      "name": "Zero-Score Submissions",
+      "displayName": "Zero-Score Submissions",
+      "weight": 10,
+      "column": "Course Zero Assignments",
+      "type": "linear-multiplier",
+      "multiplier": 2,
+      "calculation": "Adds 2 points of risk for each assignment submitted with a score of zero, capped at 10 points. This identifies students who are submitting empty or incomplete work."
+    }
+  ]
+}
