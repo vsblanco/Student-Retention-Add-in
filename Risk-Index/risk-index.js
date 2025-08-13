@@ -812,7 +812,7 @@ async function importRiskIndex() {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange(true);
-            usedRange.load(["values", "columnCount"]);
+            usedRange.load(["values", "columnCount", "rowCount"]);
             await context.sync();
 
             const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
@@ -838,11 +838,21 @@ async function importRiskIndex() {
             if (scores.length > 0) {
                 const targetRange = sheet.getRangeByIndexes(1, riskIndexCol, scores.length, 1);
                 targetRange.values = scores;
+                
+                // Add conditional formatting
+                const formatRange = sheet.getRangeByIndexes(1, riskIndexCol, usedRange.rowCount - 1, 1);
+                formatRange.conditionalFormats.clear();
+                const conditionalFormat = formatRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+                conditionalFormat.colorScale.criteria = {
+                    minimum: { type: Excel.ConditionalFormatRuleType.lowestValue, color: "#63BE7B" }, // Green
+                    midpoint: { type: Excel.ConditionalFormatRuleType.percentile, percentile: 50, color: "#FFEB84" }, // Yellow
+                    maximum: { type: Excel.ConditionalFormatRuleType.highestValue, color: "#F8696B" }  // Red
+                };
             }
             
             await context.sync();
         });
-        alert("Risk Index scores have been successfully imported into the sheet.");
+        alert("Risk Index scores have been successfully imported and formatted.");
     } catch (error) {
         console.error("Error importing risk index:", error);
         alert(`An error occurred: ${error.message}`);
