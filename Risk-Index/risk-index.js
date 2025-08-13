@@ -6,6 +6,7 @@ Office.onReady((info) => {
 
 // --- STATE ---
 let currentFormula = null;
+let sessionCustomFormula = null; 
 let componentIdCounter = 0;
 let modifierIdCounter = 0;
 
@@ -38,16 +39,28 @@ const COLUMN_ALIASES = {
  */
 async function run() {
     // Viewer listeners
-    document.getElementById('formula-selector').addEventListener('change', () => displayFormula(document.getElementById('formula-selector').value));
-    document.getElementById('check-compatibility-button').addEventListener('click', checkCompatibility);
+    document.getElementById('formula-selector').addEventListener('change', handleFormulaSelection);
+    document.getElementById('check-compatibility-button').addEventListener('click', () => checkCompatibility(currentFormula, 'compatibility-results-container'));
     
     // Builder listeners
     document.getElementById('add-component-btn').addEventListener('click', addComponent);
     document.getElementById('add-modifier-btn').addEventListener('click', addModifier);
     document.getElementById('generate-json-btn').addEventListener('click', generateAndCopyJson);
+    document.getElementById('builder-check-compatibility-btn').addEventListener('click', () => {
+        const formula = buildFormulaFromUI();
+        checkCompatibility(formula, 'builder-compatibility-results-container');
+    });
+    document.getElementById('builder-import-btn').addEventListener('click', importFormulaFromBuilder);
 
     // View toggler
     document.getElementById('toggle-view-btn').addEventListener('click', toggleView);
+
+    // Custom Formula Modal Listeners
+    document.getElementById('load-custom-formula-btn').addEventListener('click', handleCustomFormulaLoad);
+    document.getElementById('cancel-custom-formula-btn').addEventListener('click', () => {
+        document.getElementById('custom-formula-modal').classList.add('hidden');
+        document.getElementById('formula-selector').value = ''; 
+    });
 
     await loadFormulaOptions();
 }
@@ -62,13 +75,11 @@ function toggleView() {
     const mainTitle = document.getElementById('main-title');
 
     if (viewerMode.classList.contains('hidden')) {
-        // Switch to Viewer
         viewerMode.classList.remove('hidden');
         builderMode.classList.add('hidden');
         toggleBtn.textContent = 'Formula Builder';
         mainTitle.textContent = 'Risk Index Models';
     } else {
-        // Switch to Builder
         viewerMode.classList.add('hidden');
         builderMode.classList.remove('hidden');
         toggleBtn.textContent = 'Formula Viewer';
@@ -100,16 +111,69 @@ async function loadFormulaOptions() {
     if (selector.options.length <= 1) {
         selector.innerHTML = '<option>No formulas found</option>';
     }
+    const divider = document.createElement('option');
+    divider.disabled = true;
+    divider.textContent = '──────────';
+    selector.appendChild(divider);
+    const customOption = document.createElement('option');
+    customOption.value = 'custom';
+    customOption.textContent = 'Upload Custom Formula...';
+    selector.appendChild(customOption);
 }
 
-async function displayFormula(fileName) {
+function handleFormulaSelection() {
+    const selector = document.getElementById('formula-selector');
+    const selectedValue = selector.value;
+    if (selectedValue === 'custom') {
+        document.getElementById('custom-json-input').value = '';
+        document.getElementById('custom-formula-status').textContent = '';
+        document.getElementById('custom-formula-modal').classList.remove('hidden');
+    } else if (selectedValue === 'session-custom') {
+        displayFormula(null, sessionCustomFormula);
+    } else {
+        displayFormula(selectedValue);
+    }
+}
+
+function handleCustomFormulaLoad() {
+    const jsonInput = document.getElementById('custom-json-input');
+    const statusEl = document.getElementById('custom-formula-status');
+    try {
+        const formulaObject = JSON.parse(jsonInput.value);
+        if (!formulaObject.modelName || !formulaObject.components) {
+            throw new Error('JSON is missing required fields like "modelName" or "components".');
+        }
+        sessionCustomFormula = formulaObject;
+        addCustomFormulaToDropdown(formulaObject);
+        document.getElementById('custom-formula-modal').classList.add('hidden');
+        displayFormula(null, sessionCustomFormula);
+    } catch (error) {
+        statusEl.textContent = `Error: ${error.message}`;
+        console.error("Invalid JSON:", error);
+    }
+}
+
+function addCustomFormulaToDropdown(formulaObject) {
+    const selector = document.getElementById('formula-selector');
+    const existingCustomOpt = selector.querySelector('option[value="session-custom"]');
+    if (existingCustomOpt) {
+        existingCustomOpt.remove();
+    }
+    const customOption = document.createElement('option');
+    customOption.value = 'session-custom';
+    customOption.textContent = `(Custom) ${formulaObject.modelName}`;
+    customOption.selected = true;
+    selector.insertBefore(customOption, selector.querySelector('option[value="custom"]'));
+}
+
+async function displayFormula(fileName, formulaObject = null) {
     const container = document.getElementById('formula-details-container');
     const spinner = document.getElementById('loading-spinner');
     const compatibilitySection = document.getElementById('compatibility-section');
     const resultsContainer = document.getElementById('compatibility-results-container');
     currentFormula = null;
     resultsContainer.innerHTML = '';
-    if (!fileName) {
+    if (!fileName && !formulaObject) {
         container.innerHTML = '<p class="text-center text-gray-500">Please select a formula to view its details.</p>';
         compatibilitySection.classList.add('hidden');
         return;
@@ -119,9 +183,7 @@ async function displayFormula(fileName) {
     compatibilitySection.classList.add('hidden');
     container.innerHTML = '';
     try {
-        const response = await fetch(`${FORMULAS_PATH}${fileName}`);
-        if (!response.ok) throw new Error(`Failed to fetch ${fileName}`);
-        currentFormula = await response.json();
+        currentFormula = formulaObject ? formulaObject : await (await fetch(`${FORMULAS_PATH}${fileName}`)).json();
         renderFormulaDetails(currentFormula, container);
         compatibilitySection.classList.remove('hidden');
     } catch (error) {
@@ -167,13 +229,13 @@ function renderFormulaDetails(formula, container) {
     container.innerHTML = html;
 }
 
-async function checkCompatibility() {
-    if (!currentFormula) return;
-    const resultsContainer = document.getElementById('compatibility-results-container');
+async function checkCompatibility(formulaToCheck, resultsContainerId) {
+    if (!formulaToCheck) return;
+    const resultsContainer = document.getElementById(resultsContainerId);
     resultsContainer.innerHTML = '<p class="text-center text-gray-500">Checking...</p>';
     try {
         const requiredColumns = new Set();
-        (currentFormula.components || []).forEach(c => {
+        (formulaToCheck.components || []).forEach(c => {
             if (c.column) requiredColumns.add(c.column);
             if (c.columns) {
                 if (c.columns.numerator) requiredColumns.add(c.columns.numerator);
@@ -184,7 +246,7 @@ async function checkCompatibility() {
                 if (c.conditionalSource.sourceColumn) requiredColumns.add(c.conditionalSource.sourceColumn);
             }
         });
-        (currentFormula.postCalculationModifiers || []).forEach(m => {
+        (formulaToCheck.postCalculationModifiers || []).forEach(m => {
             if (m.conditionColumn) requiredColumns.add(m.conditionColumn);
         });
         const masterHeaders = await Excel.run(async (context) => {
@@ -202,7 +264,7 @@ async function checkCompatibility() {
             if (!found) allFound = false;
             results.push({ name: reqCol, found });
         });
-        renderCompatibilityResults(results, allFound);
+        renderCompatibilityResults(results, allFound, resultsContainerId);
     } catch (error) {
         let errorMessage = `Error during compatibility check: ${error.message}`;
         if (error.code === 'ItemNotFound') {
@@ -213,8 +275,8 @@ async function checkCompatibility() {
     }
 }
 
-function renderCompatibilityResults(results, allFound) {
-    const container = document.getElementById('compatibility-results-container');
+function renderCompatibilityResults(results, allFound, containerId) {
+    const container = document.getElementById(containerId);
     let overallStatus = allFound
         ? `<div class="p-3 mb-3 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">✔ All required columns found. This model is compatible.</div>`
         : `<div class="p-3 mb-3 bg-red-100 text-red-800 rounded-lg text-sm font-semibold">❌ Missing required columns. This model may not run correctly.</div>`;
@@ -334,9 +396,9 @@ function addOperation(container) {
     container.appendChild(opDiv);
 }
 
-function generateAndCopyJson() {
+function buildFormulaFromUI() {
     const formula = {
-        modelName: document.getElementById('modelName').value,
+        modelName: document.getElementById('modelName').value || "Untitled Model",
         author: document.getElementById('author').value,
         description: document.getElementById('description').value,
         version: document.getElementById('version').value,
@@ -390,6 +452,11 @@ function generateAndCopyJson() {
     if (formula.postCalculationModifiers.length === 0) {
         delete formula.postCalculationModifiers;
     }
+    return formula;
+}
+
+function generateAndCopyJson() {
+    const formula = buildFormulaFromUI();
     const jsonOutput = document.getElementById('json-output');
     const jsonString = JSON.stringify(formula, null, 2);
     jsonOutput.value = jsonString;
@@ -402,4 +469,16 @@ function generateAndCopyJson() {
     } catch (err) {
         console.error('Failed to copy JSON: ', err);
     }
+}
+
+function importFormulaFromBuilder() {
+    const formula = buildFormulaFromUI();
+    if (!formula.modelName) {
+        alert("Please provide a Model Name before importing.");
+        return;
+    }
+    sessionCustomFormula = formula;
+    addCustomFormulaToDropdown(formula);
+    toggleView(); // Switch back to viewer
+    displayFormula(null, sessionCustomFormula); // Display the new formula
 }
