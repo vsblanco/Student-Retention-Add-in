@@ -6,7 +6,7 @@ Office.onReady((info) => {
 
 // --- STATE ---
 let currentFormula = null;
-let sessionCustomFormula = null; 
+let sessionCustomFormulas = {}; // Store multiple custom formulas
 let componentIdCounter = 0;
 let modifierIdCounter = 0;
 
@@ -32,7 +32,7 @@ const COLUMN_ALIASES = {
     "Grade Trend": ["grade trend"],
     "Course Missing Assignments": ["course missing assignments"],
     "Course Zero Assignments": ["course zero assignments"],
-    "Student Name": ["student name", "name","studentname"]
+    "Student Name": ["student name", "name", "studentname"]
 };
 const INFO_CONTENT = {
     modelName: { title: "Model Name", content: "The public-facing name of your formula. This is what will appear in the dropdown list for selection." },
@@ -78,12 +78,16 @@ async function run() {
 
     // View toggler
     document.getElementById('toggle-view-btn').addEventListener('click', toggleView);
+    document.getElementById('edit-custom-formula-btn').addEventListener('click', openEditModal);
 
-    // Custom Formula Modal Listeners
+    // Modal Listeners
     document.getElementById('load-custom-formula-btn').addEventListener('click', handleCustomFormulaLoad);
     document.getElementById('cancel-custom-formula-btn').addEventListener('click', () => {
         document.getElementById('custom-formula-modal').classList.add('hidden');
         document.getElementById('formula-selector').value = ''; 
+    });
+    document.getElementById('cancel-edit-formula-btn').addEventListener('click', () => {
+        document.getElementById('edit-formula-modal').classList.add('hidden');
     });
 
     // Info Popup Listeners
@@ -166,8 +170,9 @@ function handleFormulaSelection() {
         document.getElementById('custom-json-input').value = '';
         document.getElementById('custom-formula-status').textContent = '';
         document.getElementById('custom-formula-modal').classList.remove('hidden');
-    } else if (selectedValue === 'session-custom') {
-        displayFormula(null, sessionCustomFormula);
+    } else if (selectedValue.startsWith('session-custom-')) {
+        const modelName = selectedValue.replace('session-custom-', '');
+        displayFormula(null, sessionCustomFormulas[modelName]);
     } else {
         displayFormula(selectedValue);
     }
@@ -181,27 +186,36 @@ function handleCustomFormulaLoad() {
         if (!formulaObject.modelName || !formulaObject.components) {
             throw new Error('JSON is missing required fields like "modelName" or "components".');
         }
-        sessionCustomFormula = formulaObject;
-        addCustomFormulaToDropdown(formulaObject);
+        sessionCustomFormulas[formulaObject.modelName] = formulaObject;
+        updateCustomFormulaDropdown();
+        document.getElementById('formula-selector').value = `session-custom-${formulaObject.modelName}`;
         document.getElementById('custom-formula-modal').classList.add('hidden');
-        displayFormula(null, sessionCustomFormula);
+        displayFormula(null, formulaObject);
     } catch (error) {
         statusEl.textContent = `Error: ${error.message}`;
         console.error("Invalid JSON:", error);
     }
 }
 
-function addCustomFormulaToDropdown(formulaObject) {
+function updateCustomFormulaDropdown() {
     const selector = document.getElementById('formula-selector');
-    const existingCustomOpt = selector.querySelector('option[value="session-custom"]');
-    if (existingCustomOpt) {
-        existingCustomOpt.remove();
+    // Remove existing custom options
+    selector.querySelectorAll('option[value^="session-custom-"]').forEach(opt => opt.remove());
+
+    Object.values(sessionCustomFormulas).forEach(formula => {
+        const customOption = document.createElement('option');
+        customOption.value = `session-custom-${formula.modelName}`;
+        customOption.textContent = `(Custom) ${formula.modelName}`;
+        selector.insertBefore(customOption, selector.querySelector('option[value="custom"]'));
+    });
+
+    // Show/hide edit button
+    const editBtn = document.getElementById('edit-custom-formula-btn');
+    if(Object.keys(sessionCustomFormulas).length > 0) {
+        editBtn.classList.remove('hidden');
+    } else {
+        editBtn.classList.add('hidden');
     }
-    const customOption = document.createElement('option');
-    customOption.value = 'session-custom';
-    customOption.textContent = `(Custom) ${formulaObject.modelName}`;
-    customOption.selected = true;
-    selector.insertBefore(customOption, selector.querySelector('option[value="custom"]'));
 }
 
 async function displayFormula(fileName, formulaObject = null) {
@@ -443,6 +457,100 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
 // ### FORMULA BUILDER FUNCTIONS    ###
 // ####################################
 
+function openEditModal() {
+    const listContainer = document.getElementById('edit-formula-list');
+    listContainer.innerHTML = ''; // Clear previous list
+    const customFormulaNames = Object.keys(sessionCustomFormulas);
+
+    if (customFormulaNames.length === 0) {
+        alert("No custom formulas in this session to edit.");
+        return;
+    }
+
+    customFormulaNames.forEach(name => {
+        const button = document.createElement('button');
+        button.className = 'w-full text-left p-2 bg-gray-100 rounded-md hover:bg-blue-100';
+        button.textContent = name;
+        button.onclick = () => {
+            loadFormulaIntoBuilder(name);
+            document.getElementById('edit-formula-modal').classList.add('hidden');
+        };
+        listContainer.appendChild(button);
+    });
+
+    document.getElementById('edit-formula-modal').classList.remove('hidden');
+}
+
+function loadFormulaIntoBuilder(modelName) {
+    const formula = sessionCustomFormulas[modelName];
+    if (!formula) return;
+
+    // Switch to builder view if not already there
+    if (document.getElementById('viewer-mode').style.display !== 'none') {
+        toggleView();
+    }
+    
+    // Populate general info
+    document.getElementById('modelName').value = formula.modelName || '';
+    document.getElementById('author').value = formula.author || '';
+    document.getElementById('description').value = formula.description || '';
+    document.getElementById('version').value = formula.version || '1.0';
+    document.getElementById('maxScore').value = formula.maxScore || 100;
+
+    // Populate components
+    const componentsContainer = document.getElementById('components-container');
+    componentsContainer.innerHTML = '';
+    componentIdCounter = 0;
+    (formula.components || []).forEach(compData => {
+        addComponent(); // Adds a blank card
+        const newCard = document.getElementById(`comp-${componentIdCounter - 1}`);
+        // Now populate the new card
+        newCard.querySelector('[data-key="name"]').value = compData.name || '';
+        newCard.querySelector('[data-key="displayName"]').value = compData.displayName || '';
+        newCard.querySelector('[data-key="weight"]').value = compData.weight || 10;
+        const typeSelect = newCard.querySelector('[data-key="type"]');
+        typeSelect.value = compData.type || 'linear';
+        handleTypeChange({target: typeSelect}); // Trigger UI update for the selected type
+        
+        // Populate type-specific fields
+        if(compData.column) newCard.querySelector('[data-key="column"]').value = compData.column;
+        if(compData.multiplier) newCard.querySelector('[data-key="multiplier"]').value = compData.multiplier;
+        if(compData.columns) {
+            if(compData.columns.numerator) newCard.querySelector('[data-key="columns.numerator"]').value = compData.columns.numerator;
+            if(compData.columns.denominator) newCard.querySelector('[data-key="columns.denominator"]').value = compData.columns.denominator;
+        }
+        if(compData.type === 'value-map' && compData.map) {
+            const pairsContainer = newCard.querySelector('.value-map-pairs');
+            pairsContainer.innerHTML = ''; // Clear the default pair
+            Object.entries(compData.map).forEach(([key, value]) => {
+                addValueMapPair(pairsContainer, key, value);
+            });
+        }
+    });
+
+    // Populate modifiers
+    const modifiersContainer = document.getElementById('modifiers-container');
+    modifiersContainer.innerHTML = '';
+    modifierIdCounter = 0;
+    (formula.postCalculationModifiers || []).forEach(modData => {
+        addModifier();
+        const newCard = document.getElementById(`mod-${modifierIdCounter - 1}`);
+        // Populate fields
+        newCard.querySelector('[data-key="name"]').value = modData.name || '';
+        newCard.querySelector('[data-key="displayName"]').value = modData.displayName || '';
+        newCard.querySelector('[data-key="conditionColumn"]').value = modData.conditionColumn || '';
+        newCard.querySelector('[data-key="conditionValue"]').value = modData.conditionValue || '';
+        newCard.querySelector('[data-key="calculation"]').value = modData.calculation || '';
+        
+        const opsContainer = newCard.querySelector('.operations-list');
+        opsContainer.innerHTML = ''; // Clear default
+        (modData.operations || []).forEach(op => {
+            addOperation(opsContainer, op.operator, op.value);
+        });
+    });
+}
+
+
 function addComponent() {
     const id = `comp-${componentIdCounter++}`;
     const container = document.getElementById('components-container');
@@ -500,10 +608,10 @@ function handleTypeChange(event) {
     }
 }
 
-function addValueMapPair(container) {
+function addValueMapPair(container, key = '', value = '') {
     const pairDiv = document.createElement('div');
     pairDiv.className = 'flex items-center gap-2';
-    pairDiv.innerHTML = `<input type="text" class="w-full p-1 border rounded map-key" placeholder="Key (e.g., A)"><span class="font-bold">:</span><input type="number" class="w-full p-1 border rounded map-value" placeholder="Value (e.g., 0)"><button class="remove-pair-btn text-red-500 hover:text-red-700">&times;</button>`;
+    pairDiv.innerHTML = `<input type="text" class="w-full p-1 border rounded map-key" placeholder="Key (e.g., A)" value="${key}"><span class="font-bold">:</span><input type="number" class="w-full p-1 border rounded map-value" placeholder="Value (e.g., 0)" value="${value}"><button class="remove-pair-btn text-red-500 hover:text-red-700">&times;</button>`;
     pairDiv.querySelector('.remove-pair-btn').addEventListener('click', () => pairDiv.remove());
     container.appendChild(pairDiv);
 }
@@ -536,10 +644,10 @@ function addModifier() {
     addOperation(modifierCard.querySelector('.operations-list'));
 }
 
-function addOperation(container) {
+function addOperation(container, operator = '+', value = '') {
     const opDiv = document.createElement('div');
     opDiv.className = 'flex items-center gap-2';
-    opDiv.innerHTML = `<select class="w-1/3 p-1 border rounded op-operator">${MODIFIER_OPERATORS.map(op => `<option value="${op}">${op}</option>`).join('')}</select><input type="number" class="w-2/3 p-1 border rounded op-value" placeholder="Value"><button class="remove-op-btn text-red-500 hover:text-red-700">&times;</button>`;
+    opDiv.innerHTML = `<select class="w-1/3 p-1 border rounded op-operator">${MODIFIER_OPERATORS.map(op => `<option value="${op}" ${op === operator ? 'selected' : ''}>${op}</option>`).join('')}</select><input type="number" class="w-2/3 p-1 border rounded op-value" placeholder="Value" value="${value}"><button class="remove-op-btn text-red-500 hover:text-red-700">&times;</button>`;
     opDiv.querySelector('.remove-op-btn').addEventListener('click', () => opDiv.remove());
     container.appendChild(opDiv);
 }
@@ -625,10 +733,17 @@ function importFormulaFromBuilder() {
         alert("Please provide a Model Name before importing.");
         return;
     }
-    sessionCustomFormula = formula;
-    addCustomFormulaToDropdown(formula);
+    // Remove old version if name is the same but case might be different
+    const oldKey = Object.keys(sessionCustomFormulas).find(key => key.toLowerCase() === formula.modelName.toLowerCase());
+    if(oldKey) {
+        delete sessionCustomFormulas[oldKey];
+    }
+
+    sessionCustomFormulas[formula.modelName] = formula;
+    updateCustomFormulaDropdown();
     toggleView(); // Switch back to viewer
-    displayFormula(null, sessionCustomFormula); // Display the new formula
+    document.getElementById('formula-selector').value = `session-custom-${formula.modelName}`;
+    displayFormula(null, formula); // Display the new formula
 }
 
 // ####################################
