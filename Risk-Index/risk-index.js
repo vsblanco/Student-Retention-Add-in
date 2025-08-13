@@ -841,7 +841,7 @@ async function importRiskIndex() {
                 
                 // Add conditional formatting
                 const formatRange = sheet.getRangeByIndexes(1, riskIndexCol, usedRange.rowCount - 1, 1);
-                formatRange.conditionalFormats.clear();
+                formatRange.conditionalFormats.clearAll();
                 const conditionalFormat = formatRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
                 conditionalFormat.colorScale.criteria = {
                     minimum: { type: Excel.ConditionalFormatRuleType.lowestValue, color: "#63BE7B" }, // Green
