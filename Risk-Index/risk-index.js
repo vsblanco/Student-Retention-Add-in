@@ -104,6 +104,15 @@ async function run() {
         document.getElementById('info-popup-modal').classList.add('hidden');
     });
 
+    // Event delegation for expandable example scores
+    document.body.addEventListener('click', (event) => {
+        const scoreHeader = event.target.closest('.score-example-header');
+        if (scoreHeader) {
+            const details = scoreHeader.nextElementSibling;
+            details.classList.toggle('hidden');
+        }
+    });
+
     await loadFormulaOptions();
 }
 
@@ -339,13 +348,13 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
             
             randomIndices.forEach(index => {
                 const studentRow = studentDataRows[index];
-                const score = calculateRiskScore(studentRow, formulaToCheck, headerMap);
+                const { score, breakdown } = calculateRiskScore(studentRow, formulaToCheck, headerMap);
                 const studentName = studentRow[headerMap["Student Name"]] || `Row ${index + 2}`;
-                exampleScores.push({ name: studentName, score });
+                exampleScores.push({ name: studentName, score, breakdown });
             });
         }
 
-        renderCompatibilityResults(columnCheckResults, allFound, exampleScores, resultsContainerId);
+        renderCompatibilityResults(columnCheckResults, allFound, exampleScores, resultsContainerId, formulaToCheck.maxScore);
 
     } catch (error) {
         let errorMessage = `Error during compatibility check: ${error.message}`;
@@ -359,6 +368,7 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
 
 function calculateRiskScore(studentRow, formula, headerMap) {
     let totalScore = 0;
+    const breakdown = [];
 
     // Calculate component scores
     (formula.components || []).forEach(comp => {
@@ -400,7 +410,9 @@ function calculateRiskScore(studentRow, formula, headerMap) {
             }
         } catch (e) { console.error(`Error calculating component ${comp.name}:`, e); }
 
-        totalScore += Math.max(0, componentScore); // Ensure score is not negative
+        const finalComponentScore = Math.round(Math.max(0, componentScore));
+        breakdown.push({ name: comp.displayName || comp.name, score: finalComponentScore });
+        totalScore += finalComponentScore;
     });
 
     // Apply modifiers
@@ -423,10 +435,19 @@ function calculateRiskScore(studentRow, formula, headerMap) {
         }
     });
 
-    return Math.round(Math.min(totalScore, formula.maxScore || 100));
+    return { score: Math.round(Math.min(totalScore, formula.maxScore || 100)), breakdown };
 }
 
-function renderCompatibilityResults(results, allFound, exampleScores, containerId) {
+function getScoreColor(score, maxScore) {
+    if (maxScore === 0) return 'hsl(120, 70%, 45%)'; // Default to green if maxScore is 0
+    const percentage = Math.min(score / maxScore, 1); // Cap at 100%
+    // Hue goes from 120 (green) down to 0 (red)
+    const hue = 120 * (1 - percentage);
+    // Use HSL for easy color interpolation
+    return `hsl(${hue}, 70%, 45%)`;
+}
+
+function renderCompatibilityResults(results, allFound, exampleScores, containerId, maxScore) {
     const container = document.getElementById(containerId);
     let overallStatus = allFound
         ? `<div class="p-3 mb-3 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">✔ All required columns found. This model is compatible.</div>`
@@ -442,9 +463,25 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
 
     let examplesHtml = '';
     if (exampleScores && exampleScores.length > 0) {
-        examplesHtml = '<div class="mt-4"><h4 class="text-md font-semibold text-gray-700 mb-2">Example Scores</h4><ul class="space-y-1 text-sm">';
+        examplesHtml = '<div class="mt-4"><h4 class="text-md font-semibold text-gray-700 mb-2">Example Scores (Click to expand)</h4><ul class="space-y-1 text-sm">';
         exampleScores.forEach(ex => {
-            examplesHtml += `<li class="p-2 bg-gray-50 rounded-md flex justify-between items-center"><span>${ex.name}</span><span class="font-bold text-gray-800">${ex.score} pts</span></li>`;
+            const scoreColor = getScoreColor(ex.score, maxScore || 100);
+            let breakdownHtml = '<ul class="mt-2 border-t pt-2 space-y-1">';
+            ex.breakdown.forEach(item => {
+                breakdownHtml += `<li class="flex justify-between text-xs text-gray-600"><span>${item.name}</span><span class="font-medium">${item.score} pts</span></li>`;
+            });
+            breakdownHtml += '</ul>';
+
+            examplesHtml += `
+                <li class="p-2 bg-gray-50 rounded-md">
+                    <div class="score-example-header flex justify-between items-center cursor-pointer">
+                        <span>${ex.name}</span>
+                        <span class="font-bold text-white px-2 py-1 rounded" style="background-color: ${scoreColor};">${ex.score} pts</span>
+                    </div>
+                    <div class="score-details hidden mt-2">
+                        ${breakdownHtml}
+                    </div>
+                </li>`;
         });
         examplesHtml += '</ul></div>';
     }
