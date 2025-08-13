@@ -32,7 +32,7 @@ const COLUMN_ALIASES = {
     "Grade Trend": ["grade trend"],
     "Course Missing Assignments": ["course missing assignments"],
     "Course Zero Assignments": ["course zero assignments"],
-    "Student Name": ["student name", "name"]
+    "Student Name": ["student name", "name","studentname"]
 };
 const INFO_CONTENT = {
     modelName: { title: "Model Name", content: "The public-facing name of your formula. This is what will appear in the dropdown list for selection." },
