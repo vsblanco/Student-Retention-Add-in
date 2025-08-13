@@ -14,7 +14,8 @@ let modifierIdCounter = 0;
 const FORMULA_FILES = [
     "standard-risk-model.json",
     "re-entry-risk-model.json",
-    "engagement-momentum-model.json"
+    "engagement-momentum-model.json",
+    "Simple-Risk-Index.json"
 ];
 const FORMULAS_PATH = "Formulas/";
 const MASTER_LIST_SHEET = "Master List";
