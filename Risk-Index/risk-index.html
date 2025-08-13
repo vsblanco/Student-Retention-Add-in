@@ -101,10 +101,34 @@
             <div class="bg-white p-6 rounded-lg shadow">
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
                     <h2 class="text-lg font-semibold text-gray-700">Generated JSON</h2>
-                    <button id="generate-json-btn" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700">Generate & Copy JSON</button>
+                    <div class="flex space-x-2">
+                        <button id="generate-json-btn" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-sm">Generate & Copy</button>
+                        <button id="builder-import-btn" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 text-sm">Import into Session</button>
+                    </div>
                 </div>
-                <textarea id="json-output" rows="15" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly placeholder="Click the button to generate the JSON output..."></textarea>
+                <textarea id="json-output" rows="10" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly placeholder="Click 'Generate & Copy' to see the JSON output..."></textarea>
                 <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
+            </div>
+
+            <!-- Builder Compatibility Check Section -->
+            <div class="bg-white p-6 rounded-lg shadow">
+                 <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">Compatibility Check</h2>
+                 <button id="builder-check-compatibility-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Check Built Formula</button>
+                 <div id="builder-compatibility-results-container" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Formula Modal -->
+    <div id="custom-formula-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Upload Custom Formula</h3>
+            <p class="text-sm text-gray-600 mb-4">Paste the JSON content of your custom risk model below.</p>
+            <textarea id="custom-json-input" class="w-full h-64 p-2 border border-gray-300 rounded-md font-mono text-xs" placeholder='{ "modelName": "My Custom Model", ... }'></textarea>
+            <p id="custom-formula-status" class="text-xs text-red-500 mt-2 h-4"></p>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="cancel-custom-formula-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                <button id="load-custom-formula-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Load Formula</button>
             </div>
         </div>
     </div>
