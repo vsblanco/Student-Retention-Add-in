@@ -499,13 +499,13 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
 // ### FORMULA BUILDER FUNCTIONS    ###
 // ####################################
 
-function openEditModal() {
+async function openEditModal() {
     const listContainer = document.getElementById('edit-formula-list');
     listContainer.innerHTML = ''; // Clear previous list
     const customFormulaNames = Object.keys(sessionCustomFormulas);
 
     if (customFormulaNames.length === 0) {
-        alert("No custom formulas in this session to edit.");
+        await showNotificationModal("Info", "No custom formulas in this session to edit.");
         return;
     }
 
@@ -528,7 +528,7 @@ function loadFormulaIntoBuilder(modelName) {
     if (!formula) return;
 
     // Switch to builder view if not already there
-    if (document.getElementById('viewer-mode').style.display !== 'none') {
+    if (!document.getElementById('viewer-mode').classList.contains('hidden')) {
         toggleView();
     }
     
@@ -769,10 +769,10 @@ function generateAndCopyJson() {
     }
 }
 
-function importFormulaFromBuilder() {
+async function importFormulaFromBuilder() {
     const formula = buildFormulaFromUI();
     if (!formula.modelName) {
-        alert("Please provide a Model Name before importing.");
+        await showNotificationModal("Validation Error", "Please provide a Model Name before importing.");
         return;
     }
     // Remove old version if name is the same but case might be different
@@ -804,7 +804,7 @@ function showInfoPopup(title, content) {
 
 async function importRiskIndex() {
     if (!currentFormula) {
-        alert("Please select a formula first.");
+        await showNotificationModal("Error", "Please select a formula first.");
         return;
     }
 
@@ -852,10 +852,10 @@ async function importRiskIndex() {
             
             await context.sync();
         });
-        alert("Risk Index scores have been successfully imported and formatted.");
+        await showNotificationModal("Success", "Risk Index scores have been successfully imported and formatted.");
     } catch (error) {
         console.error("Error importing risk index:", error);
-        alert(`An error occurred: ${error.message}`);
+        await showNotificationModal("Error", `An error occurred: ${error.message}`);
     }
 }
 
@@ -886,10 +886,13 @@ function showConfirmationModal(message) {
     return new Promise((resolve) => {
         document.getElementById('confirmation-message').textContent = message;
         const modal = document.getElementById('confirmation-modal');
-        modal.classList.remove('hidden');
-
         const okBtn = document.getElementById('confirmation-ok-btn');
         const cancelBtn = document.getElementById('confirmation-cancel-btn');
+
+        okBtn.classList.remove('hidden');
+        cancelBtn.classList.remove('hidden');
+        
+        modal.classList.remove('hidden');
 
         const cleanup = () => {
             modal.classList.add('hidden');
@@ -900,11 +903,37 @@ function showConfirmationModal(message) {
         okBtn.addEventListener('click', () => {
             cleanup();
             resolve(true);
-        });
+        }, { once: true });
 
         cancelBtn.addEventListener('click', () => {
             cleanup();
             resolve(false);
-        });
+        }, { once: true });
+    });
+}
+
+function showNotificationModal(title, message) {
+    return new Promise((resolve) => {
+        document.getElementById('confirmation-title').textContent = title;
+        document.getElementById('confirmation-message').textContent = message;
+        const modal = document.getElementById('confirmation-modal');
+        const okBtn = document.getElementById('confirmation-ok-btn');
+        const cancelBtn = document.getElementById('confirmation-cancel-btn');
+
+        cancelBtn.classList.add('hidden');
+        okBtn.classList.remove('hidden');
+        
+        modal.classList.remove('hidden');
+
+        const cleanup = () => {
+            modal.classList.add('hidden');
+            cancelBtn.classList.remove('hidden');
+            okBtn.replaceWith(okBtn.cloneNode(true));
+        };
+
+        okBtn.addEventListener('click', () => {
+            cleanup();
+            resolve(true);
+        }, { once: true });
     });
 }
