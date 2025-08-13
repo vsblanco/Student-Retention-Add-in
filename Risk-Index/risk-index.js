@@ -18,6 +18,7 @@ const FORMULA_FILES = [
 ];
 const FORMULAS_PATH = "Formulas/";
 const MASTER_LIST_SHEET = "Master List";
+const RISK_INDEX_COLUMN_NAME = "Risk Index";
 const COMPONENT_TYPES = ["value-map", "linear", "linear-multiplier", "inverse-linear", "inverse-ratio"];
 const MODIFIER_OPERATORS = ["+", "-", "*", "/"];
 const COLUMN_ALIASES = {
@@ -65,6 +66,7 @@ async function run() {
     // Viewer listeners
     document.getElementById('formula-selector').addEventListener('change', handleFormulaSelection);
     document.getElementById('check-compatibility-button').addEventListener('click', () => checkCompatibility(currentFormula, 'compatibility-results-container'));
+    document.getElementById('import-risk-index-btn').addEventListener('click', importRiskIndex);
     
     // Builder listeners
     document.getElementById('add-component-btn').addEventListener('click', addComponent);
@@ -234,6 +236,7 @@ async function displayFormula(fileName, formulaObject = null) {
     const resultsContainer = document.getElementById('compatibility-results-container');
     currentFormula = null;
     resultsContainer.innerHTML = '';
+    document.getElementById('import-risk-index-btn').classList.add('hidden'); // Hide import button initially
     if (!fileName && !formulaObject) {
         container.innerHTML = '<p class="text-center text-gray-500">Please select a formula to view its details.</p>';
         compatibilitySection.classList.add('hidden');
@@ -298,6 +301,7 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
     if (!formulaToCheck) return;
     const resultsContainer = document.getElementById(resultsContainerId);
     resultsContainer.innerHTML = '<p class="text-center text-gray-500">Checking...</p>';
+    document.getElementById('import-risk-index-btn').classList.add('hidden');
     try {
         const requiredColumns = new Set();
         (formulaToCheck.components || []).forEach(c => {
@@ -343,6 +347,7 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
         
         let exampleScores = [];
         if (allFound && studentDataRows.length > 0) {
+            document.getElementById('import-risk-index-btn').classList.remove('hidden'); // Show import button if compatible
             const sampleSize = Math.min(5, studentDataRows.length);
             const randomIndices = [...Array(studentDataRows.length).keys()].sort(() => 0.5 - Math.random()).slice(0, sampleSize);
             
@@ -791,4 +796,105 @@ function showInfoPopup(title, content) {
     document.getElementById('info-popup-title').textContent = title;
     document.getElementById('info-popup-content').innerHTML = content;
     document.getElementById('info-popup-modal').classList.remove('hidden');
+}
+
+// ####################################
+// ### RISK INDEX IMPORT FUNCTIONS  ###
+// ####################################
+
+async function importRiskIndex() {
+    if (!currentFormula) {
+        alert("Please select a formula first.");
+        return;
+    }
+
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange(true);
+            usedRange.load(["values", "columnCount"]);
+            await context.sync();
+
+            const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
+            let riskIndexCol = headers.indexOf(RISK_INDEX_COLUMN_NAME.toLowerCase());
+
+            if (riskIndexCol === -1) {
+                const userConfirmed = await showConfirmationModal(`The "${RISK_INDEX_COLUMN_NAME}" column was not found. Would you like to create it?`);
+                if (userConfirmed) {
+                    riskIndexCol = usedRange.columnCount;
+                    sheet.getRangeByIndexes(0, riskIndexCol, 1, 1).values = [[RISK_INDEX_COLUMN_NAME]];
+                } else {
+                    return; // User cancelled
+                }
+            }
+            
+            // Re-fetch data and build header map now that column is guaranteed
+            const { data, headerMap } = await getSheetDataWithHeaderMap();
+            const scores = data.slice(1).map(studentRow => {
+                const { score } = calculateRiskScore(studentRow, currentFormula, headerMap);
+                return [score];
+            });
+
+            if (scores.length > 0) {
+                const targetRange = sheet.getRangeByIndexes(1, riskIndexCol, scores.length, 1);
+                targetRange.values = scores;
+            }
+            
+            await context.sync();
+        });
+        alert("Risk Index scores have been successfully imported into the sheet.");
+    } catch (error) {
+        console.error("Error importing risk index:", error);
+        alert(`An error occurred: ${error.message}`);
+    }
+}
+
+async function getSheetDataWithHeaderMap() {
+    return await Excel.run(async (context) => {
+        const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
+        const usedRange = sheet.getUsedRange(true);
+        usedRange.load("values");
+        await context.sync();
+        
+        const sheetData = usedRange.values;
+        const headers = sheetData[0].map(h => String(h || '').toLowerCase());
+        
+        const map = {};
+        Object.keys(COLUMN_ALIASES).forEach(key => {
+            const aliases = COLUMN_ALIASES[key];
+            const foundIndex = headers.findIndex(header => aliases.includes(header));
+            if(foundIndex !== -1) {
+                map[key] = foundIndex;
+            }
+        });
+        return { data: sheetData, headerMap: map };
+    });
+}
+
+
+function showConfirmationModal(message) {
+    return new Promise((resolve) => {
+        document.getElementById('confirmation-message').textContent = message;
+        const modal = document.getElementById('confirmation-modal');
+        modal.classList.remove('hidden');
+
+        const okBtn = document.getElementById('confirmation-ok-btn');
+        const cancelBtn = document.getElementById('confirmation-cancel-btn');
+
+        const cleanup = () => {
+            modal.classList.add('hidden');
+            okBtn.replaceWith(okBtn.cloneNode(true));
+            cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+        };
+
+        okBtn.addEventListener('click', () => {
+            cleanup();
+            resolve(true);
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            cleanup();
+            resolve(false);
+        });
+    });
 }
