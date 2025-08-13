@@ -33,6 +33,29 @@ const COLUMN_ALIASES = {
     "Course Missing Assignments": ["course missing assignments"],
     "Course Zero Assignments": ["course zero assignments"]
 };
+const INFO_CONTENT = {
+    modelName: { title: "Model Name", content: "The public-facing name of your formula. This is what will appear in the dropdown list for selection." },
+    author: { title: "Author", content: "The person or team who created this model. This helps track ownership and provides contact info for questions." },
+    description: { title: "Description", content: "A brief summary of what this model is designed to measure and what makes it unique. This helps users choose the right model for their needs." },
+    version: { title: "Version", content: "A version number (e.g., 1.0, 1.1) to help track changes and updates to the model over time." },
+    maxScore: { title: "Maximum Score", content: "The highest possible score a student can get with this model. This is typically the sum of all component weights." },
+    componentName: { title: "Component Name", content: "The internal, unique identifier for this component (e.g., 'currentGrade'). It should be in camelCase and contain no spaces." },
+    componentDisplayName: { title: "Component Display Name", content: "The user-friendly name for this component that will be shown in the formula viewer (e.g., 'Current Grade')." },
+    componentWeight: { title: "Weight (Points)", content: "The maximum number of points this component can contribute to the total risk score. The sum of all weights usually equals the 'Maximum Score'." },
+    componentCalcType: { title: "Calculation Type", content: `
+        Determines how the risk score for this component is calculated.
+        <ul class='list-disc list-inside mt-2'>
+            <li><strong>value-map:</strong> Assigns specific points based on a text value (e.g., 'A' grade = 0 points).</li>
+            <li><strong>linear:</strong> Score increases directly with the value in the source column. (e.g., more 'Days Out' = more points).</li>
+            <li><strong>linear-multiplier:</strong> Same as linear, but the value is multiplied by a factor first.</li>
+            <li><strong>inverse-linear:</strong> Score decreases as the value in the source column increases (e.g., a higher 'GPA' = fewer points).</li>
+            <li><strong>inverse-ratio:</strong> Calculates risk based on the inverse of a ratio between two columns.</li>
+        </ul>`
+    },
+    componentCalcLogic: { title: "Calculation Logic", content: "A plain-text description of how this component works. This text is displayed in the formula viewer to help users understand the model." },
+    sourceColumn: { title: "Source Column", content: "The exact name of the column header in your 'Master List' sheet that contains the data for this calculation." },
+    valueMappings: { title: "Value Mappings", content: "Define the specific points for each possible value. The 'Key' is the text from the Excel cell (e.g., 'A', 'B', 'C'), and the 'Value' is the number of points to assign." }
+};
 
 /**
  * Main function to initialize the task pane.
@@ -60,6 +83,20 @@ async function run() {
     document.getElementById('cancel-custom-formula-btn').addEventListener('click', () => {
         document.getElementById('custom-formula-modal').classList.add('hidden');
         document.getElementById('formula-selector').value = ''; 
+    });
+
+    // Info Popup Listeners
+    document.body.addEventListener('click', (event) => {
+        if (event.target.classList.contains('info-btn')) {
+            const infoKey = event.target.dataset.info;
+            const infoData = INFO_CONTENT[infoKey];
+            if (infoData) {
+                showInfoPopup(infoData.title, infoData.content);
+            }
+        }
+    });
+    document.getElementById('info-popup-close-btn').addEventListener('click', () => {
+        document.getElementById('info-popup-modal').classList.add('hidden');
     });
 
     await loadFormulaOptions();
@@ -307,11 +344,11 @@ function addComponent() {
             <button class="remove-btn text-red-500 hover:text-red-700 font-bold">Remove</button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-            <div><label class="block font-medium">Name</label><input type="text" data-key="name" class="w-full p-1 border rounded" placeholder="e.g., Current Grade"></div>
-            <div><label class="block font-medium">Display Name</label><input type="text" data-key="displayName" class="w-full p-1 border rounded" placeholder="e.g., Current Grade"></div>
-            <div><label class="block font-medium">Weight (Points)</label><input type="number" data-key="weight" class="w-full p-1 border rounded" value="10"></div>
-            <div><label class="block font-medium">Calculation Type</label><select data-key="type" class="w-full p-1 border rounded component-type-select">${COMPONENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
-            <div class="md:col-span-2"><label class="block font-medium">Calculation Logic</label><input type="text" data-key="calculation" class="w-full p-1 border rounded" placeholder="e.g., Points assigned based on letter grade."></div>
+            <div><label class="block font-medium">Name <span class="info-btn" data-info="componentName">(i)</span></label><input type="text" data-key="name" class="w-full p-1 border rounded" placeholder="e.g., currentGrade"></div>
+            <div><label class="block font-medium">Display Name <span class="info-btn" data-info="componentDisplayName">(i)</span></label><input type="text" data-key="displayName" class="w-full p-1 border rounded" placeholder="e.g., Current Grade"></div>
+            <div><label class="block font-medium">Weight (Points) <span class="info-btn" data-info="componentWeight">(i)</span></label><input type="number" data-key="weight" class="w-full p-1 border rounded" value="10"></div>
+            <div><label class="block font-medium">Calculation Type <span class="info-btn" data-info="componentCalcType">(i)</span></label><select data-key="type" class="w-full p-1 border rounded component-type-select">${COMPONENT_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+            <div class="md:col-span-2"><label class="block font-medium">Calculation Logic <span class="info-btn" data-info="componentCalcLogic">(i)</span></label><input type="text" data-key="calculation" class="w-full p-1 border rounded" placeholder="e.g., Points assigned based on letter grade."></div>
         </div>
         <div class="type-specific-config mt-3"></div>`;
     container.appendChild(componentCard);
@@ -328,7 +365,7 @@ function handleTypeChange(event) {
     const selectedType = selectElement.value;
     let configHtml = '<div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">';
     if (["linear", "linear-multiplier", "inverse-linear", "value-map"].includes(selectedType)) {
-        configHtml += `<div><label class="block font-medium">Source Column</label><input type="text" data-key="column" class="w-full p-1 border rounded" placeholder="e.g., Grade"></div>`;
+        configHtml += `<div><label class="block font-medium">Source Column <span class="info-btn" data-info="sourceColumn">(i)</span></label><input type="text" data-key="column" class="w-full p-1 border rounded" placeholder="e.g., Grade"></div>`;
     }
     switch (selectedType) {
         case 'linear-multiplier':
@@ -338,7 +375,7 @@ function handleTypeChange(event) {
             configHtml += `<div><label class="block font-medium">Numerator Column</label><input type="text" data-key="columns.numerator" class="w-full p-1 border rounded" placeholder="e.g., Contact Attempts"></div><div><label class="block font-medium">Denominator Column</label><input type="text" data-key="columns.denominator" class="w-full p-1 border rounded" placeholder="e.g., Times Contacted"></div>`;
             break;
         case 'value-map':
-            configHtml += `<div class="md:col-span-2"><label class="block font-medium">Value Mappings</label><div class="value-map-pairs space-y-2 mt-1"></div><button class="add-map-pair-btn mt-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+ Add Pair</button></div>`;
+            configHtml += `<div class="md:col-span-2"><label class="block font-medium">Value Mappings <span class="info-btn" data-info="valueMappings">(i)</span></label><div class="value-map-pairs space-y-2 mt-1"></div><button class="add-map-pair-btn mt-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+ Add Pair</button></div>`;
             break;
     }
     configHtml += '</div>';
@@ -481,4 +518,14 @@ function importFormulaFromBuilder() {
     addCustomFormulaToDropdown(formula);
     toggleView(); // Switch back to viewer
     displayFormula(null, sessionCustomFormula); // Display the new formula
+}
+
+// ####################################
+// ### INFO POPUP FUNCTIONS         ###
+// ####################################
+
+function showInfoPopup(title, content) {
+    document.getElementById('info-popup-title').textContent = title;
+    document.getElementById('info-popup-content').innerHTML = content;
+    document.getElementById('info-popup-modal').classList.remove('hidden');
 }
