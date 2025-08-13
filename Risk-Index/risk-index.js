@@ -353,9 +353,9 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
             
             randomIndices.forEach(index => {
                 const studentRow = studentDataRows[index];
-                const { score, breakdown } = calculateRiskScore(studentRow, formulaToCheck, headerMap);
+                const { score, breakdown, appliedModifiers } = calculateRiskScore(studentRow, formulaToCheck, headerMap);
                 const studentName = studentRow[headerMap["Student Name"]] || `Row ${index + 2}`;
-                exampleScores.push({ name: studentName, score, breakdown });
+                exampleScores.push({ name: studentName, score, breakdown, appliedModifiers });
             });
         }
 
@@ -374,6 +374,7 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
 function calculateRiskScore(studentRow, formula, headerMap) {
     let totalScore = 0;
     const breakdown = [];
+    const appliedModifiers = [];
 
     // Calculate component scores
     (formula.components || []).forEach(comp => {
@@ -429,6 +430,7 @@ function calculateRiskScore(studentRow, formula, headerMap) {
         }
 
         if (conditionMet) {
+            appliedModifiers.push({ name: mod.displayName || mod.name, calculation: mod.calculation });
             (mod.operations || []).forEach(op => {
                 switch(op.operator) {
                     case '+': totalScore += op.value; break;
@@ -440,7 +442,7 @@ function calculateRiskScore(studentRow, formula, headerMap) {
         }
     });
 
-    return { score: Math.round(Math.min(totalScore, formula.maxScore || 100)), breakdown };
+    return { score: Math.round(Math.min(totalScore, formula.maxScore || 100)), breakdown, appliedModifiers };
 }
 
 function getScoreColor(score, maxScore) {
@@ -476,6 +478,14 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
                 breakdownHtml += `<li class="flex justify-between text-xs text-gray-600"><span>${item.name}</span><span class="font-medium">${item.score} pts</span></li>`;
             });
             breakdownHtml += '</ul>';
+
+            if (ex.appliedModifiers.length > 0) {
+                breakdownHtml += '<h5 class="text-xs font-bold text-orange-600 mt-2">Modifiers Applied:</h5><ul class="space-y-1">';
+                ex.appliedModifiers.forEach(mod => {
+                    breakdownHtml += `<li class="text-xs text-gray-600 pl-2">– ${mod.name}</li>`;
+                });
+                breakdownHtml += '</ul>';
+            }
 
             examplesHtml += `
                 <li class="p-2 bg-gray-50 rounded-md">
