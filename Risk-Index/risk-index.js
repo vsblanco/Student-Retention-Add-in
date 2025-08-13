@@ -31,7 +31,8 @@ const COLUMN_ALIASES = {
     "Status": ["status"],
     "Grade Trend": ["grade trend"],
     "Course Missing Assignments": ["course missing assignments"],
-    "Course Zero Assignments": ["course zero assignments"]
+    "Course Zero Assignments": ["course zero assignments"],
+    "Student Name": ["student name", "name"]
 };
 const INFO_CONTENT = {
     modelName: { title: "Model Name", content: "The public-facing name of your formula. This is what will appear in the dropdown list for selection." },
@@ -266,6 +267,10 @@ function renderFormulaDetails(formula, container) {
     container.innerHTML = html;
 }
 
+// ########################################
+// ### COMPATIBILITY & EXAMPLE CHECKER  ###
+// ########################################
+
 async function checkCompatibility(formulaToCheck, resultsContainerId) {
     if (!formulaToCheck) return;
     const resultsContainer = document.getElementById(resultsContainerId);
@@ -278,30 +283,56 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
                 if (c.columns.numerator) requiredColumns.add(c.columns.numerator);
                 if (c.columns.denominator) requiredColumns.add(c.columns.denominator);
             }
-            if (c.conditionalSource) {
-                if (c.conditionalSource.conditionColumn) requiredColumns.add(c.conditionalSource.conditionColumn);
-                if (c.conditionalSource.sourceColumn) requiredColumns.add(c.conditionalSource.sourceColumn);
-            }
         });
         (formulaToCheck.postCalculationModifiers || []).forEach(m => {
             if (m.conditionColumn) requiredColumns.add(m.conditionColumn);
         });
-        const masterHeaders = await Excel.run(async (context) => {
+        requiredColumns.add("Student Name"); // Always need student name for examples
+
+        const { data, headerMap } = await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
-            const headerRange = sheet.getRange("1:1").getUsedRange(true);
-            headerRange.load("values");
+            const usedRange = sheet.getUsedRange(true);
+            usedRange.load("values");
             await context.sync();
-            return headerRange.values[0].map(h => String(h || '').toLowerCase());
+            
+            const sheetData = usedRange.values;
+            const headers = sheetData[0].map(h => String(h || '').toLowerCase());
+            
+            const map = {};
+            requiredColumns.forEach(reqCol => {
+                const aliases = COLUMN_ALIASES[reqCol] || [reqCol.toLowerCase()];
+                const foundIndex = headers.findIndex(header => aliases.includes(header));
+                if(foundIndex !== -1) {
+                    map[reqCol] = foundIndex;
+                }
+            });
+            return { data: sheetData, headerMap: map };
         });
-        const results = [];
+
+        const studentDataRows = data.slice(1);
+        const columnCheckResults = [];
         let allFound = true;
         requiredColumns.forEach(reqCol => {
-            const aliases = COLUMN_ALIASES[reqCol] || [reqCol.toLowerCase()];
-            const found = aliases.some(alias => masterHeaders.includes(alias));
+            const found = headerMap[reqCol] !== undefined;
             if (!found) allFound = false;
-            results.push({ name: reqCol, found });
+            columnCheckResults.push({ name: reqCol, found });
         });
-        renderCompatibilityResults(results, allFound, resultsContainerId);
+        
+        let exampleScores = [];
+        if (allFound && studentDataRows.length > 0) {
+            const sampleSize = Math.min(5, studentDataRows.length);
+            const randomIndices = [...Array(studentDataRows.length).keys()].sort(() => 0.5 - Math.random()).slice(0, sampleSize);
+            
+            randomIndices.forEach(index => {
+                const studentRow = studentDataRows[index];
+                const score = calculateRiskScore(studentRow, formulaToCheck, headerMap);
+                const studentName = studentRow[headerMap["Student Name"]] || `Row ${index + 2}`;
+                exampleScores.push({ name: studentName, score });
+            });
+        }
+
+        renderCompatibilityResults(columnCheckResults, allFound, exampleScores, resultsContainerId);
+
     } catch (error) {
         let errorMessage = `Error during compatibility check: ${error.message}`;
         if (error.code === 'ItemNotFound') {
@@ -312,19 +343,99 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
     }
 }
 
-function renderCompatibilityResults(results, allFound, containerId) {
+function calculateRiskScore(studentRow, formula, headerMap) {
+    let totalScore = 0;
+
+    // Calculate component scores
+    (formula.components || []).forEach(comp => {
+        let componentScore = 0;
+        const weight = comp.weight || 0;
+        
+        try {
+            switch(comp.type) {
+                case 'value-map': {
+                    const value = studentRow[headerMap[comp.column]];
+                    componentScore = comp.map[value] !== undefined ? comp.map[value] : 0;
+                    break;
+                }
+                case 'linear': {
+                    const value = parseFloat(studentRow[headerMap[comp.column]]) || 0;
+                    componentScore = Math.min(value, weight);
+                    break;
+                }
+                case 'linear-multiplier': {
+                    const value = parseFloat(studentRow[headerMap[comp.column]]) || 0;
+                    const multiplier = comp.multiplier || 1;
+                    componentScore = Math.min(value * multiplier, weight);
+                    break;
+                }
+                case 'inverse-linear': {
+                     const value = parseFloat(studentRow[headerMap[comp.column]]) || 0;
+                     // Assuming value is a percentage for this calculation
+                     componentScore = (1 - (value / 100)) * weight;
+                     break;
+                }
+                case 'inverse-ratio': {
+                    const num = parseFloat(studentRow[headerMap[comp.columns.numerator]]) || 0;
+                    const den = parseFloat(studentRow[headerMap[comp.columns.denominator]]) || 0;
+                    if (num > 0) {
+                        componentScore = (1 - (den / num)) * weight;
+                    }
+                    break;
+                }
+            }
+        } catch (e) { console.error(`Error calculating component ${comp.name}:`, e); }
+
+        totalScore += Math.max(0, componentScore); // Ensure score is not negative
+    });
+
+    // Apply modifiers
+    (formula.postCalculationModifiers || []).forEach(mod => {
+        const conditionValue = studentRow[headerMap[mod.conditionColumn]];
+        let conditionMet = String(conditionValue).toLowerCase() === String(mod.conditionValue).toLowerCase();
+        if (typeof mod.conditionValue === 'boolean') {
+            conditionMet = (String(conditionValue).toLowerCase() === 'true') === mod.conditionValue;
+        }
+
+        if (conditionMet) {
+            (mod.operations || []).forEach(op => {
+                switch(op.operator) {
+                    case '+': totalScore += op.value; break;
+                    case '-': totalScore -= op.value; break;
+                    case '*': totalScore *= op.value; break;
+                    case '/': if(op.value !== 0) totalScore /= op.value; break;
+                }
+            });
+        }
+    });
+
+    return Math.round(Math.min(totalScore, formula.maxScore || 100));
+}
+
+function renderCompatibilityResults(results, allFound, exampleScores, containerId) {
     const container = document.getElementById(containerId);
     let overallStatus = allFound
         ? `<div class="p-3 mb-3 bg-green-100 text-green-800 rounded-lg text-sm font-semibold">✔ All required columns found. This model is compatible.</div>`
         : `<div class="p-3 mb-3 bg-red-100 text-red-800 rounded-lg text-sm font-semibold">❌ Missing required columns. This model may not run correctly.</div>`;
-    let listHtml = '<ul class="space-y-1 text-sm">';
+    
+    let listHtml = '<div><h4 class="text-md font-semibold text-gray-700 mb-2">Column Requirements</h4><ul class="space-y-1 text-sm">';
     results.forEach(res => {
         const icon = res.found ? '<span class="text-green-500 font-bold mr-2">✔</span>' : '<span class="text-red-500 font-bold mr-2">❌</span>';
         const textColor = res.found ? 'text-gray-700' : 'text-red-700 font-semibold';
         listHtml += `<li class="p-2 bg-gray-50 rounded-md flex items-center ${textColor}">${icon} ${res.name}</li>`;
     });
-    listHtml += '</ul>';
-    container.innerHTML = overallStatus + listHtml;
+    listHtml += '</ul></div>';
+
+    let examplesHtml = '';
+    if (exampleScores && exampleScores.length > 0) {
+        examplesHtml = '<div class="mt-4"><h4 class="text-md font-semibold text-gray-700 mb-2">Example Scores</h4><ul class="space-y-1 text-sm">';
+        exampleScores.forEach(ex => {
+            examplesHtml += `<li class="p-2 bg-gray-50 rounded-md flex justify-between items-center"><span>${ex.name}</span><span class="font-bold text-gray-800">${ex.score} pts</span></li>`;
+        });
+        examplesHtml += '</ul></div>';
+    }
+
+    container.innerHTML = overallStatus + listHtml + examplesHtml;
 }
 
 
