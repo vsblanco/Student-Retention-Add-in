@@ -26,7 +26,7 @@
             </select>
         </div>
 
-        <!-- Loading Spinner (Moved outside of the container) -->
+        <!-- Loading Spinner -->
         <div id="loading-spinner" class="text-center p-8 hidden">
             <p class="text-gray-600">Loading formula details...</p>
         </div>
@@ -35,6 +35,16 @@
         <div id="formula-details-container" class="space-y-6">
             <!-- Content will be dynamically inserted here by the script -->
             <p class="text-center text-gray-500">Please select a formula to view its details.</p>
+        </div>
+
+        <!-- Compatibility Check Section -->
+        <div id="compatibility-section" class="mt-6 hidden">
+            <button id="check-compatibility-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
+                Check Compatibility
+            </button>
+            <div id="compatibility-results-container" class="mt-4">
+                <!-- Compatibility results will be rendered here -->
+            </div>
         </div>
     </div>
 
