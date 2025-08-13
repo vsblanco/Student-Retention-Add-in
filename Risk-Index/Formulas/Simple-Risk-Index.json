@@ -1,0 +1,26 @@
+{
+  "modelName": "Simple Risk Index",
+  "author": "Victor Blanco",
+  "description": "Uses the student's current grade and Last Date of Attendance to determine risk.",
+  "version": "1.0",
+  "maxScore": 100,
+  "components": [
+    {
+      "name": "Current Grade",
+      "displayName": "Current Grade",
+      "weight": 50,
+      "type": "inverse-linear",
+      "calculation": "",
+      "column": "grade"
+    },
+    {
+      "name": "LDA",
+      "displayName": "LDA",
+      "weight": 50,
+      "type": "linear-multiplier",
+      "calculation": "",
+      "column": "Days Out",
+      "multiplier": 3
+    }
+  ]
+}
