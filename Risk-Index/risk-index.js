@@ -1,6 +1,6 @@
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        run(); // The DOM is ready when Office.onReady executes, so we can call run() directly.
+        document.addEventListener("DOMContentLoaded", run);
     }
 });
 
@@ -9,7 +9,6 @@ let currentFormula = null;
 let sessionCustomFormulas = {}; // Store multiple custom formulas
 let componentIdCounter = 0;
 let modifierIdCounter = 0;
-let currentBuilderStep = 0;
 
 // --- CONSTANTS ---
 const FORMULA_FILES = [
@@ -19,7 +18,6 @@ const FORMULA_FILES = [
 ];
 const FORMULAS_PATH = "Formulas/";
 const MASTER_LIST_SHEET = "Master List";
-const RISK_INDEX_COLUMN_NAME = "Risk Index";
 const COMPONENT_TYPES = ["value-map", "linear", "linear-multiplier", "inverse-linear", "inverse-ratio"];
 const MODIFIER_OPERATORS = ["+", "-", "*", "/"];
 const COLUMN_ALIASES = {
@@ -67,25 +65,16 @@ async function run() {
     // Viewer listeners
     document.getElementById('formula-selector').addEventListener('change', handleFormulaSelection);
     document.getElementById('check-compatibility-button').addEventListener('click', () => checkCompatibility(currentFormula, 'compatibility-results-container'));
-    document.getElementById('import-risk-index-btn').addEventListener('click', importRiskIndex);
     
     // Builder listeners
     document.getElementById('add-component-btn').addEventListener('click', addComponent);
     document.getElementById('add-modifier-btn').addEventListener('click', addModifier);
+    document.getElementById('generate-json-btn').addEventListener('click', generateAndCopyJson);
     document.getElementById('builder-check-compatibility-btn').addEventListener('click', () => {
         const formula = buildFormulaFromUI();
         checkCompatibility(formula, 'builder-compatibility-results-container');
     });
     document.getElementById('builder-import-btn').addEventListener('click', importFormulaFromBuilder);
-    document.getElementById('builder-prev-btn').addEventListener('click', () => navigateBuilder(-1));
-    document.getElementById('builder-next-btn').addEventListener('click', () => navigateBuilder(1));
-    document.getElementById('builder-json-popup-btn').addEventListener('click', showJsonPopup);
-    document.getElementById('builder-tabs').addEventListener('click', (e) => {
-        if (e.target.matches('.tab-btn')) {
-            const step = parseInt(e.target.dataset.step, 10);
-            showBuilderStep(step);
-        }
-    });
 
     // View toggler
     document.getElementById('toggle-view-btn').addEventListener('click', toggleView);
@@ -100,10 +89,6 @@ async function run() {
     document.getElementById('cancel-edit-formula-btn').addEventListener('click', () => {
         document.getElementById('edit-formula-modal').classList.add('hidden');
     });
-    document.getElementById('close-json-modal-btn').addEventListener('click', () => {
-        document.getElementById('json-output-modal').classList.add('hidden');
-    });
-    document.getElementById('copy-json-btn').addEventListener('click', copyJsonToClipboard);
 
     // Info Popup Listeners
     document.body.addEventListener('click', (event) => {
@@ -129,7 +114,6 @@ async function run() {
     });
 
     await loadFormulaOptions();
-    showBuilderStep(0); // Initialize builder to the first step
 }
 
 /**
@@ -250,7 +234,6 @@ async function displayFormula(fileName, formulaObject = null) {
     const resultsContainer = document.getElementById('compatibility-results-container');
     currentFormula = null;
     resultsContainer.innerHTML = '';
-    document.getElementById('import-risk-index-btn').classList.add('hidden'); // Hide import button initially
     if (!fileName && !formulaObject) {
         container.innerHTML = '<p class="text-center text-gray-500">Please select a formula to view its details.</p>';
         compatibilitySection.classList.add('hidden');
@@ -315,7 +298,6 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
     if (!formulaToCheck) return;
     const resultsContainer = document.getElementById(resultsContainerId);
     resultsContainer.innerHTML = '<p class="text-center text-gray-500">Checking...</p>';
-    document.getElementById('import-risk-index-btn').classList.add('hidden');
     try {
         const requiredColumns = new Set();
         (formulaToCheck.components || []).forEach(c => {
@@ -361,15 +343,14 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
         
         let exampleScores = [];
         if (allFound && studentDataRows.length > 0) {
-            document.getElementById('import-risk-index-btn').classList.remove('hidden'); // Show import button if compatible
             const sampleSize = Math.min(5, studentDataRows.length);
             const randomIndices = [...Array(studentDataRows.length).keys()].sort(() => 0.5 - Math.random()).slice(0, sampleSize);
             
             randomIndices.forEach(index => {
                 const studentRow = studentDataRows[index];
-                const { score, breakdown, appliedModifiers } = calculateRiskScore(studentRow, formulaToCheck, headerMap);
+                const { score, breakdown } = calculateRiskScore(studentRow, formulaToCheck, headerMap);
                 const studentName = studentRow[headerMap["Student Name"]] || `Row ${index + 2}`;
-                exampleScores.push({ name: studentName, score, breakdown, appliedModifiers });
+                exampleScores.push({ name: studentName, score, breakdown });
             });
         }
 
@@ -388,7 +369,6 @@ async function checkCompatibility(formulaToCheck, resultsContainerId) {
 function calculateRiskScore(studentRow, formula, headerMap) {
     let totalScore = 0;
     const breakdown = [];
-    const appliedModifiers = [];
 
     // Calculate component scores
     (formula.components || []).forEach(comp => {
@@ -444,7 +424,6 @@ function calculateRiskScore(studentRow, formula, headerMap) {
         }
 
         if (conditionMet) {
-            appliedModifiers.push({ name: mod.displayName || mod.name, calculation: mod.calculation });
             (mod.operations || []).forEach(op => {
                 switch(op.operator) {
                     case '+': totalScore += op.value; break;
@@ -456,7 +435,7 @@ function calculateRiskScore(studentRow, formula, headerMap) {
         }
     });
 
-    return { score: Math.round(Math.min(totalScore, formula.maxScore || 100)), breakdown, appliedModifiers };
+    return { score: Math.round(Math.min(totalScore, formula.maxScore || 100)), breakdown };
 }
 
 function getScoreColor(score, maxScore) {
@@ -493,14 +472,6 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
             });
             breakdownHtml += '</ul>';
 
-            if (ex.appliedModifiers.length > 0) {
-                breakdownHtml += '<h5 class="text-xs font-bold text-orange-600 mt-2">Modifiers Applied:</h5><ul class="space-y-1">';
-                ex.appliedModifiers.forEach(mod => {
-                    breakdownHtml += `<li class="text-xs text-gray-600 pl-2">– ${mod.name}</li>`;
-                });
-                breakdownHtml += '</ul>';
-            }
-
             examplesHtml += `
                 <li class="p-2 bg-gray-50 rounded-md">
                     <div class="score-example-header flex justify-between items-center cursor-pointer">
@@ -523,13 +494,13 @@ function renderCompatibilityResults(results, allFound, exampleScores, containerI
 // ### FORMULA BUILDER FUNCTIONS    ###
 // ####################################
 
-async function openEditModal() {
+function openEditModal() {
     const listContainer = document.getElementById('edit-formula-list');
     listContainer.innerHTML = ''; // Clear previous list
     const customFormulaNames = Object.keys(sessionCustomFormulas);
 
     if (customFormulaNames.length === 0) {
-        await showNotificationModal("Info", "No custom formulas in this session to edit.");
+        alert("No custom formulas in this session to edit.");
         return;
     }
 
@@ -552,7 +523,7 @@ function loadFormulaIntoBuilder(modelName) {
     if (!formula) return;
 
     // Switch to builder view if not already there
-    if (!document.getElementById('viewer-mode').classList.contains('hidden')) {
+    if (document.getElementById('viewer-mode').style.display !== 'none') {
         toggleView();
     }
     
@@ -793,10 +764,10 @@ function generateAndCopyJson() {
     }
 }
 
-async function importFormulaFromBuilder() {
+function importFormulaFromBuilder() {
     const formula = buildFormulaFromUI();
     if (!formula.modelName) {
-        await showNotificationModal("Validation Error", "Please provide a Model Name before importing.");
+        alert("Please provide a Model Name before importing.");
         return;
     }
     // Remove old version if name is the same but case might be different
@@ -820,144 +791,4 @@ function showInfoPopup(title, content) {
     document.getElementById('info-popup-title').textContent = title;
     document.getElementById('info-popup-content').innerHTML = content;
     document.getElementById('info-popup-modal').classList.remove('hidden');
-}
-
-// ####################################
-// ### RISK INDEX IMPORT FUNCTIONS  ###
-// ####################################
-
-async function importRiskIndex() {
-    if (!currentFormula) {
-        await showNotificationModal("Error", "Please select a formula first.");
-        return;
-    }
-
-    try {
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
-            const usedRange = sheet.getUsedRange(true);
-            usedRange.load(["values", "columnCount", "rowCount"]);
-            await context.sync();
-
-            const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
-            let riskIndexCol = headers.indexOf(RISK_INDEX_COLUMN_NAME.toLowerCase());
-
-            if (riskIndexCol === -1) {
-                const userConfirmed = await showConfirmationModal(`The "${RISK_INDEX_COLUMN_NAME}" column was not found. Would you like to create it?`);
-                if (userConfirmed) {
-                    riskIndexCol = usedRange.columnCount;
-                    sheet.getRangeByIndexes(0, riskIndexCol, 1, 1).values = [[RISK_INDEX_COLUMN_NAME]];
-                } else {
-                    return; // User cancelled
-                }
-            }
-            
-            // Re-fetch data and build header map now that column is guaranteed
-            const { data, headerMap } = await getSheetDataWithHeaderMap();
-            const scores = data.slice(1).map(studentRow => {
-                const { score } = calculateRiskScore(studentRow, currentFormula, headerMap);
-                return [score];
-            });
-
-            if (scores.length > 0) {
-                const targetRange = sheet.getRangeByIndexes(1, riskIndexCol, scores.length, 1);
-                targetRange.values = scores;
-                
-                // Add conditional formatting
-                const formatRange = sheet.getRangeByIndexes(1, riskIndexCol, usedRange.rowCount - 1, 1);
-                formatRange.conditionalFormats.clearAll();
-                const conditionalFormat = formatRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
-                conditionalFormat.colorScale.criteria = {
-                    minimum: { type: Excel.ConditionalFormatRuleType.lowestValue, color: "#63BE7B" }, // Green
-                    midpoint: { type: Excel.ConditionalFormatRuleType.percentile, percentile: 50, color: "#FFEB84" }, // Yellow
-                    maximum: { type: Excel.ConditionalFormatRuleType.highestValue, color: "#F8696B" }  // Red
-                };
-            }
-            
-            await context.sync();
-        });
-        await showNotificationModal("Success", "Risk Index scores have been successfully imported and formatted.");
-    } catch (error) {
-        console.error("Error importing risk index:", error);
-        await showNotificationModal("Error", `An error occurred: ${error.message}`);
-    }
-}
-
-async function getSheetDataWithHeaderMap() {
-    return await Excel.run(async (context) => {
-        const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
-        const usedRange = sheet.getUsedRange(true);
-        usedRange.load("values");
-        await context.sync();
-        
-        const sheetData = usedRange.values;
-        const headers = sheetData[0].map(h => String(h || '').toLowerCase());
-        
-        const map = {};
-        Object.keys(COLUMN_ALIASES).forEach(key => {
-            const aliases = COLUMN_ALIASES[key];
-            const foundIndex = headers.findIndex(header => aliases.includes(header));
-            if(foundIndex !== -1) {
-                map[key] = foundIndex;
-            }
-        });
-        return { data: sheetData, headerMap: map };
-    });
-}
-
-
-function showConfirmationModal(message) {
-    return new Promise((resolve) => {
-        document.getElementById('confirmation-message').textContent = message;
-        const modal = document.getElementById('confirmation-modal');
-        const okBtn = document.getElementById('confirmation-ok-btn');
-        const cancelBtn = document.getElementById('confirmation-cancel-btn');
-
-        okBtn.classList.remove('hidden');
-        cancelBtn.classList.remove('hidden');
-        
-        modal.classList.remove('hidden');
-
-        const cleanup = () => {
-            modal.classList.add('hidden');
-            okBtn.replaceWith(okBtn.cloneNode(true));
-            cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-        };
-
-        okBtn.addEventListener('click', () => {
-            cleanup();
-            resolve(true);
-        }, { once: true });
-
-        cancelBtn.addEventListener('click', () => {
-            cleanup();
-            resolve(false);
-        }, { once: true });
-    });
-}
-
-function showNotificationModal(title, message) {
-    return new Promise((resolve) => {
-        document.getElementById('confirmation-title').textContent = title;
-        document.getElementById('confirmation-message').textContent = message;
-        const modal = document.getElementById('confirmation-modal');
-        const okBtn = document.getElementById('confirmation-ok-btn');
-        const cancelBtn = document.getElementById('confirmation-cancel-btn');
-
-        cancelBtn.classList.add('hidden');
-        okBtn.classList.remove('hidden');
-        
-        modal.classList.remove('hidden');
-
-        const cleanup = () => {
-            modal.classList.add('hidden');
-            cancelBtn.classList.remove('hidden');
-            okBtn.replaceWith(okBtn.cloneNode(true));
-        };
-
-        okBtn.addEventListener('click', () => {
-            cleanup();
-            resolve(true);
-        }, { once: true });
-    });
 }
