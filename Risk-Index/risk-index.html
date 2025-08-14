@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Risk Index</title>
+    <title>Risk Index Formula Builder</title>
 
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
@@ -19,154 +19,147 @@
             display: inline-block;
             margin-left: 4px;
         }
+        .tab-button.active {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .section-panel {
+            min-height: 70vh;
+        }
     </style>
 </head>
-<body class="bg-gray-100 p-4 font-sans">
+<body class="bg-gray-100 font-sans">
     
-    <!-- Main Header -->
-    <div class="flex justify-between items-center mb-4">
-        <h1 id="main-title" class="text-2xl font-bold text-gray-800">Risk Index Models</h1>
-        <div class="flex space-x-2">
-            <button id="edit-custom-formula-btn" class="hidden px-3 py-1 text-sm font-medium text-gray-600 bg-yellow-200 rounded-md hover:bg-yellow-300">Edit Custom Formula</button>
-            <button id="toggle-view-btn" class="px-3 py-1 text-sm font-medium text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300">Formula Builder</button>
+    <div class="max-w-4xl mx-auto p-4">
+        <!-- Main Header -->
+        <div class="flex justify-between items-center mb-4">
+            <h1 id="main-title" class="text-2xl font-bold text-gray-800">Formula Builder</h1>
+            <div class="flex space-x-2">
+                <button id="load-json-btn" class="px-3 py-1 text-sm font-medium text-gray-600 bg-yellow-200 rounded-md hover:bg-yellow-300">Load from JSON</button>
+                <button id="export-json-btn" class="px-3 py-1 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Export JSON</button>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="border-b border-gray-200 mb-4">
+            <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                <button id="tab-step-1" type="button" data-step="1" class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
+                    1. General
+                </button>
+                <button id="tab-step-2" type="button" data-step="2" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    2. Components
+                </button>
+                <button id="tab-step-3" type="button" data-step="3" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    3. Modifiers
+                </button>
+                <button id="tab-step-4" type="button" data-step="4" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    4. Test & Finish
+                </button>
+            </nav>
+        </div>
+
+        <!-- Wizard Panels -->
+        <div id="wizard-panels">
+            <!-- Step 1: General Information -->
+            <div id="panel-step-1" class="section-panel">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">General Information</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <label class="block font-medium text-gray-600">Model Name <span class="info-btn" data-info="modelName">(i)</span></label>
+                            <input type="text" id="modelName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Engagement Momentum Model">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Author <span class="info-btn" data-info="author">(i)</span></label>
+                            <input type="text" id="author" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Academics Team">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block font-medium text-gray-600">Description <span class="info-btn" data-info="description">(i)</span></label>
+                            <textarea id="description" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="A brief description of the model's purpose."></textarea>
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Version <span class="info-btn" data-info="version">(i)</span></label>
+                            <input type="text" id="version" value="1.0" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Maximum Score <span class="info-btn" data-info="maxScore">(i)</span></label>
+                            <input type="number" id="maxScore" value="100" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Risk Components -->
+            <div id="panel-step-2" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold text-gray-700">Risk Components</h2>
+                        <button id="add-component-btn" class="px-3 py-1 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600">+ Add Component</button>
+                    </div>
+                    <div id="components-container" class="space-y-4">
+                        <p class="text-center text-gray-500 py-4">No components added yet. Click 'Add Component' to start.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Post-Calculation Modifiers -->
+            <div id="panel-step-3" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold text-gray-700">Post-Calculation Modifiers</h2>
+                        <button id="add-modifier-btn" class="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">+ Add Modifier</button>
+                    </div>
+                    <div id="modifiers-container" class="space-y-4">
+                         <p class="text-center text-gray-500 py-4">No modifiers added yet. Modifiers adjust the total score based on a condition.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Compatibility Check & Finish -->
+            <div id="panel-step-4" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Test & Finish</h2>
+                    <p class="text-sm text-gray-600 mb-4">Check if your current "Master List" sheet has the columns required by your formula and see example scores.</p>
+                    <button id="builder-check-compatibility-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Check Compatibility & Calculate Examples</button>
+                    <div id="builder-compatibility-results-container" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Footer -->
+        <div class="mt-6 pt-4 border-t border-gray-300 flex justify-between items-center">
+            <button id="prev-btn" class="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50" disabled>Previous</button>
+            <div id="step-indicator" class="text-sm text-gray-500">Step 1 of 4</div>
+            <button id="next-btn" class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">Next</button>
         </div>
     </div>
 
-    <!-- Viewer Mode -->
-    <div id="viewer-mode">
-        <!-- Formula Selector -->
-        <div class="mb-6">
-            <label for="formula-selector" class="block text-sm font-medium text-gray-700 mb-1">Select a Formula:</label>
-            <select id="formula-selector" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                <option>Loading formulas...</option>
-            </select>
-        </div>
-
-        <!-- Loading Spinner -->
-        <div id="loading-spinner" class="text-center p-8 hidden">
-            <p class="text-gray-600">Loading formula details...</p>
-        </div>
-
-        <!-- Formula Details Container -->
-        <div id="formula-details-container" class="space-y-6">
-            <p class="text-center text-gray-500">Please select a formula to view its details.</p>
-        </div>
-
-        <!-- Compatibility Check Section -->
-        <div id="compatibility-section" class="mt-6 hidden">
-            <button id="check-compatibility-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
-                Check Compatibility
-            </button>
-            <div id="compatibility-results-container" class="mt-4"></div>
-            <button id="import-risk-index-btn" class="hidden w-full mt-4 bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">
-                Import Risk Index to Sheet
-            </button>
-        </div>
-    </div>
-
-    <!-- Builder Mode (Hidden by default) -->
-    <div id="builder-mode" class="hidden">
-        <div class="max-w-4xl mx-auto space-y-6">
-            <!-- General Information Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">General Information</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <label class="block font-medium text-gray-600">Model Name <span class="info-btn" data-info="modelName">(i)</span></label>
-                        <input type="text" id="modelName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Engagement Momentum Model">
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Author <span class="info-btn" data-info="author">(i)</span></label>
-                        <input type="text" id="author" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Academics Team">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block font-medium text-gray-600">Description <span class="info-btn" data-info="description">(i)</span></label>
-                        <textarea id="description" rows="2" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="A brief description of the model's purpose."></textarea>
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Version <span class="info-btn" data-info="version">(i)</span></label>
-                        <input type="text" id="version" value="1.0" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Maximum Score <span class="info-btn" data-info="maxScore">(i)</span></label>
-                        <input type="number" id="maxScore" value="100" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Components Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Risk Components</h2>
-                    <button id="add-component-btn" class="px-3 py-1 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600">+ Add Component</button>
-                </div>
-                <div id="components-container" class="space-y-4"></div>
-            </div>
-
-            <!-- Modifiers Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Post-Calculation Modifiers</h2>
-                    <button id="add-modifier-btn" class="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">+ Add Modifier</button>
-                </div>
-                <div id="modifiers-container" class="space-y-4"></div>
-            </div>
-
-            <!-- JSON Output Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Generated JSON</h2>
-                    <div class="flex space-x-2">
-                        <button id="generate-json-btn" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-sm">Generate & Copy</button>
-                        <button id="builder-import-btn" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 text-sm">Import into Session</button>
-                    </div>
-                </div>
-                <textarea id="json-output" rows="10" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly placeholder="Click 'Generate & Copy' to see the JSON output..."></textarea>
-                <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
-            </div>
-
-            <!-- Builder Compatibility Check Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                 <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">Compatibility Check</h2>
-                 <button id="builder-check-compatibility-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Check Built Formula</button>
-                 <div id="builder-compatibility-results-container" class="mt-4"></div>
+    <!-- Modals -->
+    <!-- JSON Export Modal -->
+    <div id="json-export-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Export Formula JSON</h3>
+            <p class="text-sm text-gray-600 mb-4">Copy the JSON content below to save or share your custom risk model.</p>
+            <textarea id="json-output" rows="12" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly></textarea>
+            <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="copy-json-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Copy to Clipboard</button>
+                <button id="close-export-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Custom Formula Modal -->
+    <!-- Load from JSON Modal -->
     <div id="custom-formula-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-            <h3 class="text-lg font-semibold text-gray-800 mb-2">Upload Custom Formula</h3>
-            <p class="text-sm text-gray-600 mb-4">Paste the JSON content of your custom risk model below.</p>
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Load Custom Formula</h3>
+            <p class="text-sm text-gray-600 mb-4">Paste the JSON content of a previously saved risk model to load it into the builder.</p>
             <textarea id="custom-json-input" class="w-full h-64 p-2 border border-gray-300 rounded-md font-mono text-xs" placeholder='{ "modelName": "My Custom Model", ... }'></textarea>
             <p id="custom-formula-status" class="text-xs text-red-500 mt-2 h-4"></p>
             <div class="flex justify-end gap-2 mt-4">
                 <button id="cancel-custom-formula-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
                 <button id="load-custom-formula-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Load Formula</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Formula Modal -->
-    <div id="edit-formula-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 class="text-lg font-semibold text-gray-800 mb-4">Edit Custom Formula</h3>
-            <div id="edit-formula-list" class="space-y-2"></div>
-            <div class="flex justify-end mt-4">
-                <button id="cancel-edit-formula-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Confirmation Modal -->
-    <div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 id="confirmation-title" class="text-lg font-semibold text-gray-800 mb-2">Confirmation</h3>
-            <p id="confirmation-message" class="text-sm text-gray-600 mb-4"></p>
-            <div class="flex justify-end gap-2 mt-4">
-                <button id="confirmation-cancel-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
-                <button id="confirmation-ok-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">OK</button>
             </div>
         </div>
     </div>
