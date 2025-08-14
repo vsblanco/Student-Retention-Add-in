@@ -1,7 +1,6 @@
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        // The DOM is ready when Office.onReady executes, so we can call run() directly.
-        run();
+        run(); // The DOM is ready when Office.onReady executes, so we can call run() directly.
     }
 });
 
@@ -10,13 +9,13 @@ let currentFormula = null;
 let sessionCustomFormulas = {}; // Store multiple custom formulas
 let componentIdCounter = 0;
 let modifierIdCounter = 0;
+let currentBuilderStep = 0;
 
 // --- CONSTANTS ---
 const FORMULA_FILES = [
     "standard-risk-model.json",
     "re-entry-risk-model.json",
-    "engagement-momentum-model.json",
-    "Simple-Risk-Index.json"
+    "engagement-momentum-model.json"
 ];
 const FORMULAS_PATH = "Formulas/";
 const MASTER_LIST_SHEET = "Master List";
@@ -73,12 +72,20 @@ async function run() {
     // Builder listeners
     document.getElementById('add-component-btn').addEventListener('click', addComponent);
     document.getElementById('add-modifier-btn').addEventListener('click', addModifier);
-    document.getElementById('generate-json-btn').addEventListener('click', generateAndCopyJson);
     document.getElementById('builder-check-compatibility-btn').addEventListener('click', () => {
         const formula = buildFormulaFromUI();
         checkCompatibility(formula, 'builder-compatibility-results-container');
     });
     document.getElementById('builder-import-btn').addEventListener('click', importFormulaFromBuilder);
+    document.getElementById('builder-prev-btn').addEventListener('click', () => navigateBuilder(-1));
+    document.getElementById('builder-next-btn').addEventListener('click', () => navigateBuilder(1));
+    document.getElementById('builder-json-popup-btn').addEventListener('click', showJsonPopup);
+    document.getElementById('builder-tabs').addEventListener('click', (e) => {
+        if (e.target.matches('.tab-btn')) {
+            const step = parseInt(e.target.dataset.step, 10);
+            showBuilderStep(step);
+        }
+    });
 
     // View toggler
     document.getElementById('toggle-view-btn').addEventListener('click', toggleView);
@@ -93,6 +100,10 @@ async function run() {
     document.getElementById('cancel-edit-formula-btn').addEventListener('click', () => {
         document.getElementById('edit-formula-modal').classList.add('hidden');
     });
+    document.getElementById('close-json-modal-btn').addEventListener('click', () => {
+        document.getElementById('json-output-modal').classList.add('hidden');
+    });
+    document.getElementById('copy-json-btn').addEventListener('click', copyJsonToClipboard);
 
     // Info Popup Listeners
     document.body.addEventListener('click', (event) => {
@@ -118,6 +129,7 @@ async function run() {
     });
 
     await loadFormulaOptions();
+    showBuilderStep(0); // Initialize builder to the first step
 }
 
 /**
