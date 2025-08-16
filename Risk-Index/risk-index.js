@@ -6,9 +6,10 @@ Office.onReady((info) => {
 
 // --- STATE ---
 let currentFormula = null;
-let sessionCustomFormulas = {}; // Store multiple custom formulas
+let sessionCustomFormulas = {}; 
 let componentIdCounter = 0;
 let modifierIdCounter = 0;
+let currentBuilderStep = 1; // For wizard navigation
 
 // --- CONSTANTS ---
 const FORMULA_FILES = [
@@ -69,26 +70,37 @@ async function run() {
     // Builder listeners
     document.getElementById('add-component-btn').addEventListener('click', addComponent);
     document.getElementById('add-modifier-btn').addEventListener('click', addModifier);
-    document.getElementById('generate-json-btn').addEventListener('click', generateAndCopyJson);
     document.getElementById('builder-check-compatibility-btn').addEventListener('click', () => {
         const formula = buildFormulaFromUI();
         checkCompatibility(formula, 'builder-compatibility-results-container');
     });
-    document.getElementById('builder-import-btn').addEventListener('click', importFormulaFromBuilder);
 
-    // View toggler
+    // View toggler and main header buttons
     document.getElementById('toggle-view-btn').addEventListener('click', toggleView);
     document.getElementById('edit-custom-formula-btn').addEventListener('click', openEditModal);
+    document.getElementById('export-json-btn').addEventListener('click', () => generateAndCopyJson(true));
+    document.getElementById('load-json-btn').addEventListener('click', () => {
+        document.getElementById('custom-json-input').value = '';
+        document.getElementById('custom-formula-status').textContent = '';
+        document.getElementById('custom-formula-modal').classList.remove('hidden');
+    });
 
     // Modal Listeners
     document.getElementById('load-custom-formula-btn').addEventListener('click', handleCustomFormulaLoad);
     document.getElementById('cancel-custom-formula-btn').addEventListener('click', () => {
         document.getElementById('custom-formula-modal').classList.add('hidden');
-        document.getElementById('formula-selector').value = ''; 
+        if (document.getElementById('viewer-mode').style.display !== 'none') {
+            document.getElementById('formula-selector').value = ''; 
+        }
     });
     document.getElementById('cancel-edit-formula-btn').addEventListener('click', () => {
         document.getElementById('edit-formula-modal').classList.add('hidden');
     });
+    document.getElementById('close-export-modal-btn').addEventListener('click', () => {
+        document.getElementById('json-export-modal').classList.add('hidden');
+    });
+    document.getElementById('copy-json-btn').addEventListener('click', copyJsonToClipboard);
+
 
     // Info Popup Listeners
     document.body.addEventListener('click', (event) => {
@@ -112,9 +124,82 @@ async function run() {
             details.classList.toggle('hidden');
         }
     });
-
+    
+    setupBuilderNavigation();
     await loadFormulaOptions();
 }
+
+/**
+ * Sets up the event listeners for the builder wizard navigation (tabs, next/prev).
+ */
+function setupBuilderNavigation() {
+    const nextBtn = document.getElementById('next-btn');
+    const prevBtn = document.getElementById('prev-btn');
+    const tabButtons = document.querySelectorAll('.tab-button');
+
+    function showStep(step) {
+        const totalSteps = 4;
+        const stepIndicator = document.getElementById('step-indicator');
+        const panels = document.querySelectorAll('.section-panel');
+
+        // Hide all panels
+        panels.forEach(p => p.classList.add('hidden'));
+        // Show the correct panel
+        const panelToShow = document.getElementById(`panel-step-${step}`);
+        if(panelToShow) {
+            panelToShow.classList.remove('hidden');
+        }
+
+        // Update tab styles
+        tabButtons.forEach(b => {
+            b.classList.remove('active', 'border-blue-500', 'text-blue-600');
+            b.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            if (parseInt(b.dataset.step, 10) === step) {
+                b.classList.add('active', 'border-blue-500', 'text-blue-600');
+                b.classList.remove('border-transparent', 'text-gray-500');
+            }
+        });
+
+        // Update navigation buttons and indicator
+        if (stepIndicator) {
+            stepIndicator.textContent = `Step ${step} of ${totalSteps}`;
+        }
+        if (prevBtn) {
+            prevBtn.disabled = step === 1;
+        }
+        if (nextBtn) {
+            nextBtn.disabled = step === totalSteps;
+        }
+        currentBuilderStep = step;
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (currentBuilderStep < 4) {
+                showStep(currentBuilderStep + 1);
+            }
+        });
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentBuilderStep > 1) {
+                showStep(currentBuilderStep - 1);
+            }
+        });
+    }
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const step = parseInt(button.dataset.step, 10);
+            showStep(step);
+        });
+    });
+    
+    // Initialize to step 1
+    showStep(1);
+}
+
 
 /**
  * Toggles between the Viewer and Builder modes.
@@ -195,11 +280,18 @@ function handleCustomFormulaLoad() {
         if (!formulaObject.modelName || !formulaObject.components) {
             throw new Error('JSON is missing required fields like "modelName" or "components".');
         }
-        sessionCustomFormulas[formulaObject.modelName] = formulaObject;
-        updateCustomFormulaDropdown();
-        document.getElementById('formula-selector').value = `session-custom-${formulaObject.modelName}`;
+        
+        // If in builder mode, load into builder. Otherwise, load into viewer.
+        if (!document.getElementById('builder-mode').classList.contains('hidden')) {
+            loadFormulaIntoBuilder(formulaObject.modelName, formulaObject);
+        } else {
+            sessionCustomFormulas[formulaObject.modelName] = formulaObject;
+            updateCustomFormulaDropdown();
+            document.getElementById('formula-selector').value = `session-custom-${formulaObject.modelName}`;
+            displayFormula(null, formulaObject);
+        }
         document.getElementById('custom-formula-modal').classList.add('hidden');
-        displayFormula(null, formulaObject);
+
     } catch (error) {
         statusEl.textContent = `Error: ${error.message}`;
         console.error("Invalid JSON:", error);
@@ -500,26 +592,25 @@ function openEditModal() {
     const customFormulaNames = Object.keys(sessionCustomFormulas);
 
     if (customFormulaNames.length === 0) {
-        alert("No custom formulas in this session to edit.");
-        return;
+        listContainer.innerHTML = '<p class="text-sm text-gray-500">No custom formulas in this session to edit.</p>';
+    } else {
+        customFormulaNames.forEach(name => {
+            const button = document.createElement('button');
+            button.className = 'w-full text-left p-2 bg-gray-100 rounded-md hover:bg-blue-100';
+            button.textContent = name;
+            button.onclick = () => {
+                loadFormulaIntoBuilder(name);
+                document.getElementById('edit-formula-modal').classList.add('hidden');
+            };
+            listContainer.appendChild(button);
+        });
     }
-
-    customFormulaNames.forEach(name => {
-        const button = document.createElement('button');
-        button.className = 'w-full text-left p-2 bg-gray-100 rounded-md hover:bg-blue-100';
-        button.textContent = name;
-        button.onclick = () => {
-            loadFormulaIntoBuilder(name);
-            document.getElementById('edit-formula-modal').classList.add('hidden');
-        };
-        listContainer.appendChild(button);
-    });
 
     document.getElementById('edit-formula-modal').classList.remove('hidden');
 }
 
-function loadFormulaIntoBuilder(modelName) {
-    const formula = sessionCustomFormulas[modelName];
+function loadFormulaIntoBuilder(modelName, formulaData = null) {
+    const formula = formulaData || sessionCustomFormulas[modelName];
     if (!formula) return;
 
     // Switch to builder view if not already there
@@ -591,6 +682,10 @@ function loadFormulaIntoBuilder(modelName) {
 function addComponent() {
     const id = `comp-${componentIdCounter++}`;
     const container = document.getElementById('components-container');
+    // Clear placeholder text if it's the first component
+    if (componentIdCounter === 1) {
+        container.innerHTML = '';
+    }
     const componentCard = document.createElement('div');
     componentCard.id = id;
     componentCard.className = 'component-card border border-gray-200 p-4 rounded-md space-y-3';
@@ -608,7 +703,12 @@ function addComponent() {
         </div>
         <div class="type-specific-config mt-3"></div>`;
     container.appendChild(componentCard);
-    componentCard.querySelector('.remove-btn').addEventListener('click', () => componentCard.remove());
+    componentCard.querySelector('.remove-btn').addEventListener('click', () => {
+        componentCard.remove();
+        if (document.getElementById('components-container').children.length === 0) {
+             document.getElementById('components-container').innerHTML = '<p class="text-center text-gray-500 py-4">No components added yet. Click \'Add Component\' to start.</p>';
+        }
+    });
     const typeSelect = componentCard.querySelector('.component-type-select');
     typeSelect.addEventListener('change', handleTypeChange);
     handleTypeChange({ target: typeSelect });
@@ -656,6 +756,9 @@ function addValueMapPair(container, key = '', value = '') {
 function addModifier() {
     const id = `mod-${modifierIdCounter++}`;
     const container = document.getElementById('modifiers-container');
+    if (modifierIdCounter === 1) {
+        container.innerHTML = '';
+    }
     const modifierCard = document.createElement('div');
     modifierCard.id = id;
     modifierCard.className = 'modifier-card border border-gray-200 p-4 rounded-md space-y-3';
@@ -673,7 +776,12 @@ function addModifier() {
             <div class="md:col-span-2"><label class="block font-medium">Operations</label><div class="operations-list space-y-2 mt-1"></div><button class="add-operation-btn mt-2 text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+ Add Operation</button></div>
         </div>`;
     container.appendChild(modifierCard);
-    modifierCard.querySelector('.remove-btn').addEventListener('click', () => modifierCard.remove());
+    modifierCard.querySelector('.remove-btn').addEventListener('click', () => {
+        modifierCard.remove();
+        if (document.getElementById('modifiers-container').children.length === 0) {
+            document.getElementById('modifiers-container').innerHTML = '<p class="text-center text-gray-500 py-4">No modifiers added yet. Modifiers adjust the total score based on a condition.</p>';
+        }
+    });
     modifierCard.querySelector('.add-operation-btn').addEventListener('click', (e) => {
         e.preventDefault();
         addOperation(e.target.previousElementSibling);
@@ -748,39 +856,35 @@ function buildFormulaFromUI() {
     return formula;
 }
 
-function generateAndCopyJson() {
+function generateAndCopyJson(showModal = false) {
     const formula = buildFormulaFromUI();
     const jsonOutput = document.getElementById('json-output');
     const jsonString = JSON.stringify(formula, null, 2);
     jsonOutput.value = jsonString;
+    
+    if (showModal) {
+        document.getElementById('json-export-modal').classList.remove('hidden');
+    } else {
+        copyJsonToClipboard();
+    }
+}
+
+function copyJsonToClipboard() {
+    const jsonOutput = document.getElementById('json-output');
     jsonOutput.select();
     try {
-        document.execCommand('copy');
+        // Use document.execCommand for broader compatibility in Office Add-ins
+        const successful = document.execCommand('copy');
         const copyStatus = document.getElementById('copy-status');
-        copyStatus.textContent = "Copied to clipboard!";
+        if (successful) {
+            copyStatus.textContent = "Copied to clipboard!";
+        } else {
+            copyStatus.textContent = "Copy failed. Please copy manually.";
+        }
         setTimeout(() => { copyStatus.textContent = ""; }, 2000);
     } catch (err) {
         console.error('Failed to copy JSON: ', err);
     }
-}
-
-function importFormulaFromBuilder() {
-    const formula = buildFormulaFromUI();
-    if (!formula.modelName) {
-        alert("Please provide a Model Name before importing.");
-        return;
-    }
-    // Remove old version if name is the same but case might be different
-    const oldKey = Object.keys(sessionCustomFormulas).find(key => key.toLowerCase() === formula.modelName.toLowerCase());
-    if(oldKey) {
-        delete sessionCustomFormulas[oldKey];
-    }
-
-    sessionCustomFormulas[formula.modelName] = formula;
-    updateCustomFormulaDropdown();
-    toggleView(); // Switch back to viewer
-    document.getElementById('formula-selector').value = `session-custom-${formula.modelName}`;
-    displayFormula(null, formula); // Display the new formula
 }
 
 // ####################################
