@@ -25,7 +25,7 @@
             background-color: #eff6ff;
         }
         .section-panel {
-            min-height: 70vh;
+            min-height: 65vh;
         }
     </style>
 </head>
@@ -74,6 +74,10 @@
 
     <!-- Builder Mode (Hidden by default) -->
     <div id="builder-mode" class="hidden">
+        <div class="flex justify-end space-x-2 mb-4">
+            <button id="load-json-btn" class="px-3 py-1 text-sm font-medium text-gray-600 bg-yellow-200 rounded-md hover:bg-yellow-300">Load from JSON</button>
+            <button id="export-json-btn" class="px-3 py-1 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Export JSON</button>
+        </div>
         <!-- Tab Navigation -->
         <div class="border-b border-gray-200 mb-4">
             <nav class="-mb-px flex space-x-4" aria-label="Tabs">
@@ -164,7 +168,7 @@
         <div class="mt-6 pt-4 border-t border-gray-300 flex justify-between items-center">
             <button id="prev-btn" class="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50" disabled>Previous</button>
             <div id="step-indicator" class="text-sm text-gray-500">Step 1 of 4</div>
-            <button id="next-btn" class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">Next</button>
+            <button id="next-btn" class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">Next</button>
         </div>
     </div>
 
@@ -212,7 +216,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- JSON Export Modal -->
     <div id="json-export-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
@@ -227,85 +231,7 @@
         </div>
     </div>
 
-
     <!-- JavaScript for the Task Pane -->
-    <script>
-        // This script handles the wizard navigation for the Formula Builder
-        document.addEventListener('DOMContentLoaded', () => {
-            let currentStep = 1;
-            const totalSteps = 4;
-            const nextBtn = document.getElementById('next-btn');
-            const prevBtn = document.getElementById('prev-btn');
-            const stepIndicator = document.getElementById('step-indicator');
-            const tabButtons = document.querySelectorAll('.tab-button');
-            const panels = document.querySelectorAll('.section-panel');
-
-            function showStep(step) {
-                // Hide all panels
-                panels.forEach(p => p.classList.add('hidden'));
-                // Show the correct panel
-                document.getElementById(`panel-step-${step}`).classList.remove('hidden');
-
-                // Update tab styles
-                tabButtons.forEach(b => {
-                    b.classList.remove('active', 'border-blue-500', 'text-blue-600');
-                    b.classList.add('border-transparent', 'text-gray-500');
-                    if (parseInt(b.dataset.step, 10) === step) {
-                        b.classList.add('active', 'border-blue-500', 'text-blue-600');
-                        b.classList.remove('border-transparent', 'text-gray-500');
-                    }
-                });
-
-                // Update navigation buttons and indicator
-                stepIndicator.textContent = `Step ${step} of ${totalSteps}`;
-                prevBtn.disabled = step === 1;
-                nextBtn.disabled = step === totalSteps;
-                currentStep = step;
-            }
-
-            nextBtn.addEventListener('click', () => {
-                if (currentStep < totalSteps) {
-                    showStep(currentStep + 1);
-                }
-            });
-
-            prevBtn.addEventListener('click', () => {
-                if (currentStep > 1) {
-                    showStep(currentStep - 1);
-                }
-            });
-
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const step = parseInt(button.dataset.step, 10);
-                    showStep(step);
-                });
-            });
-            
-            // Add listeners for the export/load buttons in the builder
-            document.getElementById('export-json-btn').addEventListener('click', () => {
-                // This will call the function defined in risk-index.js
-                if (window.generateAndCopyJson) {
-                    window.generateAndCopyJson(true); // Pass true to show modal
-                }
-            });
-            
-            document.getElementById('load-json-btn').addEventListener('click', () => {
-                 document.getElementById('custom-json-input').value = '';
-                 document.getElementById('custom-formula-status').textContent = '';
-                 document.getElementById('custom-formula-modal').classList.remove('hidden');
-            });
-            
-            document.getElementById('close-export-modal-btn').addEventListener('click', () => {
-                document.getElementById('json-export-modal').classList.add('hidden');
-            });
-             document.getElementById('copy-json-btn').addEventListener('click', () => {
-                if(window.copyJsonToClipboard) {
-                    window.copyJsonToClipboard();
-                }
-            });
-        });
-    </script>
     <script type="text/javascript" src="risk-index.js"></script>
 </body>
 </html>
