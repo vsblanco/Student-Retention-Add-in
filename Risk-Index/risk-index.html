@@ -19,6 +19,14 @@
             display: inline-block;
             margin-left: 4px;
         }
+        .tab-button.active {
+            border-color: #3b82f6;
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .section-panel {
+            min-height: 70vh;
+        }
     </style>
 </head>
 <body class="bg-gray-100 p-4 font-sans">
@@ -66,75 +74,101 @@
 
     <!-- Builder Mode (Hidden by default) -->
     <div id="builder-mode" class="hidden">
-        <div class="max-w-4xl mx-auto space-y-6">
-            <!-- General Information Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">General Information</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <label class="block font-medium text-gray-600">Model Name <span class="info-btn" data-info="modelName">(i)</span></label>
-                        <input type="text" id="modelName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Engagement Momentum Model">
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Author <span class="info-btn" data-info="author">(i)</span></label>
-                        <input type="text" id="author" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Academics Team">
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="block font-medium text-gray-600">Description <span class="info-btn" data-info="description">(i)</span></label>
-                        <textarea id="description" rows="2" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="A brief description of the model's purpose."></textarea>
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Version <span class="info-btn" data-info="version">(i)</span></label>
-                        <input type="text" id="version" value="1.0" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
-                    </div>
-                    <div>
-                        <label class="block font-medium text-gray-600">Maximum Score <span class="info-btn" data-info="maxScore">(i)</span></label>
-                        <input type="number" id="maxScore" value="100" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+        <!-- Tab Navigation -->
+        <div class="border-b border-gray-200 mb-4">
+            <nav class="-mb-px flex space-x-4" aria-label="Tabs">
+                <button id="tab-step-1" type="button" data-step="1" class="tab-button active whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
+                    1. General
+                </button>
+                <button id="tab-step-2" type="button" data-step="2" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    2. Components
+                </button>
+                <button id="tab-step-3" type="button" data-step="3" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    3. Modifiers
+                </button>
+                <button id="tab-step-4" type="button" data-step="4" class="tab-button whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
+                    4. Test & Finish
+                </button>
+            </nav>
+        </div>
+
+        <!-- Wizard Panels -->
+        <div id="wizard-panels">
+            <!-- Step 1: General Information -->
+            <div id="panel-step-1" class="section-panel">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">General Information</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <label class="block font-medium text-gray-600">Model Name <span class="info-btn" data-info="modelName">(i)</span></label>
+                            <input type="text" id="modelName" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Engagement Momentum Model">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Author <span class="info-btn" data-info="author">(i)</span></label>
+                            <input type="text" id="author" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="e.g., Academics Team">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block font-medium text-gray-600">Description <span class="info-btn" data-info="description">(i)</span></label>
+                            <textarea id="description" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="A brief description of the model's purpose."></textarea>
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Version <span class="info-btn" data-info="version">(i)</span></label>
+                            <input type="text" id="version" value="1.0" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
+                        <div>
+                            <label class="block font-medium text-gray-600">Maximum Score <span class="info-btn" data-info="maxScore">(i)</span></label>
+                            <input type="number" id="maxScore" value="100" class="mt-1 block w-full p-2 border border-gray-300 rounded-md">
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Components Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Risk Components</h2>
-                    <button id="add-component-btn" class="px-3 py-1 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600">+ Add Component</button>
-                </div>
-                <div id="components-container" class="space-y-4"></div>
-            </div>
-
-            <!-- Modifiers Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Post-Calculation Modifiers</h2>
-                    <button id="add-modifier-btn" class="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">+ Add Modifier</button>
-                </div>
-                <div id="modifiers-container" class="space-y-4"></div>
-            </div>
-
-            <!-- JSON Output Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-semibold text-gray-700">Generated JSON</h2>
-                    <div class="flex space-x-2">
-                        <button id="generate-json-btn" class="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 text-sm">Generate & Copy</button>
-                        <button id="builder-import-btn" class="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 text-sm">Import into Session</button>
+            <!-- Step 2: Risk Components -->
+            <div id="panel-step-2" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold text-gray-700">Risk Components</h2>
+                        <button id="add-component-btn" class="px-3 py-1 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600">+ Add Component</button>
+                    </div>
+                    <div id="components-container" class="space-y-4">
+                        <p class="text-center text-gray-500 py-4">No components added yet. Click 'Add Component' to start.</p>
                     </div>
                 </div>
-                <textarea id="json-output" rows="10" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly placeholder="Click 'Generate & Copy' to see the JSON output..."></textarea>
-                <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
             </div>
 
-            <!-- Builder Compatibility Check Section -->
-            <div class="bg-white p-6 rounded-lg shadow">
-                 <h2 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">Compatibility Check</h2>
-                 <button id="builder-check-compatibility-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Check Built Formula</button>
-                 <div id="builder-compatibility-results-container" class="mt-4"></div>
+            <!-- Step 3: Post-Calculation Modifiers -->
+            <div id="panel-step-3" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 class="text-xl font-semibold text-gray-700">Post-Calculation Modifiers</h2>
+                        <button id="add-modifier-btn" class="px-3 py-1 bg-green-500 text-white text-sm font-semibold rounded-md hover:bg-green-600">+ Add Modifier</button>
+                    </div>
+                    <div id="modifiers-container" class="space-y-4">
+                         <p class="text-center text-gray-500 py-4">No modifiers added yet. Modifiers adjust the total score based on a condition.</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- Step 4: Compatibility Check & Finish -->
+            <div id="panel-step-4" class="section-panel hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Test & Finish</h2>
+                    <p class="text-sm text-gray-600 mb-4">Check if your current "Master List" sheet has the columns required by your formula and see example scores.</p>
+                    <button id="builder-check-compatibility-btn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Check Compatibility & Calculate Examples</button>
+                    <div id="builder-compatibility-results-container" class="mt-4"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Footer -->
+        <div class="mt-6 pt-4 border-t border-gray-300 flex justify-between items-center">
+            <button id="prev-btn" class="px-6 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50" disabled>Previous</button>
+            <div id="step-indicator" class="text-sm text-gray-500">Step 1 of 4</div>
+            <button id="next-btn" class="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50">Next</button>
         </div>
     </div>
 
-    <!-- Custom Formula Modal -->
+    <!-- Modals -->
     <div id="custom-formula-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
             <h3 class="text-lg font-semibold text-gray-800 mb-2">Upload Custom Formula</h3>
@@ -148,7 +182,6 @@
         </div>
     </div>
 
-    <!-- Edit Formula Modal -->
     <div id="edit-formula-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <h3 class="text-lg font-semibold text-gray-800 mb-4">Edit Custom Formula</h3>
@@ -159,7 +192,6 @@
         </div>
     </div>
 
-    <!-- Confirmation Modal -->
     <div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <h3 id="confirmation-title" class="text-lg font-semibold text-gray-800 mb-2">Confirmation</h3>
@@ -171,7 +203,6 @@
         </div>
     </div>
 
-    <!-- Info Popup Modal -->
     <div id="info-popup-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <h3 id="info-popup-title" class="text-lg font-semibold text-gray-800 mb-2">Information</h3>
@@ -181,8 +212,100 @@
             </div>
         </div>
     </div>
+    
+    <!-- JSON Export Modal -->
+    <div id="json-export-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <h3 class="text-lg font-semibold text-gray-800 mb-2">Export Formula JSON</h3>
+            <p class="text-sm text-gray-600 mb-4">Copy the JSON content below to save or share your custom risk model.</p>
+            <textarea id="json-output" rows="12" class="w-full p-2 border border-gray-300 rounded-md font-mono text-xs bg-gray-50" readonly></textarea>
+            <p id="copy-status" class="text-xs text-green-600 font-semibold mt-2 h-4"></p>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="copy-json-btn" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Copy to Clipboard</button>
+                <button id="close-export-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+            </div>
+        </div>
+    </div>
+
 
     <!-- JavaScript for the Task Pane -->
+    <script>
+        // This script handles the wizard navigation for the Formula Builder
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentStep = 1;
+            const totalSteps = 4;
+            const nextBtn = document.getElementById('next-btn');
+            const prevBtn = document.getElementById('prev-btn');
+            const stepIndicator = document.getElementById('step-indicator');
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const panels = document.querySelectorAll('.section-panel');
+
+            function showStep(step) {
+                // Hide all panels
+                panels.forEach(p => p.classList.add('hidden'));
+                // Show the correct panel
+                document.getElementById(`panel-step-${step}`).classList.remove('hidden');
+
+                // Update tab styles
+                tabButtons.forEach(b => {
+                    b.classList.remove('active', 'border-blue-500', 'text-blue-600');
+                    b.classList.add('border-transparent', 'text-gray-500');
+                    if (parseInt(b.dataset.step, 10) === step) {
+                        b.classList.add('active', 'border-blue-500', 'text-blue-600');
+                        b.classList.remove('border-transparent', 'text-gray-500');
+                    }
+                });
+
+                // Update navigation buttons and indicator
+                stepIndicator.textContent = `Step ${step} of ${totalSteps}`;
+                prevBtn.disabled = step === 1;
+                nextBtn.disabled = step === totalSteps;
+                currentStep = step;
+            }
+
+            nextBtn.addEventListener('click', () => {
+                if (currentStep < totalSteps) {
+                    showStep(currentStep + 1);
+                }
+            });
+
+            prevBtn.addEventListener('click', () => {
+                if (currentStep > 1) {
+                    showStep(currentStep - 1);
+                }
+            });
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const step = parseInt(button.dataset.step, 10);
+                    showStep(step);
+                });
+            });
+            
+            // Add listeners for the export/load buttons in the builder
+            document.getElementById('export-json-btn').addEventListener('click', () => {
+                // This will call the function defined in risk-index.js
+                if (window.generateAndCopyJson) {
+                    window.generateAndCopyJson(true); // Pass true to show modal
+                }
+            });
+            
+            document.getElementById('load-json-btn').addEventListener('click', () => {
+                 document.getElementById('custom-json-input').value = '';
+                 document.getElementById('custom-formula-status').textContent = '';
+                 document.getElementById('custom-formula-modal').classList.remove('hidden');
+            });
+            
+            document.getElementById('close-export-modal-btn').addEventListener('click', () => {
+                document.getElementById('json-export-modal').classList.add('hidden');
+            });
+             document.getElementById('copy-json-btn').addEventListener('click', () => {
+                if(window.copyJsonToClipboard) {
+                    window.copyJsonToClipboard();
+                }
+            });
+        });
+    </script>
     <script type="text/javascript" src="risk-index.js"></script>
 </body>
 </html>
