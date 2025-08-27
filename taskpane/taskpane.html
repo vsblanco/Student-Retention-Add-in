@@ -180,6 +180,39 @@
             </div>
         </div>
     </div>
+
+    <!-- Edit Comment Modal -->
+    <div id="edit-comment-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Edit Comment</h3>
+            <div id="edit-tag-section" class="flex items-center gap-2 mb-2">
+                <div id="edit-tag-pills-container" class="flex items-center gap-1 flex-wrap">
+                    <span id="edit-tag-placeholder" class="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 border border-dashed border-gray-400 rounded-full">Add Tags</span>
+                </div>
+                <div class="relative">
+                    <button id="edit-add-tag-button" type="button" class="flex items-center justify-center w-6 h-6 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    </button>
+                    <div id="edit-tag-dropdown" class="hidden absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
+                        <!-- Dropdown items for editing -->
+                    </div>
+                </div>
+            </div>
+            <textarea id="edit-comment-input" class="w-full p-2 border border-gray-300 rounded-md" rows="4"></textarea>
+            <div class="items-center px-4 py-3 flex gap-2">
+                <button id="cancel-edit-button" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300">Cancel</button>
+                <button id="update-comment-button" class="flex-1 px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600">Update</button>
+            </div>
+            <p id="edit-comment-status" class="text-xs text-center text-gray-500 h-4"></p>
+        </div>
+    </div>
+
+    <!-- Custom Context Menu -->
+    <div id="comment-context-menu" class="hidden absolute bg-white border rounded shadow-lg z-50">
+        <button id="edit-comment-btn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            Edit Comment
+        </button>
+    </div>
     
     <!-- Your Add-in's Code -->
     <script type="text/javascript" src="taskpane.js"></script>
