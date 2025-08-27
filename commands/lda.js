@@ -1,5 +1,5 @@
 /*
- * This file contains the logic for the "Create LDA" ribbon button command. yes
+ * This file contains the logic for the "Create LDA" ribbon button command.
  */
 import { CONSTANTS, getSettings, findColumnIndex, parseDate } from './utils.js';
 
@@ -470,7 +470,7 @@ async function createAndFormatTable(context, options) {
         if (dncPhoneMap && dncPhoneMap.size > 0) {
             console.log(`[DEBUG] Applying ${dncPhoneMap.size} DNC phone highlights.`);
             const finalLCHeaders = finalHeaders.map(h => h.toLowerCase());
-            const phoneColIdxInTable = findColumnIndex(finalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.phone);
+            const phoneColIdxInTable = findColumnIndex(finalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.primaryPhone);
             
             if (phoneColIdxInTable !== -1) {
                 for (let i = 0; i < dataRows.length; i++) {
