@@ -43,13 +43,25 @@ const CONSTANTS = {
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
     DATE_PICKER_MODAL: "date-picker-modal",
+    EDIT_COMMENT_MODAL: "edit-comment-modal",
+    UPDATE_COMMENT_BUTTON: "update-comment-button",
+    CANCEL_EDIT_BUTTON: "cancel-edit-button",
+    EDIT_COMMENT_INPUT: "edit-comment-input",
+    EDIT_TAG_PILLS_CONTAINER: "edit-tag-pills-container",
+    EDIT_TAG_PLACEHOLDER: "edit-tag-placeholder",
+    EDIT_ADD_TAG_BUTTON: "edit-add-tag-button",
+    EDIT_TAG_DROPDOWN: "edit-tag-dropdown",
+    EDIT_COMMENT_STATUS: "edit-comment-status",
+    COMMENT_CONTEXT_MENU: "comment-context-menu",
+    EDIT_COMMENT_BTN: "edit-comment-btn",
+
 
     // Settings Keys
     SETTINGS_KEY: "studentRetentionSettings",
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
-    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work"], // Phrases that trigger auto-highlight
+    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete"], // Phrases that trigger auto-highlight
     COLUMN_MAPPINGS: {
         name: ["studentname", "student name"],
         id: ["student id", "studentnumber", "student identifier"],
@@ -87,6 +99,9 @@ let pendingOutreachAction = null; // Cache outreach data while waiting for user 
 let newCommentTags = []; // To store tags for the new comment
 let selectedDate = null; // For the date picker
 let smartLdaTag = null; // To track the automatically added LDA tag
+let allComments = []; // Cache all comments for the selected student to enable editing
+let activeCommentRowIndex = null; // Store the sheet row index of the comment being edited
+let editCommentTags = []; // Tags for the comment being edited
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
@@ -151,17 +166,21 @@ function initializeAddIn() {
     if (commentInput) {
         // Add paste event listener to the comment input to automatically add the "Quote" tag
         commentInput.addEventListener('paste', () => {
-            addTag('Quote');
+            addTag('Quote', 'new');
         });
         // Add input event listener for smart LDA tag detection
         commentInput.addEventListener('input', handleCommentInputChange);
     }
 
     // Initialize the tagging UI
-    setupTaggingUI();
+    setupTaggingUI('new');
+    setupTaggingUI('edit');
     
     // Initialize the date picker
     setupDatePicker();
+
+    // Initialize the comment editing UI
+    setupCommentEditing();
 
     // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
@@ -742,12 +761,13 @@ function highlightDateInText(text) {
 async function displayStudentHistory(studentId) {
     const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
+    allComments = []; // Clear the cache
 
     try {
         await Excel.run(async (context) => {
             const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
             const historyRange = historySheet.getUsedRange();
-            historyRange.load("values");
+            historyRange.load("values, rowIndex");
             await context.sync();
 
             const historyData = historyRange.values;
@@ -763,7 +783,7 @@ async function displayStudentHistory(studentId) {
                 historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
                 return;
             }
-
+            
             const comments = [];
             for (let i = 1; i < historyData.length; i++) {
                 const row = historyData[i];
@@ -771,6 +791,7 @@ async function displayStudentHistory(studentId) {
                     const commentText = row[commentColIdx];
                     if (commentText && String(commentText).trim() !== "") {
                         const comment = {
+                            rowIndex: historyRange.rowIndex + i, // Store the absolute row index
                             text: commentText,
                             tag: tagColIdx !== -1 ? row[tagColIdx] : null,
                             timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
@@ -796,6 +817,8 @@ async function displayStudentHistory(studentId) {
                 }
             }
             
+            allComments = comments; // Cache for editing
+
             if (comments.length > 0) {
                 // --- Sorting Logic ---
                 const today = new Date();
@@ -844,7 +867,7 @@ async function displayStudentHistory(studentId) {
 
 
                     html += `
-                        <li class="p-3 ${bgColor} rounded-lg shadow-sm">
+                        <li class="p-3 ${bgColor} rounded-lg shadow-sm relative" data-row-index="${comment.rowIndex}">
                             <p class="text-sm text-gray-800">${displayText}</p>`;
                     
                     html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
@@ -889,6 +912,12 @@ async function displayStudentHistory(studentId) {
                 });
                 html += '</ul>';
                 historyContent.innerHTML = html;
+
+                // Add context menu listeners after rendering
+                historyContent.querySelectorAll('li').forEach(li => {
+                    li.addEventListener('contextmenu', showContextMenu);
+                });
+
             } else {
                 historyContent.innerHTML = '<p class="text-gray-500">No history found for this student.</p>';
             }
@@ -1046,8 +1075,8 @@ async function executeSubmitComment(commentingUser) {
         // Reset tags and refresh history
         newCommentTags = [];
         smartLdaTag = null; 
-        renderTagPills();
-        populateTagDropdown();
+        renderTagPills('new');
+        populateTagDropdown('new');
         await displayStudentHistory(currentStudentId);
 
         setTimeout(() => {
@@ -1066,13 +1095,13 @@ async function executeSubmitComment(commentingUser) {
 
 // --- START: Tagging UI Functions ---
 
-function setupTaggingUI() {
-    const addTagButton = document.getElementById(CONSTANTS.ADD_TAG_BUTTON);
-    const tagDropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+function setupTaggingUI(mode) { // mode can be 'new' or 'edit'
+    const addTagButton = document.getElementById(mode === 'new' ? CONSTANTS.ADD_TAG_BUTTON : CONSTANTS.EDIT_ADD_TAG_BUTTON);
+    const tagDropdown = document.getElementById(mode === 'new' ? CONSTANTS.TAG_DROPDOWN : CONSTANTS.EDIT_TAG_DROPDOWN);
 
     addTagButton.addEventListener('click', (event) => {
         event.stopPropagation();
-        populateTagDropdown();
+        populateTagDropdown(mode);
         tagDropdown.classList.toggle('hidden');
     });
 
@@ -1083,31 +1112,28 @@ function setupTaggingUI() {
         }
     });
 
-    renderTagPills();
-    populateTagDropdown();
+    renderTagPills(mode);
+    populateTagDropdown(mode);
 }
 
-function renderTagPills() {
-    const container = document.getElementById(CONSTANTS.TAG_PILLS_CONTAINER);
-    const placeholder = document.getElementById(CONSTANTS.TAG_PLACEHOLDER);
+function renderTagPills(mode) {
+    const isEdit = mode === 'edit';
+    const container = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_PILLS_CONTAINER : CONSTANTS.TAG_PILLS_CONTAINER);
+    const placeholder = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_PLACEHOLDER : CONSTANTS.TAG_PLACEHOLDER);
+    const tags = isEdit ? editCommentTags : newCommentTags;
 
-    // Add a guard clause to prevent errors if elements aren't found
-    if (!container || !placeholder) {
-        return;
-    }
+    if (!container || !placeholder) return;
 
-    // Remove existing pills, but not the placeholder
     container.querySelectorAll('.tag-pill').forEach(pill => pill.remove());
 
-    if (newCommentTags.length === 0) {
+    if (tags.length === 0) {
         placeholder.classList.remove('hidden');
     } else {
         placeholder.classList.add('hidden');
-        newCommentTags.forEach(tagName => {
+        tags.forEach(tagName => {
             const tagPrefix = tagName.split(' ')[0];
             const tagInfo = availableTags.find(t => t.name === tagPrefix) || { bg: 'bg-gray-200', text: 'text-gray-800' };
             const pill = document.createElement('span');
-            // Add a class to identify these as generated pills
             pill.className = `tag-pill px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
             pill.textContent = tagName;
 
@@ -1115,7 +1141,7 @@ function renderTagPills() {
             removeButton.type = 'button';
             removeButton.innerHTML = '&times;';
             removeButton.className = 'font-bold';
-            removeButton.onclick = () => removeTag(tagName);
+            removeButton.onclick = () => removeTag(tagName, mode);
 
             pill.appendChild(removeButton);
             container.appendChild(pill);
@@ -1123,12 +1149,15 @@ function renderTagPills() {
     }
 }
 
-function populateTagDropdown() {
-    const dropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
-    if (!dropdown) return; // Guard clause
+function populateTagDropdown(mode) {
+    const isEdit = mode === 'edit';
+    const dropdown = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN);
+    const tags = isEdit ? editCommentTags : newCommentTags;
+    
+    if (!dropdown) return;
     dropdown.innerHTML = '';
 
-    const tagsToShow = availableTags.filter(tag => !tag.hidden && !newCommentTags.some(t => t.startsWith(tag.name)));
+    const tagsToShow = availableTags.filter(tag => !tag.hidden && !tags.some(t => t.startsWith(tag.name)));
 
     if (tagsToShow.length === 0) {
         const noTagsItem = document.createElement('span');
@@ -1151,31 +1180,36 @@ function populateTagDropdown() {
         item.onclick = (e) => {
             e.preventDefault();
             if (tag.requiresDate) {
-                promptForLdaDate();
+                promptForLdaDate(mode);
             } else {
-                addTag(tag.name);
+                addTag(tag.name, mode);
             }
         };
         dropdown.appendChild(item);
     });
 }
 
-function addTag(tagName) {
-    if (!newCommentTags.some(t => t.startsWith(tagName.split(' ')[0]))) {
-        newCommentTags.push(tagName);
-        renderTagPills();
-        populateTagDropdown();
-        document.getElementById(CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+function addTag(tagName, mode) {
+    const tags = mode === 'edit' ? editCommentTags : newCommentTags;
+    if (!tags.some(t => t.startsWith(tagName.split(' ')[0]))) {
+        tags.push(tagName);
+        renderTagPills(mode);
+        populateTagDropdown(mode);
+        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
     }
 }
 
-function removeTag(tagName) {
-    newCommentTags = newCommentTags.filter(t => t !== tagName);
-    if (tagName === smartLdaTag) {
-        smartLdaTag = null;
+function removeTag(tagName, mode) {
+    if (mode === 'edit') {
+        editCommentTags = editCommentTags.filter(t => t !== tagName);
+    } else {
+        newCommentTags = newCommentTags.filter(t => t !== tagName);
+        if (tagName === smartLdaTag) {
+            smartLdaTag = null;
+        }
     }
-    renderTagPills();
-    populateTagDropdown();
+    renderTagPills(mode);
+    populateTagDropdown(mode);
 }
 
 
@@ -1185,6 +1219,7 @@ function removeTag(tagName) {
 
 function setupDatePicker() {
     let currentDate = new Date();
+    let currentMode = 'new';
     
     document.getElementById('prev-month').addEventListener('click', () => {
         currentDate.setMonth(currentDate.getMonth() - 1);
@@ -1203,19 +1238,21 @@ function setupDatePicker() {
     document.getElementById('confirm-date').addEventListener('click', () => {
         if (selectedDate) {
             const formattedDate = `${selectedDate.getMonth() + 1}/${selectedDate.getDate()}/${String(selectedDate.getFullYear()).slice(-2)}`;
-            addTag(`LDA ${formattedDate}`);
+            addTag(`LDA ${formattedDate}`, currentMode);
             document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.add('hidden');
         }
     });
+
+    window.promptForLdaDate = (mode) => {
+        currentMode = mode;
+        selectedDate = null;
+        document.getElementById('confirm-date').disabled = true;
+        renderCalendar(new Date());
+        document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.remove('hidden');
+        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+    };
 }
 
-function promptForLdaDate() {
-    selectedDate = null; // Reset selection
-    document.getElementById('confirm-date').disabled = true;
-    renderCalendar(new Date());
-    document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.remove('hidden');
-    document.getElementById(CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
-}
 
 function renderCalendar(date) {
     const grid = document.getElementById('calendar-grid');
@@ -1287,21 +1324,21 @@ function handleCommentInputChange(event) {
 
         // If a smart tag already exists but is different, remove the old one
         if (smartLdaTag && smartLdaTag !== newLdaTag) {
-            removeTag(smartLdaTag);
+            removeTag(smartLdaTag, 'new');
         }
 
         // If no smart tag exists (or it was just removed), add the new one
         if (!smartLdaTag) {
             // Also check if a manual LDA tag was added, don't add if so
             if (!newCommentTags.some(tag => tag.startsWith('LDA'))) {
-                 addTag(newLdaTag);
+                 addTag(newLdaTag, 'new');
                  smartLdaTag = newLdaTag;
             }
         }
     } else {
         // If no date is found, but we had a smart tag, remove it
         if (smartLdaTag) {
-            removeTag(smartLdaTag);
+            removeTag(smartLdaTag, 'new');
         }
     }
 }
@@ -1359,6 +1396,115 @@ function parseDateFromText(text) {
 
 
 // --- END: Smart Tag Functions ---
+
+// --- START: Comment Editing Functions ---
+
+function setupCommentEditing() {
+    const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
+    const editButton = document.getElementById(CONSTANTS.EDIT_COMMENT_BTN);
+    const updateButton = document.getElementById(CONSTANTS.UPDATE_COMMENT_BUTTON);
+    const cancelButton = document.getElementById(CONSTANTS.CANCEL_EDIT_BUTTON);
+
+    // Hide context menu on any click
+    document.addEventListener('click', () => {
+        contextMenu.classList.add('hidden');
+    });
+
+    editButton.addEventListener('click', () => {
+        const commentToEdit = allComments.find(c => c.rowIndex === activeCommentRowIndex);
+        if (commentToEdit) {
+            showEditCommentModal(commentToEdit);
+        }
+        contextMenu.classList.add('hidden');
+    });
+    
+    updateButton.addEventListener('click', handleUpdateComment);
+    cancelButton.addEventListener('click', () => {
+        document.getElementById(CONSTANTS.EDIT_COMMENT_MODAL).classList.add('hidden');
+    });
+}
+
+function showContextMenu(event) {
+    event.preventDefault();
+    const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
+    const commentLi = event.currentTarget;
+    
+    activeCommentRowIndex = parseInt(commentLi.dataset.rowIndex, 10);
+
+    contextMenu.style.left = `${event.clientX}px`;
+    contextMenu.style.top = `${event.clientY}px`;
+    contextMenu.classList.remove('hidden');
+}
+
+function showEditCommentModal(comment) {
+    const modal = document.getElementById(CONSTANTS.EDIT_COMMENT_MODAL);
+    const input = document.getElementById(CONSTANTS.EDIT_COMMENT_INPUT);
+    const status = document.getElementById(CONSTANTS.EDIT_COMMENT_STATUS);
+
+    input.value = comment.text;
+    editCommentTags = comment.tag ? String(comment.tag).split(',').map(t => t.trim()) : [];
+    status.textContent = '';
+    
+    renderTagPills('edit');
+    populateTagDropdown('edit');
+    
+    modal.classList.remove('hidden');
+    input.focus();
+}
+
+async function handleUpdateComment() {
+    const modal = document.getElementById(CONSTANTS.EDIT_COMMENT_MODAL);
+    const input = document.getElementById(CONSTANTS.EDIT_COMMENT_INPUT);
+    const status = document.getElementById(CONSTANTS.EDIT_COMMENT_STATUS);
+    const newText = input.value.trim();
+    const newTags = editCommentTags.join(', ');
+
+    if (!newText) {
+        status.textContent = "Comment cannot be empty.";
+        return;
+    }
+    
+    status.textContent = "Updating...";
+
+    try {
+        await Excel.run(async (context) => {
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+            const headersRange = historySheet.getRange("1:1").getUsedRange();
+            headersRange.load("values");
+            await context.sync();
+
+            const headers = headersRange.values[0].map(h => String(h || '').toLowerCase());
+            const commentCol = findColumnIndex(headers, ["comment"]);
+            const tagCol = findColumnIndex(headers, ["tag"]);
+
+            if (commentCol === -1 || tagCol === -1) {
+                throw new Error("Could not find 'Comment' or 'Tag' column in history sheet.");
+            }
+
+            const rowToUpdate = historySheet.getRangeByIndexes(activeCommentRowIndex, 0, 1, headers.length);
+            const commentCell = rowToUpdate.getCell(0, commentCol);
+            const tagCell = rowToUpdate.getCell(0, tagCol);
+
+            commentCell.values = [[newText]];
+            tagCell.values = [[newTags]];
+            
+            await context.sync();
+        });
+        
+        status.textContent = "Updated successfully!";
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            displayStudentHistory(currentStudentId); // Refresh history view
+        }, 1000);
+
+    } catch (error) {
+        status.textContent = `Error: ${error.message}`;
+        console.error("Error updating comment:", error);
+    }
+}
+
+
+// --- END: Comment Editing Functions ---
 
 
 // --- START: Code moved from commands.js ---
