@@ -83,6 +83,7 @@ let currentUserName = "Unknown User"; // Variable to store the current user's na
 let settings = {}; // To store all add-in settings
 let welcomeDialog = null;
 let sessionCommentUser = null; // Cache the user for the current session
+let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
 let newCommentTags = []; // To store tags for the new comment
 let selectedDate = null; // For the date picker
 let smartLdaTag = null; // To track the automatically added LDA tag
@@ -91,7 +92,6 @@ const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
-    { name: 'Contacted', bg: 'bg-yellow-100', text: 'text-yellow-800', hidden: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
@@ -948,7 +948,30 @@ async function handleUserSelection() {
     document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
     
     // If this was the initial prompt, we now initialize the rest of the add-in
-    initializeAddIn();
+    if (!pendingOutreachAction) {
+        initializeAddIn();
+    }
+
+    // Check if there's a pending outreach action to complete
+    if (pendingOutreachAction) {
+        const { studentId, studentName, commentText, rowIndex } = pendingOutreachAction;
+        
+        // Add the comment
+        await addOutreachComment(studentId, studentName, commentText, sessionCommentUser);
+
+        // Check for highlight triggers
+        const lowerCommentText = commentText.toLowerCase();
+        if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
+            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+            await applyContactedHighlight(rowIndex);
+        }
+
+        // Clear the pending action
+        pendingOutreachAction = null;
+    } else {
+        // If no pending action, it was triggered by the submit button
+        await executeSubmitComment(sessionCommentUser);
+    }
 }
 
 /**
@@ -1385,6 +1408,43 @@ function jsDateToExcelDate(date) {
 }
 
 /**
+ * Applies a yellow highlight to a specific row to mark it as contacted.
+ * This is a non-toggle version of the function in actions.js.
+ * @param {number} rowIndex The zero-based index of the row to highlight.
+ */
+async function applyContactedHighlight(rowIndex) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const headerRange = sheet.getRange("1:1").getUsedRange(true);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
+            const studentNameColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.name);
+            const outreachColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach);
+
+            if (studentNameColIndex === -1 || outreachColIndex === -1) {
+                console.error("Could not find 'StudentName' and/or 'Outreach' columns for highlighting.");
+                return;
+            }
+
+            const startCol = Math.min(studentNameColIndex, outreachColIndex);
+            const endCol = Math.max(studentNameColIndex, outreachColIndex);
+            const colCount = endCol - startCol + 1;
+
+            const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
+            highlightRange.format.fill.color = "yellow";
+            await context.sync();
+        });
+    } catch (error) {
+        errorHandler(error);
+    }
+}
+
+
+/**
  * Event handler for when the worksheet changes. Now handles bulk pastes.
  * @param {Excel.WorksheetChangedEventArgs} eventArgs
  */
@@ -1398,18 +1458,12 @@ async function onWorksheetChanged(eventArgs) {
         if (eventArgs.source !== Excel.EventSource.local) return;
         if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") return;
 
-        const sheet = context.workbook.worksheets.getItem(eventArgs.worksheetId);
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
         const changedRange = sheet.getRange(eventArgs.address);
         
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
         headerRange.load("values, columnCount");
         changedRange.load("address, rowIndex, columnIndex, rowCount, columnCount, values, valuesBefore");
-        
-        // Load history sheet data at the same time
-        const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
-        const historyRange = historySheet.getUsedRange(true);
-        historyRange.load("values, rowIndex, rowCount");
-
         await context.sync();
         
         const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
@@ -1436,20 +1490,6 @@ async function onWorksheetChanged(eventArgs) {
 
             if (studentIdColIndex === -1 || studentNameColIndex === -1) return;
 
-            const historyData = historyRange.values;
-            const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
-            const histIdCol = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
-            const histCommentCol = findColumnIndex(historyHeaders, ["comment"]);
-            const histTimestampCol = findColumnIndex(historyHeaders, ["timestamp"]);
-            const histTagCol = findColumnIndex(historyHeaders, ["tag"]);
-            const histCreatedByCol = findColumnIndex(historyHeaders, ["created by"]);
-            const histStudentCol = findColumnIndex(historyHeaders, ["student"]);
-
-            if (histIdCol === -1 || histCommentCol === -1 || histTimestampCol === -1 || histTagCol === -1) {
-                console.log("Student History sheet is missing required columns.");
-                return;
-            }
-
             for (let i = 0; i < changedRange.rowCount; i++) {
                 const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
                                  String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
@@ -1463,74 +1503,130 @@ async function onWorksheetChanged(eventArgs) {
                     const rowIndex = changedRange.rowIndex + i;
 
                     if (studentId && studentName) {
-                        // --- INLINED addOutreachComment LOGIC ---
-                        let todaysCommentRowIndex = -1;
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-
-                        for (let j = historyData.length - 1; j > 0; j--) {
-                            const row = historyData[j];
-                            if (row[histIdCol] && String(row[histIdCol]) === String(studentId)) {
-                                const tags = String(row[histTagCol] || '').toLowerCase();
-                                if (tags.includes('outreach')) {
-                                    const commentDate = parseDate(row[histTimestampCol]);
-                                    if (commentDate) {
-                                        commentDate.setHours(0, 0, 0, 0);
-                                        if (commentDate.getTime() === today.getTime()) {
-                                            todaysCommentRowIndex = historyRange.rowIndex + j;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        const now = new Date();
-                        const excelNow = jsDateToExcelDate(now);
+                        await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
                         const lowerNewValue = newValue.toLowerCase();
-
-                        if (todaysCommentRowIndex !== -1) {
-                            historySheet.getCell(todaysCommentRowIndex, histCommentCol).values = [[newValue]];
-                            historySheet.getCell(todaysCommentRowIndex, histTimestampCol).values = [[excelNow]];
-                        } else {
-                            let tagsToSave = "Outreach";
-                            if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
-                                tagsToSave += ', Contacted';
-                            }
-                            const date = parseDateFromText(newValue);
-                            if (date) {
-                                tagsToSave += `, LDA ${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
-                            }
-                            
-                            const newRowData = new Array(historyHeaders.length).fill("");
-                            newRowData[histIdCol] = studentId;
-                            if (histStudentCol !== -1) newRowData[histStudentCol] = studentName;
-                            if (histCreatedByCol !== -1) newRowData[histCreatedByCol] = sessionCommentUser;
-                            newRowData[histTagCol] = tagsToSave;
-                            newRowData[histTimestampCol] = excelNow;
-                            newRowData[histCommentCol] = newValue;
-                            
-                            historySheet.getRangeByIndexes(historyRange.rowCount, 0, 1, historyHeaders.length).values = [newRowData];
-                        }
-                        
-                        // --- INLINED applyContactedHighlight LOGIC ---
                         if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
-                            const startCol = Math.min(studentNameColIndex, outreachColIndex);
-                            const colCount = Math.abs(studentNameColIndex - outreachColIndex) + 1;
-                            sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount).format.fill.color = "yellow";
+                            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+                            await applyContactedHighlight(rowIndex);
                         }
                     }
                 }
             }
-            historySheet.getUsedRange().getEntireColumn().format.autofitColumns();
         }
-        await context.sync();
-        
-        // Post-sync UI update
-        if (currentStudentId && !document.getElementById(CONSTANTS.PANEL_HISTORY).classList.contains("hidden")) {
-             setTimeout(() => displayStudentHistory(currentStudentId), 100);
-        }
-
     }).catch(errorHandler);
+}
+
+
+/**
+ * Adds or updates a comment in the "Student History" sheet based on an outreach entry.
+ * If an outreach comment for the student exists for the current day, it updates it.
+ * Otherwise, it adds a new comment.
+ * @param {string|number} studentId The student's ID.
+ * @param {string} studentName The student's name.
+ * @param {string} commentText The new comment text from the Outreach column.
+ * @param {string} commentingUser The user making the comment.
+ */
+async function addOutreachComment(studentId, studentName, commentText, commentingUser) {
+    await Excel.run(async (context) => {
+        try {
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+            const historyRange = historySheet.getUsedRange(true);
+            historyRange.load("values, rowIndex, rowCount, address");
+            await context.sync();
+
+            const historyData = historyRange.values;
+            const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
+
+            const idCol = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
+            const commentCol = findColumnIndex(historyHeaders, ["comment"]);
+            const timestampCol = findColumnIndex(historyHeaders, ["timestamp"]);
+            const tagCol = findColumnIndex(historyHeaders, ["tag"]);
+            const createdByCol = findColumnIndex(historyHeaders, ["created by"]);
+            const studentCol = findColumnIndex(historyHeaders, ["student"]);
+
+            if (idCol === -1 || commentCol === -1 || timestampCol === -1 || tagCol === -1) {
+                console.log("Student History sheet is missing required columns (StudentNumber, Comment, Timestamp, Tag).");
+                return;
+            }
+
+            let todaysCommentRowIndex = -1;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Search backwards for the most recent entry for this student today
+            for (let i = historyData.length - 1; i > 0; i--) {
+                const row = historyData[i];
+                if (row[idCol] && String(row[idCol]) === String(studentId)) {
+                    const tags = String(row[tagCol] || '').toLowerCase();
+                    if (tags.includes('outreach')) {
+                        const commentDate = parseDate(row[timestampCol]);
+                        if (commentDate) {
+                            commentDate.setHours(0, 0, 0, 0);
+                            if (commentDate.getTime() === today.getTime()) {
+                                todaysCommentRowIndex = historyRange.rowIndex + i;
+                                break; // Found today's outreach comment
+                            }
+                        }
+                    }
+                }
+            }
+
+            const now = new Date();
+            const excelNow = jsDateToExcelDate(now);
+
+            if (todaysCommentRowIndex !== -1) {
+                // Update existing comment
+                console.log(`Updating existing outreach comment for ${studentName} at row ${todaysCommentRowIndex + 1}`);
+                const commentCell = historySheet.getCell(todaysCommentRowIndex, commentCol);
+                const timestampCell = historySheet.getCell(todaysCommentRowIndex, timestampCol);
+                
+                commentCell.values = [[commentText]];
+                timestampCell.values = [[excelNow]];
+                timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
+
+            } else {
+                // Add new comment
+                console.log(`Adding new outreach comment for ${studentName}`);
+                const newRowData = new Array(historyHeaders.length).fill("");
+                newRowData[idCol] = studentId;
+                if (studentCol !== -1) newRowData[studentCol] = studentName;
+                if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
+                
+                let tagsToSave = "Outreach";
+                const date = parseDateFromText(commentText);
+                if (date) {
+                    const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
+                    const ldaTag = `LDA ${formattedDate}`;
+                    tagsToSave += `, ${ldaTag}`;
+                }
+
+                newRowData[tagCol] = tagsToSave;
+                newRowData[timestampCol] = excelNow;
+                newRowData[commentCol] = commentText;
+                
+                const newRowIndex = historyRange.rowIndex + historyRange.rowCount;
+                const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, historyHeaders.length);
+                newRowRange.values = [newRowData];
+                
+                const newTimestampCell = historySheet.getCell(newRowIndex, timestampCol);
+                newTimestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
+            }
+            
+            historySheet.getUsedRange().format.autofitColumns();
+            await context.sync();
+
+            // Refresh the history pane if it's open for the current student
+            if (studentId && String(studentId) === String(currentStudentId)) {
+                const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
+                if (panelHistory && !panelHistory.classList.contains("hidden")) {
+                    console.log(`Refreshing history for student ${studentName} after outreach update.`);
+                    setTimeout(() => displayStudentHistory(currentStudentId), 100);
+                }
+            }
+
+        } catch (error) {
+            errorHandler(error);
+        }
+    });
 }
 // --- END: Code moved from commands.js ---
