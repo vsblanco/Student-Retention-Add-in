@@ -85,7 +85,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v16");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v17");
     try {
         const settings = await getSettings();
         const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns, includeLdaTagFollowup } = settings.createlda;
@@ -107,22 +107,22 @@ async function handleCreateLdaSheet() {
             let historySheet, historyRange, historyData;
             const ldaFollowUpMap = new Map();
 
-            if (includeLdaTagFollowup) {
-                try {
-                    historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
-                    historyRange = historySheet.getUsedRange();
-                    historyRange.load("values");
-                } catch (e) {
-                    console.warn("Student History sheet not found, cannot process LDA follow-ups.");
-                }
+            // Always try to get history sheet for DNC check
+            try {
+                historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+                historyRange = historySheet.getUsedRange();
+                historyRange.load("values");
+            } catch (e) {
+                console.warn("Student History sheet not found, cannot process LDA follow-ups or DNC statuses.");
             }
             
             await context.sync();
             
-            // --- Process History for LDA Follow-ups ---
-            if (includeLdaTagFollowup && historySheet) {
-                console.log("[DEBUG] Processing Student History for LDA follow-ups.");
+            // --- Process History for LDA Follow-ups and DNC ---
+            const dncStatusMap = new Map();
+            if (historySheet) {
                 historyData = historyRange.values;
+                console.log("[DEBUG] Processing Student History sheet.");
                 const historyHeaders = historyData[0].map(h => String(h || '').toLowerCase());
                 const histIdCol = findColumnIndex(historyHeaders, CONSTANTS.STUDENT_NUMBER_COLS);
                 const histTagCol = findColumnIndex(historyHeaders, ["tag"]);
@@ -131,10 +131,27 @@ async function handleCreateLdaSheet() {
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
 
-                    for (let i = historyData.length - 1; i > 0; i--) { // Iterate backwards to get the most recent
+                    // Iterate backwards to get the most recent tags for each student
+                    for (let i = historyData.length - 1; i > 0; i--) { 
                         const row = historyData[i];
                         const studentId = row[histIdCol];
-                        if (studentId && !ldaFollowUpMap.has(studentId)) {
+                        if (!studentId) continue;
+
+                        // DNC Check (always run)
+                        if (!dncStatusMap.has(studentId)) {
+                             const tags = String(row[histTagCol] || '').toLowerCase().split(',').map(t => t.trim());
+                             const dncTag = tags.find(t => t.startsWith('dnc'));
+                             if (dncTag) {
+                                 const dncInfo = { phone: false, email: false, all: false };
+                                 if (dncTag.includes('phone')) dncInfo.phone = true;
+                                 else if (dncTag.includes('email')) dncInfo.email = true;
+                                 else dncInfo.all = true; // General "dnc" tag
+                                 dncStatusMap.set(studentId, dncInfo);
+                             }
+                        }
+
+                        // LDA Follow-up Check (if enabled)
+                        if (includeLdaTagFollowup && !ldaFollowUpMap.has(studentId)) {
                             const tags = String(row[histTagCol] || '').split(',').map(t => t.trim());
                             const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
                             if (ldaTag) {
@@ -150,6 +167,7 @@ async function handleCreateLdaSheet() {
                         }
                     }
                     console.log(`[DEBUG] Found ${ldaFollowUpMap.size} students with future LDA follow-ups.`);
+                    console.log(`[DEBUG] Found ${dncStatusMap.size} students with DNC preferences.`);
                 }
             }
 
@@ -229,13 +247,14 @@ async function handleCreateLdaSheet() {
                 hideLeftoverColumns,
                 originalHeaders,
                 valueToColorMap,
-                ldaFollowUpMap
+                ldaFollowUpMap,
+                dncStatusMap // Pass DNC map
             });
             
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
-                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap);
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncStatusMap);
             }
             
         });
@@ -256,7 +275,7 @@ async function handleCreateLdaSheet() {
     }
 }
 
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncStatusMap) {
     console.log("[DEBUG] Creating failing list table.");
     const originalLCHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -295,7 +314,8 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             hideLeftoverColumns,
             originalHeaders,
             valueToColorMap,
-            ldaFollowUpMap
+            ldaFollowUpMap,
+            dncStatusMap // Pass DNC map
         });
     }
 }
@@ -370,7 +390,8 @@ async function createAndFormatTable(context, options) {
         hideLeftoverColumns,
         originalHeaders,
         valueToColorMap,
-        ldaFollowUpMap
+        ldaFollowUpMap,
+        dncStatusMap
     } = options;
 
     let finalHeaders;
@@ -447,6 +468,52 @@ async function createAndFormatTable(context, options) {
         table.style = "TableStyleLight9";
         
         await context.sync();
+
+        // --- DNC Formatting Logic ---
+        if (dncStatusMap && dncStatusMap.size > 0) {
+            console.log("[DEBUG] Applying DNC formatting to table:", tableName);
+            const tableBodyRange = table.getDataBodyRange();
+            const finalLCHeaders = finalHeaders.map(h => h.toLowerCase());
+            const studentIdColInTable = findColumnIndex(finalLCHeaders, CONSTANTS.STUDENT_NUMBER_COLS);
+            
+            if (studentIdColInTable !== -1) {
+                tableBodyRange.load("values");
+                await context.sync();
+                
+                for (let i = 0; i < tableBodyRange.values.length; i++) {
+                    const studentId = tableBodyRange.values[i][studentIdColInTable];
+                    if (studentId && dncStatusMap.has(studentId)) {
+                        const dncInfo = dncStatusMap.get(studentId);
+                        const contactCols = {
+                            phone: ["primary phone", "other phone"],
+                            email: ["student email", "personal email"]
+                        };
+                        
+                        const applyDncFormat = (colName) => {
+                            const colIdx = finalLCHeaders.indexOf(colName);
+                            if (colIdx !== -1) {
+                                const cell = tableBodyRange.getCell(i, colIdx);
+                                cell.format.fill.color = "#C00000"; // Dark Red
+                                cell.format.font.strikethrough = true;
+                            }
+                        };
+
+                        if (dncInfo.all) {
+                            [...contactCols.phone, ...contactCols.email].forEach(applyDncFormat);
+                            const outreachColIdx = finalLCHeaders.indexOf("outreach");
+                            if (outreachColIdx !== -1) {
+                                const cell = tableBodyRange.getCell(i, outreachColIdx);
+                                cell.values = [["Student wishes not to be contacted."]];
+                            }
+                        } else {
+                            if (dncInfo.phone) contactCols.phone.forEach(applyDncFormat);
+                            if (dncInfo.email) contactCols.email.forEach(applyDncFormat);
+                        }
+                    }
+                }
+            }
+        }
+        // --- End DNC Formatting ---
 
         if (valueToColorMap.size > 0) {
             const assignedColIdxInTable = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.assigned);
