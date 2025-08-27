@@ -134,7 +134,7 @@ async function handleCreateLdaSheet() {
                     // Iterate backwards to get the most recent tags for each student
                     for (let i = historyData.length - 1; i > 0; i--) { 
                         const row = historyData[i];
-                        const studentId = row[histIdCol];
+                        const studentId = String(row[histIdCol]);
                         if (!studentId) continue;
 
                         // DNC Check (always run)
@@ -481,7 +481,7 @@ async function createAndFormatTable(context, options) {
                 await context.sync();
                 
                 for (let i = 0; i < tableBodyRange.values.length; i++) {
-                    const studentId = tableBodyRange.values[i][studentIdColInTable];
+                    const studentId = String(tableBodyRange.values[i][studentIdColInTable]);
                     if (studentId && dncStatusMap.has(studentId)) {
                         const dncInfo = dncStatusMap.get(studentId);
                         const contactCols = {
