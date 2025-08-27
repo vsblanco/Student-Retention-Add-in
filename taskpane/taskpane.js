@@ -54,6 +54,9 @@ const CONSTANTS = {
     EDIT_COMMENT_STATUS: "edit-comment-status",
     COMMENT_CONTEXT_MENU: "comment-context-menu",
     EDIT_COMMENT_BTN: "edit-comment-btn",
+    DNC_TYPE_MODAL: "dnc-type-modal",
+    DNC_OPTIONS_CONTAINER: "dnc-options-container",
+    CANCEL_DNC_BUTTON: "cancel-dnc-button",
 
 
     // Settings Keys
@@ -102,10 +105,12 @@ let smartLdaTag = null; // To track the automatically added LDA tag
 let allComments = []; // Cache all comments for the selected student to enable editing
 let activeCommentRowIndex = null; // Store the sheet row index of the comment being edited
 let editCommentTags = []; // Tags for the comment being edited
+let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edit')
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
+    { name: 'DNC', bg: 'bg-gray-700', text: 'text-red-500', requiresPopup: true },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
@@ -181,6 +186,9 @@ function initializeAddIn() {
 
     // Initialize the comment editing UI
     setupCommentEditing();
+    
+    // Initialize the DNC modal
+    setupDncModal();
 
     // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
@@ -823,13 +831,15 @@ async function displayStudentHistory(studentId) {
                 // --- Sorting Logic ---
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
+                
+                const isNoteOrDnc = (c) => c.tag && (c.tag.toLowerCase().includes('note') || c.tag.toLowerCase().includes('dnc'));
 
-                const noteComments = comments.filter(c => c.tag && c.tag.toLowerCase().includes('note'));
-                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today && !noteComments.includes(c));
-                const regularComments = comments.filter(c => !noteComments.includes(c) && !priorityComments.includes(c));
+                const noteAndDncComments = comments.filter(isNoteOrDnc);
+                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today && !isNoteOrDnc(c));
+                const regularComments = comments.filter(c => !isNoteOrDnc(c) && !priorityComments.includes(c));
 
-                // Sort note comments by timestamp (most recent first)
-                noteComments.sort((a, b) => {
+                // Sort note and DNC comments by timestamp (most recent first)
+                noteAndDncComments.sort((a, b) => {
                     const dateA = parseDate(a.timestamp) || 0;
                     const dateB = parseDate(b.timestamp) || 0;
                     return dateB - dateA;
@@ -845,16 +855,16 @@ async function displayStudentHistory(studentId) {
                     return dateB - dateA;
                 });
 
-                const sortedComments = [...noteComments, ...priorityComments, ...regularComments];
+                const sortedComments = [...noteAndDncComments, ...priorityComments, ...regularComments];
                 // --- End Sorting Logic ---
 
                 let html = '<ul class="space-y-4">';
                 sortedComments.forEach(comment => {
-                    const isNote = comment.tag && comment.tag.toLowerCase().includes('note');
-                    const isPriority = !isNote && comment.ldaDate && comment.ldaDate >= today;
+                    const isNoteOrDnc = comment.tag && (comment.tag.toLowerCase().includes('note') || comment.tag.toLowerCase().includes('dnc'));
+                    const isPriority = !isNoteOrDnc && comment.ldaDate && comment.ldaDate >= today;
                     
                     let bgColor = 'bg-gray-100'; // Default
-                    if (isNote) {
+                    if (isNoteOrDnc) {
                         bgColor = 'bg-gray-200';
                     } else if (isPriority) {
                         bgColor = 'bg-orange-100';
@@ -1101,6 +1111,7 @@ function setupTaggingUI(mode) { // mode can be 'new' or 'edit'
 
     addTagButton.addEventListener('click', (event) => {
         event.stopPropagation();
+        activeTaggingMode = mode;
         populateTagDropdown(mode);
         tagDropdown.classList.toggle('hidden');
     });
@@ -1181,6 +1192,8 @@ function populateTagDropdown(mode) {
             e.preventDefault();
             if (tag.requiresDate) {
                 promptForLdaDate(mode);
+            } else if (tag.requiresPopup) {
+                promptForDncType(mode);
             } else {
                 addTag(tag.name, mode);
             }
@@ -1219,7 +1232,6 @@ function removeTag(tagName, mode) {
 
 function setupDatePicker() {
     let currentDate = new Date();
-    let currentMode = 'new';
     
     document.getElementById('prev-month').addEventListener('click', () => {
         currentDate.setMonth(currentDate.getMonth() - 1);
@@ -1238,13 +1250,13 @@ function setupDatePicker() {
     document.getElementById('confirm-date').addEventListener('click', () => {
         if (selectedDate) {
             const formattedDate = `${selectedDate.getMonth() + 1}/${selectedDate.getDate()}/${String(selectedDate.getFullYear()).slice(-2)}`;
-            addTag(`LDA ${formattedDate}`, currentMode);
+            addTag(`LDA ${formattedDate}`, activeTaggingMode);
             document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.add('hidden');
         }
     });
 
     window.promptForLdaDate = (mode) => {
-        currentMode = mode;
+        activeTaggingMode = mode;
         selectedDate = null;
         document.getElementById('confirm-date').disabled = true;
         renderCalendar(new Date());
@@ -1505,6 +1517,54 @@ async function handleUpdateComment() {
 
 
 // --- END: Comment Editing Functions ---
+
+// --- START: DNC Functions ---
+
+function setupDncModal() {
+    const cancelButton = document.getElementById(CONSTANTS.CANCEL_DNC_BUTTON);
+    cancelButton.addEventListener('click', () => {
+        document.getElementById(CONSTANTS.DNC_TYPE_MODAL).classList.add('hidden');
+    });
+}
+
+function promptForDncType(mode) {
+    activeTaggingMode = mode;
+    const modal = document.getElementById(CONSTANTS.DNC_TYPE_MODAL);
+    const container = document.getElementById(CONSTANTS.DNC_OPTIONS_CONTAINER);
+    container.innerHTML = ''; // Clear previous options
+
+    const contactMethods = [
+        { name: 'Phone', value: document.getElementById(CONSTANTS.PRIMARY_PHONE_DISPLAY).textContent },
+        { name: 'Other Phone', value: document.getElementById(CONSTANTS.OTHER_PHONE_DISPLAY).textContent },
+        { name: 'Email', value: document.getElementById(CONSTANTS.STUDENT_EMAIL_DISPLAY).textContent },
+        { name: 'All', value: 'All Contact Methods' }
+    ];
+
+    contactMethods.forEach(method => {
+        if (method.value && method.value !== 'N/A') {
+            const button = document.createElement('button');
+            button.className = 'block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md border';
+            button.innerHTML = `<span class="font-bold">${method.name}:</span> ${method.value}`;
+            button.onclick = () => addDncTag(method.name);
+            container.appendChild(button);
+        }
+    });
+
+    modal.classList.remove('hidden');
+    document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+}
+
+function addDncTag(dncType) {
+    let tagName = 'DNC';
+    if (dncType !== 'All') {
+        tagName += ` - ${dncType}`;
+    }
+    addTag(tagName, activeTaggingMode);
+    document.getElementById(CONSTANTS.DNC_TYPE_MODAL).classList.add('hidden');
+}
+
+
+// --- END: DNC Functions ---
 
 
 // --- START: Code moved from commands.js ---
