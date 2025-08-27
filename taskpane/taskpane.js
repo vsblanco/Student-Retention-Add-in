@@ -1,6 +1,6 @@
 /*
  * This file contains the logic for the Task Pane UI.
- * It is loaded by taskpane.html.
+ * It is loaded by taskpane.html. yes
  */
 
 const CONSTANTS = {
