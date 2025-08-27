@@ -64,7 +64,7 @@ const CONSTANTS = {
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
-    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete"], // Phrases that trigger auto-highlight
+    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work"], // Phrases that trigger auto-highlight
     COLUMN_MAPPINGS: {
         name: ["studentname", "student name"],
         id: ["student id", "studentnumber", "student identifier"],
