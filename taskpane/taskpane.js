@@ -92,6 +92,7 @@ const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
+    { name: 'Contacted', bg: 'bg-yellow-100', text: 'text-yellow-800', hidden: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
@@ -1593,6 +1594,13 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
                 
                 let tagsToSave = "Outreach";
+                const lowerCommentText = commentText.toLowerCase();
+
+                // Check for highlight/contacted triggers
+                if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
+                    tagsToSave += ', Contacted';
+                }
+
                 const date = parseDateFromText(commentText);
                 if (date) {
                     const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
