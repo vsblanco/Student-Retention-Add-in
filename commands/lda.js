@@ -85,7 +85,7 @@ async function processCreateLdaMessage(arg) {
  * Creates a new worksheet with today's date for LDA, populated with filtered and sorted data from the Master List.
  */
 async function handleCreateLdaSheet() {
-    console.log("[DEBUG] Starting handleCreateLdaSheet v17");
+    console.log("[DEBUG] Starting handleCreateLdaSheet v18");
     try {
         const settings = await getSettings();
         const { daysOutFilter, includeFailingList, ldaColumns, hideLeftoverColumns, includeLdaTagFollowup } = settings.createlda;
@@ -106,9 +106,9 @@ async function handleCreateLdaSheet() {
             
             let historySheet, historyRange, historyData;
             const ldaFollowUpMap = new Map();
-            const dncPhoneMap = new Map(); // Map for DNC - Phone students
+            const dncPhoneMap = new Map();
+            const dncOtherPhoneMap = new Map();
 
-            // Always try to get history sheet for DNC check, even if LDA followup is off
             try {
                 historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
                 historyRange = historySheet.getUsedRange();
@@ -131,7 +131,6 @@ async function handleCreateLdaSheet() {
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
 
-                    // Iterate forwards to catch all DNC tags, and backwards for most recent LDA
                     for (let i = 1; i < historyData.length; i++) {
                         const row = historyData[i];
                         const studentId = row[histIdCol];
@@ -140,9 +139,13 @@ async function handleCreateLdaSheet() {
                             if (tags.includes('dnc - phone')) {
                                 dncPhoneMap.set(studentId, true);
                             }
+                            if (tags.includes('dnc - other phone')) {
+                                dncOtherPhoneMap.set(studentId, true);
+                            }
                         }
                     }
                     console.log(`[DEBUG] Found ${dncPhoneMap.size} students with 'DNC - Phone' tags.`);
+                    console.log(`[DEBUG] Found ${dncOtherPhoneMap.size} students with 'DNC - Other Phone' tags.`);
 
                     if (includeLdaTagFollowup) {
                         for (let i = historyData.length - 1; i > 0; i--) { // Iterate backwards to get the most recent
@@ -245,13 +248,14 @@ async function handleCreateLdaSheet() {
                 originalHeaders,
                 valueToColorMap,
                 ldaFollowUpMap,
-                dncPhoneMap // Pass DNC map
+                dncPhoneMap,
+                dncOtherPhoneMap
             });
             
             if (includeFailingList) {
                 console.log("[DEBUG] includeFailingList is true, creating failing list.");
                 const nextStartRow = ldaTableEndRow > 0 ? ldaTableEndRow + 2 : 3;
-                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncPhoneMap);
+                await createFailingListTable(context, newSheet, sheetName, nextStartRow, dataRowsWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncPhoneMap, dncOtherPhoneMap);
             }
             
         });
@@ -272,7 +276,7 @@ async function handleCreateLdaSheet() {
     }
 }
 
-async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncPhoneMap) {
+async function createFailingListTable(context, sheet, sheetName, startRow, masterDataWithIndex, masterFormulas, ldaColumns, hideLeftoverColumns, originalHeaders, daysOutColIdx, valueToColorMap, ldaFollowUpMap, dncPhoneMap, dncOtherPhoneMap) {
     console.log("[DEBUG] Creating failing list table.");
     const originalLCHeaders = originalHeaders.map(h => String(h || '').toLowerCase());
     const gradeColIdx = findColumnIndex(originalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
@@ -312,7 +316,8 @@ async function createFailingListTable(context, sheet, sheetName, startRow, maste
             originalHeaders,
             valueToColorMap,
             ldaFollowUpMap,
-            dncPhoneMap // Pass DNC map
+            dncPhoneMap,
+            dncOtherPhoneMap
         });
     }
 }
@@ -388,7 +393,8 @@ async function createAndFormatTable(context, options) {
         originalHeaders,
         valueToColorMap,
         ldaFollowUpMap,
-        dncPhoneMap // Get DNC map
+        dncPhoneMap,
+        dncOtherPhoneMap
     } = options;
 
     let finalHeaders;
@@ -483,10 +489,30 @@ async function createAndFormatTable(context, options) {
                     }
                 }
             } else {
-                console.warn("[DEBUG] Could not find 'Primary Phone' column in the final table to apply DNC highlights.");
+                console.warn("[DEBUG] Could not find 'Phone' column in the final table to apply DNC highlights.");
             }
         }
-        // --- End DNC Phone Highlighting ---
+        
+        // --- DNC Other Phone Highlighting ---
+        if (dncOtherPhoneMap && dncOtherPhoneMap.size > 0) {
+            console.log(`[DEBUG] Applying ${dncOtherPhoneMap.size} DNC other phone highlights.`);
+            const finalLCHeaders = finalHeaders.map(h => h.toLowerCase());
+            const otherPhoneColIdxInTable = findColumnIndex(finalLCHeaders, CONSTANTS.COLUMN_MAPPINGS.otherPhone);
+            
+            if (otherPhoneColIdxInTable !== -1) {
+                for (let i = 0; i < dataRows.length; i++) {
+                    const studentId = dataRows[i].row[studentNumberColIdx];
+                    if (studentId && dncOtherPhoneMap.has(studentId)) {
+                        const cellToColor = table.getDataBodyRange().getCell(i, otherPhoneColIdxInTable);
+                        cellToColor.format.fill.color = "#FFC7CE"; // Light Red
+                        cellToColor.format.font.color = "#9C0006"; // Dark Red
+                        cellToColor.format.font.strikethrough = true;
+                    }
+                }
+            } else {
+                console.warn("[DEBUG] Could not find 'Other Phone' column in the final table to apply DNC highlights.");
+            }
+        }
 
         if (valueToColorMap.size > 0) {
             const assignedColIdxInTable = findColumnIndex(finalHeaders.map(h => h.toLowerCase()), CONSTANTS.COLUMN_MAPPINGS.assigned);
