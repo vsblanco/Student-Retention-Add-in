@@ -479,10 +479,11 @@ async function createAndFormatTable(context, options) {
                         const cellToColor = table.getDataBodyRange().getCell(i, phoneColIdxInTable);
                         cellToColor.format.fill.color = "#FFC7CE"; // Light Red
                         cellToColor.format.font.color = "#9C0006"; // Dark Red
+                        cellToColor.format.font.strikethrough = true;
                     }
                 }
             } else {
-                console.warn("[DEBUG] Could not find 'Phone' column in the final table to apply DNC highlights.");
+                console.warn("[DEBUG] Could not find 'Primary Phone' column in the final table to apply DNC highlights.");
             }
         }
         // --- End DNC Phone Highlighting ---
