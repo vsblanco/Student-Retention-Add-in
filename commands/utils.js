@@ -25,7 +25,8 @@ export const CONSTANTS = {
         assigned: ["assigned"],
         programVersion: ["programversion", "program version"],
         courseMissingAssignments: ["course missing assignments"],
-        courseZeroAssignments: ["course zero assignments"]
+        courseZeroAssignments: ["course zero assignments"],
+        primaryPhone: ["primary phone", "phone"]
     }
 };
 
