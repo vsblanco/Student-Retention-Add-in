@@ -90,6 +90,7 @@ let smartLdaTag = null; // To track the automatically added LDA tag
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
+    { name: 'Note', bg: 'bg-green-100', text: 'text-green-800' },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
@@ -800,8 +801,16 @@ async function displayStudentHistory(studentId) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today);
-                const regularComments = comments.filter(c => !c.ldaDate || c.ldaDate < today);
+                const noteComments = comments.filter(c => c.tag && c.tag.toLowerCase().includes('note'));
+                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today && !noteComments.includes(c));
+                const regularComments = comments.filter(c => !noteComments.includes(c) && !priorityComments.includes(c));
+
+                // Sort note comments by timestamp (most recent first)
+                noteComments.sort((a, b) => {
+                    const dateA = parseDate(a.timestamp) || 0;
+                    const dateB = parseDate(b.timestamp) || 0;
+                    return dateB - dateA;
+                });
 
                 // Sort priority comments by LDA date, ascending (soonest first)
                 priorityComments.sort((a, b) => a.ldaDate - b.ldaDate);
@@ -813,13 +822,21 @@ async function displayStudentHistory(studentId) {
                     return dateB - dateA;
                 });
 
-                const sortedComments = [...priorityComments, ...regularComments];
+                const sortedComments = [...noteComments, ...priorityComments, ...regularComments];
                 // --- End Sorting Logic ---
 
                 let html = '<ul class="space-y-4">';
                 sortedComments.forEach(comment => {
-                    const isPriority = comment.ldaDate && comment.ldaDate >= today;
-                    const bgColor = isPriority ? 'bg-orange-100' : 'bg-gray-100';
+                    const isNote = comment.tag && comment.tag.toLowerCase().includes('note');
+                    const isPriority = !isNote && comment.ldaDate && comment.ldaDate >= today;
+                    
+                    let bgColor = 'bg-gray-100'; // Default
+                    if (isNote) {
+                        bgColor = 'bg-green-100';
+                    } else if (isPriority) {
+                        bgColor = 'bg-orange-100';
+                    }
+
                     let displayText = comment.text;
                     if (isPriority) {
                         displayText = highlightDateInText(comment.text);
