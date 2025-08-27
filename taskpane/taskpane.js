@@ -110,7 +110,7 @@ let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edi
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
-    { name: 'DNC', bg: 'bg-gray-700', text: 'text-red-500', requiresPopup: true },
+    { name: 'DNC', bg: 'bg-red-500', text: 'text-black', requiresPopup: true },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
@@ -1835,3 +1835,4 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
         }
     });
 }
+// --- END: Code moved from commands.js ---
