@@ -1459,7 +1459,7 @@ async function onWorksheetChanged(eventArgs) {
         if (eventArgs.source !== Excel.EventSource.local) return;
         if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") return;
 
-        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const sheet = context.workbook.worksheets.getItem(eventArgs.worksheetId);
         const changedRange = sheet.getRange(eventArgs.address);
         
         const headerRange = sheet.getRange("1:1").getUsedRange(true);
