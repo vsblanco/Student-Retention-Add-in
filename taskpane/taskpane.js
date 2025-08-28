@@ -976,35 +976,34 @@ function setupTaggingUI(mode) {
 function renderTagPills(mode) {
     const isEdit = mode === 'edit';
     const container = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_PILLS_CONTAINER : CONSTANTS.TAG_PILLS_CONTAINER);
-    const placeholder = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_PLACEHOLDER : CONSTANTS.TAG_PLACEHOLDER);
     const tags = isEdit ? editCommentTags : newCommentTags;
 
-    if (!container || !placeholder) return;
+    if (!container) return;
 
+    // Clear existing pills, but not the button container
     container.querySelectorAll('.tag-pill').forEach(pill => pill.remove());
 
-    if (tags.length === 0) {
-        placeholder.classList.remove('hidden');
-    } else {
-        placeholder.classList.add('hidden');
-        tags.forEach(tagName => {
-            const tagPrefix = tagName.split(' ')[0];
-            const tagInfo = availableTags.find(t => t.name === tagPrefix) || { bg: 'bg-gray-200', text: 'text-gray-800' };
-            const pill = document.createElement('span');
-            pill.className = `tag-pill px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
-            pill.textContent = tagName;
+    // The button container is now the last child, so we insert before it
+    const buttonContainer = container.querySelector('.relative');
 
-            const removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.innerHTML = '&times;';
-            removeButton.className = 'font-bold';
-            removeButton.onclick = () => removeTag(tagName, mode);
+    tags.forEach(tagName => {
+        const tagPrefix = tagName.split(' ')[0];
+        const tagInfo = availableTags.find(t => t.name === tagPrefix) || { bg: 'bg-gray-200', text: 'text-gray-800' };
+        const pill = document.createElement('span');
+        pill.className = `tag-pill px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${tagInfo.bg} ${tagInfo.text}`;
+        pill.textContent = tagName;
 
-            pill.appendChild(removeButton);
-            container.appendChild(pill);
-        });
-    }
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.innerHTML = '&times;';
+        removeButton.className = 'font-bold';
+        removeButton.onclick = () => removeTag(tagName, mode);
+
+        pill.appendChild(removeButton);
+        container.insertBefore(pill, buttonContainer);
+    });
 }
+
 
 function populateTagDropdown(mode) {
     const isEdit = mode === 'edit';
