@@ -162,8 +162,8 @@
                         <button id="add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
                         </button>
-                        <!-- MODIFIED: Removed Tailwind classes and added 'glass-dropdown' -->
-                        <div id="tag-dropdown" class="glass-dropdown absolute bottom-full right-0 mb-2 w-48 rounded-lg z-20 p-2">
+                        <!-- MODIFIED: Changed positioning to appear below the button -->
+                        <div id="tag-dropdown" class="glass-dropdown absolute top-full right-0 mt-2 w-48 rounded-lg z-20 p-2">
                             <!-- Dropdown content populated by JS -->
                         </div>
                     </div>
@@ -224,8 +224,8 @@
                 <button id="edit-add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
                 </button>
-                <!-- MODIFIED: Removed Tailwind classes and added 'glass-dropdown' -->
-                <div id="edit-tag-dropdown" class="glass-dropdown absolute bottom-full right-0 mb-2 w-48 rounded-lg z-20 p-2"></div>
+                <!-- MODIFIED: Changed positioning to appear below the button -->
+                <div id="edit-tag-dropdown" class="glass-dropdown absolute top-full right-0 mt-2 w-48 rounded-lg z-20 p-2"></div>
             </div>
             <textarea id="edit-comment-input" class="w-full p-2 border rounded-md" rows="4"></textarea>
             <div class="flex justify-between items-center mt-2">
