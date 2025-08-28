@@ -24,7 +24,7 @@
             transition: opacity 0.5s;
         }
 
-        /* --- New styles for Liquid Glass Dropdown --- */
+        /* --- Styles for Animations --- */
         @keyframes fallDown {
             from {
                 opacity: 0;
@@ -35,16 +35,24 @@
                 transform: translateY(0);
             }
         }
+        
+        @keyframes fallIn {
+            from {
+                opacity: 0;
+                transform: translateY(-15px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
 
         .glass-dropdown {
-            /* Glass effect */
             background: rgba(255, 255, 255, 0.3);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.18);
             box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
-            
-            /* Base styles for hiding/showing */
             opacity: 0;
             visibility: hidden;
             transform: translateY(-10px);
@@ -59,20 +67,25 @@
             pointer-events: auto;
         }
         
-        /* Staggered animation for items */
         .glass-dropdown.show a {
             animation: fallDown 0.3s ease-out forwards;
             animation-delay: calc(var(--i, 0) * 40ms);
-            opacity: 0; /* Start hidden for animation */
+            opacity: 0;
+        }
+        
+        /* MODIFIED: Animation for user selection buttons */
+        #user-selection-modal.show #user-buttons-container button {
+            animation: fallIn 0.4s ease-out forwards;
+            animation-delay: calc(var(--i, 0) * 60ms);
+            opacity: 0;
         }
     </style>
 </head>
 <body class="bg-gray-50">
-    <div id="main-content" class="h-screen flex flex-col">
+    <div id="main-content" class="h-screen flex-col hidden"> <!-- MODIFIED: Hidden by default -->
         <!-- Header with Student Info -->
         <div class="p-4 bg-white border-b border-gray-200">
             <div class="flex items-center justify-between space-x-4">
-                <!-- Left side: Avatar and Name -->
                 <div class="flex items-center space-x-4">
                     <div id="student-avatar" class="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold">--</div>
                     <div>
@@ -80,7 +93,6 @@
                         <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block">Unassigned</span>
                     </div>
                 </div>
-                <!-- Right side: Stat blocks -->
                 <div class="flex space-x-2">
                     <div id="days-out-stat-block" class="p-2 text-center rounded-lg bg-gray-200 text-gray-800 w-20">
                         <div class="text-xl font-bold" id="days-out-display">--</div>
@@ -107,7 +119,6 @@
         <div class="flex-grow overflow-y-auto">
             <!-- Details Panel -->
             <div id="panel-details" class="p-4 space-y-4">
-                <!-- Contact Info -->
                 <div class="space-y-3">
                     <div id="copy-student-id" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
                         <label class="text-xs text-gray-500">Student ID</label>
@@ -177,7 +188,6 @@
                     </div>
                 </div>
 
-                 <!-- New Comment Section -->
                 <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
                     <div id="tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
                         <div class="relative">
@@ -202,20 +212,17 @@
         </div>
     </div>
     
-    <!-- Modals -->
-    <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 class="text-lg font-medium text-gray-900">Commenting As</h3>
-            <div class="mt-2">
-                <select id="user-selection-dropdown" class="w-full p-2 border rounded-md"></select>
-            </div>
-            <div class="mt-4 flex justify-end">
-                <button id="cancel-user-button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md mr-2 hover:bg-gray-300">Cancel</button>
-                <button id="confirm-user-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Confirm</button>
+    <!-- MODIFIED: User Selection Modal with Buttons -->
+    <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-medium text-gray-900 text-center mb-4">Who is commenting?</h3>
+            <div id="user-buttons-container" class="space-y-2">
+                <!-- User buttons will be inserted here by JS -->
             </div>
         </div>
     </div>
     
+    <!-- Other Modals -->
     <div id="date-picker-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-72">
             <div class="flex justify-between items-center mb-2">
