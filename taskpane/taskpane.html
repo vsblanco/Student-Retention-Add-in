@@ -155,16 +155,16 @@
 
                  <!-- New Comment Section (now at the top) -->
                 <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
-                    <div class="flex items-center gap-2 mb-2" id="tag-pills-container">
-                        <span id="tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
-                    </div>
-                    <div class="relative">
-                        <button id="add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
-                        </button>
-                        <!-- MODIFIED: Changed positioning to appear below the button -->
-                        <div id="tag-dropdown" class="glass-dropdown absolute top-full right-0 mt-2 w-48 rounded-lg z-20 p-2">
-                            <!-- Dropdown content populated by JS -->
+                    <!-- MODIFIED: Button moved here, placeholder removed -->
+                    <div id="tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
+                        <!-- Tag pills will be rendered here by JS -->
+                        <div class="relative">
+                            <button id="add-tag-button" type="button" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
+                                Insert Tag
+                            </button>
+                            <div id="tag-dropdown" class="glass-dropdown absolute top-full left-0 mt-2 w-48 rounded-lg z-20 p-2">
+                                <!-- Dropdown content populated by JS -->
+                            </div>
                         </div>
                     </div>
                     <textarea id="new-comment-input" class="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="Add a new comment..."></textarea>
@@ -217,15 +217,15 @@
     <div id="edit-comment-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-96">
             <h3 class="text-lg font-medium text-gray-900 mb-2">Edit Comment</h3>
-            <div class="flex items-center gap-2 mb-2" id="edit-tag-pills-container">
-                <span id="edit-tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
-            </div>
-             <div class="relative">
-                <button id="edit-add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
-                </button>
-                <!-- MODIFIED: Changed positioning to appear below the button -->
-                <div id="edit-tag-dropdown" class="glass-dropdown absolute top-full right-0 mt-2 w-48 rounded-lg z-20 p-2"></div>
+            <!-- MODIFIED: Button moved here, placeholder removed -->
+            <div id="edit-tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
+                <!-- Tag pills will be rendered here by JS -->
+                 <div class="relative">
+                    <button id="edit-add-tag-button" type="button" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
+                        Insert Tag
+                    </button>
+                    <div id="edit-tag-dropdown" class="glass-dropdown absolute top-full left-0 mt-2 w-48 rounded-lg z-20 p-2"></div>
+                </div>
             </div>
             <textarea id="edit-comment-input" class="w-full p-2 border rounded-md" rows="4"></textarea>
             <div class="flex justify-between items-center mt-2">
