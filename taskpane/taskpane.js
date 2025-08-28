@@ -306,29 +306,24 @@ function setupTabs() {
  */
 function switchTab(tabId) {
     const tabDetails = document.getElementById(CONSTANTS.TAB_DETAILS);
-    // MODIFIED: Corrected the typo here
     const tabHistory = document.getElementById(CONSTANTS.TAB_HISTORY);
     const panelDetails = document.getElementById(CONSTANTS.PANEL_DETAILS);
     const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
 
     if (tabId === CONSTANTS.TAB_DETAILS) {
-        // Activate Details Tab
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         panelDetails.classList.remove("hidden");
 
-        // Deactivate History Tab
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelHistory.classList.add("hidden");
     } else { // Switching to History
-        // Activate History Tab
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         panelHistory.classList.remove("hidden");
+        panelHistory.classList.add("flex"); // Ensure flex is on for sticky header
 
-        // Deactivate Details Tab
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelDetails.classList.add("hidden");
         
-        // Logic to populate history if needed
         if (currentStudentId) {
             displayStudentHistory(currentStudentId);
         } else {
@@ -1646,64 +1641,72 @@ async function applyContactedHighlight(rowIndex) {
 
 
 async function onWorksheetChanged(eventArgs) {
-    if (!sessionCommentUser) {
-        console.log("Outreach change ignored: No session user selected.");
-        return;
-    }
+    // MODIFIED: Rewritten for clarity and to fix bugs
+    try {
+        await Excel.run(async (context) => {
+            if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
+                return;
+            }
 
-    await Excel.run(async (context) => {
-        if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) return;
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const changedRange = sheet.getRange(eventArgs.address);
+            const headerRange = sheet.getRange("1:1").getUsedRange(true);
 
-        const sheet = context.workbook.worksheets.getActiveWorksheet();
-        const changedRange = sheet.getRange(eventArgs.address);
-        
-        const headerRange = sheet.getRange("1:1").getUsedRange(true);
-        headerRange.load("values, columnCount");
-        changedRange.load("address, rowIndex, columnIndex, rowCount, columnCount, values, valuesBefore");
-        await context.sync();
-        
-        const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
-        const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
-        
-        if (outreachColIndex === -1) return;
+            changedRange.load("address, rowIndex, columnIndex, values, valuesBefore");
+            headerRange.load("values");
+            await context.sync();
 
-        if (changedRange.rowIndex > 0 && 
-            changedRange.columnIndex <= outreachColIndex && 
-            (changedRange.columnIndex + changedRange.columnCount - 1) >= outreachColIndex) {
+            const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
+            const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
 
-            const outreachColumnOffset = outreachColIndex - changedRange.columnIndex;
-            
-            const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, changedRange.rowCount, headerRange.columnCount);
+            if (outreachColIndex === -1 || changedRange.columnIndex !== outreachColIndex || changedRange.rowIndex === 0) {
+                return;
+            }
+
+            const newValue = (changedRange.values[0][0] || "").trim();
+            const oldValue = (changedRange.valuesBefore[0][0] || "").trim();
+
+            if (newValue === "" || newValue.toLowerCase() === oldValue.toLowerCase()) {
+                return;
+            }
+
+            const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, headers.length);
             studentInfoRange.load("values");
             await context.sync();
-            const allRowValues = studentInfoRange.values;
 
+            const studentRowValues = studentInfoRange.values[0];
             const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
             const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
 
-            if (studentIdColIndex === -1 || studentNameColIndex === -1) return;
-
-            for (let i = 0; i < changedRange.rowCount; i++) {
-                const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
-                const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ? String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
-
-                if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
-                    const studentId = allRowValues[i][studentIdColIndex];
-                    const studentName = allRowValues[i][studentNameColIndex];
-                    const rowIndex = changedRange.rowIndex + i;
-
-                    if (studentId && studentName) {
-                        await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
-                        const lowerNewValue = newValue.toLowerCase();
-                        if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
-                            console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
-                            await applyContactedHighlight(rowIndex);
-                        }
-                    }
-                }
+            if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+                return;
             }
-        }
-    }).catch(errorHandler);
+
+            const studentId = studentRowValues[studentIdColIndex];
+            const studentName = studentRowValues[studentNameColIndex];
+            const rowIndex = changedRange.rowIndex;
+
+            if (!studentId || !studentName) {
+                return;
+            }
+
+            if (!sessionCommentUser) {
+                console.log("Outreach change detected, but no user is selected. Prompting.");
+                pendingOutreachAction = { studentId, studentName, commentText: newValue, rowIndex };
+                promptForUserAndSubmit();
+                return;
+            }
+
+            await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
+            const lowerNewValue = newValue.toLowerCase();
+            if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
+                console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+                await applyContactedHighlight(rowIndex);
+            }
+        });
+    } catch (error) {
+        errorHandler(error);
+    }
 }
 
 
@@ -1763,7 +1766,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
 
             } else {
-                const newRowData = new Array(headers.length).fill("");
+                const newRowData = new Array(historyHeaders.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
                 if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
