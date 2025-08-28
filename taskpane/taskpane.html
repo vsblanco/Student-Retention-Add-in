@@ -77,7 +77,6 @@
                     <div id="student-avatar" class="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold">--</div>
                     <div>
                         <h2 id="student-name-display" class="text-lg font-bold text-gray-800">Select a Student</h2>
-                        <!-- MODIFIED: "Assigned To" badge is now nested under the name -->
                         <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block">Unassigned</span>
                     </div>
                 </div>
@@ -110,7 +109,6 @@
             <div id="panel-details" class="p-4 space-y-4">
                 <!-- Contact Info -->
                 <div class="space-y-3">
-                    <!-- MODIFIED: Student ID is now primarily displayed here -->
                     <div id="copy-student-id" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
                         <label class="text-xs text-gray-500">Student ID</label>
                         <p class="font-semibold text-gray-800" id="student-id-display-copy">N/A</p>
@@ -157,6 +155,11 @@
                     </div>
                 </div>
 
+                <!-- MODIFIED: Added Tag Filter Container -->
+                <div id="tag-filter-container" class="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-200 mb-2">
+                    <!-- Tag filter buttons will be rendered here by JS -->
+                </div>
+
                 <div id="search-bar" class="hidden relative">
                     <input type="text" id="search-input" class="w-full p-2 pl-8 border rounded-md" placeholder="Search comments...">
                     <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
@@ -167,16 +170,14 @@
                     </button>
                 </div>
 
-                 <!-- New Comment Section (now at the top) -->
+                 <!-- New Comment Section -->
                 <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
                     <div id="tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
-                        <!-- Tag pills will be rendered here by JS -->
                         <div class="relative">
                             <button id="add-tag-button" type="button" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
                                 Insert Tag
                             </button>
                             <div id="tag-dropdown" class="glass-dropdown absolute top-full left-0 mt-2 w-48 rounded-lg z-20 p-2">
-                                <!-- Dropdown content populated by JS -->
                             </div>
                         </div>
                     </div>
@@ -194,7 +195,7 @@
         </div>
     </div>
     
-    <!-- User Selection Modal -->
+    <!-- Modals -->
     <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <h3 class="text-lg font-medium text-gray-900">Commenting As</h3>
@@ -208,7 +209,6 @@
         </div>
     </div>
     
-    <!-- Date Picker Modal -->
     <div id="date-picker-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-72">
             <div class="flex justify-between items-center mb-2">
@@ -216,9 +216,7 @@
                 <h3 id="month-year" class="font-bold"></h3>
                 <button id="next-month" class="p-1 rounded-full hover:bg-gray-200">&gt;</button>
             </div>
-            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm">
-                <!-- Calendar will be rendered here by JS -->
-            </div>
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
             <div class="flex justify-end mt-4">
                 <button id="cancel-date" class="px-3 py-1 bg-gray-200 rounded mr-2">Cancel</button>
                 <button id="confirm-date" class="px-3 py-1 bg-blue-600 text-white rounded disabled:bg-gray-400">OK</button>
@@ -226,12 +224,10 @@
         </div>
     </div>
 
-    <!-- Edit Comment Modal -->
     <div id="edit-comment-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-96">
             <h3 class="text-lg font-medium text-gray-900 mb-2">Edit Comment</h3>
             <div id="edit-tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
-                <!-- Tag pills will be rendered here by JS -->
                  <div class="relative">
                     <button id="edit-add-tag-button" type="button" class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors">
                         Insert Tag
@@ -250,20 +246,16 @@
         </div>
     </div>
     
-    <!-- DNC Type Modal -->
     <div id="dnc-type-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-96">
             <h3 class="text-lg font-medium text-gray-900 mb-2">Select DNC Type</h3>
-            <div id="dnc-options-container" class="space-y-2">
-                <!-- DNC options will be rendered here by JS -->
-            </div>
+            <div id="dnc-options-container" class="space-y-2"></div>
             <div class="flex justify-end mt-4">
                 <button id="cancel-dnc-button" class="px-4 py-2 bg-gray-200 rounded-md">Cancel</button>
             </div>
         </div>
     </div>
     
-    <!-- Delete Confirmation Modal -->
     <div id="delete-confirm-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div class="mt-3 text-center">
@@ -291,7 +283,6 @@
     </div>
 
 
-    <!-- Comment Context Menu -->
     <div id="comment-context-menu" class="hidden fixed bg-white border rounded-md shadow-lg z-50 text-sm">
         <button id="edit-comment-btn" class="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Edit Comment</button>
         <button id="delete-comment-btn" class="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 disabled:text-gray-400 disabled:hover:bg-transparent">Delete Comment</button>
