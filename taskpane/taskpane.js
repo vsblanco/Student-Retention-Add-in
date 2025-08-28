@@ -19,7 +19,7 @@ const CONSTANTS = {
     STUDENT_AVATAR: "student-avatar",
     STUDENT_NAME_DISPLAY: "student-name-display",
     ASSIGNED_TO_BADGE: "assigned-to-badge",
-    STUDENT_ID_DISPLAY: "student-id-display",
+    STUDENT_ID_DISPLAY_COPY: "student-id-display-copy",
     LAST_LDA_DISPLAY: "last-lda-display",
     DAYS_OUT_DISPLAY: "days-out-display",
     DAYS_OUT_STAT_BLOCK: "days-out-stat-block",
@@ -61,11 +61,11 @@ const CONSTANTS = {
     DELETE_CONFIRM_MODAL: "delete-confirm-modal",
     CONFIRM_DELETE_BUTTON: "confirm-delete-button",
     CANCEL_DELETE_BUTTON: "cancel-delete-button",
-    // MODIFIED: Added Search constants
     SEARCH_HISTORY_BUTTON: "search-history-button",
     SEARCH_BAR: "search-bar",
     SEARCH_INPUT: "search-input",
     CLEAR_SEARCH_BUTTON: "clear-search-button",
+    TAG_FILTER_CONTAINER: "tag-filter-container", // MODIFIED: Added constant for tag filter
 
 
     // Settings Keys
@@ -73,7 +73,7 @@ const CONSTANTS = {
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
-    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work","hanged up"], // Phrases that trigger auto-highlight
+    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work","hanged up"],
     COLUMN_MAPPINGS: {
         name: ["studentname", "student name"],
         id: ["student id", "studentnumber", "student identifier"],
@@ -98,23 +98,24 @@ const CONSTANTS = {
 };
 
 
-let lastSelectedRow = -1; // Variable to track the last selected row index
-let currentStudentId = null; // Variable to store the currently selected student's ID
-let currentStudentName = null; // Variable to store the currently selected student's name
-let currentGradebookLink = null; // Variable to store the gradebook link
-let assignedColorMap = {}; // To cache colors for assigned people
-let currentUserName = "Unknown User"; // Variable to store the current user's name
-let settings = {}; // To store all add-in settings
+let lastSelectedRow = -1;
+let currentStudentId = null;
+let currentStudentName = null;
+let currentGradebookLink = null;
+let assignedColorMap = {};
+let currentUserName = "Unknown User";
+let settings = {};
 let welcomeDialog = null;
-let sessionCommentUser = null; // Cache the user for the current session
-let pendingOutreachAction = null; // Cache outreach data while waiting for user selection
-let newCommentTags = []; // To store tags for the new comment
-let selectedDate = null; // For the date picker
-let smartLdaTag = null; // To track the automatically added LDA tag
-let allComments = []; // Cache all comments for the selected student to enable editing
-let activeCommentRowIndex = null; // Store the sheet row index of the comment being edited
-let editCommentTags = []; // Tags for the comment being edited
-let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edit')
+let sessionCommentUser = null;
+let pendingOutreachAction = null;
+let newCommentTags = [];
+let selectedDate = null;
+let smartLdaTag = null;
+let allComments = [];
+let activeCommentRowIndex = null;
+let editCommentTags = [];
+let activeTaggingMode = 'new';
+let activeFilterTags = []; // MODIFIED: Added state for active filters
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', description: 'For high-priority items needing immediate attention.' },
@@ -126,7 +127,6 @@ const availableTags = [
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
 
-// The initialize function must be run each time a new page is loaded.
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     loadUserSettings();
@@ -182,7 +182,8 @@ function initializeAddIn() {
     setupCommentEditing();
     setupDncModal();
     setupDeleteConfirmation();
-    setupSearch(); // MODIFIED: Added search setup
+    setupSearch(); 
+    setupTagFilters(); // MODIFIED: Added tag filter setup
 
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -468,7 +469,7 @@ async function onSelectionChange() {
             const studentAvatar = document.getElementById(CONSTANTS.STUDENT_AVATAR);
             const studentNameDisplay = document.getElementById(CONSTANTS.STUDENT_NAME_DISPLAY);
             const assignedToBadge = document.getElementById(CONSTANTS.ASSIGNED_TO_BADGE);
-            const studentIdDisplay = document.getElementById(CONSTANTS.STUDENT_ID_DISPLAY);
+            const studentIdDisplayCopy = document.getElementById(CONSTANTS.STUDENT_ID_DISPLAY_COPY);
             const lastLdaDisplay = document.getElementById(CONSTANTS.LAST_LDA_DISPLAY);
             const daysOutDisplay = document.getElementById(CONSTANTS.DAYS_OUT_DISPLAY);
             const daysOutStatBlock = document.getElementById(CONSTANTS.DAYS_OUT_STAT_BLOCK);
@@ -482,7 +483,7 @@ async function onSelectionChange() {
             const studentName = colIdx.name !== -1 ? rowData[colIdx.name] : "N/A";
             
             studentNameDisplay.textContent = studentName || "N/A";
-            studentIdDisplay.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
+            studentIdDisplayCopy.textContent = (colIdx.id !== -1 ? rowData[colIdx.id] : "N/A") || "N/A";
             
             const lastLdaValue = colIdx.lastLda !== -1 ? rowData[colIdx.lastLda] : null;
             lastLdaDisplay.textContent = formatExcelDate(lastLdaValue);
@@ -645,9 +646,7 @@ function setupCopyHandlers() {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('click', () => {
-                const displayEl = id === CONSTANTS.COPY_STUDENT_ID
-                    ? el.querySelector('#' + CONSTANTS.STUDENT_ID_DISPLAY)
-                    : el.querySelector('.font-semibold');
+                const displayEl = el.querySelector('.font-semibold');
                 if (displayEl) copyToClipboard(displayEl.textContent, el);
             });
         }
@@ -686,13 +685,12 @@ async function displayStudentHistory(studentId, searchTerm = '') {
     const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
     
-    if (searchTerm === '') { // Only reset allComments cache if not searching
-        allComments = [];
-    }
+    // Only fetch from sheet if we don't have the comments cached or if it's a new student
+    const needsFetch = allComments.length === 0 || (allComments.length > 0 && String(allComments[0].studentId) !== String(studentId));
 
     try {
         await Excel.run(async (context) => {
-            if (searchTerm === '' || allComments.length === 0) {
+            if (needsFetch) {
                 const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
                 const historyRange = historySheet.getUsedRange();
                 historyRange.load("values, rowIndex");
@@ -715,10 +713,12 @@ async function displayStudentHistory(studentId, searchTerm = '') {
                 const comments = [];
                 for (let i = 1; i < historyData.length; i++) {
                     const row = historyData[i];
-                    if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
+                    const currentId = row[idColIdx];
+                    if (currentId && String(currentId) === String(studentId)) {
                         const commentText = row[commentColIdx];
                         if (commentText && String(commentText).trim() !== "") {
                             const comment = {
+                                studentId: currentId,
                                 rowIndex: historyRange.rowIndex + i,
                                 text: commentText,
                                 tag: tagColIdx !== -1 ? row[tagColIdx] : null,
@@ -747,9 +747,20 @@ async function displayStudentHistory(studentId, searchTerm = '') {
             }
             
             let commentsToDisplay = allComments;
+
+            // Filter by active tags first
+            if (activeFilterTags.length > 0) {
+                commentsToDisplay = commentsToDisplay.filter(comment => {
+                    if (!comment.tag) return false;
+                    const commentTags = String(comment.tag).split(',').map(t => t.trim().split(' ')[0].toLowerCase());
+                    return activeFilterTags.some(filterTag => commentTags.includes(filterTag.toLowerCase()));
+                });
+            }
+
+            // Then filter by search term
             if (searchTerm) {
                 const lowerCaseSearchTerm = searchTerm.toLowerCase();
-                commentsToDisplay = allComments.filter(comment => 
+                commentsToDisplay = commentsToDisplay.filter(comment => 
                     String(comment.text).toLowerCase().includes(lowerCaseSearchTerm) ||
                     String(comment.tag).toLowerCase().includes(lowerCaseSearchTerm) ||
                     String(comment.createdBy).toLowerCase().includes(lowerCaseSearchTerm)
@@ -824,7 +835,7 @@ async function displayStudentHistory(studentId, searchTerm = '') {
                 historyContent.querySelectorAll('li').forEach(li => li.addEventListener('contextmenu', showContextMenu));
 
             } else {
-                historyContent.innerHTML = searchTerm 
+                historyContent.innerHTML = (searchTerm || activeFilterTags.length > 0)
                     ? '<p class="text-gray-500">No matching comments found.</p>'
                     : '<p class="text-gray-500">No history found for this student.</p>';
             }
@@ -970,6 +981,7 @@ async function executeSubmitComment(commentingUser) {
         smartLdaTag = null; 
         renderTagPills('new');
         populateTagDropdown('new');
+        allComments = []; // Invalidate cache
         await displayStudentHistory(currentStudentId);
 
         setTimeout(() => { statusDisplay.textContent = ""; }, 3000);
@@ -990,13 +1002,11 @@ function setupTaggingUI(mode) {
         event.stopPropagation();
         activeTaggingMode = mode;
         populateTagDropdown(mode);
-        // MODIFIED: Toggle 'show' class for animation
         tagDropdown.classList.toggle('show');
     });
 
     document.addEventListener('click', (event) => {
         if (!tagDropdown.contains(event.target) && !addTagButton.contains(event.target)) {
-            // MODIFIED: Remove 'show' class
             tagDropdown.classList.remove('show');
         }
     });
@@ -1012,10 +1022,8 @@ function renderTagPills(mode) {
 
     if (!container) return;
 
-    // Clear existing pills, but not the button container
     container.querySelectorAll('.tag-pill').forEach(pill => pill.remove());
 
-    // The button container is now the last child, so we insert before it
     const buttonContainer = container.querySelector('.relative');
 
     tags.forEach(tagName => {
@@ -1363,6 +1371,7 @@ async function handleUpdateComment() {
         status.textContent = "Updated successfully!";
         setTimeout(() => {
             modal.classList.add('hidden');
+            allComments = []; // Invalidate cache
             displayStudentHistory(currentStudentId);
         }, 1000);
 
@@ -1381,18 +1390,16 @@ async function handleDeleteComment() {
     try {
         await Excel.run(async (context) => {
             const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
-            // Note: Office JS API row indexes are 0-based relative to the worksheet, not the range.
             const rowToDelete = historySheet.getRangeByIndexes(activeCommentRowIndex, 0, 1, 1).getEntireRow();
             rowToDelete.delete(Excel.DeleteShiftDirection.up);
             await context.sync();
         });
         
-        console.log(`Successfully deleted row ${activeCommentRowIndex + 1}`);
-        await displayStudentHistory(currentStudentId); // Refresh the view
+        allComments = []; // Invalidate cache
+        await displayStudentHistory(currentStudentId);
 
     } catch (error) {
         console.error("Error deleting comment:", error);
-        // Optionally show an error to the user
     } finally {
         activeCommentRowIndex = null;
     }
@@ -1446,7 +1453,7 @@ function addDncTag(dncType) {
 
 // --- END: DNC Functions ---
 
-// --- START: Search Functions ---
+// --- START: Search and Filter Functions ---
 
 function setupSearch() {
     const searchButton = document.getElementById(CONSTANTS.SEARCH_HISTORY_BUTTON);
@@ -1475,7 +1482,51 @@ function setupSearch() {
     });
 }
 
-// --- END: Search Functions ---
+function setupTagFilters() {
+    const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
+    container.innerHTML = '';
+
+    availableTags.filter(tag => !tag.hidden).forEach(tag => {
+        const button = document.createElement('button');
+        button.className = `px-2 py-1 text-xs font-semibold rounded-full transition-all duration-150 opacity-50 hover:opacity-100 ${tag.bg} ${tag.text}`;
+        button.textContent = tag.name;
+        button.dataset.tagName = tag.name;
+
+        button.addEventListener('click', () => {
+            const tagName = button.dataset.tagName;
+            const index = activeFilterTags.indexOf(tagName);
+
+            if (index > -1) {
+                activeFilterTags.splice(index, 1);
+            } else {
+                activeFilterTags.push(tagName);
+            }
+            
+            renderTagFilters();
+            
+            if (currentStudentId) {
+                const searchTerm = document.getElementById(CONSTANTS.SEARCH_INPUT).value;
+                displayStudentHistory(currentStudentId, searchTerm);
+            }
+        });
+        container.appendChild(button);
+    });
+}
+
+function renderTagFilters() {
+    const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
+    container.querySelectorAll('button').forEach(button => {
+        if (activeFilterTags.includes(button.dataset.tagName)) {
+            button.classList.remove('opacity-50');
+            button.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
+        } else {
+            button.classList.add('opacity-50');
+            button.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500');
+        }
+    });
+}
+
+// --- END: Search and Filter Functions ---
 
 
 // --- START: Code moved from commands.js ---
@@ -1684,6 +1735,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
             if (studentId && String(studentId) === String(currentStudentId)) {
                 const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
                 if (panelHistory && !panelHistory.classList.contains("hidden")) {
+                    allComments = []; // Invalidate cache
                     setTimeout(() => displayStudentHistory(currentStudentId), 100);
                 }
             }
