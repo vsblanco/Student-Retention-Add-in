@@ -54,9 +54,13 @@ const CONSTANTS = {
     EDIT_COMMENT_STATUS: "edit-comment-status",
     COMMENT_CONTEXT_MENU: "comment-context-menu",
     EDIT_COMMENT_BTN: "edit-comment-btn",
+    DELETE_COMMENT_BTN: "delete-comment-btn",
     DNC_TYPE_MODAL: "dnc-type-modal",
     DNC_OPTIONS_CONTAINER: "dnc-options-container",
     CANCEL_DNC_BUTTON: "cancel-dnc-button",
+    DELETE_CONFIRM_MODAL: "delete-confirm-modal",
+    CONFIRM_DELETE_BUTTON: "confirm-delete-button",
+    CANCEL_DELETE_BUTTON: "cancel-delete-button",
 
 
     // Settings Keys
@@ -122,18 +126,15 @@ Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     loadUserSettings();
     
-    // Add listeners for the new user selection modal buttons
     const confirmUserButton = document.getElementById(CONSTANTS.CONFIRM_USER_BUTTON);
     if (confirmUserButton) {
         confirmUserButton.addEventListener('click', handleUserSelection);
     }
 
     if (sessionCommentUser) {
-        // If a user is already selected for the session, show the main content
         document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
         initializeAddIn();
     } else {
-        // Otherwise, prompt for a user first.
         promptForUserAndSubmit();
     }
   }
@@ -144,24 +145,20 @@ Office.onReady((info) => {
  * Initializes the main add-in functionality after a user has been selected.
  */
 function initializeAddIn() {
-    // By the time Office is ready, the DOM should be loaded as well.
     setupTabs();
-    setupCopyHandlers(); // Set up the copy-to-clipboard functionality
-    setupGradebookLinkHandler(); // Set up the gradebook link handler
+    setupCopyHandlers();
+    setupGradebookLinkHandler();
     
-    // Add event listener for the new comment button
     const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
     if (submitButton) {
         submitButton.addEventListener("click", submitNewComment);
     }
     
-    // Add event listener for the floating action button to toggle the new comment section
     const addCommentButton = document.getElementById(CONSTANTS.ADD_COMMENT_BUTTON);
     if (addCommentButton) {
         addCommentButton.addEventListener('click', () => {
             const commentSection = document.getElementById(CONSTANTS.NEW_COMMENT_SECTION);
             commentSection.classList.toggle('hidden');
-            // If the section is now visible, focus the input
             if (!commentSection.classList.contains('hidden')) {
                 document.getElementById(CONSTANTS.NEW_COMMENT_INPUT).focus();
             }
@@ -170,28 +167,17 @@ function initializeAddIn() {
     
     const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
     if (commentInput) {
-        // Add paste event listener to the comment input to automatically add the "Quote" tag
-        commentInput.addEventListener('paste', () => {
-            addTag('Quote', 'new');
-        });
-        // Add input event listener for smart LDA tag detection
+        commentInput.addEventListener('paste', () => addTag('Quote', 'new'));
         commentInput.addEventListener('input', handleCommentInputChange);
     }
 
-    // Initialize the tagging UI
     setupTaggingUI('new');
     setupTaggingUI('edit');
-    
-    // Initialize the date picker
     setupDatePicker();
-
-    // Initialize the comment editing UI
     setupCommentEditing();
-    
-    // Initialize the DNC modal
     setupDncModal();
+    setupDeleteConfirmation(); // New setup function for delete modal
 
-    // Add event handler for selection changes to update the task pane
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
         console.error("Failed to register selection change handler: " + result.error.message);
@@ -200,7 +186,6 @@ function initializeAddIn() {
       }
     });
     
-    // Add event handler for worksheet changes to catch outreach updates
     Excel.run(async (context) => {
       const worksheet = context.workbook.worksheets.getActiveWorksheet();
       worksheet.onChanged.add(onWorksheetChanged);
@@ -208,7 +193,6 @@ function initializeAddIn() {
       console.log("Worksheet onChanged event handler registered from taskpane.");
     }).catch(errorHandler);
 
-    // Run initial check
     onSelectionChange();
 }
 
@@ -226,27 +210,17 @@ function loadUserSettings() {
         }
     }
     
-    // Ensure userProfile object and userList exist
-    if (!settings.userProfile) {
-        settings.userProfile = { userList: [] };
-    }
-    if (!settings.userProfile.userList) {
-        settings.userProfile.userList = [];
-    }
-    if (!settings.taskpane) {
-        settings.taskpane = { smartNavigation: true };
-    }
+    if (!settings.userProfile) settings.userProfile = { userList: [] };
+    if (!settings.userProfile.userList) settings.userProfile.userList = [];
+    if (!settings.taskpane) settings.taskpane = { smartNavigation: true };
 
-    // Load user name from settings, fallback to Office context display name
     currentUserName = settings.userProfile.name || Office.context.displayName;
 
-    // Add the current user to the list if not already present, then save
     if (currentUserName && !settings.userProfile.userList.includes(currentUserName)) {
         settings.userProfile.userList.push(currentUserName);
         saveUserSettings();
     }
     
-    // Show welcome message if needed
     if (!settings.userProfile.hasSeenWelcomeMessage) {
         showWelcomeDialogIfNeeded();
     }
@@ -298,10 +272,7 @@ function processWelcomeDialogMessage(arg) {
         settings.userProfile.name = currentUserName;
         settings.userProfile.hasSeenWelcomeMessage = true;
 
-        // Add the new name to the user list if it's not already there
-        if (!settings.userProfile.userList) {
-            settings.userProfile.userList = [];
-        }
+        if (!settings.userProfile.userList) settings.userProfile.userList = [];
         if (!settings.userProfile.userList.includes(currentUserName)) {
             settings.userProfile.userList.push(currentUserName);
         }
@@ -407,28 +378,20 @@ function formatExcelDate(excelDate) {
     if (isNaN(excelDate) || excelDate === null || excelDate === "") {
         return "N/A";
     }
-    // Excel's epoch starts on 1900-01-01, but it incorrectly thinks 1900 is a leap year.
-    // The JavaScript epoch starts on 1970-01-01. The difference is 25569 days.
-    // The calculation correctly gives UTC milliseconds.
     const date = new Date((excelDate - 25569) * 86400 * 1000);
     
     if (isNaN(date.getTime())) {
         return "N/A";
     }
 
-    // Use UTC methods to avoid timezone shifts.
     const day = date.getUTCDate();
     const year = date.getUTCFullYear();
     const month = date.toLocaleString('default', { month: 'long', timeZone: 'UTC' });
 
     let daySuffix = 'th';
-    if (day === 1 || day === 21 || day === 31) {
-        daySuffix = 'st';
-    } else if (day === 2 || day === 22) {
-        daySuffix = 'nd';
-    } else if (day === 3 || day === 23) {
-        daySuffix = 'rd';
-    }
+    if (day === 1 || day === 21 || day === 31) daySuffix = 'st';
+    else if (day === 2 || day === 22) daySuffix = 'nd';
+    else if (day === 3 || day === 23) daySuffix = 'rd';
 
     return `${month} ${day}${daySuffix}, ${year}`;
 }
@@ -449,8 +412,6 @@ async function onSelectionChange() {
             
             await context.sync();
 
-            // --- Smart Navigation & Data Loading Logic ---
-            
             const headers = usedRange.values[0];
             const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
 
@@ -471,7 +432,6 @@ async function onSelectionChange() {
                 outreach: findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.outreach)
             };
 
-            // Smart Navigation: This runs on every selection change.
             if (settings.taskpane && settings.taskpane.smartNavigation !== false) {
                 const selectedCol = selectedRange.columnIndex;
                 if (selectedCol === colIdx.primaryPhone || selectedCol === colIdx.otherPhone || selectedCol === colIdx.outreach) {
@@ -481,10 +441,7 @@ async function onSelectionChange() {
                 }
             }
 
-            // Data Loading: This part only runs if the row has changed.
-            if (selectedRange.rowIndex === lastSelectedRow) {
-                return; 
-            }
+            if (selectedRange.rowIndex === lastSelectedRow) return; 
             lastSelectedRow = selectedRange.rowIndex;
 
             if (selectedRange.rowIndex < usedRange.rowIndex) {
@@ -495,7 +452,6 @@ async function onSelectionChange() {
 
             const rowDataIndex = lastSelectedRow - usedRange.rowIndex;
             if (rowDataIndex < 0 || rowDataIndex >= usedRange.values.length) {
-                console.error("Selected row is outside the bounds of the used range data.");
                 currentStudentId = null;
                 currentStudentName = null;
                 return;
@@ -538,15 +494,10 @@ async function onSelectionChange() {
             daysOutDisplay.textContent = (daysOut !== null && !isNaN(daysOut)) ? daysOut : "--";
             daysOutStatBlock.className = 'flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800';
             if (daysOut !== null && !isNaN(daysOut)) {
-                if (daysOut >= 14) {
-                    daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
-                } else if (daysOut > 10) {
-                    daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
-                } else if (daysOut > 5) {
-                    daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
-                } else {
-                    daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
-                }
+                if (daysOut >= 14) daysOutStatBlock.classList.add('bg-red-200', 'text-red-800');
+                else if (daysOut > 10) daysOutStatBlock.classList.add('bg-orange-200', 'text-orange-800');
+                else if (daysOut > 5) daysOutStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
+                else daysOutStatBlock.classList.add('bg-green-200', 'text-green-800');
             } else {
                 daysOutStatBlock.classList.add('bg-gray-200', 'text-gray-800');
             }
@@ -556,13 +507,9 @@ async function onSelectionChange() {
             if (grade !== null && !isNaN(grade)) {
                 const gradePercent = grade > 1 ? grade : grade * 100;
                 gradeDisplay.textContent = `${Math.round(gradePercent)}%`;
-                if (gradePercent >= 70) {
-                    gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
-                } else if (gradePercent >= 60) {
-                    gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
-                } else {
-                    gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
-                }
+                if (gradePercent >= 70) gradeStatBlock.classList.add('bg-green-200', 'text-green-800');
+                else if (gradePercent >= 60) gradeStatBlock.classList.add('bg-yellow-200', 'text-yellow-800');
+                else gradeStatBlock.classList.add('bg-red-200', 'text-red-800');
             } else {
                 gradeDisplay.textContent = 'N/A';
                 gradeStatBlock.classList.add('bg-gray-200', 'text-gray-800');
@@ -572,7 +519,6 @@ async function onSelectionChange() {
             currentStudentId = studentId;
             currentStudentName = studentName;
 
-            // Check for hyperlink formula first
             const gradeBookFormula = (colIdx.gradeBook !== -1 && rowFormulas) ? rowFormulas[colIdx.gradeBook] : null;
             const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
             const match = gradeBookFormula ? String(gradeBookFormula).match(hyperlinkRegex) : null;
@@ -582,7 +528,6 @@ async function onSelectionChange() {
                 gradeStatBlock.classList.add('cursor-pointer', 'hover:bg-gray-300');
                 gradeStatBlock.title = 'Click to open Grade Book';
             } else {
-                // Fallback for plain text URLs
                 const gradeBookValue = colIdx.gradeBook !== -1 ? rowData[colIdx.gradeBook] : null;
                 if (gradeBookValue && (String(gradeBookValue).startsWith('http://') || String(gradeBookValue).startsWith('https://'))) {
                     currentGradebookLink = gradeBookValue;
@@ -595,22 +540,16 @@ async function onSelectionChange() {
                 }
             }
 
-            // Handle Assigned To badge
             if (colIdx.assigned !== -1) {
                 const assignedTo = rowData[colIdx.assigned];
                 assignedToBadge.textContent = assignedTo || "Unassigned";
 
-                // Check if the color is already in our cache
                 if (assignedColorMap[assignedTo]) {
                     const cellColor = assignedColorMap[assignedTo];
                     assignedToBadge.style.backgroundColor = cellColor;
-                    const r = parseInt(cellColor.substr(1, 2), 16);
-                    const g = parseInt(cellColor.substr(3, 2), 16);
-                    const b = parseInt(cellColor.substr(5, 2), 16);
-                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                    assignedToBadge.style.color = brightness > 125 ? 'black' : 'white';
+                    const r = parseInt(cellColor.substr(1, 2), 16), g = parseInt(cellColor.substr(3, 2), 16), b = parseInt(cellColor.substr(5, 2), 16);
+                    assignedToBadge.style.color = ((r * 299 + g * 587 + b * 114) / 1000) > 125 ? 'black' : 'white';
                 } else if (assignedTo) {
-                    // If not in cache, get the color for this specific cell and cache it
                     const assignedCell = sheet.getCell(lastSelectedRow, colIdx.assigned);
                     assignedCell.load("format/fill/color");
                     await context.sync();
@@ -619,14 +558,9 @@ async function onSelectionChange() {
                         const cellColor = assignedCell.format.fill.color;
                         if (cellColor && cellColor !== '#ffffff' && cellColor !== '#000000') {
                             assignedColorMap[assignedTo] = cellColor;
-                            console.log(`[DEBUG] Caching new color for '${assignedTo}': ${cellColor}`);
-                            
                             assignedToBadge.style.backgroundColor = cellColor;
-                            const r = parseInt(cellColor.substr(1, 2), 16);
-                            const g = parseInt(cellColor.substr(3, 2), 16);
-                            const b = parseInt(cellColor.substr(5, 2), 16);
-                            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                            assignedToBadge.style.color = brightness > 125 ? 'black' : 'white';
+                            const r = parseInt(cellColor.substr(1, 2), 16), g = parseInt(cellColor.substr(3, 2), 16), b = parseInt(cellColor.substr(5, 2), 16);
+                            assignedToBadge.style.color = ((r * 299 + g * 587 + b * 114) / 1000) > 125 ? 'black' : 'white';
                         } else {
                             assignedToBadge.style.backgroundColor = '#e5e7eb';
                             assignedToBadge.style.color = '#1f2937';
@@ -643,17 +577,14 @@ async function onSelectionChange() {
             }
 
             const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
-            if (submitButton) {
-                submitButton.disabled = !currentStudentId;
-            }
+            if (submitButton) submitButton.disabled = !currentStudentId;
 
             const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
             if (!panelHistory.classList.contains("hidden")) {
                 if (currentStudentId) {
                     displayStudentHistory(currentStudentId);
                 } else {
-                    const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
-                    historyContent.innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
+                    document.getElementById(CONSTANTS.HISTORY_CONTENT).innerHTML = '<p class="text-gray-500">Could not find Student ID in the selected row.</p>';
                 }
             }
         });
@@ -671,9 +602,7 @@ async function onSelectionChange() {
  * @param {HTMLElement} triggerElement The element that triggered the copy action.
  */
 function copyToClipboard(text, triggerElement) {
-    if (!text || text === "N/A") {
-        return; // Don't copy placeholder text
-    }
+    if (!text || text === "N/A") return;
 
     const textArea = document.createElement("textarea");
     textArea.value = text;
@@ -685,7 +614,6 @@ function copyToClipboard(text, triggerElement) {
         document.execCommand('copy');
         const feedbackEl = triggerElement.querySelector('.copy-feedback');
         if (feedbackEl) {
-            // Hide all other feedback elements first
             document.querySelectorAll('.copy-feedback').forEach(el => el.classList.add('hidden'));
             feedbackEl.classList.remove('hidden');
             setTimeout(() => {
@@ -703,25 +631,18 @@ function copyToClipboard(text, triggerElement) {
  */
 function setupCopyHandlers() {
     const contactInfoIds = [
-        CONSTANTS.COPY_STUDENT_ID,
-        CONSTANTS.COPY_PRIMARY_PHONE,
-        CONSTANTS.COPY_OTHER_PHONE,
-        CONSTANTS.COPY_STUDENT_EMAIL,
-        CONSTANTS.COPY_PERSONAL_EMAIL
+        CONSTANTS.COPY_STUDENT_ID, CONSTANTS.COPY_PRIMARY_PHONE, CONSTANTS.COPY_OTHER_PHONE,
+        CONSTANTS.COPY_STUDENT_EMAIL, CONSTANTS.COPY_PERSONAL_EMAIL
     ];
 
     contactInfoIds.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener('click', () => {
-                // For the student ID, the text is in a different child element
                 const displayEl = id === CONSTANTS.COPY_STUDENT_ID
                     ? el.querySelector('#' + CONSTANTS.STUDENT_ID_DISPLAY)
                     : el.querySelector('.font-semibold');
-                
-                if (displayEl) {
-                    copyToClipboard(displayEl.textContent, el);
-                }
+                if (displayEl) copyToClipboard(displayEl.textContent, el);
             });
         }
     });
@@ -734,9 +655,7 @@ function setupGradebookLinkHandler() {
     const gradeStatBlock = document.getElementById(CONSTANTS.GRADE_STAT_BLOCK);
     if (gradeStatBlock) {
         gradeStatBlock.addEventListener('click', () => {
-            if (currentGradebookLink) {
-                window.open(currentGradebookLink, '_blank');
-            }
+            if (currentGradebookLink) window.open(currentGradebookLink, '_blank');
         });
     }
 }
@@ -747,20 +666,8 @@ function setupGradebookLinkHandler() {
  * @returns {string} The comment text with the date part bolded.
  */
 function highlightDateInText(text) {
-    // Regex to find days of the week, tomorrow, or month-day combinations.
-    // It's case-insensitive and handles optional suffixes like 'st', 'nd', 'rd', 'th'.
     const dateRegex = /\b(tomorrow|sunday|monday|tuesday|wednesday|thursday|friday|saturday|january|february|march|april|may|june|july|august|september|october|november|december)\b(\s+\d{1,2}(st|nd|rd|th)?)?/i;
-
-    const match = text.match(dateRegex);
-
-    if (match) {
-        // Replace the first occurrence of the matched date string with a bolded version.
-        return text.replace(dateRegex, (matchedText) => {
-            return `<strong class="font-bold text-gray-900">${matchedText}</strong>`;
-        });
-    }
-
-    return text; // Return original text if no date found
+    return text.replace(dateRegex, (matchedText) => `<strong class="font-bold text-gray-900">${matchedText}</strong>`);
 }
 
 
@@ -770,7 +677,7 @@ function highlightDateInText(text) {
 async function displayStudentHistory(studentId) {
     const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
-    allComments = []; // Clear the cache
+    allComments = [];
 
     try {
         await Excel.run(async (context) => {
@@ -800,15 +707,14 @@ async function displayStudentHistory(studentId) {
                     const commentText = row[commentColIdx];
                     if (commentText && String(commentText).trim() !== "") {
                         const comment = {
-                            rowIndex: historyRange.rowIndex + i, // Store the absolute row index
+                            rowIndex: historyRange.rowIndex + i,
                             text: commentText,
                             tag: tagColIdx !== -1 ? row[tagColIdx] : null,
                             timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
                             createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown',
-                            ldaDate: null // New property for priority sorting
+                            ldaDate: null
                         };
 
-                        // Check for future LDA tag
                         if (comment.tag) {
                             const tags = String(comment.tag).split(',').map(t => t.trim());
                             const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
@@ -816,7 +722,7 @@ async function displayStudentHistory(studentId) {
                                 const dateStr = ldaTag.substring(4);
                                 const ldaDate = new Date(dateStr);
                                 if (!isNaN(ldaDate.getTime())) {
-                                    ldaDate.setHours(0, 0, 0, 0); // Normalize to start of day for comparison
+                                    ldaDate.setHours(0, 0, 0, 0);
                                     comment.ldaDate = ldaDate;
                                 }
                             }
@@ -826,10 +732,9 @@ async function displayStudentHistory(studentId) {
                 }
             }
             
-            allComments = comments; // Cache for editing
+            allComments = comments;
 
             if (comments.length > 0) {
-                // --- Sorting Logic ---
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
@@ -839,25 +744,11 @@ async function displayStudentHistory(studentId) {
                 const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today && !isNoteOrDnc(c));
                 const regularComments = comments.filter(c => !isNoteOrDnc(c) && !priorityComments.includes(c));
 
-                // Sort note and DNC comments by timestamp (most recent first)
-                noteAndDncComments.sort((a, b) => {
-                    const dateA = parseDate(a.timestamp) || 0;
-                    const dateB = parseDate(b.timestamp) || 0;
-                    return dateB - dateA;
-                });
-
-                // Sort priority comments by LDA date, ascending (soonest first)
+                noteAndDncComments.sort((a, b) => (parseDate(b.timestamp) || 0) - (parseDate(a.timestamp) || 0));
                 priorityComments.sort((a, b) => a.ldaDate - b.ldaDate);
-
-                // Sort regular comments by timestamp, descending (most recent first)
-                regularComments.sort((a, b) => {
-                    const dateA = parseDate(a.timestamp) || 0;
-                    const dateB = parseDate(b.timestamp) || 0;
-                    return dateB - dateA;
-                });
+                regularComments.sort((a, b) => (parseDate(b.timestamp) || 0) - (parseDate(a.timestamp) || 0));
 
                 const sortedComments = [...noteAndDncComments, ...priorityComments, ...regularComments];
-                // --- End Sorting Logic ---
 
                 let html = '<ul class="space-y-4">';
                 sortedComments.forEach(comment => {
@@ -865,72 +756,41 @@ async function displayStudentHistory(studentId) {
                     const isPriority = !isNoteOrDnc && comment.ldaDate && comment.ldaDate >= today;
                     const isContacted = comment.tag && comment.tag.toLowerCase().includes('contacted');
                     
-                    let bgColor = 'bg-gray-100'; // Default
-                    if (isNoteOrDnc) {
-                        bgColor = 'bg-gray-200';
-                    } else if (isPriority) {
-                        bgColor = 'bg-orange-100';
-                    } else if (isContacted) {
-                        bgColor = 'bg-yellow-100';
-                    }
+                    let bgColor = 'bg-gray-100';
+                    if (isNoteOrDnc) bgColor = 'bg-gray-200';
+                    else if (isPriority) bgColor = 'bg-orange-100';
+                    else if (isContacted) bgColor = 'bg-yellow-100';
 
-                    let displayText = comment.text;
-                    if (isPriority) {
-                        displayText = highlightDateInText(comment.text);
-                    }
+                    let displayText = isPriority ? highlightDateInText(comment.text) : comment.text;
 
-
-                    html += `
-                        <li class="p-3 ${bgColor} rounded-lg shadow-sm relative" data-row-index="${comment.rowIndex}">
-                            <p class="text-sm text-gray-800">${displayText}</p>`;
+                    html += `<li class="p-3 ${bgColor} rounded-lg shadow-sm relative" data-row-index="${comment.rowIndex}">
+                                <p class="text-sm text-gray-800">${displayText}</p>
+                                <div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
+                                    <div class="flex items-center gap-2">`;
                     
-                    html += `<div class="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">`;
-                    html += `<div class="flex items-center gap-2">`; // Left side container
-                    
-                    // Tag rendering logic
                     if (comment.tag) {
-                        const tags = String(comment.tag).split(',').map(t => t.trim());
-                        tags.forEach(tagName => {
+                        String(comment.tag).split(',').map(t => t.trim()).forEach(tagName => {
                             if (tagName && tagName.toLowerCase() !== 'comment') {
                                 const tagPrefix = tagName.split(' ')[0];
-                                const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagPrefix.toLowerCase()) || 
-                                                { bg: 'bg-blue-100', text: 'text-blue-800' }; // Default color
+                                const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagPrefix.toLowerCase()) || { bg: 'bg-blue-100', text: 'text-blue-800' };
                                 html += `<span class="px-2 py-0.5 font-semibold rounded-full ${tagInfo.bg} ${tagInfo.text}">${tagName}</span>`;
                             }
                         });
                     }
                     
-                    html += `<span class="font-medium">${comment.createdBy}</span>`;
-                    html += `</div>`; // End left side
+                    html += `<span class="font-medium">${comment.createdBy}</span></div>`;
 
-                    let dateText;
-                    if (comment.timestamp) {
-                       dateText = comment.timestamp;
-                       if (!isNaN(dateText) && dateText > 25569) {
-                           const date = new Date((dateText - 25569) * 86400 * 1000);
-                           dateText = date.toLocaleString('en-US', {
-                               year: 'numeric',
-                               month: 'numeric',
-                               day: 'numeric',
-                               hour: 'numeric',
-                               minute: '2-digit'
-                           });
-                       }
-                    } else {
-                        dateText = 'Unknown Time';
+                    let dateText = 'Unknown Time';
+                    if (comment.timestamp && !isNaN(comment.timestamp) && comment.timestamp > 25569) {
+                       const date = new Date((comment.timestamp - 25569) * 86400 * 1000);
+                       dateText = date.toLocaleString('en-US', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                     }
-                    html += `<span>${dateText}</span>`;
-                    
-                    html += `</div>`;
-                    html += `</li>`;
+                    html += `<span>${dateText}</span></div></li>`;
                 });
                 html += '</ul>';
                 historyContent.innerHTML = html;
 
-                // Add context menu listeners after rendering
-                historyContent.querySelectorAll('li').forEach(li => {
-                    li.addEventListener('contextmenu', showContextMenu);
-                });
+                historyContent.querySelectorAll('li').forEach(li => li.addEventListener('contextmenu', showContextMenu));
 
             } else {
                 historyContent.innerHTML = '<p class="text-gray-500">No history found for this student.</p>';
@@ -964,16 +824,14 @@ function promptForUserAndSubmit() {
     const modal = document.getElementById(CONSTANTS.USER_SELECTION_MODAL);
     const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
     
-    dropdown.innerHTML = ''; // Clear previous options
+    dropdown.innerHTML = '';
 
     const userList = (settings.userProfile && settings.userProfile.userList) || [currentUserName];
     userList.forEach(user => {
         const option = document.createElement('option');
         option.value = user;
         option.textContent = user;
-        if (user === currentUserName) {
-            option.selected = true; // Default to the current user
-        }
+        if (user === currentUserName) option.selected = true;
         dropdown.appendChild(option);
     });
 
@@ -985,34 +843,27 @@ function promptForUserAndSubmit() {
  */
 async function handleUserSelection() {
     const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
-    const selectedUser = dropdown.value;
-    sessionCommentUser = selectedUser; // Cache the selection for the session
+    sessionCommentUser = dropdown.value;
     document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
     document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
     
-    // If this was the initial prompt, we now initialize the rest of the add-in
     if (!pendingOutreachAction) {
         initializeAddIn();
     }
 
-    // Check if there's a pending outreach action to complete
     if (pendingOutreachAction) {
         const { studentId, studentName, commentText, rowIndex } = pendingOutreachAction;
         
-        // Add the comment
         await addOutreachComment(studentId, studentName, commentText, sessionCommentUser);
 
-        // Check for highlight triggers
         const lowerCommentText = commentText.toLowerCase();
         if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
             console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
             await applyContactedHighlight(rowIndex);
         }
 
-        // Clear the pending action
         pendingOutreachAction = null;
     } else {
-        // If no pending action, it was triggered by the submit button
         await executeSubmitComment(sessionCommentUser);
     }
 }
@@ -1065,14 +916,10 @@ async function executeSubmitComment(commentingUser) {
             if (studentCol !== -1) newRowData[studentCol] = currentStudentName;
             if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
             
-            // Join the selected tags, or default to "Comment" if none are selected
             const tagsToSave = newCommentTags.length > 0 ? newCommentTags.join(', ') : "Comment";
             if (tagCol !== -1) newRowData[tagCol] = tagsToSave;
 
-            if (timestampCol !== -1) {
-                const now = new Date();
-                newRowData[timestampCol] = (now.getTime() / 86400000) + 25569;
-            }
+            if (timestampCol !== -1) newRowData[timestampCol] = (new Date().getTime() / 86400000) + 25569;
             newRowData[commentCol] = commentText;
 
             const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, headers.length);
@@ -1086,30 +933,23 @@ async function executeSubmitComment(commentingUser) {
         commentInput.value = "";
         statusDisplay.textContent = "Comment added successfully!";
         
-        // Reset tags and refresh history
         newCommentTags = [];
         smartLdaTag = null; 
         renderTagPills('new');
         populateTagDropdown('new');
         await displayStudentHistory(currentStudentId);
 
-        setTimeout(() => {
-            statusDisplay.textContent = "";
-        }, 3000);
+        setTimeout(() => { statusDisplay.textContent = ""; }, 3000);
 
     } catch (error) {
-        if (error.code === 'ItemNotFound') {
-            statusDisplay.textContent = `Error: "${CONSTANTS.HISTORY_SHEET}" sheet not found.`;
-        } else {
-            statusDisplay.textContent = `Error: ${error.message}`;
-        }
+        statusDisplay.textContent = error.code === 'ItemNotFound' ? `Error: "${CONSTANTS.HISTORY_SHEET}" sheet not found.` : `Error: ${error.message}`;
         console.error("Error in submitNewComment: " + error);
     }
 }
 
 // --- START: Tagging UI Functions ---
 
-function setupTaggingUI(mode) { // mode can be 'new' or 'edit'
+function setupTaggingUI(mode) {
     const addTagButton = document.getElementById(mode === 'new' ? CONSTANTS.ADD_TAG_BUTTON : CONSTANTS.EDIT_ADD_TAG_BUTTON);
     const tagDropdown = document.getElementById(mode === 'new' ? CONSTANTS.TAG_DROPDOWN : CONSTANTS.EDIT_TAG_DROPDOWN);
 
@@ -1120,7 +960,6 @@ function setupTaggingUI(mode) { // mode can be 'new' or 'edit'
         tagDropdown.classList.toggle('hidden');
     });
 
-    // Hide dropdown if clicked outside
     document.addEventListener('click', (event) => {
         if (!tagDropdown.contains(event.target) && !addTagButton.contains(event.target)) {
             tagDropdown.classList.add('hidden');
@@ -1194,13 +1033,9 @@ function populateTagDropdown(mode) {
 
         item.onclick = (e) => {
             e.preventDefault();
-            if (tag.requiresDate) {
-                promptForLdaDate(mode);
-            } else if (tag.requiresPopup) {
-                promptForDncType(mode);
-            } else {
-                addTag(tag.name, mode);
-            }
+            if (tag.requiresDate) promptForLdaDate(mode);
+            else if (tag.requiresPopup) promptForDncType(mode);
+            else addTag(tag.name, mode);
         };
         dropdown.appendChild(item);
     });
@@ -1221,9 +1056,7 @@ function removeTag(tagName, mode) {
         editCommentTags = editCommentTags.filter(t => t !== tagName);
     } else {
         newCommentTags = newCommentTags.filter(t => t !== tagName);
-        if (tagName === smartLdaTag) {
-            smartLdaTag = null;
-        }
+        if (tagName === smartLdaTag) smartLdaTag = null;
     }
     renderTagPills(mode);
     populateTagDropdown(mode);
@@ -1274,13 +1107,12 @@ function renderCalendar(date) {
     const grid = document.getElementById('calendar-grid');
     const header = document.getElementById('month-year');
     
-    grid.innerHTML = ''; // Clear old calendar
+    grid.innerHTML = '';
     const month = date.getMonth();
     const year = date.getFullYear();
 
     header.textContent = `${date.toLocaleString('default', { month: 'long' })} ${year}`;
 
-    // Day headers
     ['S', 'M', 'T', 'W', 'T', 'F', 'S'].forEach(day => {
         const dayEl = document.createElement('div');
         dayEl.className = 'font-bold text-gray-500';
@@ -1291,12 +1123,8 @@ function renderCalendar(date) {
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-    // Blank spaces for the first week
-    for (let i = 0; i < firstDay; i++) {
-        grid.appendChild(document.createElement('div'));
-    }
+    for (let i = 0; i < firstDay; i++) grid.appendChild(document.createElement('div'));
 
-    // Date cells
     for (let i = 1; i <= daysInMonth; i++) {
         const dayEl = document.createElement('button');
         dayEl.textContent = i;
@@ -1311,7 +1139,7 @@ function renderCalendar(date) {
         dayEl.onclick = () => {
             selectedDate = dayDate;
             document.getElementById('confirm-date').disabled = false;
-            renderCalendar(date); // Re-render to show selection
+            renderCalendar(date);
         };
         grid.appendChild(dayEl);
     }
@@ -1322,10 +1150,6 @@ function renderCalendar(date) {
 
 // --- START: Smart Tag Functions ---
 
-/**
- * Handles the input event on the comment box to check for smart tags.
- * @param {Event} event The input event.
- */
 function handleCommentInputChange(event) {
     const text = event.target.value.toLowerCase();
     const triggerWords = ['engage', 'submit'];
@@ -1333,65 +1157,44 @@ function handleCommentInputChange(event) {
     const hasTrigger = triggerWords.some(word => text.includes(word));
     const date = hasTrigger ? parseDateFromText(text) : null;
 
-    // If a date is found, add or update the smart LDA tag
     if (date) {
         const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
         const newLdaTag = `LDA ${formattedDate}`;
 
-        // If a smart tag already exists but is different, remove the old one
-        if (smartLdaTag && smartLdaTag !== newLdaTag) {
-            removeTag(smartLdaTag, 'new');
-        }
+        if (smartLdaTag && smartLdaTag !== newLdaTag) removeTag(smartLdaTag, 'new');
 
-        // If no smart tag exists (or it was just removed), add the new one
-        if (!smartLdaTag) {
-            // Also check if a manual LDA tag was added, don't add if so
-            if (!newCommentTags.some(tag => tag.startsWith('LDA'))) {
-                 addTag(newLdaTag, 'new');
-                 smartLdaTag = newLdaTag;
-            }
+        if (!smartLdaTag && !newCommentTags.some(tag => tag.startsWith('LDA'))) {
+             addTag(newLdaTag, 'new');
+             smartLdaTag = newLdaTag;
         }
-    } else {
-        // If no date is found, but we had a smart tag, remove it
-        if (smartLdaTag) {
-            removeTag(smartLdaTag, 'new');
-        }
+    } else if (smartLdaTag) {
+        removeTag(smartLdaTag, 'new');
     }
 }
 
-/**
- * Parses a date from a string of text, understanding relative terms.
- * @param {string} text The text to parse.
- * @returns {Date|null} A Date object or null if no date is found.
- */
 function parseDateFromText(text) {
     const now = new Date();
     text = text.toLowerCase();
 
-    // Check for "tomorrow"
     if (text.includes('tomorrow')) {
         const tomorrow = new Date();
         tomorrow.setDate(now.getDate() + 1);
         return tomorrow;
     }
 
-    // Check for days of the week
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     for (let i = 0; i < days.length; i++) {
         if (text.includes(days[i])) {
             const targetDay = i;
             const today = now.getDay();
             let daysToAdd = targetDay - today;
-            if (daysToAdd <= 0) {
-                daysToAdd += 7; // Get the next occurrence
-            }
+            if (daysToAdd <= 0) daysToAdd += 7;
             const nextDate = new Date();
             nextDate.setDate(now.getDate() + daysToAdd);
             return nextDate;
         }
     }
     
-    // Check for "Month Day" format (e.g., "August 20th")
     const monthDayRegex = /(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})/;
     const monthDayMatch = text.match(monthDayRegex);
     if (monthDayMatch) {
@@ -1401,9 +1204,7 @@ function parseDateFromText(text) {
         const day = parseInt(monthDayMatch[2], 10);
         let year = now.getFullYear();
         const date = new Date(year, month, day);
-        if (date < now) { // If the date is in the past, assume next year
-            date.setFullYear(year + 1);
-        }
+        if (date < now) date.setFullYear(year + 1);
         return date;
     }
 
@@ -1413,24 +1214,25 @@ function parseDateFromText(text) {
 
 // --- END: Smart Tag Functions ---
 
-// --- START: Comment Editing Functions ---
+// --- START: Comment Editing and Deleting Functions ---
 
 function setupCommentEditing() {
     const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
     const editButton = document.getElementById(CONSTANTS.EDIT_COMMENT_BTN);
+    const deleteButton = document.getElementById(CONSTANTS.DELETE_COMMENT_BTN);
     const updateButton = document.getElementById(CONSTANTS.UPDATE_COMMENT_BUTTON);
     const cancelButton = document.getElementById(CONSTANTS.CANCEL_EDIT_BUTTON);
 
-    // Hide context menu on any click
-    document.addEventListener('click', () => {
-        contextMenu.classList.add('hidden');
-    });
+    document.addEventListener('click', () => contextMenu.classList.add('hidden'));
 
     editButton.addEventListener('click', () => {
         const commentToEdit = allComments.find(c => c.rowIndex === activeCommentRowIndex);
-        if (commentToEdit) {
-            showEditCommentModal(commentToEdit);
-        }
+        if (commentToEdit) showEditCommentModal(commentToEdit);
+        contextMenu.classList.add('hidden');
+    });
+    
+    deleteButton.addEventListener('click', () => {
+        document.getElementById(CONSTANTS.DELETE_CONFIRM_MODAL).classList.remove('hidden');
         contextMenu.classList.add('hidden');
     });
     
@@ -1440,12 +1242,29 @@ function setupCommentEditing() {
     });
 }
 
+function setupDeleteConfirmation() {
+    const modal = document.getElementById(CONSTANTS.DELETE_CONFIRM_MODAL);
+    const confirmBtn = document.getElementById(CONSTANTS.CONFIRM_DELETE_BUTTON);
+    const cancelBtn = document.getElementById(CONSTANTS.CANCEL_DELETE_BUTTON);
+
+    confirmBtn.addEventListener('click', handleDeleteComment);
+    cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+}
+
 function showContextMenu(event) {
     event.preventDefault();
     const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
+    const deleteButton = document.getElementById(CONSTANTS.DELETE_COMMENT_BTN);
     const commentLi = event.currentTarget;
     
     activeCommentRowIndex = parseInt(commentLi.dataset.rowIndex, 10);
+    const comment = allComments.find(c => c.rowIndex === activeCommentRowIndex);
+
+    if (comment) {
+        deleteButton.disabled = comment.createdBy !== sessionCommentUser;
+    } else {
+        deleteButton.disabled = true;
+    }
 
     contextMenu.style.left = `${event.clientX}px`;
     contextMenu.style.top = `${event.clientY}px`;
@@ -1493,16 +1312,11 @@ async function handleUpdateComment() {
             const commentCol = findColumnIndex(headers, ["comment"]);
             const tagCol = findColumnIndex(headers, ["tag"]);
 
-            if (commentCol === -1 || tagCol === -1) {
-                throw new Error("Could not find 'Comment' or 'Tag' column in history sheet.");
-            }
+            if (commentCol === -1 || tagCol === -1) throw new Error("Could not find 'Comment' or 'Tag' column.");
 
             const rowToUpdate = historySheet.getRangeByIndexes(activeCommentRowIndex, 0, 1, headers.length);
-            const commentCell = rowToUpdate.getCell(0, commentCol);
-            const tagCell = rowToUpdate.getCell(0, tagCol);
-
-            commentCell.values = [[newText]];
-            tagCell.values = [[newTags]];
+            rowToUpdate.getCell(0, commentCol).values = [[newText]];
+            rowToUpdate.getCell(0, tagCol).values = [[newTags]];
             
             await context.sync();
         });
@@ -1510,7 +1324,7 @@ async function handleUpdateComment() {
         status.textContent = "Updated successfully!";
         setTimeout(() => {
             modal.classList.add('hidden');
-            displayStudentHistory(currentStudentId); // Refresh history view
+            displayStudentHistory(currentStudentId);
         }, 1000);
 
     } catch (error) {
@@ -1519,8 +1333,34 @@ async function handleUpdateComment() {
     }
 }
 
+async function handleDeleteComment() {
+    const modal = document.getElementById(CONSTANTS.DELETE_CONFIRM_MODAL);
+    modal.classList.add('hidden');
 
-// --- END: Comment Editing Functions ---
+    if (activeCommentRowIndex === null) return;
+
+    try {
+        await Excel.run(async (context) => {
+            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+            // Note: Office JS API row indexes are 0-based relative to the worksheet, not the range.
+            const rowToDelete = historySheet.getRangeByIndexes(activeCommentRowIndex, 0, 1, 1).getEntireRow();
+            rowToDelete.delete(Excel.DeleteShiftDirection.up);
+            await context.sync();
+        });
+        
+        console.log(`Successfully deleted row ${activeCommentRowIndex + 1}`);
+        await displayStudentHistory(currentStudentId); // Refresh the view
+
+    } catch (error) {
+        console.error("Error deleting comment:", error);
+        // Optionally show an error to the user
+    } finally {
+        activeCommentRowIndex = null;
+    }
+}
+
+
+// --- END: Comment Editing and Deleting Functions ---
 
 // --- START: DNC Functions ---
 
@@ -1535,7 +1375,7 @@ function promptForDncType(mode) {
     activeTaggingMode = mode;
     const modal = document.getElementById(CONSTANTS.DNC_TYPE_MODAL);
     const container = document.getElementById(CONSTANTS.DNC_OPTIONS_CONTAINER);
-    container.innerHTML = ''; // Clear previous options
+    container.innerHTML = '';
 
     const contactMethods = [
         { name: 'Phone', value: document.getElementById(CONSTANTS.PRIMARY_PHONE_DISPLAY).textContent },
@@ -1559,10 +1399,7 @@ function promptForDncType(mode) {
 }
 
 function addDncTag(dncType) {
-    let tagName = 'DNC';
-    if (dncType !== 'All') {
-        tagName += ` - ${dncType}`;
-    }
+    let tagName = dncType === 'All' ? 'DNC' : `DNC - ${dncType}`;
     addTag(tagName, activeTaggingMode);
     document.getElementById(CONSTANTS.DNC_TYPE_MODAL).classList.add('hidden');
 }
@@ -1573,10 +1410,6 @@ function addDncTag(dncType) {
 
 // --- START: Code moved from commands.js ---
 
-/**
- * Generic error handler for Excel.run calls.
- * @param {any} error The error object.
- */
 function errorHandler(error) {
     console.log("Error: " + error);
     if (error instanceof OfficeExtension.Error) {
@@ -1584,44 +1417,21 @@ function errorHandler(error) {
     }
 }
 
-/**
- * Parses a date value from various possible formats (Date object, string, Excel serial number).
- * @param {*} dateValue The value to parse.
- * @returns {Date|null} A valid Date object or null.
- */
 function parseDate(dateValue) {
     if (!dateValue) return null;
-    if (dateValue instanceof Date) {
-        return dateValue;
-    }
-    if (typeof dateValue === 'number') {
-        if (dateValue > 25569) { // Corresponds to 1970-01-01
-            return new Date((dateValue - 25569) * 86400 * 1000);
-        }
-    }
+    if (dateValue instanceof Date) return dateValue;
+    if (typeof dateValue === 'number' && dateValue > 25569) return new Date((dateValue - 25569) * 86400 * 1000);
     if (typeof dateValue === 'string') {
         const parsed = new Date(dateValue);
-        if (!isNaN(parsed.getTime())) {
-            return parsed;
-        }
+        if (!isNaN(parsed.getTime())) return parsed;
     }
     return null;
 }
 
-/**
- * Converts a JavaScript Date object to an Excel serial date number.
- * @param {Date} date The JavaScript Date object.
- * @returns {number} The Excel serial date number.
- */
 function jsDateToExcelDate(date) {
     return (date.getTime() / 86400000) + 25569;
 }
 
-/**
- * Applies a yellow highlight to a specific row to mark it as contacted.
- * This is a non-toggle version of the function in actions.js.
- * @param {number} rowIndex The zero-based index of the row to highlight.
- */
 async function applyContactedHighlight(rowIndex) {
     try {
         await Excel.run(async (context) => {
@@ -1641,8 +1451,7 @@ async function applyContactedHighlight(rowIndex) {
             }
 
             const startCol = Math.min(studentNameColIndex, outreachColIndex);
-            const endCol = Math.max(studentNameColIndex, outreachColIndex);
-            const colCount = endCol - startCol + 1;
+            const colCount = Math.abs(studentNameColIndex - outreachColIndex) + 1;
 
             const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
             highlightRange.format.fill.color = "yellow";
@@ -1654,10 +1463,6 @@ async function applyContactedHighlight(rowIndex) {
 }
 
 
-/**
- * Event handler for when the worksheet changes. Now handles bulk pastes.
- * @param {Excel.WorksheetChangedEventArgs} eventArgs
- */
 async function onWorksheetChanged(eventArgs) {
     if (!sessionCommentUser) {
         console.log("Outreach change ignored: No session user selected.");
@@ -1665,8 +1470,7 @@ async function onWorksheetChanged(eventArgs) {
     }
 
     await Excel.run(async (context) => {
-        if (eventArgs.source !== Excel.EventSource.local) return;
-        if (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited") return;
+        if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) return;
 
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const changedRange = sheet.getRange(eventArgs.address);
@@ -1687,10 +1491,7 @@ async function onWorksheetChanged(eventArgs) {
 
             const outreachColumnOffset = outreachColIndex - changedRange.columnIndex;
             
-            const studentInfoRange = sheet.getRangeByIndexes(
-                changedRange.rowIndex, 0, 
-                changedRange.rowCount, headerRange.columnCount
-            );
+            const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, changedRange.rowCount, headerRange.columnCount);
             studentInfoRange.load("values");
             await context.sync();
             const allRowValues = studentInfoRange.values;
@@ -1701,11 +1502,8 @@ async function onWorksheetChanged(eventArgs) {
             if (studentIdColIndex === -1 || studentNameColIndex === -1) return;
 
             for (let i = 0; i < changedRange.rowCount; i++) {
-                const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
-                                 String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
-                
-                const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ?
-                                 String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
+                const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
+                const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ? String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
 
                 if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
                     const studentId = allRowValues[i][studentIdColIndex];
@@ -1727,15 +1525,6 @@ async function onWorksheetChanged(eventArgs) {
 }
 
 
-/**
- * Adds or updates a comment in the "Student History" sheet based on an outreach entry.
- * If an outreach comment for the student exists for the current day, it updates it.
- * Otherwise, it adds a new comment.
- * @param {string|number} studentId The student's ID.
- * @param {string} studentName The student's name.
- * @param {string} commentText The new comment text from the Outreach column.
- * @param {string} commentingUser The user making the comment.
- */
 async function addOutreachComment(studentId, studentName, commentText, commentingUser) {
     await Excel.run(async (context) => {
         try {
@@ -1763,7 +1552,6 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            // Search backwards for the most recent entry for this student today
             for (let i = historyData.length - 1; i > 0; i--) {
                 const row = historyData[i];
                 if (row[idCol] && String(row[idCol]) === String(studentId)) {
@@ -1774,7 +1562,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                             commentDate.setHours(0, 0, 0, 0);
                             if (commentDate.getTime() === today.getTime()) {
                                 todaysCommentRowIndex = historyRange.rowIndex + i;
-                                break; // Found today's outreach comment
+                                break;
                             }
                         }
                     }
@@ -1785,8 +1573,6 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
             const excelNow = jsDateToExcelDate(now);
 
             if (todaysCommentRowIndex !== -1) {
-                // Update existing comment
-                console.log(`Updating existing outreach comment for ${studentName} at row ${todaysCommentRowIndex + 1}`);
                 const commentCell = historySheet.getCell(todaysCommentRowIndex, commentCol);
                 const timestampCell = historySheet.getCell(todaysCommentRowIndex, timestampCol);
                 
@@ -1795,8 +1581,6 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
 
             } else {
-                // Add new comment
-                console.log(`Adding new outreach comment for ${studentName}`);
                 const newRowData = new Array(historyHeaders.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
@@ -1806,12 +1590,10 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 const date = parseDateFromText(commentText);
                 if (date) {
                     const formattedDate = `${date.getMonth() + 1}/${date.getDate()}/${String(date.getFullYear()).slice(-2)}`;
-                    const ldaTag = `LDA ${formattedDate}`;
-                    tagsToSave += `, ${ldaTag}`;
+                    tagsToSave += `, LDA ${formattedDate}`;
                 }
 
-                const lowerCommentText = commentText.toLowerCase();
-                if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
+                if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => commentText.toLowerCase().includes(phrase))) {
                     tagsToSave += ', Contacted';
                 }
 
@@ -1823,18 +1605,15 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 const newRowRange = historySheet.getRangeByIndexes(newRowIndex, 0, 1, historyHeaders.length);
                 newRowRange.values = [newRowData];
                 
-                const newTimestampCell = historySheet.getCell(newRowIndex, timestampCol);
-                newTimestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
+                historySheet.getCell(newRowIndex, timestampCol).numberFormat = [["M/D/YYYY h:mm AM/PM"]];
             }
             
             historySheet.getUsedRange().format.autofitColumns();
             await context.sync();
 
-            // Refresh the history pane if it's open for the current student
             if (studentId && String(studentId) === String(currentStudentId)) {
                 const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
                 if (panelHistory && !panelHistory.classList.contains("hidden")) {
-                    console.log(`Refreshing history for student ${studentName} after outreach update.`);
                     setTimeout(() => displayStudentHistory(currentStudentId), 100);
                 }
             }
@@ -1844,3 +1623,4 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
         }
     });
 }
+// --- END: Code moved from commands.js ---
