@@ -51,6 +51,7 @@ const CONSTANTS = {
     COMMENT_CONTEXT_MENU: "comment-context-menu",
     EDIT_COMMENT_BTN: "edit-comment-btn",
     DELETE_COMMENT_BTN: "delete-comment-btn",
+    COPY_COMMENT_BTN: "copy-comment-btn", // MODIFIED: Added constant
     DNC_TYPE_MODAL: "dnc-type-modal",
     DNC_OPTIONS_CONTAINER: "dnc-options-container",
     CANCEL_DNC_BUTTON: "cancel-dnc-button",
@@ -177,7 +178,7 @@ function initializeAddIn() {
     setupDncModal();
     setupDeleteConfirmation();
     setupSearch(); 
-    renderTagFilters(); // Initial render for the filter bar
+    renderTagFilters();
 
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -321,7 +322,7 @@ function switchTab(tabId) {
         tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelHistory.classList.remove("hidden");
-        panelDetails.classList.add("hidden");
+        panelHistory.classList.add("hidden");
         if (addCommentButton) addCommentButton.classList.remove('hidden');
         
         if (submitButton) {
@@ -1302,6 +1303,7 @@ function setupCommentEditing() {
     const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
     const editButton = document.getElementById(CONSTANTS.EDIT_COMMENT_BTN);
     const deleteButton = document.getElementById(CONSTANTS.DELETE_COMMENT_BTN);
+    const copyButton = document.getElementById(CONSTANTS.COPY_COMMENT_BTN); // MODIFIED
     const updateButton = document.getElementById(CONSTANTS.UPDATE_COMMENT_BUTTON);
     const cancelButton = document.getElementById(CONSTANTS.CANCEL_EDIT_BUTTON);
 
@@ -1318,11 +1320,43 @@ function setupCommentEditing() {
         contextMenu.classList.add('hidden');
     });
     
+    // MODIFIED: Added event listener for copy button
+    copyButton.addEventListener('click', handleCopyComment);
+    
     updateButton.addEventListener('click', handleUpdateComment);
     cancelButton.addEventListener('click', () => {
         document.getElementById(CONSTANTS.EDIT_COMMENT_MODAL).classList.add('hidden');
     });
 }
+
+// MODIFIED: New function to handle copying comment text
+function handleCopyComment() {
+    const commentToCopy = allComments.find(c => c.rowIndex === activeCommentRowIndex);
+    if (commentToCopy) {
+        const textToCopy = commentToCopy.text;
+        
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        textArea.style.position = "absolute";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            const copyButton = document.getElementById(CONSTANTS.COPY_COMMENT_BTN);
+            const originalText = copyButton.textContent;
+            copyButton.textContent = "Copied!";
+            setTimeout(() => {
+                copyButton.textContent = originalText;
+            }, 2000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+        }
+        document.body.removeChild(textArea);
+    }
+    document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU).classList.add('hidden');
+}
+
 
 function setupDeleteConfirmation() {
     const modal = document.getElementById(CONSTANTS.DELETE_CONFIRM_MODAL);
@@ -1518,8 +1552,6 @@ function setupSearch() {
 }
 
 function setupTagFilters() {
-    // This function is now primarily for setting up the "Insert Tag" button's dropdown.
-    // The rendering of active filter tags is handled by renderTagFilters.
     setupTaggingUI('filter');
 }
 
@@ -1540,7 +1572,6 @@ function toggleFilterTag(tagName) {
 
 function renderTagFilters() {
     const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
-    // Clear only the dynamically added filter tag buttons, not the "Insert Tag" button container
     container.querySelectorAll('.filter-tag-button').forEach(btn => btn.remove());
 
     const insertTagButtonContainer = container.querySelector('.relative');
