@@ -77,10 +77,8 @@
                     <div id="student-avatar" class="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold">--</div>
                     <div>
                         <h2 id="student-name-display" class="text-lg font-bold text-gray-800">Select a Student</h2>
-                        <div class="flex items-center gap-2">
-                            <span id="student-id-display" class="text-sm text-gray-500">No ID</span>
-                            <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800">Unassigned</span>
-                        </div>
+                        <!-- MODIFIED: "Assigned To" badge is now nested under the name -->
+                        <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block">Unassigned</span>
                     </div>
                 </div>
                 <!-- Right side: Stat blocks -->
@@ -112,6 +110,7 @@
             <div id="panel-details" class="p-4 space-y-4">
                 <!-- Contact Info -->
                 <div class="space-y-3">
+                    <!-- MODIFIED: Student ID is now primarily displayed here -->
                     <div id="copy-student-id" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
                         <label class="text-xs text-gray-500">Student ID</label>
                         <p class="font-semibold text-gray-800" id="student-id-display-copy">N/A</p>
@@ -148,7 +147,6 @@
             <div id="panel-history" class="hidden p-4 space-y-4">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-bold text-gray-800">History</h3>
-                    <!-- MODIFIED: Added container for buttons -->
                     <div class="flex items-center space-x-2">
                         <button id="search-history-button" class="bg-gray-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-700">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -159,7 +157,6 @@
                     </div>
                 </div>
 
-                <!-- MODIFIED: Added Search Bar -->
                 <div id="search-bar" class="hidden relative">
                     <input type="text" id="search-input" class="w-full p-2 pl-8 border rounded-md" placeholder="Search comments...">
                     <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
