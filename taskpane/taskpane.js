@@ -39,7 +39,6 @@ const CONSTANTS = {
     CONFIRM_USER_BUTTON: "confirm-user-button",
     CANCEL_USER_BUTTON: "cancel-user-button",
     TAG_PILLS_CONTAINER: "tag-pills-container",
-    TAG_PLACEHOLDER: "tag-placeholder",
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
     DATE_PICKER_MODAL: "date-picker-modal",
@@ -48,7 +47,6 @@ const CONSTANTS = {
     CANCEL_EDIT_BUTTON: "cancel-edit-button",
     EDIT_COMMENT_INPUT: "edit-comment-input",
     EDIT_TAG_PILLS_CONTAINER: "edit-tag-pills-container",
-    EDIT_TAG_PLACEHOLDER: "edit-tag-placeholder",
     EDIT_ADD_TAG_BUTTON: "edit-add-tag-button",
     EDIT_TAG_DROPDOWN: "edit-tag-dropdown",
     EDIT_COMMENT_STATUS: "edit-comment-status",
@@ -62,10 +60,12 @@ const CONSTANTS = {
     CONFIRM_DELETE_BUTTON: "confirm-delete-button",
     CANCEL_DELETE_BUTTON: "cancel-delete-button",
     SEARCH_HISTORY_BUTTON: "search-history-button",
-    SEARCH_BAR: "search-bar",
+    SEARCH_CONTAINER: "search-container", // MODIFIED
     SEARCH_INPUT: "search-input",
     CLEAR_SEARCH_BUTTON: "clear-search-button",
-    TAG_FILTER_CONTAINER: "tag-filter-container", // MODIFIED: Added constant for tag filter
+    TAG_FILTER_CONTAINER: "tag-filter-container",
+    FILTER_ADD_TAG_BUTTON: "filter-add-tag-button", // MODIFIED
+    FILTER_TAG_DROPDOWN: "filter-tag-dropdown",   // MODIFIED
 
 
     // Settings Keys
@@ -115,7 +115,7 @@ let allComments = [];
 let activeCommentRowIndex = null;
 let editCommentTags = [];
 let activeTaggingMode = 'new';
-let activeFilterTags = []; // MODIFIED: Added state for active filters
+let activeFilterTags = [];
 
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', description: 'For high-priority items needing immediate attention.' },
@@ -178,12 +178,13 @@ function initializeAddIn() {
 
     setupTaggingUI('new');
     setupTaggingUI('edit');
+    setupTaggingUI('filter'); // MODIFIED
     setupDatePicker();
     setupCommentEditing();
     setupDncModal();
     setupDeleteConfirmation();
     setupSearch(); 
-    setupTagFilters(); // MODIFIED: Added tag filter setup
+    setupTagFilters();
 
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -685,7 +686,6 @@ async function displayStudentHistory(studentId, searchTerm = '') {
     const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
     
-    // Only fetch from sheet if we don't have the comments cached or if it's a new student
     const needsFetch = allComments.length === 0 || (allComments.length > 0 && String(allComments[0].studentId) !== String(studentId));
 
     try {
@@ -748,7 +748,6 @@ async function displayStudentHistory(studentId, searchTerm = '') {
             
             let commentsToDisplay = allComments;
 
-            // Filter by active tags first
             if (activeFilterTags.length > 0) {
                 commentsToDisplay = commentsToDisplay.filter(comment => {
                     if (!comment.tag) return false;
@@ -757,7 +756,6 @@ async function displayStudentHistory(studentId, searchTerm = '') {
                 });
             }
 
-            // Then filter by search term
             if (searchTerm) {
                 const lowerCaseSearchTerm = searchTerm.toLowerCase();
                 commentsToDisplay = commentsToDisplay.filter(comment => 
@@ -995,8 +993,24 @@ async function executeSubmitComment(commentingUser) {
 // --- START: Tagging UI Functions ---
 
 function setupTaggingUI(mode) {
-    const addTagButton = document.getElementById(mode === 'new' ? CONSTANTS.ADD_TAG_BUTTON : CONSTANTS.EDIT_ADD_TAG_BUTTON);
-    const tagDropdown = document.getElementById(mode === 'new' ? CONSTANTS.TAG_DROPDOWN : CONSTANTS.EDIT_TAG_DROPDOWN);
+    let addTagButton, tagDropdown;
+
+    switch (mode) {
+        case 'new':
+            addTagButton = document.getElementById(CONSTANTS.ADD_TAG_BUTTON);
+            tagDropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+            break;
+        case 'edit':
+            addTagButton = document.getElementById(CONSTANTS.EDIT_ADD_TAG_BUTTON);
+            tagDropdown = document.getElementById(CONSTANTS.EDIT_TAG_DROPDOWN);
+            break;
+        case 'filter':
+            addTagButton = document.getElementById(CONSTANTS.FILTER_ADD_TAG_BUTTON);
+            tagDropdown = document.getElementById(CONSTANTS.FILTER_TAG_DROPDOWN);
+            break;
+        default:
+            return;
+    }
 
     addTagButton.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -1011,7 +1025,9 @@ function setupTaggingUI(mode) {
         }
     });
 
-    renderTagPills(mode);
+    if (mode !== 'filter') {
+        renderTagPills(mode);
+    }
     populateTagDropdown(mode);
 }
 
@@ -1046,14 +1062,28 @@ function renderTagPills(mode) {
 
 
 function populateTagDropdown(mode) {
-    const isEdit = mode === 'edit';
-    const dropdown = document.getElementById(isEdit ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN);
-    const tags = isEdit ? editCommentTags : newCommentTags;
+    let dropdown, tags;
+    switch (mode) {
+        case 'new':
+            dropdown = document.getElementById(CONSTANTS.TAG_DROPDOWN);
+            tags = newCommentTags;
+            break;
+        case 'edit':
+            dropdown = document.getElementById(CONSTANTS.EDIT_TAG_DROPDOWN);
+            tags = editCommentTags;
+            break;
+        case 'filter':
+            dropdown = document.getElementById(CONSTANTS.FILTER_TAG_DROPDOWN);
+            tags = activeFilterTags; // For filter mode, we check against active filters
+            break;
+        default:
+            return;
+    }
     
     if (!dropdown) return;
     dropdown.innerHTML = '';
 
-    const tagsToShow = availableTags.filter(tag => !tag.hidden && !tags.some(t => t.startsWith(tag.name)));
+    const tagsToShow = availableTags.filter(tag => !tag.hidden);
 
     if (tagsToShow.length === 0) {
         const noTagsItem = document.createElement('span');
@@ -1080,9 +1110,14 @@ function populateTagDropdown(mode) {
 
         item.onclick = (e) => {
             e.preventDefault();
-            if (tag.requiresDate) promptForLdaDate(mode);
-            else if (tag.requiresPopup) promptForDncType(mode);
-            else addTag(tag.name, mode);
+            if (mode === 'filter') {
+                toggleFilterTag(tag.name);
+                dropdown.classList.remove('show');
+            } else {
+                if (tag.requiresDate) promptForLdaDate(mode);
+                else if (tag.requiresPopup) promptForDncType(mode);
+                else addTag(tag.name, mode);
+            }
         };
         dropdown.appendChild(item);
     });
@@ -1457,13 +1492,13 @@ function addDncTag(dncType) {
 
 function setupSearch() {
     const searchButton = document.getElementById(CONSTANTS.SEARCH_HISTORY_BUTTON);
-    const searchBar = document.getElementById(CONSTANTS.SEARCH_BAR);
+    const searchContainer = document.getElementById(CONSTANTS.SEARCH_CONTAINER);
     const searchInput = document.getElementById(CONSTANTS.SEARCH_INPUT);
     const clearSearchButton = document.getElementById(CONSTANTS.CLEAR_SEARCH_BUTTON);
 
     searchButton.addEventListener('click', () => {
-        searchBar.classList.toggle('hidden');
-        if (!searchBar.classList.contains('hidden')) {
+        searchContainer.classList.toggle('hidden');
+        if (!searchContainer.classList.contains('hidden')) {
             searchInput.focus();
         }
     });
@@ -1484,7 +1519,8 @@ function setupSearch() {
 
 function setupTagFilters() {
     const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
-    container.innerHTML = '';
+    const existingButtons = container.querySelectorAll('button:not(#filter-add-tag-button)');
+    existingButtons.forEach(btn => btn.remove()); // Clear old buttons
 
     availableTags.filter(tag => !tag.hidden).forEach(tag => {
         const button = document.createElement('button');
@@ -1492,30 +1528,31 @@ function setupTagFilters() {
         button.textContent = tag.name;
         button.dataset.tagName = tag.name;
 
-        button.addEventListener('click', () => {
-            const tagName = button.dataset.tagName;
-            const index = activeFilterTags.indexOf(tagName);
-
-            if (index > -1) {
-                activeFilterTags.splice(index, 1);
-            } else {
-                activeFilterTags.push(tagName);
-            }
-            
-            renderTagFilters();
-            
-            if (currentStudentId) {
-                const searchTerm = document.getElementById(CONSTANTS.SEARCH_INPUT).value;
-                displayStudentHistory(currentStudentId, searchTerm);
-            }
-        });
-        container.appendChild(button);
+        button.addEventListener('click', () => toggleFilterTag(tag.name));
+        
+        // Insert before the "Insert Tag" button's container
+        container.insertBefore(button, container.querySelector('.relative'));
     });
 }
 
+function toggleFilterTag(tagName) {
+    const index = activeFilterTags.indexOf(tagName);
+    if (index > -1) {
+        activeFilterTags.splice(index, 1);
+    } else {
+        activeFilterTags.push(tagName);
+    }
+    renderTagFilters();
+    if (currentStudentId) {
+        const searchTerm = document.getElementById(CONSTANTS.SEARCH_INPUT).value;
+        displayStudentHistory(currentStudentId, searchTerm);
+    }
+}
+
+
 function renderTagFilters() {
     const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
-    container.querySelectorAll('button').forEach(button => {
+    container.querySelectorAll('button:not(#filter-add-tag-button)').forEach(button => {
         if (activeFilterTags.includes(button.dataset.tagName)) {
             button.classList.remove('opacity-50');
             button.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
