@@ -4,235 +4,236 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Student Retention Add-in</title>
+    <title>Student Retention Task Pane</title>
 
     <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-
-    <!-- ExcelJS for reading .xlsx files -->
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-
-    <!-- Tailwind CSS for styling -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
+    
+    <!-- Task Pane Code -->
+    <script type="text/javascript" src="taskpane.js"></script>
+    
     <style>
-        /* A little extra styling */
+        /* Custom styles for a better look and feel */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        .copy-feedback {
+            transition: opacity 0.5s;
         }
     </style>
 </head>
 <body class="bg-gray-50">
-    <!-- Main Content (Initially Hidden) -->
-    <div id="main-content" class="p-4 hidden">
-        <!-- Tab Navigation -->
-        <div class="border-b border-gray-200">
-            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                <button id="tab-details" type="button" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600" aria-current="page">
-                    Student Details
-                </button>
-                <button id="tab-history" type="button" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                    Student History
-                </button>
+    <div id="main-content" class="h-screen flex flex-col">
+        <!-- Header with Student Info -->
+        <div class="p-4 bg-white border-b border-gray-200">
+            <div class="flex items-center space-x-4">
+                <div id="student-avatar" class="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold">--</div>
+                <div>
+                    <h2 id="student-name-display" class="text-lg font-bold text-gray-800">Select a Student</h2>
+                    <div class="flex items-center gap-2">
+                        <span id="student-id-display" class="text-sm text-gray-500">No ID</span>
+                        <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800">Unassigned</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="border-b border-gray-200 bg-white">
+            <nav class="-mb-px flex space-x-6 px-4" aria-label="Tabs">
+                <button id="tab-details" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600">Details</button>
+                <button id="tab-history" class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">History</button>
             </nav>
         </div>
 
-        <!-- Tab Content Panels -->
-        <div class="pt-5 relative">
-            <!-- Floating Add Button (Moved Here) -->
-            <button id="add-comment-button" class="hidden absolute top-0 right-0 bg-blue-600 text-white rounded-full p-2 shadow-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-            </button>
-
-            <!-- Student Details Panel -->
-            <div id="panel-details">
-                <div class="flex flex-col md:flex-row gap-4">
-                    <!-- Left Column: Identity -->
-                    <div class="w-full md:w-1/3 flex flex-col items-center text-center p-4 bg-white rounded-lg shadow-inner">
-                        <div id="student-avatar" class="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-4xl bg-gray-400 mb-3">
-                            --
-                        </div>
-                        <h2 id="student-name-display" class="text-xl font-bold text-gray-800" title="Select a row">Select a row</h2>
-                        <div class="mt-1">
-                            <span id="assigned-to-badge" class="px-2 py-0.5 text-xs font-semibold text-gray-800 bg-gray-200 rounded-full">Unassigned</span>
-                        </div>
-                        <!-- Student ID -->
-                        <div id="copy-student-id" class="mt-2 cursor-pointer hover:bg-gray-100 p-1 rounded-md">
-                            <dt class="text-sm font-medium text-gray-500 flex items-center">
-                                Student ID
-                                <span class="copy-feedback hidden text-xs text-green-600 font-normal ml-2">Copied!</span>
-                            </dt>
-                            <dd id="student-id-display" class="mt-1 text-sm text-gray-900 font-semibold">--</dd>
-                        </div>
-                        <p class="mt-1 text-xs text-gray-500">Last LDA: <span id="last-lda-display">N/A</span></p>
+        <!-- Main Content Panels -->
+        <div class="flex-grow overflow-y-auto">
+            <!-- Details Panel -->
+            <div id="panel-details" class="p-4 space-y-4">
+                <!-- Stat Blocks -->
+                <div class="flex space-x-3">
+                    <div id="days-out-stat-block" class="flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800">
+                        <div class="text-2xl font-bold" id="days-out-display">--</div>
+                        <div class="text-xs font-medium uppercase text-gray-500">Days Out</div>
                     </div>
-
-                    <!-- Right Column: Info & Stats -->
-                    <div class="w-full md:w-2/3 flex flex-col gap-4">
-                        <!-- Stats Block -->
-                        <div class="flex gap-4">
-                            <div id="days-out-stat-block" class="flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800">
-                                <div id="days-out-display" class="text-3xl font-bold">--</div>
-                                <div class="text-xs font-semibold">DAYS OUT</div>
-                            </div>
-                            <div id="grade-stat-block" class="flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800 transition-colors duration-150">
-                                <div id="grade-display" class="text-3xl font-bold">--%</div>
-                                <div class="text-xs font-semibold">GRADE</div>
-                            </div>
-                        </div>
-                        <!-- Contact Info -->
-                        <div class="p-4 bg-white rounded-lg shadow-inner flex-grow">
-                            <h3 class="font-bold text-gray-700 mb-3">Contact Information</h3>
-                            <div class="space-y-1 text-sm">
-                                <div id="copy-primary-phone" class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors duration-150">
-                                    <svg class="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                                    <div class="flex-grow"><div class="text-xs text-gray-500">Primary Phone</div><div id="primary-phone-display" class="font-semibold">N/A</div></div>
-                                    <span class="copy-feedback text-xs text-green-600 font-semibold hidden ml-2">Copied!</span>
-                                </div>
-                                <div id="copy-other-phone" class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors duration-150">
-                                    <svg class="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
-                                    <div class="flex-grow"><div class="text-xs text-gray-500">Other Phone</div><div id="other-phone-display" class="font-semibold">N/A</div></div>
-                                    <span class="copy-feedback text-xs text-green-600 font-semibold hidden ml-2">Copied!</span>
-                                </div>
-                                <div id="copy-student-email" class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors duration-150">
-                                    <svg class="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                                    <div class="flex-grow"><div class="text-xs text-gray-500">Student Email</div><div id="student-email-display" class="font-semibold">N/A</div></div>
-                                    <span class="copy-feedback text-xs text-green-600 font-semibold hidden ml-2">Copied!</span>
-                                </div>
-                                <div id="copy-personal-email" class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer transition-colors duration-150">
-                                    <svg class="w-5 h-5 text-gray-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                                    <div class="flex-grow"><div class="text-xs text-gray-500">Personal Email</div><div id="personal-email-display" class="font-semibold">N/A</div></div>
-                                    <span class="copy-feedback text-xs text-green-600 font-semibold hidden ml-2">Copied!</span>
-                                </div>
-                            </div>
-                        </div>
+                    <div id="grade-stat-block" class="flex-1 p-3 text-center rounded-lg bg-gray-200 text-gray-800 transition-colors duration-150">
+                        <div class="text-2xl font-bold" id="grade-display">N/A</div>
+                        <div class="text-xs font-medium uppercase text-gray-500">Grade</div>
+                    </div>
+                </div>
+                <!-- Contact Info -->
+                <div class="space-y-3">
+                    <div id="copy-student-id" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
+                        <label class="text-xs text-gray-500">Student ID</label>
+                        <p class="font-semibold text-gray-800" id="student-id-display-copy">N/A</p>
+                        <span class="copy-feedback hidden absolute right-2 top-2 text-xs bg-green-500 text-white px-2 py-1 rounded">Copied!</span>
+                    </div>
+                    <div id="copy-primary-phone" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
+                        <label class="text-xs text-gray-500">Primary Phone</label>
+                        <p class="font-semibold text-gray-800" id="primary-phone-display">N/A</p>
+                        <span class="copy-feedback hidden absolute right-2 top-2 text-xs bg-green-500 text-white px-2 py-1 rounded">Copied!</span>
+                    </div>
+                    <div id="copy-other-phone" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
+                        <label class="text-xs text-gray-500">Other Phone</label>
+                        <p class="font-semibold text-gray-800" id="other-phone-display">N/A</p>
+                        <span class="copy-feedback hidden absolute right-2 top-2 text-xs bg-green-500 text-white px-2 py-1 rounded">Copied!</span>
+                    </div>
+                    <div id="copy-student-email" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
+                        <label class="text-xs text-gray-500">Student Email</label>
+                        <p class="font-semibold text-gray-800" id="student-email-display">N/A</p>
+                        <span class="copy-feedback hidden absolute right-2 top-2 text-xs bg-green-500 text-white px-2 py-1 rounded">Copied!</span>
+                    </div>
+                    <div id="copy-personal-email" class="p-2 rounded-lg hover:bg-gray-200 cursor-pointer relative">
+                        <label class="text-xs text-gray-500">Personal Email</label>
+                        <p class="font-semibold text-gray-800" id="personal-email-display">N/A</p>
+                        <span class="copy-feedback hidden absolute right-2 top-2 text-xs bg-green-500 text-white px-2 py-1 rounded">Copied!</span>
+                    </div>
+                     <div class="p-2 rounded-lg">
+                        <label class="text-xs text-gray-500">Last LDA</label>
+                        <p class="font-semibold text-gray-800" id="last-lda-display">N/A</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Student History Panel (Initially Hidden) -->
-            <div id="panel-history" class="hidden">
-                <!-- New Comment Section (Initially Hidden) -->
-                <div id="new-comment-section" class="hidden p-4 bg-white rounded-lg shadow-inner mb-4">
-                    <div id="tag-section" class="flex items-center gap-2 mb-2">
-                        <div id="tag-pills-container" class="flex items-center gap-1 flex-wrap">
-                             <span id="tag-placeholder" class="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 border border-dashed border-gray-400 rounded-full">Insert Tags</span>
-                        </div>
-                        <div class="relative">
-                            <button id="add-tag-button" type="button" class="flex items-center justify-center w-6 h-6 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                            </button>
-                            <div id="tag-dropdown" class="hidden absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
-                                <!-- Dropdown items will be generated here by JS -->
-                            </div>
-                        </div>
-                    </div>
-                    <textarea id="new-comment-input" class="w-full p-2 border border-gray-300 rounded-md" rows="3" placeholder="Type your comment here..."></textarea>
-                    <button id="submit-comment-button" class="mt-2 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400" disabled>
-                        Submit Comment
-                    </button>
-                    <p id="comment-status" class="text-xs text-gray-500 mt-2 h-4"></p>
-                </div>
-                <!-- History Display Section -->
-                <div id="history-content" class="p-4 bg-white rounded-lg shadow-inner">
+            <!-- History Panel -->
+            <div id="panel-history" class="hidden p-4">
+                <div id="history-content">
                     <p class="text-gray-500">Select a student row to see their history.</p>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- User Selection Modal -->
-    <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
-        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div class="mt-3 text-center">
-                <h3 class="text-lg leading-6 font-medium text-gray-900">Select User</h3>
-                <div class="mt-2 px-7 py-3">
-                    <p class="text-sm text-gray-500 mb-4">
-                        Please select the user for this session.
-                    </p>
-                    <select id="user-selection-dropdown" class="w-full p-2 border border-gray-300 rounded-md">
-                        <!-- Options will be populated by JS -->
-                    </select>
+        <!-- New Comment Section -->
+        <div id="new-comment-section" class="hidden p-4 bg-white border-t border-gray-200">
+            <div class="flex items-center gap-2 mb-2" id="tag-pills-container">
+                <span id="tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
+            </div>
+            <div class="relative">
+                <button id="add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
+                </button>
+                <div id="tag-dropdown" class="hidden absolute bottom-full right-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-20">
+                    <!-- Dropdown content populated by JS -->
                 </div>
-                <div class="items-center px-4 py-3">
-                    <button id="confirm-user-button" class="px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">
-                        Confirm
-                    </button>
-                </div>
+            </div>
+            <textarea id="new-comment-input" class="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="Add a new comment..."></textarea>
+            <div class="flex justify-between items-center mt-2">
+                <span id="comment-status" class="text-sm text-green-600"></span>
+                <button id="submit-comment-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
             </div>
         </div>
     </div>
 
+    <!-- Floating Action Button for adding comments -->
+    <button id="add-comment-button" class="hidden fixed bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+    </button>
+    
+    <!-- User Selection Modal -->
+    <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <h3 class="text-lg font-medium text-gray-900">Commenting As</h3>
+            <div class="mt-2">
+                <select id="user-selection-dropdown" class="w-full p-2 border rounded-md"></select>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button id="cancel-user-button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md mr-2 hover:bg-gray-300">Cancel</button>
+                <button id="confirm-user-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Date Picker Modal -->
     <div id="date-picker-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-4 w-72">
-            <div id="calendar-header" class="flex justify-between items-center mb-2">
+            <div class="flex justify-between items-center mb-2">
                 <button id="prev-month" class="p-1 rounded-full hover:bg-gray-200">&lt;</button>
-                <h3 id="month-year" class="font-bold text-lg"></h3>
+                <h3 id="month-year" class="font-bold"></h3>
                 <button id="next-month" class="p-1 rounded-full hover:bg-gray-200">&gt;</button>
             </div>
-            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm"></div>
-            <div class="flex justify-end gap-2 mt-4">
-                <button id="cancel-date" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
-                <button id="confirm-date" class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700" disabled>Confirm</button>
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-sm">
+                <!-- Calendar will be rendered here by JS -->
+            </div>
+            <div class="flex justify-end mt-4">
+                <button id="cancel-date" class="px-3 py-1 bg-gray-200 rounded mr-2">Cancel</button>
+                <button id="confirm-date" class="px-3 py-1 bg-blue-600 text-white rounded disabled:bg-gray-400">OK</button>
             </div>
         </div>
     </div>
 
     <!-- Edit Comment Modal -->
     <div id="edit-comment-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Edit Comment</h3>
-            <div id="edit-tag-section" class="flex items-center gap-2 mb-2">
-                <div id="edit-tag-pills-container" class="flex items-center gap-1 flex-wrap">
-                    <span id="edit-tag-placeholder" class="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100 border border-dashed border-gray-400 rounded-full">Add Tags</span>
+        <div class="bg-white rounded-lg shadow-xl p-4 w-96">
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Edit Comment</h3>
+            <div class="flex items-center gap-2 mb-2" id="edit-tag-pills-container">
+                <span id="edit-tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
+            </div>
+             <div class="relative">
+                <button id="edit-add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
+                </button>
+                <div id="edit-tag-dropdown" class="hidden absolute bottom-full right-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-20"></div>
+            </div>
+            <textarea id="edit-comment-input" class="w-full p-2 border rounded-md" rows="4"></textarea>
+            <div class="flex justify-between items-center mt-2">
+                <span id="edit-comment-status" class="text-sm text-green-600"></span>
+                <div class="flex justify-end">
+                    <button id="cancel-edit-button" class="px-4 py-2 bg-gray-200 rounded-md mr-2">Cancel</button>
+                    <button id="update-comment-button" class="px-4 py-2 bg-blue-600 text-white rounded-md">Update</button>
                 </div>
-                <div class="relative">
-                    <button id="edit-add-tag-button" type="button" class="flex items-center justify-center w-6 h-6 bg-gray-200 text-gray-600 rounded-full hover:bg-gray-300">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                    </button>
-                    <div id="edit-tag-dropdown" class="hidden absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg z-20">
-                        <!-- Dropdown items for editing -->
-                    </div>
-                </div>
-            </div>
-            <textarea id="edit-comment-input" class="w-full p-2 border border-gray-300 rounded-md" rows="4"></textarea>
-            <div class="items-center px-4 py-3 flex gap-2">
-                <button id="cancel-edit-button" class="flex-1 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300">Cancel</button>
-                <button id="update-comment-button" class="flex-1 px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-blue-600">Update</button>
-            </div>
-            <p id="edit-comment-status" class="text-xs text-center text-gray-500 h-4"></p>
-        </div>
-    </div>
-
-    <!-- DNC Type Modal -->
-    <div id="dnc-type-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-        <div class="relative p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2">Do Not Contact</h3>
-            <p class="text-sm text-gray-500 mb-4">Select the contact method(s) the student has opted out of.</p>
-            <div id="dnc-options-container" class="space-y-2">
-                <!-- DNC options will be populated here -->
-            </div>
-            <div class="items-center mt-4 flex justify-end">
-                <button id="cancel-dnc-button" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md shadow-sm hover:bg-gray-300">Cancel</button>
             </div>
         </div>
-    </div>
-
-    <!-- Custom Context Menu -->
-    <div id="comment-context-menu" class="hidden absolute bg-white border rounded shadow-lg z-50">
-        <button id="edit-comment-btn" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            Edit Comment
-        </button>
     </div>
     
-    <!-- Your Add-in's Code -->
-    <script type="text/javascript" src="taskpane.js"></script>
-    <script>
-        // Debug log to confirm the taskpane HTML file is loaded.
-        console.log("Taskpane HTML page loaded successfully.");
-    </script>
+    <!-- DNC Type Modal -->
+    <div id="dnc-type-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-4 w-96">
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Select DNC Type</h3>
+            <div id="dnc-options-container" class="space-y-2">
+                <!-- DNC options will be rendered here by JS -->
+            </div>
+            <div class="flex justify-end mt-4">
+                <button id="cancel-dnc-button" class="px-4 py-2 bg-gray-200 rounded-md">Cancel</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-confirm-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                    <svg class="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Delete Comment</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p class="text-sm text-gray-500">
+                        Are you sure you want to delete this comment? This action cannot be undone.
+                    </p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="confirm-delete-button" class="px-4 py-2 bg-red-500 text-white text-base font-medium rounded-md w-auto shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-300">
+                        Delete
+                    </button>
+                    <button id="cancel-delete-button" class="ml-2 px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-md w-auto shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Comment Context Menu -->
+    <div id="comment-context-menu" class="hidden fixed bg-white border rounded-md shadow-lg z-50 text-sm">
+        <button id="edit-comment-btn" class="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">Edit Comment</button>
+        <button id="delete-comment-btn" class="block w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 disabled:text-gray-400 disabled:hover:bg-transparent">Delete Comment</button>
+    </div>
+
 </body>
 </html>
