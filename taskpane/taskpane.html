@@ -104,6 +104,13 @@
 
             <!-- History Panel -->
             <div id="panel-history" class="hidden p-4 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-gray-800">History</h3>
+                    <button id="add-comment-button" class="bg-blue-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                    </button>
+                </div>
+
                  <!-- New Comment Section (now at the top) -->
                 <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
                     <div class="flex items-center gap-2 mb-2" id="tag-pills-container">
@@ -129,11 +136,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Floating Action Button for adding comments -->
-        <button id="add-comment-button" class="hidden fixed bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-        </button>
     </div>
     
     <!-- User Selection Modal -->
