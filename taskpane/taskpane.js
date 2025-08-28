@@ -61,6 +61,11 @@ const CONSTANTS = {
     DELETE_CONFIRM_MODAL: "delete-confirm-modal",
     CONFIRM_DELETE_BUTTON: "confirm-delete-button",
     CANCEL_DELETE_BUTTON: "cancel-delete-button",
+    // MODIFIED: Added Search constants
+    SEARCH_HISTORY_BUTTON: "search-history-button",
+    SEARCH_BAR: "search-bar",
+    SEARCH_INPUT: "search-input",
+    CLEAR_SEARCH_BUTTON: "clear-search-button",
 
 
     // Settings Keys
@@ -111,7 +116,6 @@ let activeCommentRowIndex = null; // Store the sheet row index of the comment be
 let editCommentTags = []; // Tags for the comment being edited
 let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edit')
 
-// MODIFIED: Added descriptions for tooltips
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', description: 'For high-priority items needing immediate attention.' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100', description: 'A general-purpose note for internal records.' },
@@ -177,7 +181,8 @@ function initializeAddIn() {
     setupDatePicker();
     setupCommentEditing();
     setupDncModal();
-    setupDeleteConfirmation(); // New setup function for delete modal
+    setupDeleteConfirmation();
+    setupSearch(); // MODIFIED: Added search setup
 
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -674,82 +679,100 @@ function highlightDateInText(text) {
 
 /**
  * Fetches and displays the comment history for a given student ID from the "Student History" sheet.
+ * @param {string} studentId The ID of the student.
+ * @param {string} [searchTerm=''] An optional term to filter the comments.
  */
-async function displayStudentHistory(studentId) {
+async function displayStudentHistory(studentId, searchTerm = '') {
     const historyContent = document.getElementById(CONSTANTS.HISTORY_CONTENT);
     historyContent.innerHTML = '<p class="text-gray-500">Loading history...</p>';
-    allComments = [];
+    
+    if (searchTerm === '') { // Only reset allComments cache if not searching
+        allComments = [];
+    }
 
     try {
         await Excel.run(async (context) => {
-            const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
-            const historyRange = historySheet.getUsedRange();
-            historyRange.load("values, rowIndex");
-            await context.sync();
+            if (searchTerm === '' || allComments.length === 0) {
+                const historySheet = context.workbook.worksheets.getItem(CONSTANTS.HISTORY_SHEET);
+                const historyRange = historySheet.getUsedRange();
+                historyRange.load("values, rowIndex");
+                await context.sync();
 
-            const historyData = historyRange.values;
-            const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
-            
-            const idColIdx = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
-            const commentColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.comment);
-            const tagColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.tag);
-            const timestampColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.timestamp);
-            const createdByColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.createdBy);
+                const historyData = historyRange.values;
+                const historyHeaders = historyData[0].map(header => String(header || '').toLowerCase());
+                
+                const idColIdx = findColumnIndex(historyHeaders, CONSTANTS.COLUMN_MAPPINGS.id);
+                const commentColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.comment);
+                const tagColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.tag);
+                const timestampColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.timestamp);
+                const createdByColIdx = historyHeaders.indexOf(CONSTANTS.COLUMN_MAPPINGS.createdBy);
 
-            if (idColIdx === -1 || commentColIdx === -1) {
-                historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
-                return;
-            }
-            
-            const comments = [];
-            for (let i = 1; i < historyData.length; i++) {
-                const row = historyData[i];
-                if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
-                    const commentText = row[commentColIdx];
-                    if (commentText && String(commentText).trim() !== "") {
-                        const comment = {
-                            rowIndex: historyRange.rowIndex + i,
-                            text: commentText,
-                            tag: tagColIdx !== -1 ? row[tagColIdx] : null,
-                            timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
-                            createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown',
-                            ldaDate: null
-                        };
+                if (idColIdx === -1 || commentColIdx === -1) {
+                    historyContent.innerHTML = '<p class="text-red-500 font-semibold">Error: "Student History" sheet must contain "Student Identifier" and "Comment" columns.</p>';
+                    return;
+                }
+                
+                const comments = [];
+                for (let i = 1; i < historyData.length; i++) {
+                    const row = historyData[i];
+                    if (row[idColIdx] && String(row[idColIdx]) === String(studentId)) {
+                        const commentText = row[commentColIdx];
+                        if (commentText && String(commentText).trim() !== "") {
+                            const comment = {
+                                rowIndex: historyRange.rowIndex + i,
+                                text: commentText,
+                                tag: tagColIdx !== -1 ? row[tagColIdx] : null,
+                                timestamp: timestampColIdx !== -1 ? row[timestampColIdx] : null,
+                                createdBy: (createdByColIdx !== -1 && row[createdByColIdx]) ? row[createdByColIdx] : 'Unknown',
+                                ldaDate: null
+                            };
 
-                        if (comment.tag) {
-                            const tags = String(comment.tag).split(',').map(t => t.trim());
-                            const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
-                            if (ldaTag) {
-                                const dateStr = ldaTag.substring(4);
-                                const ldaDate = new Date(dateStr);
-                                if (!isNaN(ldaDate.getTime())) {
-                                    ldaDate.setHours(0, 0, 0, 0);
-                                    comment.ldaDate = ldaDate;
+                            if (comment.tag) {
+                                const tags = String(comment.tag).split(',').map(t => t.trim());
+                                const ldaTag = tags.find(t => t.toLowerCase().startsWith('lda '));
+                                if (ldaTag) {
+                                    const dateStr = ldaTag.substring(4);
+                                    const ldaDate = new Date(dateStr);
+                                    if (!isNaN(ldaDate.getTime())) {
+                                        ldaDate.setHours(0, 0, 0, 0);
+                                        comment.ldaDate = ldaDate;
+                                    }
                                 }
                             }
+                            comments.push(comment);
                         }
-                        comments.push(comment);
                     }
                 }
+                allComments = comments;
             }
             
-            allComments = comments;
+            let commentsToDisplay = allComments;
+            if (searchTerm) {
+                const lowerCaseSearchTerm = searchTerm.toLowerCase();
+                commentsToDisplay = allComments.filter(comment => 
+                    String(comment.text).toLowerCase().includes(lowerCaseSearchTerm) ||
+                    String(comment.tag).toLowerCase().includes(lowerCaseSearchTerm) ||
+                    String(comment.createdBy).toLowerCase().includes(lowerCaseSearchTerm)
+                );
+            }
 
-            if (comments.length > 0) {
+            if (commentsToDisplay.length > 0) {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
                 const isNoteOrDnc = (c) => c.tag && (c.tag.toLowerCase().includes('note') || c.tag.toLowerCase().includes('dnc'));
 
-                const noteAndDncComments = comments.filter(isNoteOrDnc);
-                const priorityComments = comments.filter(c => c.ldaDate && c.ldaDate >= today && !isNoteOrDnc(c));
-                const regularComments = comments.filter(c => !isNoteOrDnc(c) && !priorityComments.includes(c));
+                const noteAndDncComments = commentsToDisplay.filter(isNoteOrDnc);
+                const priorityComments = commentsToDisplay.filter(c => c.ldaDate && c.ldaDate >= today && !isNoteOrDnc(c));
+                const regularComments = commentsToDisplay.filter(c => !isNoteOrDnc(c) && !priorityComments.includes(c));
 
                 noteAndDncComments.sort((a, b) => (parseDate(b.timestamp) || 0) - (parseDate(a.timestamp) || 0));
                 priorityComments.sort((a, b) => a.ldaDate - b.ldaDate);
                 regularComments.sort((a, b) => (parseDate(b.timestamp) || 0) - (parseDate(a.timestamp) || 0));
 
                 const sortedComments = [...noteAndDncComments, ...priorityComments, ...regularComments];
+                
+                const searchRegex = searchTerm ? new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi') : null;
 
                 let html = '<ul class="space-y-4">';
                 sortedComments.forEach(comment => {
@@ -763,6 +786,9 @@ async function displayStudentHistory(studentId) {
                     else if (isContacted) bgColor = 'bg-yellow-100';
 
                     let displayText = isPriority ? highlightDateInText(comment.text) : comment.text;
+                    if (searchRegex) {
+                        displayText = String(displayText).replace(searchRegex, `<mark class="bg-yellow-300 p-0 m-0 rounded">$1</mark>`);
+                    }
 
                     html += `<li class="p-3 ${bgColor} rounded-lg shadow-sm relative" data-row-index="${comment.rowIndex}">
                                 <p class="text-sm text-gray-800">${displayText}</p>
@@ -774,12 +800,16 @@ async function displayStudentHistory(studentId) {
                             if (tagName && tagName.toLowerCase() !== 'comment') {
                                 const tagPrefix = tagName.split(' ')[0];
                                 const tagInfo = availableTags.find(t => t.name.toLowerCase() === tagPrefix.toLowerCase()) || { bg: 'bg-blue-100', text: 'text-blue-800' };
-                                html += `<span class="px-2 py-0.5 font-semibold rounded-full ${tagInfo.bg} ${tagInfo.text}">${tagName}</span>`;
+                                let displayTagName = tagName;
+                                if (searchRegex) displayTagName = displayTagName.replace(searchRegex, `<mark class="bg-yellow-300 p-0 m-0 rounded">$1</mark>`);
+                                html += `<span class="px-2 py-0.5 font-semibold rounded-full ${tagInfo.bg} ${tagInfo.text}">${displayTagName}</span>`;
                             }
                         });
                     }
                     
-                    html += `<span class="font-medium">${comment.createdBy}</span></div>`;
+                    let createdByText = comment.createdBy;
+                    if (searchRegex) createdByText = createdByText.replace(searchRegex, `<mark class="bg-yellow-300 p-0 m-0 rounded">$1</mark>`);
+                    html += `<span class="font-medium">${createdByText}</span></div>`;
 
                     let dateText = 'Unknown Time';
                     if (comment.timestamp && !isNaN(comment.timestamp) && comment.timestamp > 25569) {
@@ -794,7 +824,9 @@ async function displayStudentHistory(studentId) {
                 historyContent.querySelectorAll('li').forEach(li => li.addEventListener('contextmenu', showContextMenu));
 
             } else {
-                historyContent.innerHTML = '<p class="text-gray-500">No history found for this student.</p>';
+                historyContent.innerHTML = searchTerm 
+                    ? '<p class="text-gray-500">No matching comments found.</p>'
+                    : '<p class="text-gray-500">No history found for this student.</p>';
             }
         });
     } catch (error) {
@@ -1029,7 +1061,6 @@ function populateTagDropdown(mode) {
         item.className = 'block px-3 py-2 text-sm text-gray-700 hover:bg-white/20 rounded-md transition-colors';
         item.style.setProperty('--i', index);
         
-        // MODIFIED: Add title attribute for tooltip
         if (tag.description) {
             item.title = tag.description;
         }
@@ -1055,7 +1086,6 @@ function addTag(tagName, mode) {
         tags.push(tagName);
         renderTagPills(mode);
         populateTagDropdown(mode);
-        // MODIFIED: Remove 'show' class
         document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
     }
 }
@@ -1107,7 +1137,6 @@ function setupDatePicker() {
         document.getElementById('confirm-date').disabled = true;
         renderCalendar(new Date());
         document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.remove('hidden');
-        // MODIFIED: Remove 'show' class
         document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
     };
 }
@@ -1405,7 +1434,6 @@ function promptForDncType(mode) {
     });
 
     modal.classList.remove('hidden');
-    // MODIFIED: Remove 'show' class
     document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
 }
 
@@ -1417,6 +1445,37 @@ function addDncTag(dncType) {
 
 
 // --- END: DNC Functions ---
+
+// --- START: Search Functions ---
+
+function setupSearch() {
+    const searchButton = document.getElementById(CONSTANTS.SEARCH_HISTORY_BUTTON);
+    const searchBar = document.getElementById(CONSTANTS.SEARCH_BAR);
+    const searchInput = document.getElementById(CONSTANTS.SEARCH_INPUT);
+    const clearSearchButton = document.getElementById(CONSTANTS.CLEAR_SEARCH_BUTTON);
+
+    searchButton.addEventListener('click', () => {
+        searchBar.classList.toggle('hidden');
+        if (!searchBar.classList.contains('hidden')) {
+            searchInput.focus();
+        }
+    });
+
+    searchInput.addEventListener('input', () => {
+        if (currentStudentId) {
+            displayStudentHistory(currentStudentId, searchInput.value);
+        }
+    });
+
+    clearSearchButton.addEventListener('click', () => {
+        searchInput.value = '';
+        if (currentStudentId) {
+            displayStudentHistory(currentStudentId, '');
+        }
+    });
+}
+
+// --- END: Search Functions ---
 
 
 // --- START: Code moved from commands.js ---
