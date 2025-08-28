@@ -103,38 +103,38 @@
             </div>
 
             <!-- History Panel -->
-            <div id="panel-history" class="hidden p-4">
+            <div id="panel-history" class="hidden p-4 space-y-4">
+                 <!-- New Comment Section (now at the top) -->
+                <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
+                    <div class="flex items-center gap-2 mb-2" id="tag-pills-container">
+                        <span id="tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
+                    </div>
+                    <div class="relative">
+                        <button id="add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
+                        </button>
+                        <div id="tag-dropdown" class="hidden absolute bottom-full right-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-20">
+                            <!-- Dropdown content populated by JS -->
+                        </div>
+                    </div>
+                    <textarea id="new-comment-input" class="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="Add a new comment..."></textarea>
+                    <div class="flex justify-between items-center mt-2">
+                        <span id="comment-status" class="text-sm text-green-600"></span>
+                        <button id="submit-comment-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
+                    </div>
+                </div>
+
                 <div id="history-content">
                     <p class="text-gray-500">Select a student row to see their history.</p>
                 </div>
             </div>
         </div>
 
-        <!-- New Comment Section -->
-        <div id="new-comment-section" class="hidden p-4 bg-white border-t border-gray-200">
-            <div class="flex items-center gap-2 mb-2" id="tag-pills-container">
-                <span id="tag-placeholder" class="text-sm text-gray-500">No tags selected</span>
-            </div>
-            <div class="relative">
-                <button id="add-tag-button" type="button" class="absolute top-1 right-1 p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-gray-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
-                </button>
-                <div id="tag-dropdown" class="hidden absolute bottom-full right-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-20">
-                    <!-- Dropdown content populated by JS -->
-                </div>
-            </div>
-            <textarea id="new-comment-input" class="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" rows="3" placeholder="Add a new comment..."></textarea>
-            <div class="flex justify-between items-center mt-2">
-                <span id="comment-status" class="text-sm text-green-600"></span>
-                <button id="submit-comment-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
-            </div>
-        </div>
+        <!-- Floating Action Button for adding comments -->
+        <button id="add-comment-button" class="hidden fixed bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+        </button>
     </div>
-
-    <!-- Floating Action Button for adding comments -->
-    <button id="add-comment-button" class="hidden fixed bottom-4 right-4 bg-blue-600 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-    </button>
     
     <!-- User Selection Modal -->
     <div id="user-selection-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
