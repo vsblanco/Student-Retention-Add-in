@@ -35,7 +35,7 @@ const CONSTANTS = {
     COPY_STUDENT_EMAIL: "copy-student-email",
     COPY_PERSONAL_EMAIL: "copy-personal-email",
     USER_SELECTION_MODAL: "user-selection-modal",
-    USER_BUTTONS_CONTAINER: "user-buttons-container", // MODIFIED
+    USER_BUTTONS_CONTAINER: "user-buttons-container",
     TAG_PILLS_CONTAINER: "tag-pills-container",
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
@@ -129,7 +129,6 @@ Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     loadUserSettings();
     
-    // MODIFIED: No confirm button listener needed anymore
     if (sessionCommentUser) {
         document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
         initializeAddIn();
@@ -178,7 +177,7 @@ function initializeAddIn() {
     setupDncModal();
     setupDeleteConfirmation();
     setupSearch(); 
-    setupTagFilters();
+    renderTagFilters(); // Initial render for the filter bar
 
     Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, onSelectionChange, (result) => {
       if (result.status === Office.AsyncResultStatus.Failed) {
@@ -873,7 +872,6 @@ function promptForUserAndSubmit() {
     });
 
     modal.classList.remove('hidden');
-    // Add a slight delay to ensure the element is visible before adding the animation class
     setTimeout(() => modal.classList.add('show'), 10);
 }
 
@@ -885,9 +883,8 @@ async function handleUserSelection(selectedUser) {
     sessionCommentUser = selectedUser;
     document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
     document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
-    document.getElementById(CONSTANTS.MAIN_CONTENT).classList.add('flex'); // Make it visible
+    document.getElementById(CONSTANTS.MAIN_CONTENT).classList.add('flex');
     
-    // If the add-in hasn't been initialized yet (first time), initialize it.
     if (!document.getElementById(CONSTANTS.TAB_DETAILS)._isInitialized) {
         initializeAddIn();
         document.getElementById(CONSTANTS.TAB_DETAILS)._isInitialized = true;
@@ -906,7 +903,6 @@ async function handleUserSelection(selectedUser) {
 
         pendingOutreachAction = null;
     } else {
-        // If there's no pending action, we might need to submit a comment if the text box has content.
         const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
         if (commentInput && commentInput.value.trim() !== "") {
             await executeSubmitComment(sessionCommentUser);
@@ -1078,7 +1074,7 @@ function populateTagDropdown(mode) {
             break;
         case 'filter':
             dropdown = document.getElementById(CONSTANTS.FILTER_TAG_DROPDOWN);
-            tags = activeFilterTags; // For filter mode, we check against active filters
+            tags = activeFilterTags;
             break;
         default:
             return;
@@ -1522,21 +1518,9 @@ function setupSearch() {
 }
 
 function setupTagFilters() {
-    const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
-    const existingButtons = container.querySelectorAll('button:not(#filter-add-tag-button)');
-    existingButtons.forEach(btn => btn.remove()); // Clear old buttons
-
-    availableTags.filter(tag => !tag.hidden).forEach(tag => {
-        const button = document.createElement('button');
-        button.className = `px-2 py-1 text-xs font-semibold rounded-full transition-all duration-150 opacity-50 hover:opacity-100 ${tag.bg} ${tag.text}`;
-        button.textContent = tag.name;
-        button.dataset.tagName = tag.name;
-
-        button.addEventListener('click', () => toggleFilterTag(tag.name));
-        
-        // Insert before the "Insert Tag" button's container
-        container.insertBefore(button, container.querySelector('.relative'));
-    });
+    // This function is now primarily for setting up the "Insert Tag" button's dropdown.
+    // The rendering of active filter tags is handled by renderTagFilters.
+    setupTaggingUI('filter');
 }
 
 function toggleFilterTag(tagName) {
@@ -1556,14 +1540,21 @@ function toggleFilterTag(tagName) {
 
 function renderTagFilters() {
     const container = document.getElementById(CONSTANTS.TAG_FILTER_CONTAINER);
-    container.querySelectorAll('button:not(#filter-add-tag-button)').forEach(button => {
-        if (activeFilterTags.includes(button.dataset.tagName)) {
-            button.classList.remove('opacity-50');
-            button.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500');
-        } else {
-            button.classList.add('opacity-50');
-            button.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500');
-        }
+    // Clear only the dynamically added filter tag buttons, not the "Insert Tag" button container
+    container.querySelectorAll('.filter-tag-button').forEach(btn => btn.remove());
+
+    const insertTagButtonContainer = container.querySelector('.relative');
+
+    activeFilterTags.forEach(tagName => {
+        const tagInfo = availableTags.find(t => t.name === tagName) || { bg: 'bg-gray-200', text: 'text-gray-800' };
+        const button = document.createElement('button');
+        button.className = `filter-tag-button px-2 py-1 text-xs font-semibold rounded-full transition-all duration-150 ${tagInfo.bg} ${tagInfo.text}`;
+        button.textContent = tagName;
+        button.dataset.tagName = tagName;
+
+        button.addEventListener('click', () => toggleFilterTag(tagName));
+        
+        container.insertBefore(button, insertTagButtonContainer);
     });
 }
 
