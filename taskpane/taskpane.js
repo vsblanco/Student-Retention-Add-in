@@ -51,7 +51,7 @@ const CONSTANTS = {
     COMMENT_CONTEXT_MENU: "comment-context-menu",
     EDIT_COMMENT_BTN: "edit-comment-btn",
     DELETE_COMMENT_BTN: "delete-comment-btn",
-    COPY_COMMENT_BTN: "copy-comment-btn", // MODIFIED: Added constant
+    COPY_COMMENT_BTN: "copy-comment-btn",
     DNC_TYPE_MODAL: "dnc-type-modal",
     DNC_OPTIONS_CONTAINER: "dnc-options-container",
     CANCEL_DNC_BUTTON: "cancel-dnc-button",
@@ -306,29 +306,29 @@ function setupTabs() {
  */
 function switchTab(tabId) {
     const tabDetails = document.getElementById(CONSTANTS.TAB_DETAILS);
+    // MODIFIED: Corrected the typo here
     const tabHistory = document.getElementById(CONSTANTS.TAB_HISTORY);
     const panelDetails = document.getElementById(CONSTANTS.PANEL_DETAILS);
     const panelHistory = document.getElementById(CONSTANTS.PANEL_HISTORY);
-    const submitButton = document.getElementById(CONSTANTS.SUBMIT_COMMENT_BUTTON);
-    const addCommentButton = document.getElementById(CONSTANTS.ADD_COMMENT_BUTTON);
 
     if (tabId === CONSTANTS.TAB_DETAILS) {
+        // Activate Details Tab
         tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
-        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
         panelDetails.classList.remove("hidden");
-        panelHistory.classList.add("hidden");
-        if (addCommentButton) addCommentButton.classList.add('hidden');
-    } else { // Switching to History
-        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
-        tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
-        panelHistory.classList.remove("hidden");
-        panelHistory.classList.add("hidden");
-        if (addCommentButton) addCommentButton.classList.remove('hidden');
-        
-        if (submitButton) {
-            submitButton.disabled = !currentStudentId;
-        }
 
+        // Deactivate History Tab
+        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+        panelHistory.classList.add("hidden");
+    } else { // Switching to History
+        // Activate History Tab
+        tabHistory.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-blue-500 text-blue-600";
+        panelHistory.classList.remove("hidden");
+
+        // Deactivate Details Tab
+        tabDetails.className = "whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300";
+        panelDetails.classList.add("hidden");
+        
+        // Logic to populate history if needed
         if (currentStudentId) {
             displayStudentHistory(currentStudentId);
         } else {
@@ -1303,7 +1303,7 @@ function setupCommentEditing() {
     const contextMenu = document.getElementById(CONSTANTS.COMMENT_CONTEXT_MENU);
     const editButton = document.getElementById(CONSTANTS.EDIT_COMMENT_BTN);
     const deleteButton = document.getElementById(CONSTANTS.DELETE_COMMENT_BTN);
-    const copyButton = document.getElementById(CONSTANTS.COPY_COMMENT_BTN); // MODIFIED
+    const copyButton = document.getElementById(CONSTANTS.COPY_COMMENT_BTN);
     const updateButton = document.getElementById(CONSTANTS.UPDATE_COMMENT_BUTTON);
     const cancelButton = document.getElementById(CONSTANTS.CANCEL_EDIT_BUTTON);
 
@@ -1320,7 +1320,6 @@ function setupCommentEditing() {
         contextMenu.classList.add('hidden');
     });
     
-    // MODIFIED: Added event listener for copy button
     copyButton.addEventListener('click', handleCopyComment);
     
     updateButton.addEventListener('click', handleUpdateComment);
@@ -1329,7 +1328,6 @@ function setupCommentEditing() {
     });
 }
 
-// MODIFIED: New function to handle copying comment text
 function handleCopyComment() {
     const commentToCopy = allComments.find(c => c.rowIndex === activeCommentRowIndex);
     if (commentToCopy) {
@@ -1765,7 +1763,7 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                 timestampCell.numberFormat = [["M/D/YYYY h:mm AM/PM"]];
 
             } else {
-                const newRowData = new Array(historyHeaders.length).fill("");
+                const newRowData = new Array(headers.length).fill("");
                 newRowData[idCol] = studentId;
                 if (studentCol !== -1) newRowData[studentCol] = studentName;
                 if (createdByCol !== -1) newRowData[createdByCol] = commentingUser;
