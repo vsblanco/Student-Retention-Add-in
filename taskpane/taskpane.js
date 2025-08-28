@@ -64,7 +64,7 @@ const CONSTANTS = {
 
     // Sheet and Column Names
     HISTORY_SHEET: "Student History",
-    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work"], // Phrases that trigger auto-highlight
+    OUTREACH_HIGHLIGHT_TRIGGERS: ["will engage", "will submit", "will come","will complete","will work","hanged up"], // Phrases that trigger auto-highlight
     COLUMN_MAPPINGS: {
         name: ["studentname", "student name"],
         id: ["student id", "studentnumber", "student identifier"],
@@ -110,8 +110,9 @@ let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edi
 const availableTags = [
     { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
     { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
-    { name: 'DNC', bg: 'bg-red-800', text: 'text-black', requiresPopup: true },
+    { name: 'DNC', bg: 'bg-red-700', text: 'text-black', requiresPopup: true },
     { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
+    { name: 'Contacted', bg: 'bg-yellow-100', text: 'text-yellow-800' },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
@@ -862,12 +863,15 @@ async function displayStudentHistory(studentId) {
                 sortedComments.forEach(comment => {
                     const isNoteOrDnc = comment.tag && (comment.tag.toLowerCase().includes('note') || comment.tag.toLowerCase().includes('dnc'));
                     const isPriority = !isNoteOrDnc && comment.ldaDate && comment.ldaDate >= today;
+                    const isContacted = comment.tag && comment.tag.toLowerCase().includes('contacted');
                     
                     let bgColor = 'bg-gray-100'; // Default
                     if (isNoteOrDnc) {
                         bgColor = 'bg-gray-200';
                     } else if (isPriority) {
                         bgColor = 'bg-orange-100';
+                    } else if (isContacted) {
+                        bgColor = 'bg-yellow-100';
                     }
 
                     let displayText = comment.text;
@@ -1806,6 +1810,11 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
                     tagsToSave += `, ${ldaTag}`;
                 }
 
+                const lowerCommentText = commentText.toLowerCase();
+                if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerCommentText.includes(phrase))) {
+                    tagsToSave += ', Contacted';
+                }
+
                 newRowData[tagCol] = tagsToSave;
                 newRowData[timestampCol] = excelNow;
                 newRowData[commentCol] = commentText;
@@ -1835,4 +1844,3 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
         }
     });
 }
-// --- END: Code moved from commands.js ---
