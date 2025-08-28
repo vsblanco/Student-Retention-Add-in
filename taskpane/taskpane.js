@@ -111,12 +111,13 @@ let activeCommentRowIndex = null; // Store the sheet row index of the comment be
 let editCommentTags = []; // Tags for the comment being edited
 let activeTaggingMode = 'new'; // To track which tag UI is active ('new' or 'edit')
 
+// MODIFIED: Added descriptions for tooltips
 const availableTags = [
-    { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800' },
-    { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100' },
-    { name: 'DNC', bg: 'bg-red-700', text: 'text-black', requiresPopup: true },
-    { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true },
-    { name: 'Contacted', bg: 'bg-yellow-100', text: 'text-yellow-800' },
+    { name: 'Urgent', bg: 'bg-red-100', text: 'text-red-800', description: 'For high-priority items needing immediate attention.' },
+    { name: 'Note', bg: 'bg-gray-700', text: 'text-gray-100', description: 'A general-purpose note for internal records.' },
+    { name: 'DNC', bg: 'bg-red-700', text: 'text-black', requiresPopup: true, description: 'Do Not Contact. Opens options for Phone, Email, or All.' },
+    { name: 'LDA', bg: 'bg-orange-100', text: 'text-orange-800', requiresDate: true, description: 'Last Date of Attendance. Adds a future follow-up date.' },
+    { name: 'Contacted', bg: 'bg-yellow-100', text: 'text-yellow-800', description: 'Marks that contact has been made with the student.' },
     { name: 'Outreach', bg: 'bg-blue-100', text: 'text-blue-800', hidden: true },
     { name: 'Quote', bg: 'bg-sky-100', text: 'text-sky-800', hidden: true }
 ];
@@ -1026,9 +1027,13 @@ function populateTagDropdown(mode) {
     tagsToShow.forEach((tag, index) => {
         const item = document.createElement('a');
         item.href = '#';
-        // MODIFIED: Added style for animation delay and hover effect
         item.className = 'block px-3 py-2 text-sm text-gray-700 hover:bg-white/20 rounded-md transition-colors';
         item.style.setProperty('--i', index);
+        
+        // MODIFIED: Add title attribute for tooltip
+        if (tag.description) {
+            item.title = tag.description;
+        }
         
         const pill = document.createElement('span');
         pill.className = `px-2 py-0.5 text-xs font-semibold rounded-full ${tag.bg} ${tag.text}`;
