@@ -79,14 +79,15 @@
             opacity: 0;
         }
         
-        /* MODIFIED: Style for the sticky, glass-effect header */
+        /* MODIFIED: Enhanced styles for the sticky, glass-effect header */
         .sticky-header {
             position: sticky;
             top: 0;
             z-index: 10;
-            background: rgba(249, 250, 251, 0.8); /* bg-gray-50 with opacity */
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(249, 250, 251, 0.75); /* bg-gray-50 with more transparency */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(209, 213, 219, 0.5); /* border-gray-300 with transparency */
         }
     </style>
 </head>
@@ -162,8 +163,8 @@
             </div>
 
             <!-- History Panel -->
-            <!-- MODIFIED: Changed structure for sticky header -->
             <div id="panel-history" class="hidden flex flex-col h-full">
+                <!-- MODIFIED: Sticky header now contains the new comment section -->
                 <div class="sticky-header p-4 space-y-4">
                     <div class="flex justify-between items-center">
                         <h3 class="text-lg font-bold text-gray-800">History</h3>
@@ -197,9 +198,7 @@
                             </button>
                         </div>
                     </div>
-                </div>
-
-                <div class="flex-grow overflow-y-auto p-4 space-y-4">
+                    
                     <div id="new-comment-section" class="hidden p-4 bg-white border rounded-lg shadow-sm">
                         <div id="tag-pills-container" class="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
                             <div class="relative">
@@ -216,7 +215,9 @@
                             <button id="submit-comment-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
                         </div>
                     </div>
+                </div>
 
+                <div class="flex-grow overflow-y-auto p-4 space-y-4">
                     <div id="history-content">
                         <p class="text-gray-500">Select a student row to see their history.</p>
                     </div>
