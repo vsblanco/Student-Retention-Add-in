@@ -1641,7 +1641,6 @@ async function applyContactedHighlight(rowIndex) {
 
 
 async function onWorksheetChanged(eventArgs) {
-    // MODIFIED: Rewritten for clarity and to fix bugs
     try {
         await Excel.run(async (context) => {
             if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
@@ -1663,8 +1662,9 @@ async function onWorksheetChanged(eventArgs) {
                 return;
             }
 
-            const newValue = (changedRange.values[0][0] || "").trim();
-            const oldValue = (changedRange.valuesBefore[0][0] || "").trim();
+            // MODIFIED: Added robust checks to prevent the TypeError
+            const newValue = (changedRange.values && changedRange.values[0] ? changedRange.values[0][0] || "" : "").trim();
+            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[0] ? changedRange.valuesBefore[0][0] || "" : "").trim();
 
             if (newValue === "" || newValue.toLowerCase() === oldValue.toLowerCase()) {
                 return;
