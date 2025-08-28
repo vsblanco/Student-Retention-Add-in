@@ -35,9 +35,7 @@ const CONSTANTS = {
     COPY_STUDENT_EMAIL: "copy-student-email",
     COPY_PERSONAL_EMAIL: "copy-personal-email",
     USER_SELECTION_MODAL: "user-selection-modal",
-    USER_SELECTION_DROPDOWN: "user-selection-dropdown",
-    CONFIRM_USER_BUTTON: "confirm-user-button",
-    CANCEL_USER_BUTTON: "cancel-user-button",
+    USER_BUTTONS_CONTAINER: "user-buttons-container", // MODIFIED
     TAG_PILLS_CONTAINER: "tag-pills-container",
     ADD_TAG_BUTTON: "add-tag-button",
     TAG_DROPDOWN: "tag-dropdown",
@@ -60,12 +58,12 @@ const CONSTANTS = {
     CONFIRM_DELETE_BUTTON: "confirm-delete-button",
     CANCEL_DELETE_BUTTON: "cancel-delete-button",
     SEARCH_HISTORY_BUTTON: "search-history-button",
-    SEARCH_CONTAINER: "search-container", // MODIFIED
+    SEARCH_CONTAINER: "search-container",
     SEARCH_INPUT: "search-input",
     CLEAR_SEARCH_BUTTON: "clear-search-button",
     TAG_FILTER_CONTAINER: "tag-filter-container",
-    FILTER_ADD_TAG_BUTTON: "filter-add-tag-button", // MODIFIED
-    FILTER_TAG_DROPDOWN: "filter-tag-dropdown",   // MODIFIED
+    FILTER_ADD_TAG_BUTTON: "filter-add-tag-button",
+    FILTER_TAG_DROPDOWN: "filter-tag-dropdown",
 
 
     // Settings Keys
@@ -131,11 +129,7 @@ Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     loadUserSettings();
     
-    const confirmUserButton = document.getElementById(CONSTANTS.CONFIRM_USER_BUTTON);
-    if (confirmUserButton) {
-        confirmUserButton.addEventListener('click', handleUserSelection);
-    }
-
+    // MODIFIED: No confirm button listener needed anymore
     if (sessionCommentUser) {
         document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
         initializeAddIn();
@@ -178,7 +172,7 @@ function initializeAddIn() {
 
     setupTaggingUI('new');
     setupTaggingUI('edit');
-    setupTaggingUI('filter'); // MODIFIED
+    setupTaggingUI('filter');
     setupDatePicker();
     setupCommentEditing();
     setupDncModal();
@@ -864,33 +858,39 @@ async function submitNewComment() {
  */
 function promptForUserAndSubmit() {
     const modal = document.getElementById(CONSTANTS.USER_SELECTION_MODAL);
-    const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
+    const container = document.getElementById(CONSTANTS.USER_BUTTONS_CONTAINER);
     
-    dropdown.innerHTML = '';
+    container.innerHTML = '';
 
     const userList = (settings.userProfile && settings.userProfile.userList) || [currentUserName];
-    userList.forEach(user => {
-        const option = document.createElement('option');
-        option.value = user;
-        option.textContent = user;
-        if (user === currentUserName) option.selected = true;
-        dropdown.appendChild(option);
+    userList.forEach((user, index) => {
+        const button = document.createElement('button');
+        button.className = 'block w-full text-center px-4 py-2 text-sm text-gray-700 bg-gray-100 hover:bg-blue-500 hover:text-white rounded-md transition-colors';
+        button.textContent = user;
+        button.style.setProperty('--i', index);
+        button.onclick = () => handleUserSelection(user);
+        container.appendChild(button);
     });
 
     modal.classList.remove('hidden');
+    // Add a slight delay to ensure the element is visible before adding the animation class
+    setTimeout(() => modal.classList.add('show'), 10);
 }
 
 /**
  * Handles the user's selection from the modal, caches it, and proceeds with submission.
+ * @param {string} selectedUser The name of the user that was clicked.
  */
-async function handleUserSelection() {
-    const dropdown = document.getElementById(CONSTANTS.USER_SELECTION_DROPDOWN);
-    sessionCommentUser = dropdown.value;
+async function handleUserSelection(selectedUser) {
+    sessionCommentUser = selectedUser;
     document.getElementById(CONSTANTS.USER_SELECTION_MODAL).classList.add('hidden');
     document.getElementById(CONSTANTS.MAIN_CONTENT).classList.remove('hidden');
+    document.getElementById(CONSTANTS.MAIN_CONTENT).classList.add('flex'); // Make it visible
     
-    if (!pendingOutreachAction) {
+    // If the add-in hasn't been initialized yet (first time), initialize it.
+    if (!document.getElementById(CONSTANTS.TAB_DETAILS)._isInitialized) {
         initializeAddIn();
+        document.getElementById(CONSTANTS.TAB_DETAILS)._isInitialized = true;
     }
 
     if (pendingOutreachAction) {
@@ -906,7 +906,11 @@ async function handleUserSelection() {
 
         pendingOutreachAction = null;
     } else {
-        await executeSubmitComment(sessionCommentUser);
+        // If there's no pending action, we might need to submit a comment if the text box has content.
+        const commentInput = document.getElementById(CONSTANTS.NEW_COMMENT_INPUT);
+        if (commentInput && commentInput.value.trim() !== "") {
+            await executeSubmitComment(sessionCommentUser);
+        }
     }
 }
 
