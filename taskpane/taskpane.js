@@ -957,12 +957,14 @@ function setupTaggingUI(mode) {
         event.stopPropagation();
         activeTaggingMode = mode;
         populateTagDropdown(mode);
-        tagDropdown.classList.toggle('hidden');
+        // MODIFIED: Toggle 'show' class for animation
+        tagDropdown.classList.toggle('show');
     });
 
     document.addEventListener('click', (event) => {
         if (!tagDropdown.contains(event.target) && !addTagButton.contains(event.target)) {
-            tagDropdown.classList.add('hidden');
+            // MODIFIED: Remove 'show' class
+            tagDropdown.classList.remove('show');
         }
     });
 
@@ -1021,10 +1023,12 @@ function populateTagDropdown(mode) {
         return;
     }
 
-    tagsToShow.forEach(tag => {
+    tagsToShow.forEach((tag, index) => {
         const item = document.createElement('a');
         item.href = '#';
-        item.className = 'block px-3 py-2 text-sm text-gray-700 hover:bg-gray-100';
+        // MODIFIED: Added style for animation delay and hover effect
+        item.className = 'block px-3 py-2 text-sm text-gray-700 hover:bg-white/20 rounded-md transition-colors';
+        item.style.setProperty('--i', index);
         
         const pill = document.createElement('span');
         pill.className = `px-2 py-0.5 text-xs font-semibold rounded-full ${tag.bg} ${tag.text}`;
@@ -1047,7 +1051,8 @@ function addTag(tagName, mode) {
         tags.push(tagName);
         renderTagPills(mode);
         populateTagDropdown(mode);
-        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+        // MODIFIED: Remove 'show' class
+        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
     }
 }
 
@@ -1098,7 +1103,8 @@ function setupDatePicker() {
         document.getElementById('confirm-date').disabled = true;
         renderCalendar(new Date());
         document.getElementById(CONSTANTS.DATE_PICKER_MODAL).classList.remove('hidden');
-        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+        // MODIFIED: Remove 'show' class
+        document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
     };
 }
 
@@ -1395,7 +1401,8 @@ function promptForDncType(mode) {
     });
 
     modal.classList.remove('hidden');
-    document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.add('hidden');
+    // MODIFIED: Remove 'show' class
+    document.getElementById(mode === 'edit' ? CONSTANTS.EDIT_TAG_DROPDOWN : CONSTANTS.TAG_DROPDOWN).classList.remove('show');
 }
 
 function addDncTag(dncType) {
