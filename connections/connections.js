@@ -1,71 +1,62 @@
 'use strict';
 
 const SETTINGS_KEY = "studentRetentionConnections";
+let wizardState = {
+    step: 1,
+    type: null,
+    name: '',
+    description: ''
+};
+
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         // Wire up event handlers
         document.getElementById("new-connection-button").onclick = showNewConnectionModal;
         document.getElementById("cancel-new-connection-button").onclick = hideNewConnectionModal;
+        
         document.getElementById("insert-key-button").onclick = showInsertKeyModal;
-        document.getElementById("custom-key-button").onclick = () => {
-            console.log("Custom Key button clicked - no action defined yet.");
-        };
+        document.getElementById("custom-key-button").onclick = showCustomKeyWizard;
+
+        // File Upload Modal Handlers
         document.getElementById("cancel-upload-button").onclick = hideInsertKeyModal;
         document.getElementById("key-file-input").onchange = handleFileSelect;
         document.getElementById("submit-key-button").onclick = handleSubmitKey;
+
+        // Custom Key Wizard Handlers
+        document.getElementById("wizard-cancel-button").onclick = hideCustomKeyWizard;
+        document.getElementById("wizard-back-button").onclick = navigateWizardBack;
+        document.getElementById("wizard-next-button").onclick = navigateWizardNext;
+        document.getElementById("wizard-finish-button").onclick = finishCustomKeyWizard;
+        document.querySelectorAll(".wizard-type-button").forEach(btn => {
+            btn.addEventListener('click', (e) => selectConnectionType(e.currentTarget));
+        });
 
         // Load and display any existing connections
         loadAndRenderConnections();
     }
 });
 
-/**
- * Shows the modal for choosing a new connection type.
- */
+// --- Main Modal Logic ---
 function showNewConnectionModal() {
-    const modal = document.getElementById("new-connection-modal");
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
+    document.getElementById("new-connection-modal").classList.remove('hidden');
 }
 
-/**
- * Hides the modal for choosing a new connection type.
- */
 function hideNewConnectionModal() {
-    const modal = document.getElementById("new-connection-modal");
-    if (modal) {
-        modal.classList.add('hidden');
-    }
+    document.getElementById("new-connection-modal").classList.add('hidden');
 }
 
-/**
- * Loads the list of connections from document settings and renders them.
- */
+// --- Connection Loading and Rendering ---
 function loadAndRenderConnections() {
     const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
-    let connections = [];
-    if (connectionsString) {
-        try {
-            connections = JSON.parse(connectionsString);
-        } catch (e) {
-            console.error("Error parsing connections from settings:", e);
-            connections = [];
-        }
-    }
+    let connections = connectionsString ? JSON.parse(connectionsString) : [];
     renderConnections(connections);
 }
 
-/**
- * Renders the list of connections to the UI.
- * @param {Array<Object>} connections - An array of connection objects.
- */
 function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
     
-    // Clear previous list but keep the placeholder message
     while (container.firstChild && container.firstChild !== noConnectionsMessage) {
         container.removeChild(container.firstChild);
     }
@@ -83,9 +74,17 @@ function renderConnections(connections) {
             const descriptionElement = document.createElement('p');
             descriptionElement.className = "text-sm text-gray-600 mt-1";
             descriptionElement.textContent = conn.description || "No description provided.";
+            
+            if(conn.type) {
+                const typeElement = document.createElement('span');
+                typeElement.className = "text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 uppercase last:mr-0 mr-1 mt-2";
+                typeElement.textContent = conn.type;
+                connectionElement.appendChild(typeElement);
+            }
 
-            connectionElement.appendChild(nameElement);
+            connectionElement.insertBefore(nameElement, connectionElement.firstChild);
             connectionElement.appendChild(descriptionElement);
+
             container.insertBefore(connectionElement, noConnectionsMessage);
         });
     } else {
@@ -93,107 +92,159 @@ function renderConnections(connections) {
     }
 }
 
-/**
- * Shows the modal for uploading a key file.
- */
+// --- Insert Key (File Upload) Modal Logic ---
 function showInsertKeyModal() {
-    hideNewConnectionModal(); // Hide the first modal
-    const modal = document.getElementById("insert-key-modal");
-    if (modal) {
-        modal.classList.remove('hidden');
-    }
+    hideNewConnectionModal(); 
+    document.getElementById("insert-key-modal").classList.remove('hidden');
 }
 
-/**
- * Hides the key file upload modal and resets its state.
- */
 function hideInsertKeyModal() {
-    const modal = document.getElementById("insert-key-modal");
-    if (modal) {
-        modal.classList.add('hidden');
-        resetFileInput();
-    }
+    document.getElementById("insert-key-modal").classList.add('hidden');
+    resetFileInput();
 }
 
-/**
- * Handles the file selection event from the input.
- * @param {Event} event The file input change event.
- */
 function handleFileSelect(event) {
     const fileInput = event.target;
     const submitButton = document.getElementById("submit-key-button");
-    const fileUploadText = document.getElementById("file-upload-text");
     const fileNameDisplay = document.getElementById("file-name-display");
 
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
         if (file.type === "application/json") {
-            fileUploadText.textContent = "File Selected:";
             fileNameDisplay.textContent = file.name;
             submitButton.disabled = false;
         } else {
-            fileUploadText.textContent = "Invalid file type. Please select a .json file.";
-            fileNameDisplay.textContent = "";
+            fileNameDisplay.textContent = "Invalid file type. Must be .json";
             submitButton.disabled = true;
         }
-    } else {
-        resetFileInput();
     }
 }
 
-/**
- * Resets the file input and associated UI elements to their default state.
- */
 function resetFileInput() {
     document.getElementById("key-file-input").value = "";
     document.getElementById("submit-key-button").disabled = true;
-    document.getElementById("file-upload-text").textContent = "Click to upload a JSON file";
     document.getElementById("file-name-display").textContent = "";
 }
 
-/**
- * Handles the submission of the selected key file.
- * Reads the file, adds it to settings, and refreshes the list.
- */
 function handleSubmitKey() {
     const fileInput = document.getElementById("key-file-input");
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
         const reader = new FileReader();
-
-        reader.onload = function(event) {
+        reader.onload = (event) => {
             try {
                 const newConnection = JSON.parse(event.target.result);
-                
-                // --- Save to settings ---
-                const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
-                let connections = connectionsString ? JSON.parse(connectionsString) : [];
-                connections.push(newConnection);
-
-                Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(connections));
-                Office.context.document.settings.saveAsync((asyncResult) => {
-                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                        console.error("Failed to save settings: " + asyncResult.error.message);
-                    } else {
-                        console.log("Settings saved successfully with new connection.");
-                        renderConnections(connections);
-                        hideInsertKeyModal();
-                    }
-                });
-
+                saveConnection(newConnection);
+                hideInsertKeyModal();
             } catch (e) {
                 alert("Error: The selected file is not valid JSON.");
-                console.error("JSON parsing error:", e);
                 resetFileInput();
             }
         };
-
-        reader.onerror = function() {
-            alert("An error occurred while reading the file.");
-            resetFileInput();
-        };
-
         reader.readAsText(file);
     }
+}
+
+
+// --- Custom Key Wizard Logic ---
+function showCustomKeyWizard() {
+    hideNewConnectionModal();
+    resetWizard();
+    document.getElementById("custom-key-wizard-modal").classList.remove('hidden');
+}
+
+function hideCustomKeyWizard() {
+    document.getElementById("custom-key-wizard-modal").classList.add('hidden');
+}
+
+function resetWizard() {
+    wizardState = { step: 1, type: null, name: '', description: '' };
+    
+    document.getElementById('wizard-step-1').classList.remove('hidden');
+    document.getElementById('wizard-step-2').classList.add('hidden');
+    
+    document.getElementById('wizard-back-button').classList.add('hidden');
+    document.getElementById('wizard-finish-button').classList.add('hidden');
+    document.getElementById('wizard-next-button').classList.remove('hidden');
+    document.getElementById('wizard-next-button').disabled = true;
+
+    document.querySelectorAll(".wizard-type-button").forEach(btn => {
+        btn.classList.remove('bg-blue-100', 'border-blue-400');
+    });
+
+    document.getElementById('connection-name').value = '';
+    document.getElementById('connection-description').value = '';
+}
+
+function selectConnectionType(buttonElement) {
+    document.querySelectorAll(".wizard-type-button").forEach(btn => {
+        btn.classList.remove('bg-blue-100', 'border-blue-400');
+    });
+    buttonElement.classList.add('bg-blue-100', 'border-blue-400');
+    wizardState.type = buttonElement.dataset.type;
+    document.getElementById('wizard-next-button').disabled = false;
+}
+
+function navigateWizardNext() {
+    if (wizardState.step === 1) {
+        wizardState.step = 2;
+        document.getElementById('wizard-step-1').classList.add('hidden');
+        document.getElementById('wizard-step-2').classList.remove('hidden');
+        
+        document.getElementById('wizard-back-button').classList.remove('hidden');
+        document.getElementById('wizard-next-button').classList.add('hidden');
+        document.getElementById('wizard-finish-button').classList.remove('hidden');
+
+        document.getElementById('connection-type-display').textContent = wizardState.type;
+    }
+}
+
+function navigateWizardBack() {
+    if (wizardState.step === 2) {
+        wizardState.step = 1;
+        document.getElementById('wizard-step-2').classList.add('hidden');
+        document.getElementById('wizard-step-1').classList.remove('hidden');
+
+        document.getElementById('wizard-back-button').classList.add('hidden');
+        document.getElementById('wizard-finish-button').classList.add('hidden');
+        document.getElementById('wizard-next-button').classList.remove('hidden');
+    }
+}
+
+function finishCustomKeyWizard() {
+    const name = document.getElementById('connection-name').value.trim();
+    const description = document.getElementById('connection-description').value.trim();
+
+    if (!name) {
+        alert("Please enter a connection name.");
+        return;
+    }
+
+    const newConnection = {
+        type: wizardState.type,
+        name: name,
+        description: description
+    };
+
+    saveConnection(newConnection);
+    hideCustomKeyWizard();
+}
+
+// --- Universal Save Function ---
+function saveConnection(newConnection) {
+    const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
+    let connections = connectionsString ? JSON.parse(connectionsString) : [];
+    connections.push(newConnection);
+
+    Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(connections));
+    Office.context.document.settings.saveAsync((asyncResult) => {
+        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+            console.error("Failed to save settings: " + asyncResult.error.message);
+            alert("Error: Could not save the new connection.");
+        } else {
+            console.log("Settings saved successfully with new connection.");
+            renderConnections(connections);
+        }
+    });
 }
 
