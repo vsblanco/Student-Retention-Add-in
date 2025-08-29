@@ -166,8 +166,12 @@ function resetWizard() {
     
     document.getElementById('wizard-back-button').classList.add('hidden');
     document.getElementById('wizard-finish-button').classList.add('hidden');
-    document.getElementById('wizard-next-button').classList.remove('hidden');
-    document.getElementById('wizard-next-button').disabled = true;
+    
+    const nextButton = document.getElementById('wizard-next-button');
+    if (nextButton) {
+        nextButton.classList.remove('hidden');
+        nextButton.disabled = true;
+    }
 
     document.querySelectorAll(".wizard-type-button").forEach(btn => {
         btn.classList.remove('bg-blue-100', 'border-blue-400');
@@ -191,73 +195,52 @@ function selectConnectionType(buttonElement) {
 }
 
 function navigateWizardNext() {
-    if (wizardState.step === 1) {
-        if (wizardState.type === 'Webhook') {
-            // For Webhook, go to the special credentials step
-            wizardState.step = 3;
-            document.getElementById('wizard-step-1').classList.add('hidden');
-            document.getElementById('wizard-step-3').classList.remove('hidden');
-
-            document.getElementById('wizard-back-button').classList.remove('hidden');
+    if (wizardState.step === 1) { // Moving from Step 1 (Type) to Step 2 (Details)
+        wizardState.step = 2;
+        
+        document.getElementById('wizard-step-1').classList.add('hidden');
+        document.getElementById('wizard-step-2').classList.remove('hidden');
+        
+        document.getElementById('wizard-back-button').classList.remove('hidden');
+        document.getElementById('connection-type-display').textContent = wizardState.type;
+        
+        // If the type is not a webhook, this is the last step, so show Finish instead of Next.
+        if (wizardState.type !== 'Webhook') {
             document.getElementById('wizard-next-button').classList.add('hidden');
             document.getElementById('wizard-finish-button').classList.remove('hidden');
-
-        } else {
-            // For API and HTTP, go to the standard details step
-            wizardState.step = 2;
-            document.getElementById('wizard-step-1').classList.add('hidden');
-            document.getElementById('wizard-step-2').classList.remove('hidden');
-            
-            document.getElementById('wizard-back-button').classList.remove('hidden');
-            document.getElementById('wizard-next-button').classList.add('hidden');
-            document.getElementById('wizard-finish-button').classList.remove('hidden');
-    
-            document.getElementById('connection-type-display').textContent = wizardState.type;
         }
+    } else if (wizardState.step === 2 && wizardState.type === 'Webhook') { // Moving from Step 2 (Details) to Step 3 (Credentials)
+        wizardState.step = 3;
+        
+        document.getElementById('wizard-step-2').classList.add('hidden');
+        document.getElementById('wizard-step-3').classList.remove('hidden');
+        
+        document.getElementById('wizard-next-button').classList.add('hidden');
+        document.getElementById('wizard-finish-button').classList.remove('hidden');
     }
 }
 
 function navigateWizardBack() {
-    if (wizardState.step === 2 || wizardState.step === 3) {
+    if (wizardState.step === 2) { // Moving from Step 2 (Details) back to Step 1 (Type)
         wizardState.step = 1;
         document.getElementById('wizard-step-2').classList.add('hidden');
-        document.getElementById('wizard-step-3').classList.add('hidden');
         document.getElementById('wizard-step-1').classList.remove('hidden');
 
         document.getElementById('wizard-back-button').classList.add('hidden');
         document.getElementById('wizard-finish-button').classList.add('hidden');
         document.getElementById('wizard-next-button').classList.remove('hidden');
-        document.getElementById('wizard-next-button').disabled = false; // It was selected before
+        document.getElementById('wizard-next-button').disabled = false; // Type is still selected
+    } else if (wizardState.step === 3) { // Moving from Step 3 (Credentials) back to Step 2 (Details)
+        wizardState.step = 2;
+        document.getElementById('wizard-step-3').classList.add('hidden');
+        document.getElementById('wizard-step-2').classList.remove('hidden');
+        
+        document.getElementById('wizard-finish-button').classList.add('hidden');
+        document.getElementById('wizard-next-button').classList.remove('hidden');
     }
 }
 
 function finishCustomKeyWizard() {
-    let newConnection;
-    if (wizardState.type === 'Webhook') {
-        // Collect all details for Webhook
-        const name = document.getElementById('connection-name').value.trim(); // Name is on step 2, but we need it now
-        const description = document.getElementById('connection-description').value.trim(); // Also step 2
-        
-        const appId = document.getElementById('pusher-app-id').value.trim();
-        const key = document.getElementById('pusher-key').value.trim();
-        const secret = document.getElementById('pusher-secret').value.trim();
-        const cluster = document.getElementById('pusher-cluster').value.trim();
-
-        if (!appId || !key || !secret || !cluster) {
-            alert("Please fill out all Pusher credential fields.");
-            return;
-        }
-        
-        // Let's go to step 2 to get name/description first
-        wizardState.step = 2;
-        document.getElementById('wizard-step-3').classList.add('hidden');
-        document.getElementById('wizard-step-2').classList.remove('hidden');
-        document.getElementById('connection-type-display').textContent = wizardState.type;
-        return; // Wait for user to fill details
-
-    } 
-    
-    // This part runs after step 2 is filled out
     const name = document.getElementById('connection-name').value.trim();
     const description = document.getElementById('connection-description').value.trim();
     
@@ -266,19 +249,29 @@ function finishCustomKeyWizard() {
         return;
     }
 
-    newConnection = {
+    const newConnection = {
         type: wizardState.type,
         name: name,
         description: description
     };
     
-    if(wizardState.type === 'Webhook') {
+    if (wizardState.type === 'Webhook') {
+        const appId = document.getElementById('pusher-app-id').value.trim();
+        const key = document.getElementById('pusher-key').value.trim();
+        const secret = document.getElementById('pusher-secret').value.trim();
+        const cluster = document.getElementById('pusher-cluster').value.trim();
+
+        if (!appId || !key || !secret || !cluster) {
+            alert("Please fill out all Pusher credential fields.");
+            return; // Stay on the current step to let the user fix it.
+        }
+
         newConnection.credentials = {
             provider: 'Pusher',
-            appId: document.getElementById('pusher-app-id').value.trim(),
-            key: document.getElementById('pusher-key').value.trim(),
-            secret: document.getElementById('pusher-secret').value.trim(),
-            cluster: document.getElementById('pusher-cluster').value.trim()
+            appId: appId,
+            key: key,
+            secret: secret,
+            cluster: cluster
         };
     }
 
