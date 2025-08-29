@@ -1,49 +1,35 @@
 'use strict';
 
 const SETTINGS_KEY = "studentRetentionConnections";
-let wizardState = {
-    step: 1,
-    type: null,
-    name: '',
-    description: ''
-};
+let wizardState = {};
 let connectionToDeleteIndex = null;
 
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        // Wire up event handlers
         document.getElementById("new-connection-button").onclick = showNewConnectionModal;
         document.getElementById("cancel-new-connection-button").onclick = hideNewConnectionModal;
-        
         document.getElementById("insert-key-button").onclick = showInsertKeyModal;
         document.getElementById("custom-key-button").onclick = showCustomKeyWizard;
-
-        // File Upload Modal Handlers
         document.getElementById("cancel-upload-button").onclick = hideInsertKeyModal;
         document.getElementById("key-file-input").onchange = handleFileSelect;
         document.getElementById("submit-key-button").onclick = handleSubmitKey;
-
-        // Custom Key Wizard Handlers
         document.getElementById("wizard-cancel-button").onclick = hideCustomKeyWizard;
         document.getElementById("wizard-back-button").onclick = navigateWizardBack;
         document.getElementById("wizard-next-button").onclick = navigateWizardNext;
         document.getElementById("wizard-finish-button").onclick = finishCustomKeyWizard;
+        document.getElementById("pusher-setup-button").onclick = handlePusherSelect;
+        document.getElementById("manual-setup-button").onclick = handleManualSelect;
         document.querySelectorAll(".wizard-type-button").forEach(btn => {
             btn.addEventListener('click', (e) => selectConnectionType(e.currentTarget));
         });
-        
-        // Delete confirmation handlers
         document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
         document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
 
-
-        // Load and display any existing connections
         loadAndRenderConnections();
     }
 });
 
-// --- Main Modal Logic ---
 function showNewConnectionModal() {
     document.getElementById("new-connection-modal").classList.remove('hidden');
 }
@@ -52,7 +38,6 @@ function hideNewConnectionModal() {
     document.getElementById("new-connection-modal").classList.add('hidden');
 }
 
-// --- Connection Loading and Rendering ---
 function loadAndRenderConnections() {
     const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
     let connections = connectionsString ? JSON.parse(connectionsString) : [];
@@ -63,7 +48,6 @@ function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
     
-    // Clear previous list items
     container.querySelectorAll(".connection-item").forEach(item => item.remove());
 
     if (connections && connections.length > 0) {
@@ -73,7 +57,6 @@ function renderConnections(connections) {
             connectionElement.className = "connection-item bg-white p-4 rounded-lg shadow-sm border border-gray-200 relative group";
             connectionElement.dataset.connectionIndex = index;
 
-            // --- Options Menu (3 dots) ---
             const optionsContainer = document.createElement('div');
             optionsContainer.className = "absolute top-2 right-2";
 
@@ -104,16 +87,14 @@ function renderConnections(connections) {
             
             optionsButton.onclick = (e) => {
                 e.stopPropagation();
-                // Close other menus
                 document.querySelectorAll('.options-menu').forEach(menu => {
                     if (menu !== optionsMenu) menu.classList.add('hidden');
                 });
                 optionsMenu.classList.toggle('hidden');
             };
-            // --- End Options Menu ---
 
             const nameElement = document.createElement('h3');
-            nameElement.className = "font-bold text-md text-gray-800 pr-8"; // Add padding for options button
+            nameElement.className = "font-bold text-md text-gray-800 pr-8";
             nameElement.textContent = conn.name || "Unnamed Connection";
             
             const descriptionElement = document.createElement('p');
@@ -125,8 +106,9 @@ function renderConnections(connections) {
 
             if(conn.type) {
                 const typeElement = document.createElement('span');
+                let providerText = conn.credentials && conn.credentials.provider ? conn.credentials.provider : conn.type;
                 typeElement.className = "text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 uppercase mt-2";
-                typeElement.textContent = conn.type;
+                typeElement.textContent = providerText;
                 connectionElement.appendChild(typeElement);
             }
 
@@ -137,8 +119,6 @@ function renderConnections(connections) {
     }
 }
 
-
-// --- Insert Key (File Upload) Modal Logic ---
 function showInsertKeyModal() {
     hideNewConnectionModal(); 
     document.getElementById("insert-key-modal").classList.remove('hidden');
@@ -191,8 +171,6 @@ function handleSubmitKey() {
     }
 }
 
-
-// --- Custom Key Wizard Logic ---
 function showCustomKeyWizard() {
     hideNewConnectionModal();
     resetWizard();
@@ -204,25 +182,25 @@ function hideCustomKeyWizard() {
 }
 
 function resetWizard() {
-    wizardState = { step: 1, type: null, name: '', description: '' };
+    wizardState = { step: 'setupType' };
     
-    document.getElementById('wizard-step-1').classList.remove('hidden');
-    document.getElementById('wizard-step-2').classList.add('hidden');
-    document.getElementById('wizard-step-3').classList.add('hidden');
+    // Hide all steps
+    document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
+    document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
+    document.getElementById('wizard-step-details').classList.add('hidden');
+    document.getElementById('wizard-step-pusher-creds').classList.add('hidden');
     
+    // Reset buttons
     document.getElementById('wizard-back-button').classList.add('hidden');
     document.getElementById('wizard-finish-button').classList.add('hidden');
-    
     const nextButton = document.getElementById('wizard-next-button');
-    if (nextButton) {
-        nextButton.classList.remove('hidden');
-        nextButton.disabled = true;
-    }
+    nextButton.classList.add('hidden');
+    nextButton.disabled = true;
 
-    document.querySelectorAll(".wizard-type-button").forEach(btn => {
+    // Clear selections and inputs
+    document.querySelectorAll(".wizard-type-button, .wizard-setup-button").forEach(btn => {
         btn.classList.remove('bg-blue-100', 'border-blue-400');
     });
-
     document.getElementById('connection-name').value = '';
     document.getElementById('connection-description').value = '';
     document.getElementById('pusher-app-id').value = '';
@@ -231,59 +209,91 @@ function resetWizard() {
     document.getElementById('pusher-cluster').value = '';
 }
 
+function handlePusherSelect() {
+    wizardState = { ...wizardState, step: 'details', setupType: 'Pusher', type: 'Webhook' };
+    updateWizardView();
+}
+
+function handleManualSelect() {
+    wizardState = { ...wizardState, step: 'manualType' };
+    updateWizardView();
+}
+
 function selectConnectionType(buttonElement) {
-    document.querySelectorAll(".wizard-type-button").forEach(btn => {
-        btn.classList.remove('bg-blue-100', 'border-blue-400');
-    });
-    buttonElement.classList.add('bg-blue-100', 'border-blue-400');
     wizardState.type = buttonElement.dataset.type;
+    document.querySelectorAll(".wizard-type-button").forEach(btn => btn.classList.remove('bg-blue-100', 'border-blue-400'));
+    buttonElement.classList.add('bg-blue-100', 'border-blue-400');
     document.getElementById('wizard-next-button').disabled = false;
 }
 
+
 function navigateWizardNext() {
-    if (wizardState.step === 1) { // Moving from Step 1 (Type) to Step 2 (Details)
-        wizardState.step = 2;
-        
-        document.getElementById('wizard-step-1').classList.add('hidden');
-        document.getElementById('wizard-step-2').classList.remove('hidden');
-        
-        document.getElementById('wizard-back-button').classList.remove('hidden');
-        document.getElementById('connection-type-display').textContent = wizardState.type;
-        
-        if (wizardState.type !== 'Webhook') {
-            document.getElementById('wizard-next-button').classList.add('hidden');
-            document.getElementById('wizard-finish-button').classList.remove('hidden');
-        }
-    } else if (wizardState.step === 2 && wizardState.type === 'Webhook') { // Moving from Step 2 (Details) to Step 3 (Credentials)
-        wizardState.step = 3;
-        
-        document.getElementById('wizard-step-2').classList.add('hidden');
-        document.getElementById('wizard-step-3').classList.remove('hidden');
-        
-        document.getElementById('wizard-next-button').classList.add('hidden');
-        document.getElementById('wizard-finish-button').classList.remove('hidden');
+    if (wizardState.step === 'manualType') {
+        wizardState.step = 'details';
+    } else if (wizardState.step === 'details' && wizardState.type === 'Webhook') {
+        wizardState.step = 'pusherCreds';
     }
+    updateWizardView();
 }
 
 function navigateWizardBack() {
-    if (wizardState.step === 2) { // Moving from Step 2 (Details) back to Step 1 (Type)
-        wizardState.step = 1;
-        document.getElementById('wizard-step-2').classList.add('hidden');
-        document.getElementById('wizard-step-1').classList.remove('hidden');
+    if (wizardState.step === 'details' && wizardState.setupType === 'Pusher') {
+        wizardState.step = 'setupType';
+    } else if (wizardState.step === 'details' && wizardState.setupType !== 'Pusher') {
+        wizardState.step = 'manualType';
+    } else if (wizardState.step === 'manualType') {
+        wizardState.step = 'setupType';
+    } else if (wizardState.step === 'pusherCreds') {
+        wizardState.step = 'details';
+    }
+    updateWizardView();
+}
 
-        document.getElementById('wizard-back-button').classList.add('hidden');
-        document.getElementById('wizard-finish-button').classList.add('hidden');
-        document.getElementById('wizard-next-button').classList.remove('hidden');
-        document.getElementById('wizard-next-button').disabled = false;
-    } else if (wizardState.step === 3) { // Moving from Step 3 (Credentials) back to Step 2 (Details)
-        wizardState.step = 2;
-        document.getElementById('wizard-step-3').classList.add('hidden');
-        document.getElementById('wizard-step-2').classList.remove('hidden');
-        
-        document.getElementById('wizard-finish-button').classList.add('hidden');
-        document.getElementById('wizard-next-button').classList.remove('hidden');
+function updateWizardView() {
+    const { step, type, setupType } = wizardState;
+    
+    // Hide all steps first
+    document.getElementById('wizard-step-1-setup-type').classList.add('hidden');
+    document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
+    document.getElementById('wizard-step-details').classList.add('hidden');
+    document.getElementById('wizard-step-pusher-creds').classList.add('hidden');
+
+    const nextButton = document.getElementById('wizard-next-button');
+    const backButton = document.getElementById('wizard-back-button');
+    const finishButton = document.getElementById('wizard-finish-button');
+
+    // Show current step
+    if (step === 'setupType') {
+        document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
+        backButton.classList.add('hidden');
+        nextButton.classList.add('hidden');
+        finishButton.classList.add('hidden');
+    } else if (step === 'manualType') {
+        document.getElementById('wizard-step-1-manual-type').classList.remove('hidden');
+        backButton.classList.remove('hidden');
+        nextButton.classList.remove('hidden');
+        nextButton.disabled = !type; // Enable if a type is already selected
+        finishButton.classList.add('hidden');
+    } else if (step === 'details') {
+        document.getElementById('wizard-step-details').classList.remove('hidden');
+        document.getElementById('connection-type-display').textContent = setupType === 'Pusher' ? 'Pusher Webhook' : type;
+        backButton.classList.remove('hidden');
+        if (type === 'Webhook') {
+            nextButton.classList.remove('hidden');
+            nextButton.disabled = false;
+            finishButton.classList.add('hidden');
+        } else {
+            nextButton.classList.add('hidden');
+            finishButton.classList.remove('hidden');
+        }
+    } else if (step === 'pusherCreds') {
+        document.getElementById('wizard-step-pusher-creds').classList.remove('hidden');
+        backButton.classList.remove('hidden');
+        nextButton.classList.add('hidden');
+        finishButton.classList.remove('hidden');
     }
 }
+
 
 function finishCustomKeyWizard() {
     const name = document.getElementById('connection-name').value.trim();
@@ -324,7 +334,6 @@ function finishCustomKeyWizard() {
     hideCustomKeyWizard();
 }
 
-// --- Universal Save Function ---
 function saveConnection(newConnection) {
     const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
     let connections = connectionsString ? JSON.parse(connectionsString) : [];
@@ -345,10 +354,7 @@ function saveConnectionsArray(connections) {
     });
 }
 
-// --- Connection Management (Edit/Delete) ---
 function handleEditConnection(index) {
-    // This is a placeholder for now. In the future, this would open the wizard
-    // with the existing data pre-filled.
     console.log("Editing connection at index:", index);
     alert("Editing functionality is not yet implemented.");
 }
@@ -367,22 +373,14 @@ function handleDeleteConnection() {
     if (connectionToDeleteIndex !== null) {
         const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
         let connections = connectionsString ? JSON.parse(connectionsString) : [];
-        
-        // Remove the connection at the specified index
         connections.splice(connectionToDeleteIndex, 1);
-        
-        // Save the modified array
         saveConnectionsArray(connections);
-        
         hideDeleteConfirmModal();
     }
 }
 
-
-// Close dropdowns if clicking outside
 document.addEventListener('click', (event) => {
     document.querySelectorAll('.options-menu').forEach(menu => {
-        // Check if the click was outside the menu and its button
         const button = menu.previousElementSibling;
         if (!menu.contains(event.target) && !button.contains(event.target)) {
             menu.classList.add('hidden');
