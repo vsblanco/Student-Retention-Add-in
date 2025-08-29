@@ -96,6 +96,24 @@
                     <FunctionName>transferData</FunctionName>
                   </Action>
                 </Control>
+                <!-- START: Connections Button -->
+                <Control xsi:type="Button" id="ConnectionsButton">
+                  <Label resid="ConnectionsButton.Label"/>
+                  <Supertip>
+                    <Title resid="ConnectionsButton.Label"/>
+                    <Description resid="ConnectionsButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="ConnectionsIcon.16x16"/>
+                    <bt:Image size="32" resid="ConnectionsIcon.32x32"/>
+                    <bt:Image size="80" resid="ConnectionsIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Connections</TaskpaneId>
+                    <SourceLocation resid="Connections.Url"/>
+                  </Action>
+                </Control>
+                <!-- END: Connections Button -->
               </Group>
               <Group id="ReportGroup">
                 <Label resid="ReportGroup.Label"/>
@@ -245,6 +263,9 @@
         <bt:Image id="SettingsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
         <bt:Image id="SettingsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
         <bt:Image id="SettingsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
+        <bt:Image id="ConnectionsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
+        <bt:Image id="ConnectionsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
+        <bt:Image id="ConnectionsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
@@ -257,6 +278,7 @@
         <bt:Url id="TransferData.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html"/>
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html"/>
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
+        <bt:Url id="Connections.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/connections/connections.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -274,6 +296,7 @@
         <bt:String id="RiskIndexButton.Label" DefaultValue="Risk Index"/>
         <bt:String id="AboutButton.Label" DefaultValue="About"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
+        <bt:String id="ConnectionsButton.Label" DefaultValue="Connections"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
@@ -286,7 +309,9 @@
         <bt:String id="RiskIndexButton.Tooltip" DefaultValue="View and analyze student risk index formulas."/>
         <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
+        <bt:String id="ConnectionsButton.Tooltip" DefaultValue="Manage student connections and relationships."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
 </OfficeApp>
+
