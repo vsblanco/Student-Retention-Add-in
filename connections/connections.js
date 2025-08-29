@@ -7,6 +7,7 @@ let wizardState = {
     name: '',
     description: ''
 };
+let connectionToDeleteIndex = null;
 
 
 Office.onReady((info) => {
@@ -31,6 +32,11 @@ Office.onReady((info) => {
         document.querySelectorAll(".wizard-type-button").forEach(btn => {
             btn.addEventListener('click', (e) => selectConnectionType(e.currentTarget));
         });
+        
+        // Delete confirmation handlers
+        document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
+        document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
+
 
         // Load and display any existing connections
         loadAndRenderConnections();
@@ -57,33 +63,72 @@ function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
     
-    while (container.firstChild && container.firstChild !== noConnectionsMessage) {
-        container.removeChild(container.firstChild);
-    }
+    // Clear previous list items
+    container.querySelectorAll(".connection-item").forEach(item => item.remove());
 
     if (connections && connections.length > 0) {
         noConnectionsMessage.classList.add('hidden');
-        connections.forEach(conn => {
+        connections.forEach((conn, index) => {
             const connectionElement = document.createElement('div');
-            connectionElement.className = "bg-white p-4 rounded-lg shadow-sm border border-gray-200";
+            connectionElement.className = "connection-item bg-white p-4 rounded-lg shadow-sm border border-gray-200 relative group";
+            connectionElement.dataset.connectionIndex = index;
+
+            // --- Options Menu (3 dots) ---
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = "absolute top-2 right-2";
+
+            const optionsButton = document.createElement('button');
+            optionsButton.className = "options-button opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-200 transition-opacity focus:opacity-100";
+            optionsButton.innerHTML = `<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>`;
             
+            const optionsMenu = document.createElement('div');
+            optionsMenu.className = "options-menu hidden absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg z-10 border";
+            
+            const editLink = document.createElement('a');
+            editLink.href = "#";
+            editLink.className = "edit-btn block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100";
+            editLink.textContent = "Edit";
+            editLink.onclick = (e) => { e.preventDefault(); handleEditConnection(index); };
+
+            const deleteLink = document.createElement('a');
+            deleteLink.href = "#";
+            deleteLink.className = "delete-btn block px-4 py-2 text-sm text-red-600 hover:bg-gray-100";
+            deleteLink.textContent = "Delete";
+            deleteLink.onclick = (e) => { e.preventDefault(); promptDeleteConnection(index); };
+            
+            optionsMenu.appendChild(editLink);
+            optionsMenu.appendChild(deleteLink);
+            optionsContainer.appendChild(optionsButton);
+            optionsContainer.appendChild(optionsMenu);
+            connectionElement.appendChild(optionsContainer);
+            
+            optionsButton.onclick = (e) => {
+                e.stopPropagation();
+                // Close other menus
+                document.querySelectorAll('.options-menu').forEach(menu => {
+                    if (menu !== optionsMenu) menu.classList.add('hidden');
+                });
+                optionsMenu.classList.toggle('hidden');
+            };
+            // --- End Options Menu ---
+
             const nameElement = document.createElement('h3');
-            nameElement.className = "font-bold text-md text-gray-800";
+            nameElement.className = "font-bold text-md text-gray-800 pr-8"; // Add padding for options button
             nameElement.textContent = conn.name || "Unnamed Connection";
             
             const descriptionElement = document.createElement('p');
             descriptionElement.className = "text-sm text-gray-600 mt-1";
             descriptionElement.textContent = conn.description || "No description provided.";
             
+            connectionElement.appendChild(nameElement);
+            connectionElement.appendChild(descriptionElement);
+
             if(conn.type) {
                 const typeElement = document.createElement('span');
-                typeElement.className = "text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 uppercase last:mr-0 mr-1 mt-2";
+                typeElement.className = "text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 uppercase mt-2";
                 typeElement.textContent = conn.type;
                 connectionElement.appendChild(typeElement);
             }
-
-            connectionElement.insertBefore(nameElement, connectionElement.firstChild);
-            connectionElement.appendChild(descriptionElement);
 
             container.insertBefore(connectionElement, noConnectionsMessage);
         });
@@ -91,6 +136,7 @@ function renderConnections(connections) {
         noConnectionsMessage.classList.remove('hidden');
     }
 }
+
 
 // --- Insert Key (File Upload) Modal Logic ---
 function showInsertKeyModal() {
@@ -204,7 +250,6 @@ function navigateWizardNext() {
         document.getElementById('wizard-back-button').classList.remove('hidden');
         document.getElementById('connection-type-display').textContent = wizardState.type;
         
-        // If the type is not a webhook, this is the last step, so show Finish instead of Next.
         if (wizardState.type !== 'Webhook') {
             document.getElementById('wizard-next-button').classList.add('hidden');
             document.getElementById('wizard-finish-button').classList.remove('hidden');
@@ -229,7 +274,7 @@ function navigateWizardBack() {
         document.getElementById('wizard-back-button').classList.add('hidden');
         document.getElementById('wizard-finish-button').classList.add('hidden');
         document.getElementById('wizard-next-button').classList.remove('hidden');
-        document.getElementById('wizard-next-button').disabled = false; // Type is still selected
+        document.getElementById('wizard-next-button').disabled = false;
     } else if (wizardState.step === 3) { // Moving from Step 3 (Credentials) back to Step 2 (Details)
         wizardState.step = 2;
         document.getElementById('wizard-step-3').classList.add('hidden');
@@ -263,7 +308,7 @@ function finishCustomKeyWizard() {
 
         if (!appId || !key || !secret || !cluster) {
             alert("Please fill out all Pusher credential fields.");
-            return; // Stay on the current step to let the user fix it.
+            return;
         }
 
         newConnection.credentials = {
@@ -284,16 +329,64 @@ function saveConnection(newConnection) {
     const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
     let connections = connectionsString ? JSON.parse(connectionsString) : [];
     connections.push(newConnection);
+    saveConnectionsArray(connections);
+}
 
-    Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(connections));
+function saveConnectionsArray(connections) {
+     Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(connections));
     Office.context.document.settings.saveAsync((asyncResult) => {
         if (asyncResult.status === Office.AsyncResultStatus.Failed) {
             console.error("Failed to save settings: " + asyncResult.error.message);
-            alert("Error: Could not save the new connection.");
+            alert("Error: Could not save the connections.");
         } else {
-            console.log("Settings saved successfully with new connection.");
+            console.log("Settings saved successfully.");
             renderConnections(connections);
         }
     });
 }
+
+// --- Connection Management (Edit/Delete) ---
+function handleEditConnection(index) {
+    // This is a placeholder for now. In the future, this would open the wizard
+    // with the existing data pre-filled.
+    console.log("Editing connection at index:", index);
+    alert("Editing functionality is not yet implemented.");
+}
+
+function promptDeleteConnection(index) {
+    connectionToDeleteIndex = index;
+    document.getElementById("delete-confirm-modal").classList.remove('hidden');
+}
+
+function hideDeleteConfirmModal() {
+    document.getElementById("delete-confirm-modal").classList.add('hidden');
+    connectionToDeleteIndex = null;
+}
+
+function handleDeleteConnection() {
+    if (connectionToDeleteIndex !== null) {
+        const connectionsString = Office.context.document.settings.get(SETTINGS_KEY);
+        let connections = connectionsString ? JSON.parse(connectionsString) : [];
+        
+        // Remove the connection at the specified index
+        connections.splice(connectionToDeleteIndex, 1);
+        
+        // Save the modified array
+        saveConnectionsArray(connections);
+        
+        hideDeleteConfirmModal();
+    }
+}
+
+
+// Close dropdowns if clicking outside
+document.addEventListener('click', (event) => {
+    document.querySelectorAll('.options-menu').forEach(menu => {
+        // Check if the click was outside the menu and its button
+        const button = menu.previousElementSibling;
+        if (!menu.contains(event.target) && !button.contains(event.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+});
 
