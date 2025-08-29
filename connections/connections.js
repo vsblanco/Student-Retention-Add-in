@@ -162,6 +162,7 @@ function resetWizard() {
     
     document.getElementById('wizard-step-1').classList.remove('hidden');
     document.getElementById('wizard-step-2').classList.add('hidden');
+    document.getElementById('wizard-step-3').classList.add('hidden');
     
     document.getElementById('wizard-back-button').classList.add('hidden');
     document.getElementById('wizard-finish-button').classList.add('hidden');
@@ -174,6 +175,10 @@ function resetWizard() {
 
     document.getElementById('connection-name').value = '';
     document.getElementById('connection-description').value = '';
+    document.getElementById('pusher-app-id').value = '';
+    document.getElementById('pusher-key').value = '';
+    document.getElementById('pusher-secret').value = '';
+    document.getElementById('pusher-cluster').value = '';
 }
 
 function selectConnectionType(buttonElement) {
@@ -187,44 +192,95 @@ function selectConnectionType(buttonElement) {
 
 function navigateWizardNext() {
     if (wizardState.step === 1) {
-        wizardState.step = 2;
-        document.getElementById('wizard-step-1').classList.add('hidden');
-        document.getElementById('wizard-step-2').classList.remove('hidden');
-        
-        document.getElementById('wizard-back-button').classList.remove('hidden');
-        document.getElementById('wizard-next-button').classList.add('hidden');
-        document.getElementById('wizard-finish-button').classList.remove('hidden');
+        if (wizardState.type === 'Webhook') {
+            // For Webhook, go to the special credentials step
+            wizardState.step = 3;
+            document.getElementById('wizard-step-1').classList.add('hidden');
+            document.getElementById('wizard-step-3').classList.remove('hidden');
 
-        document.getElementById('connection-type-display').textContent = wizardState.type;
+            document.getElementById('wizard-back-button').classList.remove('hidden');
+            document.getElementById('wizard-next-button').classList.add('hidden');
+            document.getElementById('wizard-finish-button').classList.remove('hidden');
+
+        } else {
+            // For API and HTTP, go to the standard details step
+            wizardState.step = 2;
+            document.getElementById('wizard-step-1').classList.add('hidden');
+            document.getElementById('wizard-step-2').classList.remove('hidden');
+            
+            document.getElementById('wizard-back-button').classList.remove('hidden');
+            document.getElementById('wizard-next-button').classList.add('hidden');
+            document.getElementById('wizard-finish-button').classList.remove('hidden');
+    
+            document.getElementById('connection-type-display').textContent = wizardState.type;
+        }
     }
 }
 
 function navigateWizardBack() {
-    if (wizardState.step === 2) {
+    if (wizardState.step === 2 || wizardState.step === 3) {
         wizardState.step = 1;
         document.getElementById('wizard-step-2').classList.add('hidden');
+        document.getElementById('wizard-step-3').classList.add('hidden');
         document.getElementById('wizard-step-1').classList.remove('hidden');
 
         document.getElementById('wizard-back-button').classList.add('hidden');
         document.getElementById('wizard-finish-button').classList.add('hidden');
         document.getElementById('wizard-next-button').classList.remove('hidden');
+        document.getElementById('wizard-next-button').disabled = false; // It was selected before
     }
 }
 
 function finishCustomKeyWizard() {
+    let newConnection;
+    if (wizardState.type === 'Webhook') {
+        // Collect all details for Webhook
+        const name = document.getElementById('connection-name').value.trim(); // Name is on step 2, but we need it now
+        const description = document.getElementById('connection-description').value.trim(); // Also step 2
+        
+        const appId = document.getElementById('pusher-app-id').value.trim();
+        const key = document.getElementById('pusher-key').value.trim();
+        const secret = document.getElementById('pusher-secret').value.trim();
+        const cluster = document.getElementById('pusher-cluster').value.trim();
+
+        if (!appId || !key || !secret || !cluster) {
+            alert("Please fill out all Pusher credential fields.");
+            return;
+        }
+        
+        // Let's go to step 2 to get name/description first
+        wizardState.step = 2;
+        document.getElementById('wizard-step-3').classList.add('hidden');
+        document.getElementById('wizard-step-2').classList.remove('hidden');
+        document.getElementById('connection-type-display').textContent = wizardState.type;
+        return; // Wait for user to fill details
+
+    } 
+    
+    // This part runs after step 2 is filled out
     const name = document.getElementById('connection-name').value.trim();
     const description = document.getElementById('connection-description').value.trim();
-
+    
     if (!name) {
         alert("Please enter a connection name.");
         return;
     }
 
-    const newConnection = {
+    newConnection = {
         type: wizardState.type,
         name: name,
         description: description
     };
+    
+    if(wizardState.type === 'Webhook') {
+        newConnection.credentials = {
+            provider: 'Pusher',
+            appId: document.getElementById('pusher-app-id').value.trim(),
+            key: document.getElementById('pusher-key').value.trim(),
+            secret: document.getElementById('pusher-secret').value.trim(),
+            cluster: document.getElementById('pusher-cluster').value.trim()
+        };
+    }
 
     saveConnection(newConnection);
     hideCustomKeyWizard();
