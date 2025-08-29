@@ -114,7 +114,7 @@
                     </button>
                      <button data-type="Webhook" class="wizard-type-button w-full text-left p-4 bg-white/50 border border-gray-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors">
                         <h3 class="font-bold text-gray-800">Webhook</h3>
-                        <p class="text-xs text-gray-600">Receive real-time data from other services.</p>
+                        <p class="text-xs text-gray-600">Receive real-time data from services like Pusher.</p>
                     </button>
                 </div>
             </div>
@@ -130,6 +130,29 @@
                      <div>
                         <label for="connection-description" class="block text-sm font-medium text-gray-700">Description</label>
                         <textarea id="connection-description" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="A brief summary of what this connection does."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Webhook Credentials (Pusher) -->
+            <div id="wizard-step-3" class="hidden">
+                <p class="text-sm text-gray-600 mb-6">Enter your Pusher credentials.</p>
+                 <div class="space-y-4">
+                    <div>
+                        <label for="pusher-app-id" class="block text-sm font-medium text-gray-700">App ID</label>
+                        <input type="text" id="pusher-app-id" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                     <div>
+                        <label for="pusher-key" class="block text-sm font-medium text-gray-700">Key</label>
+                        <input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="pusher-secret" class="block text-sm font-medium text-gray-700">Secret</label>
+                        <input type="password" id="pusher-secret" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label>
+                        <input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., us2">
                     </div>
                 </div>
             </div>
