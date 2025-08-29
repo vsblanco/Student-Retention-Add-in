@@ -13,6 +13,10 @@ Office.onReady((info) => {
         // New Pusher listeners
         document.getElementById("save-pusher-config-button").onclick = saveAndConnectPusher;
 
+        // Log panel listeners
+        document.getElementById("log-header").onclick = toggleLogPanel;
+        document.getElementById("clear-log-button").onclick = clearLogPanel;
+
         // Legacy listeners
         document.getElementById("new-connection-button").onclick = showNewConnectionModal;
         document.getElementById("cancel-new-connection-button").onclick = hideNewConnectionModal;
@@ -33,10 +37,61 @@ Office.onReady((info) => {
         document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
         document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
 
-
+        logToUI("Connections pane ready.");
         loadAndRenderConnections();
     }
 });
+
+// --- LOGGING FUNCTIONS ---
+/**
+ * Appends a message to the debug log panel in the UI.
+ * @param {string} message The message to log.
+ * @param {string} [type='INFO'] The type of log (INFO, ERROR, SUCCESS).
+ */
+function logToUI(message, type = 'INFO') {
+    const logContainer = document.getElementById('log-container');
+    if (logContainer) {
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.innerHTML = `<span class="text-gray-500">${timestamp} [${type}]:</span> ${message}`;
+        
+        switch (type) {
+            case 'ERROR': p.className = 'text-red-400'; break;
+            case 'SUCCESS': p.className = 'text-green-400'; break;
+            default: p.className = 'text-gray-300'; break;
+        }
+
+        logContainer.appendChild(p);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+    // Also log to the developer console for good measure
+    if (type === 'ERROR') {
+        console.error(message);
+    } else {
+        console.log(message);
+    }
+}
+
+/**
+ * Toggles the visibility of the debug log panel.
+ */
+function toggleLogPanel() {
+    const logContainer = document.getElementById('log-container');
+    const logArrow = document.getElementById('log-arrow');
+    logContainer.classList.toggle('hidden');
+    logArrow.style.transform = logContainer.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+/**
+ * Clears all messages from the debug log panel.
+ * @param {Event} e The click event.
+ */
+function clearLogPanel(e) {
+    e.stopPropagation(); // Prevent the panel from toggling when clearing
+    const logContainer = document.getElementById('log-container');
+    logContainer.innerHTML = '';
+    logToUI("Log cleared.");
+}
 
 
 // --- PUSHER INTEGRATION FUNCTIONS ---
@@ -45,15 +100,19 @@ Office.onReady((info) => {
  * Loads Pusher settings and attempts to connect automatically.
  */
 async function loadAndConnectPusher() {
+    logToUI("Attempting to load saved Pusher configuration...");
     const settings = await getSettings();
     const pusherConfig = settings.pusherConfig;
     
     if (pusherConfig && pusherConfig.key && pusherConfig.cluster && pusherConfig.channel && pusherConfig.event) {
+        logToUI("Found saved configuration. Populating UI fields.");
         document.getElementById("pusher-key").value = pusherConfig.key;
         document.getElementById("pusher-cluster").value = pusherConfig.cluster;
         document.getElementById("pusher-channel").value = pusherConfig.channel;
         document.getElementById("pusher-event").value = pusherConfig.event;
         connectToPusher(pusherConfig);
+    } else {
+        logToUI("No saved Pusher configuration found.");
     }
 }
 
@@ -61,6 +120,7 @@ async function loadAndConnectPusher() {
  * Saves the Pusher configuration from the UI and initiates a connection.
  */
 async function saveAndConnectPusher() {
+    logToUI("'Connect & Save' button clicked.");
     const settings = await getSettings();
     const pusherConfig = {
         key: document.getElementById("pusher-key").value.trim(),
@@ -71,14 +131,16 @@ async function saveAndConnectPusher() {
 
     if (!pusherConfig.key || !pusherConfig.cluster || !pusherConfig.channel || !pusherConfig.event) {
         updatePusherStatus("All fields are required.", true);
+        logToUI("Pusher config save failed: All fields are required.", "ERROR");
         return;
     }
 
     settings.pusherConfig = pusherConfig;
     await saveSettings(settings);
+    logToUI("Pusher configuration saved to document settings.");
     
-    // Disconnect any existing connection before creating a new one
     if (pusher && channel) {
+        logToUI(`Disconnecting from previous channel: ${channel.name}`);
         pusher.unsubscribe(channel.name);
         pusher.disconnect();
         pusher = null;
@@ -95,35 +157,41 @@ async function saveAndConnectPusher() {
 function connectToPusher(config) {
     try {
         updatePusherStatus("Connecting...", false);
+        logToUI(`Initializing Pusher with key: ${config.key.substring(0, 5)}... and cluster: ${config.cluster}`);
         
         pusher = new Pusher(config.key, {
             cluster: config.cluster
         });
 
+        logToUI(`Subscribing to channel: '${config.channel}'...`);
         channel = pusher.subscribe(config.channel);
 
         channel.bind('pusher:subscription_succeeded', () => {
             updatePusherStatus(`Connected & listening on '${config.channel}'`, false);
-            console.log(`Successfully subscribed to ${config.channel}! Waiting for events...`);
+            logToUI(`Successfully subscribed to '${config.channel}'!`, "SUCCESS");
         });
 
         channel.bind('pusher:subscription_error', (status) => {
-            updatePusherStatus(`Subscription Error: ${status.error.message}`, true);
-            console.error(`Failed to subscribe to ${config.channel}:`, status);
+            const errorMsg = (status && status.error && status.error.message) ? status.error.message : JSON.stringify(status);
+            updatePusherStatus(`Subscription Error: ${errorMsg}`, true);
+            logToUI(`Failed to subscribe to '${config.channel}': ${errorMsg}`, "ERROR");
         });
 
-        // The event name from the Chrome extension will have 'client-' prepended
         const clientEventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
+        logToUI(`Binding to event: '${clientEventName}'...`);
         
         channel.bind(clientEventName, (data) => {
-            console.log(`Received event '${clientEventName}' with data:`, data);
+            logToUI(`Received event '${clientEventName}' with data: ${JSON.stringify(data)}`, "SUCCESS");
             if (data && data.studentName) {
                 highlightStudentInSheet(data.studentName);
+            } else {
+                logToUI(`Event received but missing 'studentName' property.`, "ERROR");
             }
         });
 
     } catch (error) {
         updatePusherStatus(`Connection Failed: ${error.message}`, true);
+        logToUI(`Pusher connection error: ${error.message}`, "ERROR");
         console.error("Pusher connection error:", error);
     }
 }
@@ -150,12 +218,14 @@ function updatePusherStatus(message, isError) {
  * @param {string} studentName The name of the student to highlight.
  */
 async function highlightStudentInSheet(studentName) {
+    logToUI(`Attempting to highlight student: '${studentName}'...`);
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
             const range = sheet.getUsedRange();
             range.load("values, address");
             await context.sync();
+            logToUI(`Searching in range ${range.address} for '${studentName}'.`);
 
             const values = range.values;
             const headers = values[0].map(h => String(h || '').toLowerCase());
@@ -163,31 +233,35 @@ async function highlightStudentInSheet(studentName) {
             const outreachColIdx = headers.indexOf("outreach");
 
             if (nameColIdx === -1) {
+                logToUI("'StudentName' column not found in Master List.", "ERROR");
                 console.error("'StudentName' column not found in Master List.");
                 return;
             }
 
             for (let i = 1; i < values.length; i++) {
                 const rowName = values[i][nameColIdx];
-                // Normalize names for comparison: "Last, First" vs "First Last"
                 const normalizedRowName = String(rowName || '').toLowerCase().replace(/, /g, ' ').split(' ').reverse().join(' ');
                 const normalizedSearchName = String(studentName || '').toLowerCase().replace(/, /g, ' ').split(' ').reverse().join(' ');
                 
                 if (normalizedRowName === normalizedSearchName) {
+                    logToUI(`Match found for '${studentName}' at row ${i + 1}.`);
                     const startCol = Math.min(nameColIdx, outreachColIdx);
                     const colCount = Math.abs(nameColIdx - outreachColIdx) + 1;
                     const highlightRange = sheet.getRangeByIndexes(i, startCol, 1, colCount);
                     highlightRange.format.fill.color = "yellow";
                     
-                    // Optional: Select the row to bring it into view
-                    sheet.getRangeByIndexes(i, 0, 1, 1).select();
+                    const cellToSelect = sheet.getRangeByIndexes(i, 0, 1, 1);
+                    cellToSelect.select();
                     
                     await context.sync();
-                    return; // Stop after finding the first match
+                    logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
+                    return; 
                 }
             }
+            logToUI(`Could not find a matching row for '${studentName}'.`);
         });
     } catch (error) {
+        logToUI(`Error during highlight: ${error.message}`, "ERROR");
         console.error("Error highlighting student:", error);
     }
 }
@@ -244,11 +318,9 @@ function hideNewConnectionModal() {
 
 async function loadAndRenderConnections() {
     const settings = await getSettings();
-    // For this add-in, we'll use a separate key for legacy connections.
     const connectionsString = Office.context.document.settings.get("studentRetentionConnections");
     const connections = connectionsString ? JSON.parse(connectionsString) : [];
     renderConnections(connections);
-    // Also load and connect Pusher on pane open
     await loadAndConnectPusher();
 }
 
@@ -256,8 +328,8 @@ function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
 
-    container.innerHTML = ''; // Clear previous items before re-rendering
-    container.appendChild(noConnectionsMessage); // Re-add the placeholder
+    container.innerHTML = '';
+    container.appendChild(noConnectionsMessage);
 
     if (connections && connections.length > 0) {
         noConnectionsMessage.classList.add('hidden');
@@ -266,7 +338,6 @@ function renderConnections(connections) {
             connectionElement.className = "connection-item bg-white p-4 rounded-lg shadow-sm border border-gray-200 relative group";
             connectionElement.dataset.connectionIndex = index;
 
-            // Options Menu (Edit/Delete)
             const optionsContainer = document.createElement('div');
             optionsContainer.className = "absolute top-2 right-2";
             const optionsButton = document.createElement('button');
@@ -297,7 +368,6 @@ function renderConnections(connections) {
                 optionsMenu.classList.toggle('hidden');
             };
             
-            // Connection Details
             const nameElement = document.createElement('h3');
             nameElement.className = "font-bold text-md text-gray-800 pr-8";
             nameElement.textContent = conn.name || "Unnamed Connection";
@@ -387,20 +457,17 @@ function hideCustomKeyWizard() {
 function resetWizard() {
     wizardState = { step: 'setupType' };
     
-    // Hide all steps
     document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
     document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
     document.getElementById('wizard-step-details').classList.add('hidden');
     document.getElementById('wizard-step-pusher-creds').classList.add('hidden');
     
-    // Reset buttons
     document.getElementById('wizard-back-button').classList.add('hidden');
     document.getElementById('wizard-finish-button').classList.add('hidden');
     const nextButton = document.getElementById('wizard-next-button');
     nextButton.classList.add('hidden');
     nextButton.disabled = true;
 
-    // Clear selections and inputs
     document.querySelectorAll(".wizard-type-button, .wizard-setup-button").forEach(btn => {
         btn.classList.remove('bg-blue-100', 'border-blue-400');
     });
@@ -454,7 +521,6 @@ function navigateWizardBack() {
 function updateWizardView() {
     const { step, type, setupType } = wizardState;
     
-    // Hide all steps first
     document.getElementById('wizard-step-1-setup-type').classList.add('hidden');
     document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
     document.getElementById('wizard-step-details').classList.add('hidden');
@@ -464,7 +530,6 @@ function updateWizardView() {
     const backButton = document.getElementById('wizard-back-button');
     const finishButton = document.getElementById('wizard-finish-button');
 
-    // Show current step
     if (step === 'setupType') {
         document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
         backButton.classList.add('hidden');
@@ -474,7 +539,7 @@ function updateWizardView() {
         document.getElementById('wizard-step-1-manual-type').classList.remove('hidden');
         backButton.classList.remove('hidden');
         nextButton.classList.remove('hidden');
-        nextButton.disabled = !type; // Enable if a type is already selected
+        nextButton.disabled = !type;
         finishButton.classList.add('hidden');
     } else if (step === 'details') {
         document.getElementById('wizard-step-details').classList.remove('hidden');
