@@ -97,6 +97,33 @@ function clearLogPanel(e) {
 // --- PUSHER INTEGRATION FUNCTIONS ---
 
 /**
+ * Creates an HMAC-SHA256 signature for Pusher authentication.
+ * This is an async function because it uses the SubtleCrypto API.
+ * @param {string} secret The Pusher App Secret.
+ * @param {string} stringToSign The string to sign (e.g., "socket_id:channel_name").
+ * @returns {Promise<string>} A promise that resolves with the hex signature.
+ */
+async function createPusherSignature(secret, stringToSign) {
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const messageData = encoder.encode(stringToSign);
+
+    const key = await window.crypto.subtle.importKey(
+        "raw",
+        keyData,
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+    );
+    
+    const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
+    
+    // Convert ArrayBuffer to hex string
+    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+
+/**
  * Loads Pusher settings and attempts to connect automatically.
  */
 async function loadAndConnectPusher() {
@@ -104,15 +131,16 @@ async function loadAndConnectPusher() {
     const settings = await getSettings();
     const pusherConfig = settings.pusherConfig;
     
-    if (pusherConfig && pusherConfig.key && pusherConfig.cluster && pusherConfig.channel && pusherConfig.event) {
+    if (pusherConfig && pusherConfig.key && pusherConfig.cluster && pusherConfig.channel && pusherConfig.event && pusherConfig.secret) {
         logToUI("Found saved configuration. Populating UI fields.");
         document.getElementById("pusher-key").value = pusherConfig.key;
+        document.getElementById("pusher-secret").value = pusherConfig.secret;
         document.getElementById("pusher-cluster").value = pusherConfig.cluster;
         document.getElementById("pusher-channel").value = pusherConfig.channel;
         document.getElementById("pusher-event").value = pusherConfig.event;
         connectToPusher(pusherConfig);
     } else {
-        logToUI("No saved Pusher configuration found.");
+        logToUI("No saved Pusher configuration found or it is incomplete.");
     }
 }
 
@@ -124,12 +152,13 @@ async function saveAndConnectPusher() {
     const settings = await getSettings();
     const pusherConfig = {
         key: document.getElementById("pusher-key").value.trim(),
+        secret: document.getElementById("pusher-secret").value.trim(), // NEW
         cluster: document.getElementById("pusher-cluster").value.trim(),
         channel: document.getElementById("pusher-channel").value.trim(),
         event: document.getElementById("pusher-event").value.trim()
     };
 
-    if (!pusherConfig.key || !pusherConfig.cluster || !pusherConfig.channel || !pusherConfig.event) {
+    if (!pusherConfig.key || !pusherConfig.secret || !pusherConfig.cluster || !pusherConfig.channel || !pusherConfig.event) {
         updatePusherStatus("All fields are required.", true);
         logToUI("Pusher config save failed: All fields are required.", "ERROR");
         return;
@@ -160,7 +189,25 @@ function connectToPusher(config) {
         logToUI(`Initializing Pusher with key: ${config.key.substring(0, 5)}... and cluster: ${config.cluster}`);
         
         pusher = new Pusher(config.key, {
-            cluster: config.cluster
+            cluster: config.cluster,
+            // NEW: Client-side authorizer for private channels
+            authorizer: (channel, options) => {
+                return {
+                    authorize: async (socketId, callback) => {
+                        logToUI(`Authorizing for socketId: ${socketId} and channel: ${channel.name}`);
+                        const stringToSign = `${socketId}:${channel.name}`;
+                        try {
+                            const signature = await createPusherSignature(config.secret, stringToSign);
+                            const authData = { auth: `${config.key}:${signature}` };
+                            logToUI(`Generated auth signature: ${authData.auth.substring(0, 15)}...`, "SUCCESS");
+                            callback(null, authData);
+                        } catch (error) {
+                             logToUI(`Failed to generate signature: ${error.message}`, "ERROR");
+                             callback(error, null);
+                        }
+                    }
+                };
+            }
         });
 
         logToUI(`Subscribing to channel: '${config.channel}'...`);
@@ -234,7 +281,6 @@ async function highlightStudentInSheet(studentName) {
 
             if (nameColIdx === -1) {
                 logToUI("'StudentName' column not found in Master List.", "ERROR");
-                console.error("'StudentName' column not found in Master List.");
                 return;
             }
 
@@ -245,13 +291,14 @@ async function highlightStudentInSheet(studentName) {
                 
                 if (normalizedRowName === normalizedSearchName) {
                     logToUI(`Match found for '${studentName}' at row ${i + 1}.`);
-                    const startCol = Math.min(nameColIdx, outreachColIdx);
-                    const colCount = Math.abs(nameColIdx - outreachColIdx) + 1;
+                    const startCol = outreachColIdx !== -1 ? Math.min(nameColIdx, outreachColIdx) : nameColIdx;
+                    const endCol = outreachColIdx !== -1 ? Math.max(nameColIdx, outreachColIdx) : nameColIdx;
+                    const colCount = endCol - startCol + 1;
+                    
                     const highlightRange = sheet.getRangeByIndexes(i, startCol, 1, colCount);
                     highlightRange.format.fill.color = "yellow";
                     
-                    const cellToSelect = sheet.getRangeByIndexes(i, 0, 1, 1);
-                    cellToSelect.select();
+                    sheet.getRangeByIndexes(i, 0, 1, 1).select();
                     
                     await context.sync();
                     logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
@@ -261,7 +308,11 @@ async function highlightStudentInSheet(studentName) {
             logToUI(`Could not find a matching row for '${studentName}'.`);
         });
     } catch (error) {
-        logToUI(`Error during highlight: ${error.message}`, "ERROR");
+        let errorMessage = error.message;
+        if(error instanceof OfficeExtension.Error) {
+            errorMessage = error.debugInfo.message || error.message;
+        }
+        logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
         console.error("Error highlighting student:", error);
     }
 }
