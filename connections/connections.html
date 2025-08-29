@@ -9,6 +9,9 @@
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
     
+    <!-- Pusher JavaScript Library (Local) -->
+    <script src="pusher.min.js"></script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
@@ -37,9 +40,40 @@
             </button>
         </div>
 
+        <!-- START: Pusher Connection Section -->
+        <div class="mt-8 pt-6 border-t border-gray-200">
+            <h2 class="text-lg font-bold text-gray-700 mb-2">Real-time Submission Highlighting</h2>
+            <p class="text-sm text-gray-600 mb-4">Enter your Pusher details below to enable real-time highlighting when the Submission Checker extension finds a new entry.</p>
+            <div id="pusher-config-form" class="space-y-3 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <div>
+                    <label for="pusher-key" class="block text-sm font-medium text-gray-700">App Key</label>
+                    <input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Your Pusher App Key">
+                </div>
+                <div>
+                    <label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label>
+                    <input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., us2, eu">
+                </div>
+                <div>
+                    <label for="pusher-channel" class="block text-sm font-medium text-gray-700">Channel Name</label>
+                    <input type="text" id="pusher-channel" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., office-add-in-updates">
+                </div>
+                <div>
+                    <label for="pusher-event" class="block text-sm font-medium text-gray-700">Event Name</label>
+                    <input type="text" id="pusher-event" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., new-submission-found">
+                </div>
+                <div class="pt-2 flex justify-between items-center">
+                    <div id="pusher-status" class="text-sm font-semibold">Status: <span class="text-gray-500">Not Connected</span></div>
+                    <button id="save-pusher-config-button" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors duration-200 shadow-sm">
+                        Connect & Save
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- END: Pusher Connection Section -->
+
         <!-- Saved Connections List -->
         <div class="mt-8 pt-6 border-t border-gray-200 flex-grow overflow-y-auto">
-            <h2 class="text-lg font-bold text-gray-700 mb-4">Saved Connections</h2>
+            <h2 class="text-lg font-bold text-gray-700 mb-4">Saved Connections (Legacy)</h2>
             <div id="connections-list-container" class="space-y-3">
                 <!-- Connections will be rendered here by JavaScript -->
                 <p id="no-connections-message" class="text-sm text-gray-500 italic">No connections have been added yet.</p>
@@ -47,7 +81,7 @@
         </div>
     </div>
 
-    <!-- New Connection Options Modal -->
+    <!-- Modals (Kept for legacy connections) -->
     <div id="new-connection-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-40">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-2">Create New Connection</h2>
@@ -200,7 +234,7 @@
     </div>
 
 
-    <script type="text/javascript" src="../connections/connections.js"></script>
+    <script type="text/javascript" src="connections.js"></script>
 </body>
 </html>
 
