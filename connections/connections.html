@@ -11,12 +11,60 @@
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Custom CSS for modal background blur -->
+    <style>
+        .glass-modal-bg {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+    </style>
 </head>
 <body class="bg-gray-100 font-sans">
-    <div class="p-4">
+    <div class="p-6 h-screen flex flex-col">
         <h1 class="text-2xl font-bold text-gray-800">Connections</h1>
-        <p class="mt-2 text-gray-600">This is the placeholder for the Connections feature.</p>
+        <p class="mt-2 text-sm text-gray-600">Connect this office add-in with other applications/services. Insert a premade key or manually create your own key.</p>
+    
+        <div class="mt-8 space-y-4">
+            <button id="insert-key-button" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-md flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
+                </svg>
+                Insert Key
+            </button>
+            <button id="custom-key-button" class="w-full bg-gray-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-700 transition-colors duration-200 shadow-md flex items-center justify-center gap-2">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                   <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                 </svg>
+                Custom Key
+            </button>
+        </div>
     </div>
+
+    <!-- Insert Key Modal -->
+    <div id="insert-key-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Insert Connection Key</h2>
+            <p class="text-gray-600 mb-6">Please select a valid `.json` connection key file.</p>
+            
+            <div>
+                <label for="key-file-input" class="cursor-pointer bg-white border border-gray-300 rounded-lg p-4 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors">
+                    <svg class="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <span id="file-upload-text" class="text-sm font-medium text-gray-600">Click to upload a JSON file</span>
+                    <span id="file-name-display" class="text-xs text-blue-600 mt-1 font-semibold"></span>
+                </label>
+                <input type="file" id="key-file-input" class="hidden" accept=".json">
+            </div>
+
+            <div class="mt-8 flex justify-end space-x-3">
+                <button id="cancel-upload-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
+                <button id="submit-key-button" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed" disabled>Submit Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript" src="../connections/connections.js"></script>
 </body>
 </html>
 
