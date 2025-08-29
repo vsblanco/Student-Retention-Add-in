@@ -100,8 +100,27 @@
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-2">Custom Connection Wizard</h2>
             
-            <!-- Step 1: Connection Type -->
-            <div id="wizard-step-1">
+            <!-- Step 1: Setup Type (Pusher vs Manual) -->
+            <div id="wizard-step-1-setup-type">
+                <p class="text-sm text-gray-600 mb-6">Choose a guided setup or configure a connection manually.</p>
+                <div class="space-y-3">
+                    <button id="pusher-setup-button" class="wizard-setup-button w-full text-left p-4 bg-white/50 border border-gray-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors flex items-center gap-4">
+                        <svg class="w-8 h-8" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><title>Pusher</title><path d="M2.48 2.448a1.52 1.52 0 00-1.52 1.52v16.064a1.52 1.52 0 001.52 1.52h16.064a1.52 1.52 0 001.52-1.52V3.968a1.52 1.52 0 00-1.52-1.52H2.48zm.905 2.19h14.25v14.18H3.385V4.638zm2.84 2.864v8.432h2.08V7.502H6.224zm3.623 0v8.432h6.512V9.582h-4.432V7.502h4.432a1.52 1.52 0 00-1.52-1.52h-3.472a1.52 1.52 0 00-1.52 1.52z" fill="#303030"/></svg>
+                        <div>
+                           <h3 class="font-bold text-gray-800">Pusher</h3>
+                           <p class="text-xs text-gray-600">Connect to the Pusher real-time messaging service.</p>
+                        </div>
+                    </button>
+                    <button id="manual-setup-button" class="wizard-setup-button w-full text-left p-4 bg-white/50 border border-gray-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors">
+                        <h3 class="font-bold text-gray-800">Manual</h3>
+                        <p class="text-xs text-gray-600">Manually configure an API, HTTP Request, or Webhook.</p>
+                    </button>
+                </div>
+            </div>
+
+
+            <!-- Step 1 (Manual): Connection Type -->
+            <div id="wizard-step-1-manual-type" class="hidden">
                 <p class="text-sm text-gray-600 mb-6">Select the type of connection you want to create.</p>
                 <div class="space-y-3">
                     <button data-type="API" class="wizard-type-button w-full text-left p-4 bg-white/50 border border-gray-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors">
@@ -114,13 +133,13 @@
                     </button>
                      <button data-type="Webhook" class="wizard-type-button w-full text-left p-4 bg-white/50 border border-gray-300 rounded-lg hover:bg-blue-100 hover:border-blue-400 transition-colors">
                         <h3 class="font-bold text-gray-800">Webhook</h3>
-                        <p class="text-xs text-gray-600">Receive real-time data from services like Pusher.</p>
+                        <p class="text-xs text-gray-600">Receive real-time data from a generic service.</p>
                     </button>
                 </div>
             </div>
 
             <!-- Step 2: Details -->
-            <div id="wizard-step-2" class="hidden">
+            <div id="wizard-step-details" class="hidden">
                 <p class="text-sm text-gray-600 mb-6">Provide a name and description for your <b id="connection-type-display"></b> connection.</p>
                 <div class="space-y-4">
                     <div>
@@ -135,7 +154,7 @@
             </div>
 
             <!-- Step 3: Webhook Credentials (Pusher) -->
-            <div id="wizard-step-3" class="hidden">
+            <div id="wizard-step-pusher-creds" class="hidden">
                 <p class="text-sm text-gray-600 mb-6">Enter your Pusher credentials.</p>
                  <div class="space-y-4">
                     <div>
