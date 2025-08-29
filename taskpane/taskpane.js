@@ -1639,74 +1639,90 @@ async function applyContactedHighlight(rowIndex) {
     }
 }
 
-
 async function onWorksheetChanged(eventArgs) {
-    try {
-        await Excel.run(async (context) => {
-            if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
-                return;
+    // This function combines the logic from the old, working version 
+    // with the user-prompting feature of the new version.
+    await Excel.run(async (context) => {
+        if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
+            return;
+        }
+
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const changedRange = sheet.getRange(eventArgs.address);
+        const headerRange = sheet.getRange("1:1").getUsedRange(true);
+
+        changedRange.load("address, rowIndex, columnIndex, rowCount, columnCount, values, valuesBefore");
+        headerRange.load("values, columnCount");
+        await context.sync();
+
+        const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
+        const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
+
+        if (outreachColIndex === -1 || changedRange.rowIndex === 0) {
+            return; // No outreach column or change is in the header
+        }
+
+        // Check if the changed range intersects with the outreach column at all
+        const outreachColumnAffected = changedRange.columnIndex <= outreachColIndex && (changedRange.columnIndex + changedRange.columnCount - 1) >= outreachColIndex;
+        if (!outreachColumnAffected) {
+            return;
+        }
+        
+        // This offset is crucial for finding the correct value in multi-column changes
+        const outreachColumnOffset = outreachColIndex - changedRange.columnIndex;
+
+        // Load all data for the affected rows at once to be efficient
+        const studentInfoRange = sheet.getRangeByIndexes(
+            changedRange.rowIndex, 0,
+            changedRange.rowCount, headerRange.columnCount
+        );
+        studentInfoRange.load("values");
+        await context.sync();
+        const allRowValues = studentInfoRange.values;
+
+        const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
+        const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
+
+        if (studentIdColIndex === -1 || studentNameColIndex === -1) {
+            return; // Can't identify student
+        }
+
+        // Now, loop through each row that was changed
+        for (let i = 0; i < changedRange.rowCount; i++) {
+            const newValue = (changedRange.values[i] && changedRange.values[i][outreachColumnOffset]) ? 
+                             String(changedRange.values[i][outreachColumnOffset] || "").trim() : "";
+            
+            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[i] && changedRange.valuesBefore[i][outreachColumnOffset]) ?
+                             String(changedRange.valuesBefore[i][outreachColumnOffset] || "").trim() : "";
+            
+            if (newValue !== "" && newValue.toLowerCase() !== oldValue.toLowerCase()) {
+                const studentId = allRowValues[i][studentIdColIndex];
+                const studentName = allRowValues[i][studentNameColIndex];
+                const rowIndex = changedRange.rowIndex + i;
+
+                if (studentId && studentName) {
+                    if (!sessionCommentUser) {
+                        // If no user is selected, save the *first* action and prompt.
+                        // We won't process subsequent changes in this batch to avoid multiple prompts.
+                        if (!pendingOutreachAction) { 
+                            console.log("Outreach change detected, but no user is selected. Prompting.");
+                            pendingOutreachAction = { studentId, studentName, commentText: newValue, rowIndex };
+                            promptForUserAndSubmit();
+                        }
+                        return; // Stop processing further changes in this event until user is selected
+                    }
+                    
+                    // If user is selected, process the comment immediately
+                    await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
+                    const lowerNewValue = newValue.toLowerCase();
+                    if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
+                        console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
+                        await applyContactedHighlight(rowIndex);
+                    }
+                }
             }
-
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const changedRange = sheet.getRange(eventArgs.address);
-            const headerRange = sheet.getRange("1:1").getUsedRange(true);
-
-            changedRange.load("address, rowIndex, columnIndex, values, valuesBefore");
-            headerRange.load("values");
-            await context.sync();
-
-            const headers = (headerRange.values[0] || []).map(h => String(h || '').toLowerCase());
-            const outreachColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.outreach);
-
-            if (outreachColIndex === -1 || changedRange.columnIndex !== outreachColIndex || changedRange.rowIndex === 0) {
-                return;
-            }
-
-            // MODIFIED: Added robust checks to prevent the TypeError
-            const newValue = (changedRange.values && changedRange.values[0] ? changedRange.values[0][0] || "" : "").trim();
-            const oldValue = (changedRange.valuesBefore && changedRange.valuesBefore[0] ? changedRange.valuesBefore[0][0] || "" : "").trim();
-
-            if (newValue === "" || newValue.toLowerCase() === oldValue.toLowerCase()) {
-                return;
-            }
-
-            const studentInfoRange = sheet.getRangeByIndexes(changedRange.rowIndex, 0, 1, headers.length);
-            studentInfoRange.load("values");
-            await context.sync();
-
-            const studentRowValues = studentInfoRange.values[0];
-            const studentIdColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.id);
-            const studentNameColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.name);
-
-            if (studentIdColIndex === -1 || studentNameColIndex === -1) {
-                return;
-            }
-
-            const studentId = studentRowValues[studentIdColIndex];
-            const studentName = studentRowValues[studentNameColIndex];
-            const rowIndex = changedRange.rowIndex;
-
-            if (!studentId || !studentName) {
-                return;
-            }
-
-            if (!sessionCommentUser) {
-                console.log("Outreach change detected, but no user is selected. Prompting.");
-                pendingOutreachAction = { studentId, studentName, commentText: newValue, rowIndex };
-                promptForUserAndSubmit();
-                return;
-            }
-
-            await addOutreachComment(studentId, studentName, newValue, sessionCommentUser);
-            const lowerNewValue = newValue.toLowerCase();
-            if (CONSTANTS.OUTREACH_HIGHLIGHT_TRIGGERS.some(phrase => lowerNewValue.includes(phrase))) {
-                console.log(`Highlight trigger phrase found for ${studentName}. Highlighting row ${rowIndex + 1}.`);
-                await applyContactedHighlight(rowIndex);
-            }
-        });
-    } catch (error) {
-        errorHandler(error);
-    }
+        }
+    }).catch(errorHandler);
 }
 
 
@@ -1810,3 +1826,4 @@ async function addOutreachComment(studentId, studentName, commentText, commentin
     });
 }
 // --- END: Code moved from commands.js ---
+
