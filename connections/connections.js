@@ -288,26 +288,30 @@ async function highlightStudentInSheet(studentName) {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            const headerRange = sheet.getRange("1:1");
-
-            // Load all necessary properties in one batch to prevent errors
-            usedRange.load("rowCount, columnCount");
-            headerRange.load("values");
+            
+            // Get the used range and load all necessary properties at once.
+            usedRange.load("values, rowCount, columnCount");
             await context.sync();
 
-            // Find the student name column index from the loaded headers
-            const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+            // Defensive check: a completely empty sheet might not have values.
+            if (!usedRange.values || usedRange.values.length === 0) {
+                throw new Error("The 'Master List' sheet is empty or contains no data.");
+            }
+            
+            // Get headers from the first row of the used range.
+            const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
+            
             const nameColumnIndex = headers.indexOf("studentname");
             
             if (nameColumnIndex === -1) {
                 throw new Error("Could not find a 'StudentName' column in the Master List.");
             }
 
-            // Now safely use the loaded rowCount
-            const searchRange = sheet.getRangeByIndexes(0, nameColumnIndex, usedRange.rowCount, 1);
-            logToUI(`Searching for '${studentName}' in column ${String.fromCharCode(65 + nameColumnIndex)}.`);
+            // Get just the name column to search efficiently
+            const nameColumnRange = usedRange.getColumn(nameColumnIndex);
+            logToUI(`Searching for '${studentName}' in the 'StudentName' column.`);
 
-            const searchResult = searchRange.find(studentName, {
+            const searchResult = nameColumnRange.find(studentName, {
                 completeMatch: false, // Partial match is okay
                 matchCase: false,
                 searchDirection: Excel.SearchDirection.forward
@@ -319,12 +323,11 @@ async function highlightStudentInSheet(studentName) {
             const foundRowIndex = searchResult.rowIndex;
             logToUI(`Match found for '${studentName}' at row ${foundRowIndex + 1}.`);
             
-            // Now safely use the loaded columnCount
             const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount);
             entireRow.format.fill.color = "yellow";
             
             // Select the cell to bring it into view
-            sheet.getRangeByIndexes(foundRowIndex, nameColumnIndex, 1, 1).select();
+            sheet.getCell(foundRowIndex, nameColumnIndex).select();
             
             await context.sync();
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
@@ -721,3 +724,4 @@ async function handleDeleteConnection() {
         hideDeleteConfirmModal();
     }
 }
+
