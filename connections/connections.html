@@ -38,22 +38,24 @@
         .status-dot.error { background-color: #ef4444; } /* red-500 */
 
         /* Tooltip styles */
-        .tooltip {
-            visibility: hidden;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .has-tooltip:hover .tooltip {
-            visibility: visible;
-            opacity: 1;
-        }
+        .tooltip { visibility: hidden; opacity: 0; transition: opacity 0.2s; }
+        .has-tooltip:hover .tooltip { visibility: visible; opacity: 1; }
 
         /* Dropdown styles */
-        .options-menu {
-            display: none;
+        .options-menu { display: none; }
+        .options-menu.open { display: block; }
+        
+        /* Color picker styles */
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
         }
-        .options-menu.open {
-            display: block;
+        .color-swatch.selected {
+            border-color: #3b82f6; /* blue-500 */
         }
     </style>
 </head>
@@ -66,9 +68,7 @@
                 <p class="mt-2 text-sm text-gray-600">Connect this add-in with other applications/services.</p>
             </div>
             <button id="new-connection-button" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-md flex items-center justify-center gap-2 whitespace-nowrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                 New Connection
             </button>
         </div>
@@ -90,8 +90,7 @@
                     <svg id="log-arrow" class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
             </div>
-            <div id="log-container" class="hidden mt-2 p-3 h-48 bg-gray-800 text-white font-mono text-xs rounded-lg overflow-y-auto border border-gray-600">
-            </div>
+            <div id="log-container" class="hidden mt-2 p-3 h-48 bg-gray-800 text-white font-mono text-xs rounded-lg overflow-y-auto border border-gray-600"></div>
         </div>
     </div>
 
@@ -105,30 +104,23 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <button disabled class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex flex-col items-center justify-center text-center opacity-60 cursor-not-allowed">
                     <img src="../images/power-automate-icon.png" alt="Power Automate Logo" class="h-16 w-16">
-                    <h3 class="font-semibold text-gray-700 mt-3">Power Automate</h3>
-                    <p class="text-xs text-gray-500 mt-1">Coming Soon</p>
+                    <h3 class="font-semibold text-gray-700 mt-3">Power Automate</h3><p class="text-xs text-gray-500 mt-1">Coming Soon</p>
                 </button>
                 <button id="select-pusher-button" class="bg-white p-4 rounded-xl shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col items-center justify-center text-center">
                      <img src="../images/pusher-icon.png" alt="Pusher Logo" class="h-16 w-16">
-                    <h3 class="font-semibold text-gray-800 mt-3">Pusher</h3>
-                     <p class="text-xs text-gray-500 mt-1">Real-time features</p>
+                    <h3 class="font-semibold text-gray-800 mt-3">Pusher</h3><p class="text-xs text-gray-500 mt-1">Real-time features</p>
                 </button>
             </div>
-            <div class="mt-8 flex justify-end">
-                <button id="cancel-select-service-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
-            </div>
+            <div class="mt-8 flex justify-end"><button id="cancel-select-service-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button></div>
         </div>
     </div>
 
-    <!-- Pusher Configuration Modal (Create) -->
+    <!-- Pusher Config Modal (Create) -->
     <div id="pusher-config-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Configure Pusher Connection</h2>
             <div class="space-y-3 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div>
-                    <label for="connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label>
-                    <input type="text" id="connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Submission Checker">
-                </div>
+                <div><label for="connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label><input type="text" id="connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Submission Checker"></div>
                 <div><label for="pusher-key" class="block text-sm font-medium text-gray-700">App Key</label><input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Key"></div>
                 <div><label for="pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label><input type="password" id="pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Secret"></div>
                 <div><label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label><input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., us2, eu"></div>
@@ -143,15 +135,12 @@
         </div>
     </div>
     
-    <!-- Pusher Configuration Modal (Edit) -->
+    <!-- Pusher Config Modal (Edit) -->
     <div id="edit-pusher-config-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Edit Pusher Connection</h2>
             <div class="space-y-3 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                 <div>
-                    <label for="edit-connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label>
-                    <input type="text" id="edit-connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
-                </div>
+                 <div><label for="edit-connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label><input type="text" id="edit-connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                 <div><label for="edit-pusher-key" class="block text-sm font-medium text-gray-700">App Key</label><input type="text" id="edit-pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                 <div><label for="edit-pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label><input type="password" id="edit-pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter new secret to update"></div>
                 <div><label for="edit-pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label><input type="text" id="edit-pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
@@ -165,8 +154,7 @@
         </div>
     </div>
 
-
-     <!-- Add Action Modal -->
+    <!-- Add Action Modal -->
     <div id="add-action-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">Add Action</h2>
@@ -174,14 +162,47 @@
             <div class="space-y-4">
                  <button data-action-type="liveHighlight" class="w-full bg-white p-4 rounded-lg shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all text-left">
                     <h3 class="text-base font-semibold text-gray-800">Live Submission Highlighting</h3>
-                    <p class="text-sm text-gray-500 mt-1">Highlights a student's row in the Master List in real-time when a new submission is detected.</p>
+                    <p class="text-sm text-gray-500 mt-1">Highlights a student's row in real-time when a new submission is detected.</p>
                 </button>
             </div>
-            <div class="mt-6 flex justify-end">
-                <button id="cancel-add-action-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
+            <div class="mt-6 flex justify-end"><button id="cancel-add-action-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button></div>
+        </div>
+    </div>
+    
+    <!-- Action Settings Modal (Live Highlighting) -->
+    <div id="highlight-action-settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Highlighting Action Settings</h2>
+            <div class="space-y-4 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                <!-- Highlight Color -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Highlight Color</label>
+                    <div id="color-picker" class="mt-2 flex items-center gap-2">
+                        <div class="color-swatch selected" style="background-color: #4ade80;" data-color="#4ade80"></div>
+                        <div class="color-swatch" style="background-color: #facc15;" data-color="#facc15"></div>
+                        <div class="color-swatch" style="background-color: #60a5fa;" data-color="#60a5fa"></div>
+                        <div class="color-swatch" style="background-color: #f472b6;" data-color="#f472b6"></div>
+                        <input type="text" id="custom-color-input" class="ml-2 w-full px-2 py-1 border border-gray-300 rounded-md" placeholder="e.g., #ff00ff">
+                    </div>
+                </div>
+                <!-- Target Sheet -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Target Sheet</label>
+                    <div class="mt-2 space-y-2" id="sheet-options">
+                        <div class="flex items-center"><input id="sheet-today" type="radio" name="sheet-choice" value="today" checked class="h-4 w-4"><label for="sheet-today" class="ml-2 block text-sm text-gray-900">Today's LDA Sheet</label></div>
+                        <div class="flex items-center"><input id="sheet-master" type="radio" name="sheet-choice" value="master" class="h-4 w-4"><label for="sheet-master" class="ml-2 block text-sm text-gray-900">Master List</label></div>
+                        <div class="flex items-center"><input id="sheet-custom" type="radio" name="sheet-choice" value="custom" class="h-4 w-4"><label for="sheet-custom" class="ml-2 block text-sm text-gray-900">Other</label></div>
+                        <input type="text" id="custom-sheet-name" class="hidden mt-1 ml-6 w-auto px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter sheet name">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button id="cancel-action-settings-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button>
+                <button id="save-action-settings-button" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Save Action</button>
             </div>
         </div>
     </div>
+
 
     <!-- Confirm Delete Modal -->
     <div id="confirm-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
@@ -198,4 +219,3 @@
     <script type="text/javascript" src="connections.js"></script>
 </body>
 </html>
-
