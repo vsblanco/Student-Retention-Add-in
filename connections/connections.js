@@ -250,7 +250,8 @@ async function handleAddActionClick(event) {
     const settings = await getSettings();
     const connection = settings.connections.find(c => c.id === connectionToModifyId);
     if (connection && connection.actions.some(a => a.type === actionType)) {
-        alert('This connection already has this action.'); return;
+        alert('This connection already has this action.');
+        return;
     }
     populateAndShowActionSettingsModal(actionType);
 }
