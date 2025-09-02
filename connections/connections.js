@@ -252,7 +252,7 @@ async function handleAddActionClick(event) {
 
 function populateAndShowActionSettingsModal(config) {
     // Defaults for a new action
-    const defaults = { color: '#4ade80', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
+    const defaults = { color: '#92d050', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
     const settings = { ...defaults, ...config };
 
     // Set color
@@ -278,7 +278,7 @@ async function handleSaveActionSettings() {
     const connection = settings.connections.find(c => c.id === connectionToModifyId);
     if (!connection) return;
 
-    const color = document.getElementById('custom-color-input').value.trim() || '#4ade80';
+    const color = document.getElementById('custom-color-input').value.trim() || '#92d050';
     const sheetType = document.querySelector('input[name="sheet-choice"]:checked').value;
     const customSheetName = document.getElementById('custom-sheet-name').value.trim();
     const ignoreColumns = document.getElementById('ignore-columns').value.trim();
@@ -289,7 +289,7 @@ async function handleSaveActionSettings() {
         const action = connection.actions.find(a => a.id === actionToModifyId);
         if (action) action.config = actionConfig;
     } else { // Creating new action
-        const newAction = { id: `action_${new Date().getTime()}`, type: 'liveHighlight', name: 'Live Submission Highlighting', config: actionConfig };
+        const newAction = { id: `action_${new Date().getTime()}`, type: 'liveHighlight', name: 'Auto Highlight', config: actionConfig };
         connection.actions.push(newAction);
     }
 
@@ -436,7 +436,7 @@ function updateConnectionStatus(connectionId, status, message) {
 
 // --- EXCEL INTERACTION ---
 async function highlightStudentInSheet(studentName, actionConfig) {
-    const config = { color: '#4ade80', sheetType: 'today', ignoreColumns: '', ...actionConfig };
+    const config = { color: '#92d050', sheetType: 'today', ignoreColumns: '', ...actionConfig };
     let sheetName = "Master List";
     if (config.sheetType === 'today') sheetName = getTodaysLdaSheetName();
     else if (config.sheetType === 'custom' && config.customSheetName) sheetName = config.customSheetName;
