@@ -356,11 +356,23 @@ function handleSheetOptions(event) {
 }
 function populateAndShowHistoryModal(history) {
     const container = document.getElementById('history-list-container');
+    const totalCountEl = document.getElementById('history-total-count');
+    const failedCountEl = document.getElementById('history-failed-count');
+
     container.innerHTML = '';
-    if (!history || history.length === 0) {
+
+    const historyData = history || [];
+    const totalEntries = historyData.length;
+    const failedEntries = historyData.filter(entry => entry.status === 'Failed').length;
+
+    totalCountEl.textContent = `Total: ${totalEntries}`;
+    failedCountEl.textContent = `Failed: ${failedEntries}`;
+    failedCountEl.classList.toggle('hidden', failedEntries === 0);
+
+    if (totalEntries === 0) {
         container.innerHTML = '<p class="text-center text-gray-500 p-4">No history recorded yet.</p>';
     } else {
-        history.slice().reverse().forEach(entry => {
+        historyData.slice().reverse().forEach(entry => {
             const successIcon = '<svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>';
             const failIcon = '<svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>';
             const div = document.createElement('div');
@@ -457,12 +469,10 @@ async function addHistoryToAction(connectionId, actionId, historyEntry) {
     const conn = settings.connections.find(c => c.id === connectionId);
     const action = conn?.actions.find(a => a.id === actionId);
     if (action) {
-        // Check for duplicates by name
         if (action.history.some(entry => entry.name === historyEntry.name)) {
             logToUI(`Duplicate history entry for '${historyEntry.name}' ignored.`, 'INFO');
-            return; // Stop if a duplicate is found
+            return;
         }
-        
         action.history.push(historyEntry);
         if (action.history.length > 100) action.history.shift();
         await saveSettings(settings);
