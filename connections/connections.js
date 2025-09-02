@@ -224,7 +224,7 @@ async function handleConnectionCardAction(event) {
         const actionToEdit = conn?.actions.find(a => a.id === actionId);
         if (actionToEdit) {
             connectionToModifyId = connectionId;
-            actionToModifyId = actionId;
+            actionToModifyId = actionToEdit.id;
             populateAndShowActionSettingsModal(actionToEdit.config);
         }
     } else if (action === 'delete-action') {
@@ -245,31 +245,22 @@ async function handleAddActionClick(event) {
         if (connection && connection.actions.some(a => a.type === 'liveHighlight')) {
             alert('This connection already has this action.'); return;
         }
-        // NOTE: We do NOT hide the add action modal here. It gets hidden when the settings modal is closed.
-        populateAndShowActionSettingsModal(); // Show with defaults for new action
+        populateAndShowActionSettingsModal();
     }
 }
 
 function populateAndShowActionSettingsModal(config) {
-    // Defaults for a new action
     const defaults = { color: '#92d050', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
     const settings = { ...defaults, ...config };
-
-    // Set color
     document.querySelectorAll('.color-swatch').forEach(swatch => {
         swatch.classList.toggle('selected', swatch.dataset.color === settings.color);
     });
     document.getElementById('custom-color-input').value = settings.color;
-    
-    // Set sheet choice
     document.getElementById(`sheet-${settings.sheetType}`).checked = true;
     const customSheetInput = document.getElementById('custom-sheet-name');
     customSheetInput.classList.toggle('hidden', settings.sheetType !== 'custom');
     customSheetInput.value = settings.customSheetName;
-
-    // Set ignored columns
     document.getElementById('ignore-columns').value = settings.ignoreColumns;
-
     showActionSettingsModal();
 }
 
@@ -282,22 +273,19 @@ async function handleSaveActionSettings() {
     const sheetType = document.querySelector('input[name="sheet-choice"]:checked').value;
     const customSheetName = document.getElementById('custom-sheet-name').value.trim();
     const ignoreColumns = document.getElementById('ignore-columns').value.trim();
-
     const actionConfig = { color, sheetType, customSheetName, ignoreColumns };
 
-    if (actionToModifyId) { // Editing existing action
+    if (actionToModifyId) {
         const action = connection.actions.find(a => a.id === actionToModifyId);
         if (action) action.config = actionConfig;
-    } else { // Creating new action
+    } else {
         const newAction = { id: `action_${new Date().getTime()}`, type: 'liveHighlight', name: 'Auto Highlight', config: actionConfig };
         connection.actions.push(newAction);
     }
-
     await saveSettings(settings);
     hideActionSettingsModal();
     await loadAndRenderConnections();
 }
-
 
 function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
@@ -325,7 +313,6 @@ function renderConnections(connections) {
                         </div>
                     </div>`).join('');
             }
-            
             const logoSrc = LOGO_MAP[conn.type] || '';
             const logoHtml = logoSrc ? `<img src="${logoSrc}" alt="${conn.type} logo" class="h-6 w-6 mr-2">` : '';
 
@@ -438,10 +425,8 @@ function updateConnectionStatus(connectionId, status, message) {
 function reformatName(name) {
     const parts = name.split(',').map(p => p.trim());
     if (parts.length === 2) {
-        // Was "Last, First", convert to "First Last"
         return `${parts[1]} ${parts[0]}`;
     } else {
-        // Was "First Last", convert to "Last, First"
         const spaceIndex = name.lastIndexOf(' ');
         if (spaceIndex !== -1) {
             const first = name.substring(0, spaceIndex);
@@ -449,7 +434,7 @@ function reformatName(name) {
             return `${last}, ${first}`;
         }
     }
-    return name; // Return original if format is unexpected
+    return name;
 }
 
 async function highlightStudentInSheet(studentName, actionConfig) {
@@ -462,6 +447,16 @@ async function highlightStudentInSheet(studentName, actionConfig) {
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
+
+            const autoFilter = sheet.getAutoFilter();
+            autoFilter.load("isNullObject");
+            await context.sync();
+
+            if (!autoFilter.isNullObject) {
+                logToUI(`Active filter found on sheet '${sheetName}'. Clearing filter to ensure visibility.`);
+                autoFilter.clearCriteria();
+            }
+
             const usedRange = sheet.getUsedRange();
             usedRange.load("values, rowCount, columnCount");
             await context.sync();
@@ -485,17 +480,15 @@ async function highlightStudentInSheet(studentName, actionConfig) {
                     logToUI(`'${studentName}' not found. Trying alternate format: '${alternateName}'...`);
                     searchResult = nameColumn.find(alternateName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
                     searchResult.load("rowIndex");
-                    await context.sync(); // This will throw the final error if it's still not found
+                    await context.sync();
                 } else {
-                    throw error; // Re-throw other types of errors
+                    throw error;
                 }
             }
 
             const foundRowIndex = searchResult.rowIndex;
-            
             const ignoredHeaders = new Set((config.ignoreColumns || '').toLowerCase().split(',').map(h => h.trim()).filter(Boolean));
             const ignoredColumnIndices = new Set(headers.map((h, i) => ignoredHeaders.has(h) ? i : -1).filter(i => i !== -1));
-
             let startCol = -1;
             for (let i = 0; i < usedRange.columnCount; i++) {
                 if (!ignoredColumnIndices.has(i) && startCol === -1) {
@@ -508,7 +501,6 @@ async function highlightStudentInSheet(studentName, actionConfig) {
             if (startCol !== -1) {
                 sheet.getRangeByIndexes(foundRowIndex, startCol, 1, usedRange.columnCount - startCol).format.fill.color = config.color;
             }
-
             sheet.getCell(foundRowIndex, nameColumnIndex).select();
             await context.sync();
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
