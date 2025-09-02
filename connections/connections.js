@@ -1,172 +1,459 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Connections</title>
+'use strict';
 
-    <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+// --- STATE & CONSTANTS ---
+const SETTINGS_KEY = "studentRetentionSettings";
+const MASTER_LIST_SHEET = "Master List";
+
+let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
+let currentConnectionIdForAction = null; // To know which connection to add an action to
+
+// --- INITIALIZATION ---
+Office.onReady((info) => {
+    if (info.host === Office.HostType.Excel) {
+        initializeEventListeners();
+        logToUI("Connections pane ready.");
+        loadAndRenderConnections();
+    }
+});
+
+function initializeEventListeners() {
+    // Main UI
+    document.getElementById("new-connection-button").onclick = showSelectServiceModal;
     
-    <!-- Pusher JavaScript Library (Local) -->
-    <script src="pusher.min.js"></script>
+    // Select Service Modal
+    document.getElementById("cancel-select-service-button").onclick = hideSelectServiceModal;
+    document.getElementById("select-pusher-button").onclick = showPusherConfigModal;
+    
+    // Pusher Config Modal
+    document.getElementById("cancel-pusher-config-button").onclick = hidePusherConfigModal;
+    document.getElementById("create-pusher-connection-button").onclick = handleCreatePusherConnection;
+    
+    // Add Action Modal
+    const addActionModal = document.getElementById("add-action-modal");
+    addActionModal.addEventListener('click', handleAddActionClick);
+    document.getElementById("cancel-add-action-button").onclick = hideAddActionModal;
 
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    // Log panel
+    document.getElementById("log-header").onclick = toggleLogPanel;
+    document.getElementById("clear-log-button").onclick = clearLogPanel;
 
-    <!-- Custom CSS -->
-    <style>
-        .glass-modal-bg {
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            background-color: rgba(255, 255, 255, 0.6);
+    // Event delegation for connection cards
+    document.getElementById("connections-list-container").addEventListener('click', handleConnectionCardAction);
+}
+
+// --- LOGGING ---
+function logToUI(message, type = 'INFO') {
+    const logContainer = document.getElementById('log-container');
+    if (logContainer) {
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.innerHTML = `<span class="text-gray-500">${timestamp} [${type}]:</span> ${message}`;
+        
+        switch (type) {
+            case 'ERROR': p.className = 'text-red-400'; break;
+            case 'SUCCESS': p.className = 'text-green-400'; break;
+            default: p.className = 'text-gray-300'; break;
         }
-        #log-header { cursor: pointer; }
-        #log-arrow { transition: transform 0.2s; }
-        #log-container.hidden { display: none; }
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            flex-shrink: 0;
+        logContainer.appendChild(p);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+    console.log(`[${type}] ${message}`);
+}
+
+function toggleLogPanel() {
+    document.getElementById('log-container').classList.toggle('hidden');
+    document.getElementById('log-arrow').style.transform = document.getElementById('log-container').classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
+function clearLogPanel(e) {
+    if (e) e.stopPropagation();
+    document.getElementById('log-container').innerHTML = '';
+    logToUI("Log cleared.");
+}
+
+// --- MODAL & UI MANAGEMENT ---
+function showSelectServiceModal() { document.getElementById("select-service-modal").classList.remove('hidden'); }
+function hideSelectServiceModal() { document.getElementById("select-service-modal").classList.add('hidden'); }
+function showPusherConfigModal() { hideSelectServiceModal(); document.getElementById("pusher-config-modal").classList.remove('hidden'); }
+function hidePusherConfigModal() { document.getElementById("pusher-config-modal").classList.add('hidden'); resetPusherForm(); }
+function showAddActionModal(connectionId) { 
+    currentConnectionIdForAction = connectionId;
+    document.getElementById("add-action-modal").classList.remove('hidden'); 
+}
+function hideAddActionModal() { 
+    document.getElementById("add-action-modal").classList.add('hidden'); 
+    currentConnectionIdForAction = null;
+    // Clear action-specific fields
+    document.getElementById("pusher-channel").value = '';
+    document.getElementById("pusher-event").value = '';
+}
+
+function resetPusherForm() {
+    document.getElementById("connection-name").value = '';
+    document.getElementById("pusher-key").value = '';
+    document.getElementById("pusher-secret").value = '';
+    document.getElementById("pusher-cluster").value = '';
+}
+
+// --- SETTINGS MANAGEMENT ---
+async function getSettings() {
+    await new Promise(resolve => Office.context.document.settings.refreshAsync(() => resolve()));
+    const settingsString = Office.context.document.settings.get(SETTINGS_KEY);
+    const defaults = { connections: [] };
+    if (settingsString) {
+        try {
+            const settings = JSON.parse(settingsString);
+            return { ...defaults, ...settings };
+        } catch (e) {
+            logToUI("Error parsing settings, returning defaults.", "ERROR");
+            return defaults;
         }
-        .status-dot.disconnected { background-color: #9ca3af; } /* gray-400 */
-        .status-dot.connecting { background-color: #f59e0b; } /* amber-500 */
-        .status-dot.connected { background-color: #22c55e; } /* green-500 */
-        .status-dot.error { background-color: #ef4444; } /* red-500 */
-    </style>
-</head>
-<body class="bg-gray-100 font-sans">
-    <div class="p-6 h-screen flex flex-col">
-        <!-- Header -->
-        <div class="flex justify-between items-start">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">Connections</h1>
-                <p class="mt-2 text-sm text-gray-600">Connect this add-in with other applications/services.</p>
-            </div>
-            <button id="new-connection-button" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-md flex items-center justify-center gap-2 whitespace-nowrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" />
-                </svg>
-                New Connection
-            </button>
-        </div>
+    }
+    return defaults;
+}
 
-        <!-- Active Connections List -->
-        <div class="mt-8 pt-6 border-t border-gray-200 flex-grow overflow-y-auto">
-            <h2 class="text-lg font-bold text-gray-700 mb-4">Active Connections</h2>
-            <div id="connections-list-container" class="space-y-4">
-                <p id="no-connections-message" class="text-sm text-gray-500 italic">No connections have been added yet.</p>
-            </div>
-        </div>
+async function saveSettings(settingsToSave) {
+    Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settingsToSave));
+    await new Promise((resolve, reject) => {
+        Office.context.document.settings.saveAsync(result => {
+            if (result.status === Office.AsyncResultStatus.Failed) {
+                reject(new Error("Failed to save settings: " + result.error.message));
+            } else {
+                logToUI("Settings saved successfully.");
+                resolve();
+            }
+        });
+    });
+}
 
-        <!-- Debug Log Section -->
-        <div id="debug-log-section" class="mt-6 pt-6 border-t border-gray-200">
-             <div id="log-header" class="flex justify-between items-center cursor-pointer">
-                <h2 class="text-lg font-bold text-gray-700">Debug Log</h2>
-                <div class="flex items-center">
-                    <button id="clear-log-button" class="text-xs text-blue-600 hover:underline mr-2">Clear Log</button>
-                    <svg id="log-arrow" class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                </div>
-            </div>
-            <div id="log-container" class="hidden mt-2 p-3 h-48 bg-gray-800 text-white font-mono text-xs rounded-lg overflow-y-auto border border-gray-600">
-            </div>
-        </div>
-    </div>
+// --- CONNECTION & ACTION MANAGEMENT ---
+async function loadAndRenderConnections() {
+    logToUI("Loading all connections...");
+    const settings = await getSettings();
+    renderConnections(settings.connections);
+    settings.connections.forEach(conn => {
+        if (conn.type === 'pusher') {
+            connectToPusher(conn);
+        }
+    });
+}
 
-    <!-- Modals -->
-    <!-- Select Service Modal -->
-    <div id="select-service-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-40">
-        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-white/20">
-            <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">Add a New Connection</h2>
-            <p class="text-sm text-gray-600 mb-6 text-center">Select a service to connect to.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Power Automate Card -->
-                <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200 opacity-50 cursor-not-allowed">
-                    <h3 class="text-lg font-semibold text-gray-800">Power Automate</h3>
-                    <p class="text-sm text-gray-500 mt-2">Automate workflows between your favorite apps and services.</p>
-                    <button class="w-full mt-4 bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed">Coming Soon</button>
-                </div>
-                <!-- Pusher Card -->
-                <button id="select-pusher-button" class="bg-white p-6 rounded-lg shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all text-left">
-                    <h3 class="text-lg font-semibold text-gray-800">Pusher</h3>
-                    <p class="text-sm text-gray-500 mt-2">Enable real-time features like live submission highlighting.</p>
-                    <div class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg text-center">
-                        Configure
-                    </div>
-                </button>
-            </div>
-            <div class="mt-6 flex justify-end">
-                <button id="cancel-select-service-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
-            </div>
-        </div>
-    </div>
+async function handleCreatePusherConnection() {
+    const newConnection = {
+        id: `conn_${new Date().getTime()}`,
+        type: 'pusher',
+        name: document.getElementById("connection-name").value.trim(),
+        config: {
+            key: document.getElementById("pusher-key").value.trim(),
+            secret: document.getElementById("pusher-secret").value.trim(),
+            cluster: document.getElementById("pusher-cluster").value.trim()
+        },
+        actions: []
+    };
 
-    <!-- Pusher Configuration Modal -->
-    <div id="pusher-config-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
-        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
-            <h2 class="text-xl font-bold text-gray-800 mb-4">Configure Pusher Connection</h2>
-            <div class="space-y-3 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-                <div>
-                    <label for="connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label>
-                    <input type="text" id="connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Submission Checker">
-                </div>
-                <div>
-                    <label for="pusher-key" class="block text-sm font-medium text-gray-700">App Key</label>
-                    <input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Key">
-                </div>
-                <div>
-                    <label for="pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label>
-                    <input type="password" id="pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Secret">
-                </div>
-                <div>
-                    <label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label>
-                    <input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., us2, eu">
-                </div>
-                 <div class="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <p class="text-xs text-yellow-800"><strong>Security Note:</strong> The App Secret is stored within your Excel workbook.</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button id="cancel-pusher-config-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button>
-                <button id="create-pusher-connection-button" class="px-4 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-700">Create</button>
-            </div>
-        </div>
-    </div>
+    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster) {
+        alert("All fields are required to create a connection.");
+        return;
+    }
 
-     <!-- Add Action Modal -->
-    <div id="add-action-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
-        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-white/20">
-            <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">Add Action</h2>
-            <p class="text-sm text-gray-600 mb-6 text-center">Select and configure an action for this connection.</p>
+    const settings = await getSettings();
+    settings.connections.push(newConnection);
+    await saveSettings(settings);
+    
+    hidePusherConfigModal();
+    await loadAndRenderConnections();
+}
+
+async function handleConnectionCardAction(event) {
+    const button = event.target.closest('button');
+    if (!button) return;
+
+    const card = button.closest('.connection-card');
+    const connectionId = card.dataset.connectionId;
+    
+    if (button.dataset.action === 'delete') {
+        if (confirm('Are you sure you want to delete this connection?')) {
+            const settings = await getSettings();
+            settings.connections = settings.connections.filter(c => c.id !== connectionId);
+            await saveSettings(settings);
+
+            const activeInstance = activePusherInstances[connectionId];
+            if (activeInstance) {
+                activeInstance.pusher.disconnect();
+                delete activePusherInstances[connectionId];
+            }
             
-            <!-- Live Submission Highlighting Action -->
-            <div class="bg-white p-4 rounded-lg shadow-md border border-gray-200">
-                <h3 class="text-base font-semibold text-gray-800">Live Submission Highlighting</h3>
-                <p class="text-sm text-gray-500 mt-1 mb-4">Highlights a student's row in real-time when a new submission is detected.</p>
-                <div class="space-y-3">
-                    <div>
-                        <label for="pusher-channel" class="block text-sm font-medium text-gray-700">Channel Name</label>
-                        <input type="text" id="pusher-channel" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., private-my-channel">
+            await loadAndRenderConnections();
+        }
+    } else if (button.dataset.action === 'add-action') {
+        showAddActionModal(connectionId);
+    } else if (button.dataset.action === 'delete-action') {
+        const actionType = button.dataset.actionType;
+        if (confirm(`Are you sure you want to remove this action?`)) {
+            const settings = await getSettings();
+            const conn = settings.connections.find(c => c.id === connectionId);
+            if (conn) {
+                conn.actions = conn.actions.filter(a => a.type !== actionType);
+                await saveSettings(settings);
+                // Reconnect to update subscriptions
+                await loadAndRenderConnections();
+            }
+        }
+    }
+}
+
+async function handleAddActionClick(event) {
+    const button = event.target.closest('button[data-action-type]');
+    if (!button) return;
+
+    const actionType = button.dataset.actionType;
+    if (actionType === 'liveHighlight') {
+        const newAction = {
+            id: `action_${new Date().getTime()}`,
+            type: 'liveHighlight',
+            name: 'Live Submission Highlighting',
+            config: {
+                channel: document.getElementById("pusher-channel").value.trim(),
+                event: document.getElementById("pusher-event").value.trim()
+            }
+        };
+
+        if (!newAction.config.channel || !newAction.config.event) {
+             alert("Channel and Event names are required for this action.");
+             return;
+        }
+
+        const settings = await getSettings();
+        const connection = settings.connections.find(c => c.id === currentConnectionIdForAction);
+        if (connection) {
+            // Prevent adding duplicate action types
+            if (connection.actions.some(a => a.type === 'liveHighlight')) {
+                alert('This connection already has a "Live Submission Highlighting" action.');
+                return;
+            }
+            connection.actions.push(newAction);
+            await saveSettings(settings);
+            hideAddActionModal();
+            // Reconnect to bind the new action's events
+            await loadAndRenderConnections();
+        }
+    }
+}
+
+function renderConnections(connections) {
+    const container = document.getElementById("connections-list-container");
+    const noConnectionsMessage = document.getElementById("no-connections-message");
+    container.innerHTML = '';
+    container.appendChild(noConnectionsMessage);
+
+    if (connections.length === 0) {
+        noConnectionsMessage.classList.remove('hidden');
+    } else {
+        noConnectionsMessage.classList.add('hidden');
+        connections.forEach(conn => {
+            const card = document.createElement('div');
+            card.className = "connection-card bg-white p-4 rounded-lg shadow-sm border border-gray-200";
+            card.dataset.connectionId = conn.id;
+
+            let actionsHtml = '<p class="text-xs text-gray-400 italic">No actions configured.</p>';
+            if (conn.actions && conn.actions.length > 0) {
+                actionsHtml = conn.actions.map(action => `
+                    <div class="flex items-center justify-between text-sm text-gray-700 py-1 pl-2 border-l-2 border-blue-200">
+                        <span>${action.name}</span>
+                        <button data-action="delete-action" data-action-type="${action.type}" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </button>
                     </div>
+                `).join('');
+            }
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
                     <div>
-                        <label for="pusher-event" class="block text-sm font-medium text-gray-700">Event Name</label>
-                        <input type="text" id="pusher-event" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., new-submission-found">
+                        <div class="flex items-center">
+                            <span class="status-dot disconnected"></span>
+                            <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
+                        </div>
+                        <p class="text-sm text-gray-500 ml-5">${conn.type === 'pusher' ? 'Pusher Real-time' : conn.type}</p>
                     </div>
+                    <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
                 </div>
-                 <button data-action-type="liveHighlight" class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">Add This Action</button>
-            </div>
+                <div class="ml-5 mt-2 text-xs text-gray-600" id="status-text-${conn.id}">Status: Not Connected</div>
+                <div class="mt-4 ml-5 pl-4 border-l-2 border-gray-200">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Configured Actions</h4>
+                    ${actionsHtml}
+                    <button data-action="add-action" class="mt-2 text-xs text-blue-600 hover:underline">+ Add Action</button>
+                </div>`;
+            container.appendChild(card);
+        });
+    }
+}
 
-            <div class="mt-6 flex justify-end">
-                <button id="cancel-add-action-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
-            </div>
-        </div>
-    </div>
 
-    <script type="text/javascript" src="connections.js"></script>
-</body>
-</html>
+// --- PUSHER LOGIC ---
+async function createPusherSignature(secret, stringToSign) {
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(secret);
+    const messageData = encoder.encode(stringToSign);
+    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
+    return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// THIS FUNCTION HAS BEEN REVERTED TO A SIMPLER, PREVIOUSLY WORKING STATE
+function connectToPusher(connection) {
+    const { id, config, actions } = connection;
+
+    if (activePusherInstances[id]) {
+        activePusherInstances[id].pusher.disconnect();
+    }
+    
+    // An action must exist to connect
+    if (!actions || actions.length === 0) {
+        logToUI(`Connection '${connection.name}' has no actions configured. Skipping connection.`);
+        updateConnectionStatus(id, 'disconnected', 'No actions configured');
+        return;
+    }
+
+    try {
+        updateConnectionStatus(id, "connecting", "Connecting...");
+        logToUI(`Initializing Pusher for '${connection.name}'...`);
+
+        const pusher = new Pusher(config.key, {
+            cluster: config.cluster,
+            authorizer: (channel, options) => ({
+                authorize: async (socketId, callback) => {
+                    const stringToSign = `${socketId}:${channel.name}`;
+                    try {
+                        const signature = await createPusherSignature(config.secret, stringToSign);
+                        callback(null, { auth: `${config.key}:${signature}` });
+                    } catch (error) {
+                        logToUI(`Signature failed for '${connection.name}': ${error.message}`, "ERROR");
+                        callback(error, null);
+                    }
+                }
+            })
+        });
+
+        // This restored logic assumes one primary action, but is extensible.
+        // It subscribes to all unique channels needed by all actions.
+        const channelsToSubscribe = [...new Set(actions.map(a => a.config.channel))];
+
+        channelsToSubscribe.forEach(channelName => {
+            logToUI(`Subscribing to channel: '${channelName}' for connection '${connection.name}'`);
+            const channel = pusher.subscribe(channelName);
+
+            channel.bind('pusher:subscription_succeeded', () => {
+                updateConnectionStatus(id, "connected", `Connected & listening on '${channelName}'`);
+                logToUI(`'${connection.name}' subscribed to '${channelName}' successfully!`, "SUCCESS");
+            });
+
+            channel.bind('pusher:subscription_error', (status) => {
+                const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
+                updateConnectionStatus(id, "error", `Subscription Error on '${channelName}': ${errorMsg}`);
+                logToUI(`Subscription failed for '${connection.name}' on '${channelName}': ${errorMsg}`, "ERROR");
+            });
+
+            // Find all actions for this specific channel and bind their events
+            actions.filter(a => a.config.channel === channelName).forEach(action => {
+                const eventName = action.config.event.startsWith('client-') ? action.config.event : `client-${action.config.event}`;
+                logToUI(`Binding to event: '${eventName}' for action '${action.name}'`);
+                channel.bind(eventName, (data) => {
+                    logToUI(`Event received for action '${action.name}': ${JSON.stringify(data)}`, "SUCCESS");
+                    if (action.type === 'liveHighlight' && data && data.name) {
+                        highlightStudentInSheet(data.name);
+                    } else if (action.type === 'liveHighlight') {
+                        logToUI(`Action '${action.name}' received event but was missing 'name' property.`, "ERROR");
+                    }
+                    // Future actions can be handled here with 'else if (action.type === '...')'
+                });
+            });
+        });
+
+        activePusherInstances[id] = { pusher };
+
+    } catch (error) {
+        updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
+        logToUI(`Pusher error for '${connection.name}': ${error.message}`, "ERROR");
+    }
+}
+
+
+function updateConnectionStatus(connectionId, status, message) {
+    const card = document.querySelector(`.connection-card[data-connection-id="${connectionId}"]`);
+    if (card) {
+        const dot = card.querySelector('.status-dot');
+        const text = card.querySelector(`#status-text-${connectionId}`);
+        dot.className = `status-dot ${status}`;
+        text.textContent = `Status: ${message}`;
+    }
+}
+
+// --- EXCEL INTERACTION ---
+async function highlightStudentInSheet(studentName) {
+    if (!studentName) {
+        logToUI("Highlight function called with no student name.", "ERROR");
+        return;
+    }
+    logToUI(`Attempting to highlight student: '${studentName}'...`);
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
+            
+            usedRange.load("values, rowCount, columnCount");
+            await context.sync();
+
+            if (!usedRange.values || usedRange.values.length === 0) {
+                throw new Error("The 'Master List' sheet is empty or contains no data.");
+            }
+            
+            const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
+            const nameColumnIndex = headers.indexOf("studentname");
+            
+            if (nameColumnIndex === -1) {
+                throw new Error("Could not find a 'StudentName' column in the Master List.");
+            }
+
+            const nameColumnRange = usedRange.getColumn(nameColumnIndex);
+            logToUI(`Searching for '${studentName}' in the 'StudentName' column.`);
+
+            const searchResult = nameColumnRange.find(studentName, {
+                completeMatch: false,
+                matchCase: false,
+                searchDirection: Excel.SearchDirection.forward
+            });
+            
+            searchResult.load("address, rowIndex");
+            await context.sync();
+
+            const foundRowIndex = searchResult.rowIndex;
+            logToUI(`Match found for '${studentName}' at row ${foundRowIndex + 1}.`);
+            
+            const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount);
+            entireRow.format.fill.color = "yellow";
+            
+            sheet.getCell(foundRowIndex, nameColumnIndex).select();
+            
+            await context.sync();
+            logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
+        });
+    } catch (error) {
+        let errorMessage = "An unknown error occurred.";
+        if (error instanceof OfficeExtension.Error) {
+            errorMessage = error.debugInfo ? (error.debugInfo.message || error.message) : error.message;
+            if (error.code === "ItemNotFound") {
+                 errorMessage = `Could not find a student matching '${studentName}' in the 'StudentName' column.`;
+            } else if (error.code === "WorksheetNotFound") {
+                errorMessage = `The '${MASTER_LIST_SHEET}' worksheet could not be found.`;
+            }
+        } else {
+            errorMessage = error.message;
+        }
+        logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
+        console.error("Error highlighting student:", error);
+    }
+}
 
