@@ -95,7 +95,6 @@ function hideAddActionModal() { document.getElementById("add-action-modal").clas
 function showActionSettingsModal() { document.getElementById("highlight-action-settings-modal").classList.remove('hidden'); }
 function hideActionSettingsModal() { 
     document.getElementById("highlight-action-settings-modal").classList.add('hidden');
-    // Also hide the underlying add action modal
     document.getElementById("add-action-modal").classList.add('hidden');
     connectionToModifyId = null; 
     actionToModifyId = null; 
@@ -448,11 +447,11 @@ async function highlightStudentInSheet(studentName, actionConfig) {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
 
-            const autoFilter = sheet.getAutoFilter();
-            autoFilter.load("isNullObject");
+            const autoFilter = sheet.autoFilter;
+            autoFilter.load("enabled");
             await context.sync();
 
-            if (!autoFilter.isNullObject) {
+            if (autoFilter.enabled) {
                 logToUI(`Active filter found on sheet '${sheetName}'. Clearing filter to ensure visibility.`);
                 autoFilter.clearCriteria();
             }
