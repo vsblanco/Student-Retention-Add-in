@@ -8,8 +8,8 @@ const LOGO_MAP = {
     'power-automate': '../images/power-automate-icon.png'
 };
 
-let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
-let currentConnectionIdForAction = null; // To know which connection to add an action to
+let activePusherInstances = {};
+let connectionToModifyId = null; 
 
 // --- INITIALIZATION ---
 Office.onReady((info) => {
@@ -17,6 +17,12 @@ Office.onReady((info) => {
         initializeEventListeners();
         logToUI("Connections pane ready.");
         loadAndRenderConnections();
+        // Close dropdowns if user clicks outside
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.options-menu-container')) {
+                document.querySelectorAll('.options-menu').forEach(menu => menu.classList.remove('open'));
+            }
+        });
     }
 });
 
@@ -28,14 +34,21 @@ function initializeEventListeners() {
     document.getElementById("cancel-select-service-button").onclick = hideSelectServiceModal;
     document.getElementById("select-pusher-button").onclick = showPusherConfigModal;
     
-    // Pusher Config Modal
+    // Pusher Config Modal (Create)
     document.getElementById("cancel-pusher-config-button").onclick = hidePusherConfigModal;
     document.getElementById("create-pusher-connection-button").onclick = handleCreatePusherConnection;
     
+    // Pusher Config Modal (Edit)
+    document.getElementById("cancel-edit-pusher-config-button").onclick = hideEditPusherConfigModal;
+    document.getElementById("update-pusher-connection-button").onclick = handleUpdateConnection;
+
     // Add Action Modal
-    const addActionModal = document.getElementById("add-action-modal");
-    addActionModal.addEventListener('click', handleAddActionClick);
+    document.getElementById("add-action-modal").addEventListener('click', handleAddActionClick);
     document.getElementById("cancel-add-action-button").onclick = hideAddActionModal;
+
+    // Confirm Delete Modal
+    document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
+    document.getElementById("confirm-delete-button").onclick = handleConfirmDelete;
 
     // Log panel
     document.getElementById("log-header").onclick = toggleLogPanel;
@@ -48,20 +61,15 @@ function initializeEventListeners() {
 // --- LOGGING ---
 function logToUI(message, type = 'INFO') {
     const logContainer = document.getElementById('log-container');
-    if (logContainer) {
-        const p = document.createElement('p');
-        const timestamp = new Date().toLocaleTimeString();
-        p.innerHTML = `<span class="text-gray-500">${timestamp} [${type}]:</span> ${message}`;
-        
-        switch (type) {
-            case 'ERROR': p.className = 'text-red-400'; break;
-            case 'SUCCESS': p.className = 'text-green-400'; break;
-            default: p.className = 'text-gray-300'; break;
-        }
-        logContainer.appendChild(p);
-        logContainer.scrollTop = logContainer.scrollHeight;
-    }
-    console.log(`[${type}] ${message}`);
+    if (!logContainer) return;
+    const p = document.createElement('p');
+    const timestamp = new Date().toLocaleTimeString();
+    p.innerHTML = `<span class="text-gray-500">${timestamp} [${type}]:</span> ${message}`;
+    if (type === 'ERROR') p.className = 'text-red-400';
+    else if (type === 'SUCCESS') p.className = 'text-green-400';
+    else p.className = 'text-gray-300';
+    logContainer.appendChild(p);
+    logContainer.scrollTop = logContainer.scrollHeight;
 }
 
 function toggleLogPanel() {
@@ -80,14 +88,13 @@ function showSelectServiceModal() { document.getElementById("select-service-moda
 function hideSelectServiceModal() { document.getElementById("select-service-modal").classList.add('hidden'); }
 function showPusherConfigModal() { hideSelectServiceModal(); document.getElementById("pusher-config-modal").classList.remove('hidden'); }
 function hidePusherConfigModal() { document.getElementById("pusher-config-modal").classList.add('hidden'); resetPusherForm(); }
-function showAddActionModal(connectionId) { 
-    currentConnectionIdForAction = connectionId;
-    document.getElementById("add-action-modal").classList.remove('hidden'); 
-}
-function hideAddActionModal() { 
-    document.getElementById("add-action-modal").classList.add('hidden'); 
-    currentConnectionIdForAction = null;
-}
+function showEditPusherConfigModal() { document.getElementById("edit-pusher-config-modal").classList.remove('hidden'); }
+function hideEditPusherConfigModal() { document.getElementById("edit-pusher-config-modal").classList.add('hidden'); connectionToModifyId = null; }
+function showAddActionModal(connectionId) { connectionToModifyId = connectionId; document.getElementById("add-action-modal").classList.remove('hidden'); }
+function hideAddActionModal() { document.getElementById("add-action-modal").classList.add('hidden'); connectionToModifyId = null; }
+function showDeleteConfirmModal(connectionId) { connectionToModifyId = connectionId; document.getElementById("confirm-delete-modal").classList.remove('hidden'); }
+function hideDeleteConfirmModal() { document.getElementById("confirm-delete-modal").classList.add('hidden'); connectionToModifyId = null; }
+
 
 function resetPusherForm() {
     document.getElementById("connection-name").value = '';
@@ -107,15 +114,10 @@ async function getSettings() {
         try {
             const settings = JSON.parse(settingsString);
             if (settings.connections && Array.isArray(settings.connections)) {
-                settings.connections.forEach(conn => {
-                    if (!conn.actions) conn.actions = [];
-                });
+                settings.connections.forEach(conn => { conn.actions = conn.actions || []; });
             }
             return { ...defaults, ...settings };
-        } catch (e) {
-            logToUI("Error parsing settings, returning defaults.", "ERROR");
-            return defaults;
-        }
+        } catch (e) { logToUI("Error parsing settings.", "ERROR"); return defaults; }
     }
     return defaults;
 }
@@ -124,12 +126,8 @@ async function saveSettings(settingsToSave) {
     Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settingsToSave));
     await new Promise((resolve, reject) => {
         Office.context.document.settings.saveAsync(result => {
-            if (result.status === Office.AsyncResultStatus.Failed) {
-                reject(new Error("Failed to save settings: " + result.error.message));
-            } else {
-                logToUI("Settings saved successfully.");
-                resolve();
-            }
+            if (result.status === Office.AsyncResultStatus.Failed) reject(new Error("Failed to save settings: " + result.error.message));
+            else { logToUI("Settings saved successfully."); resolve(); }
         });
     });
 }
@@ -140,16 +138,13 @@ async function loadAndRenderConnections() {
     const settings = await getSettings();
     renderConnections(settings.connections);
     settings.connections.forEach(conn => {
-        if (conn.type === 'pusher') {
-            connectToPusher(conn);
-        }
+        if (conn.type === 'pusher') connectToPusher(conn);
     });
 }
 
 async function handleCreatePusherConnection() {
     const newConnection = {
-        id: `conn_${new Date().getTime()}`,
-        type: 'pusher',
+        id: `conn_${new Date().getTime()}`, type: 'pusher',
         name: document.getElementById("connection-name").value.trim(),
         config: {
             key: document.getElementById("pusher-key").value.trim(),
@@ -160,53 +155,88 @@ async function handleCreatePusherConnection() {
         },
         actions: []
     };
-
     if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster || !newConnection.config.channel || !newConnection.config.event) {
-        alert("All fields are required to create a connection.");
-        return;
+        alert("All fields are required."); return;
     }
-
     const settings = await getSettings();
     settings.connections.push(newConnection);
     await saveSettings(settings);
-    
     hidePusherConfigModal();
     await loadAndRenderConnections();
 }
 
+async function handleUpdateConnection() {
+    const settings = await getSettings();
+    const conn = settings.connections.find(c => c.id === connectionToModifyId);
+    if (!conn) return;
+
+    conn.name = document.getElementById("edit-connection-name").value.trim();
+    conn.config.key = document.getElementById("edit-pusher-key").value.trim();
+    conn.config.cluster = document.getElementById("edit-pusher-cluster").value.trim();
+    conn.config.channel = document.getElementById("edit-pusher-channel").value.trim();
+    conn.config.event = document.getElementById("edit-pusher-event").value.trim();
+    
+    const newSecret = document.getElementById("edit-pusher-secret").value.trim();
+    if (newSecret) conn.config.secret = newSecret;
+    
+    await saveSettings(settings);
+    hideEditPusherConfigModal();
+    await loadAndRenderConnections();
+}
+
+async function handleConfirmDelete() {
+    const settings = await getSettings();
+    settings.connections = settings.connections.filter(c => c.id !== connectionToModifyId);
+    await saveSettings(settings);
+    const activeInstance = activePusherInstances[connectionToModifyId];
+    if (activeInstance) {
+        activeInstance.pusher.disconnect();
+        delete activePusherInstances[connectionToModifyId];
+    }
+    hideDeleteConfirmModal();
+    await loadAndRenderConnections();
+}
+
+
 async function handleConnectionCardAction(event) {
-    const button = event.target.closest('button');
+    const button = event.target.closest('button[data-action]');
     if (!button) return;
 
+    event.stopPropagation();
     const card = button.closest('.connection-card');
     const connectionId = card.dataset.connectionId;
-    
-    if (button.dataset.action === 'delete') {
-        if (confirm('Are you sure you want to delete this connection?')) {
-            const settings = await getSettings();
-            settings.connections = settings.connections.filter(c => c.id !== connectionId);
-            await saveSettings(settings);
+    const action = button.dataset.action;
 
-            const activeInstance = activePusherInstances[connectionId];
-            if (activeInstance) {
-                activeInstance.pusher.disconnect();
-                delete activePusherInstances[connectionId];
-            }
-            
-            await loadAndRenderConnections();
+    if (action === 'toggle-menu') {
+        const menu = button.nextElementSibling;
+        const isMenuOpen = menu.classList.contains('open');
+        document.querySelectorAll('.options-menu').forEach(m => m.classList.remove('open'));
+        if (!isMenuOpen) menu.classList.add('open');
+    } else if (action === 'show-edit-modal') {
+        const settings = await getSettings();
+        const conn = settings.connections.find(c => c.id === connectionId);
+        if (conn) {
+            connectionToModifyId = connectionId;
+            document.getElementById('edit-connection-name').value = conn.name;
+            document.getElementById('edit-pusher-key').value = conn.config.key;
+            document.getElementById('edit-pusher-secret').value = ''; // Don't pre-fill secret
+            document.getElementById('edit-pusher-cluster').value = conn.config.cluster;
+            document.getElementById('edit-pusher-channel').value = conn.config.channel;
+            document.getElementById('edit-pusher-event').value = conn.config.event;
+            showEditPusherConfigModal();
         }
-    } else if (button.dataset.action === 'add-action') {
+    } else if (action === 'show-delete-modal') {
+        showDeleteConfirmModal(connectionId);
+    } else if (action === 'add-action') {
         showAddActionModal(connectionId);
-    } else if (button.dataset.action === 'delete-action') {
+    } else if (action === 'delete-action') {
         const actionId = button.dataset.actionId;
-        if (confirm(`Are you sure you want to remove this action?`)) {
-            const settings = await getSettings();
-            const conn = settings.connections.find(c => c.id === connectionId);
-            if (conn) {
-                conn.actions = conn.actions.filter(a => a.id !== actionId);
-                await saveSettings(settings);
-                await loadAndRenderConnections();
-            }
+        const settings = await getSettings();
+        const conn = settings.connections.find(c => c.id === connectionId);
+        if (conn) {
+            conn.actions = conn.actions.filter(a => a.id !== actionId);
+            await saveSettings(settings);
+            await loadAndRenderConnections();
         }
     }
 }
@@ -217,21 +247,12 @@ async function handleAddActionClick(event) {
 
     const actionType = button.dataset.actionType;
     if (actionType === 'liveHighlight') {
-        const newAction = {
-            id: `action_${new Date().getTime()}`,
-            type: 'liveHighlight',
-            name: 'Live Submission Highlighting'
-        };
-
+        const newAction = { id: `action_${new Date().getTime()}`, type: 'liveHighlight', name: 'Live Submission Highlighting' };
         const settings = await getSettings();
-        const connection = settings.connections.find(c => c.id === currentConnectionIdForAction);
+        const connection = settings.connections.find(c => c.id === connectionToModifyId);
         if (connection) {
-            if (!connection.actions) {
-                connection.actions = [];
-            }
             if (connection.actions.some(a => a.type === 'liveHighlight')) {
-                alert('This connection already has a "Live Submission Highlighting" action.');
-                return;
+                alert('This connection already has this action.'); return;
             }
             connection.actions.push(newAction);
             await saveSettings(settings);
@@ -272,19 +293,25 @@ function renderConnections(connections) {
             const logoHtml = logoSrc ? `<img src="${logoSrc}" alt="${conn.type} logo" class="h-6 w-6 mr-2">` : '';
 
             card.innerHTML = `
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center">
-                            <span class="status-dot disconnected"></span>
-                            ${logoHtml}
-                            <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center">
+                         <div class="relative has-tooltip">
+                            <span id="status-dot-${conn.id}" class="status-dot disconnected"></span>
+                            <div id="status-tooltip-${conn.id}" class="tooltip absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-700 text-white text-xs rounded">Status: Not Connected</div>
+                        </div>
+                        ${logoHtml}
+                        <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
+                    </div>
+                    <div class="relative options-menu-container">
+                        <button data-action="toggle-menu" class="p-2 text-gray-500 hover:bg-gray-200 rounded-full">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                        </button>
+                        <div class="options-menu absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg border z-10">
+                            <button data-action="show-edit-modal" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Edit</button>
+                            <button data-action="show-delete-modal" class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">Delete</button>
                         </div>
                     </div>
-                    <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
                 </div>
-                <div class="ml-5 mt-2 text-xs text-gray-600" id="status-text-${conn.id}">Status: Not Connected</div>
                 <div class="mt-4 ml-5 pl-4 border-l-2 border-gray-200">
                     <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Configured Actions</h4>
                     ${actionsHtml}
@@ -294,7 +321,6 @@ function renderConnections(connections) {
         });
     }
 }
-
 
 // --- PUSHER LOGIC ---
 async function createPusherSignature(secret, stringToSign) {
@@ -308,27 +334,20 @@ async function createPusherSignature(secret, stringToSign) {
 
 function connectToPusher(connection) {
     const { id, config, actions } = connection;
-
-    if (activePusherInstances[id]) {
-        activePusherInstances[id].pusher.disconnect();
-    }
-    
+    if (activePusherInstances[id]) activePusherInstances[id].pusher.disconnect();
     if (!actions || actions.length === 0) {
-        logToUI(`Connection '${connection.name}' has no actions configured. Skipping connection.`);
+        logToUI(`Connection '${connection.name}' has no actions configured. Skipping.`);
         updateConnectionStatus(id, 'disconnected', 'Ready. Add an action to begin listening.');
         return;
     }
-    
     if (!config.channel || !config.event) {
         logToUI(`Connection '${connection.name}' is missing channel or event name.`, "ERROR");
         updateConnectionStatus(id, 'error', 'Missing Channel or Event name');
         return;
     }
-
     try {
         updateConnectionStatus(id, "connecting", "Connecting...");
         logToUI(`Initializing Pusher for '${connection.name}'...`);
-
         const pusher = new Pusher(config.key, {
             cluster: config.cluster,
             authorizer: (channel, options) => ({
@@ -344,114 +363,70 @@ function connectToPusher(connection) {
                 }
             })
         });
-
-        logToUI(`Subscribing to channel: '${config.channel}' for connection '${connection.name}'`);
         const channel = pusher.subscribe(config.channel);
-
         channel.bind('pusher:subscription_succeeded', () => {
             updateConnectionStatus(id, "connected", `Connected & listening on '${config.channel}'`);
             logToUI(`'${connection.name}' subscribed successfully!`, "SUCCESS");
         });
-
         channel.bind('pusher:subscription_error', (status) => {
-            const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
+            const errorMsg = status?.error?.message || JSON.stringify(status);
             updateConnectionStatus(id, "error", `Subscription Error: ${errorMsg}`);
             logToUI(`Subscription failed for '${connection.name}': ${errorMsg}`, "ERROR");
         });
-
         const eventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
-        logToUI(`Binding to event: '${eventName}'`);
         channel.bind(eventName, (data) => {
             logToUI(`Event received on '${connection.name}': ${JSON.stringify(data)}`, "SUCCESS");
             if (actions.some(a => a.type === 'liveHighlight') && data && data.name) {
                 highlightStudentInSheet(data.name);
-            } else if (actions.some(a => a.type === 'liveHighlight')) {
-                logToUI(`'liveHighlight' action for '${connection.name}' received event but was missing 'name' property.`, "ERROR");
             }
         });
-
         activePusherInstances[id] = { pusher, channel };
-
     } catch (error) {
         updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
         logToUI(`Pusher error for '${connection.name}': ${error.message}`, "ERROR");
     }
 }
 
-
 function updateConnectionStatus(connectionId, status, message) {
-    const card = document.querySelector(`.connection-card[data-connection-id="${connectionId}"]`);
-    if (card) {
-        const dot = card.querySelector('.status-dot');
-        const text = card.querySelector(`#status-text-${connectionId}`);
+    const dot = document.getElementById(`status-dot-${connectionId}`);
+    const tooltip = document.getElementById(`status-tooltip-${connectionId}`);
+    if (dot && tooltip) {
         dot.className = `status-dot ${status}`;
-        text.textContent = `Status: ${message}`;
+        tooltip.textContent = `Status: ${message}`;
     }
 }
 
 // --- EXCEL INTERACTION ---
 async function highlightStudentInSheet(studentName) {
-    if (!studentName) {
-        logToUI("Highlight function called with no student name.", "ERROR");
-        return;
-    }
     logToUI(`Attempting to highlight student: '${studentName}'...`);
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            
             usedRange.load("values, rowCount, columnCount");
             await context.sync();
-
-            if (!usedRange.values || usedRange.values.length === 0) {
-                throw new Error("The 'Master List' sheet is empty or contains no data.");
-            }
-            
+            if (!usedRange.values || usedRange.values.length === 0) throw new Error("'Master List' sheet is empty.");
             const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
             const nameColumnIndex = headers.indexOf("studentname");
-            
-            if (nameColumnIndex === -1) {
-                throw new Error("Could not find a 'StudentName' column in the Master List.");
-            }
-
-            const nameColumnRange = usedRange.getColumn(nameColumnIndex);
-            logToUI(`Searching for '${studentName}' in the 'StudentName' column.`);
-
-            const searchResult = nameColumnRange.find(studentName, {
-                completeMatch: false,
-                matchCase: false,
-                searchDirection: Excel.SearchDirection.forward
-            });
-            
-            searchResult.load("address, rowIndex");
+            if (nameColumnIndex === -1) throw new Error("Could not find a 'StudentName' column.");
+            const searchResult = usedRange.getColumn(nameColumnIndex).find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+            searchResult.load("rowIndex");
             await context.sync();
-
             const foundRowIndex = searchResult.rowIndex;
             logToUI(`Match found for '${studentName}' at row ${foundRowIndex + 1}.`);
-            
-            const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount);
-            entireRow.format.fill.color = "yellow";
-            
+            sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount).format.fill.color = "yellow";
             sheet.getCell(foundRowIndex, nameColumnIndex).select();
-            
             await context.sync();
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
         });
     } catch (error) {
-        let errorMessage = "An unknown error occurred.";
+        let errorMessage = error.message;
         if (error instanceof OfficeExtension.Error) {
-            errorMessage = error.debugInfo ? (error.debugInfo.message || error.message) : error.message;
-            if (error.code === "ItemNotFound") {
-                 errorMessage = `Could not find a student matching '${studentName}' in the 'StudentName' column.`;
-            } else if (error.code === "WorksheetNotFound") {
-                errorMessage = `The '${MASTER_LIST_SHEET}' worksheet could not be found.`;
-            }
-        } else {
-            errorMessage = error.message;
+            errorMessage = error.debugInfo?.message || error.message;
+            if (error.code === "ItemNotFound") errorMessage = `Could not find a student matching '${studentName}'.`;
+            else if (error.code === "WorksheetNotFound") errorMessage = `The '${MASTER_LIST_SHEET}' worksheet could not be found.`;
         }
         logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
-        console.error("Error highlighting student:", error);
     }
 }
 
