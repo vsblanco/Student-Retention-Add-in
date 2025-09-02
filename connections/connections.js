@@ -4,8 +4,8 @@
 const SETTINGS_KEY = "studentRetentionSettings";
 const MASTER_LIST_SHEET = "Master List";
 const LOGO_MAP = {
-    pusher: 'images/pusher-icon.png',
-    'power-automate': 'images/power-automate-icon.png'
+    pusher: '../images/pusher-icon.png',
+    'power-automate': '../images/power-automate-icon.png'
 };
 
 let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
