@@ -10,6 +10,7 @@ const LOGO_MAP = {
 let activePusherInstances = {};
 let connectionToModifyId = null; 
 let actionToModifyId = null;
+let currentActionType = null; // To know which action settings to save
 
 // --- INITIALIZATION ---
 Office.onReady((info) => {
@@ -87,12 +88,13 @@ function showEditPusherConfigModal() { document.getElementById("edit-pusher-conf
 function hideEditPusherConfigModal() { document.getElementById("edit-pusher-config-modal").classList.add('hidden'); connectionToModifyId = null; }
 function showAddActionModal(connectionId) { connectionToModifyId = connectionId; document.getElementById("add-action-modal").classList.remove('hidden'); }
 function hideAddActionModal() { document.getElementById("add-action-modal").classList.add('hidden'); connectionToModifyId = null; }
-function showActionSettingsModal() { document.getElementById("highlight-action-settings-modal").classList.remove('hidden'); }
+function showActionSettingsModal() { document.getElementById("action-settings-modal").classList.remove('hidden'); }
 function hideActionSettingsModal() { 
-    document.getElementById("highlight-action-settings-modal").classList.add('hidden');
+    document.getElementById("action-settings-modal").classList.add('hidden');
     document.getElementById("add-action-modal").classList.add('hidden');
     connectionToModifyId = null; 
     actionToModifyId = null; 
+    currentActionType = null;
 }
 function showHistoryModal() { document.getElementById("action-history-modal").classList.remove('hidden'); }
 function hideHistoryModal() { document.getElementById("action-history-modal").classList.add('hidden'); connectionToModifyId = null; actionToModifyId = null; }
@@ -232,7 +234,7 @@ async function handleConnectionCardAction(event) {
         if (actionToEdit) {
             connectionToModifyId = connectionId;
             actionToModifyId = actionToEdit.id;
-            populateAndShowActionSettingsModal(actionToEdit.config);
+            populateAndShowActionSettingsModal(actionToEdit.type, actionToEdit.config);
         }
     } else if (action === 'delete-action') {
         const settings = await getSettings();
@@ -244,26 +246,47 @@ async function handleConnectionCardAction(event) {
 async function handleAddActionClick(event) {
     const button = event.target.closest('button[data-action-type]');
     if (!button) return;
-    if (button.dataset.actionType === 'liveHighlight') {
-        const settings = await getSettings();
-        const connection = settings.connections.find(c => c.id === connectionToModifyId);
-        if (connection && connection.actions.some(a => a.type === 'liveHighlight')) {
-            alert('This connection already has this action.'); return;
-        }
-        populateAndShowActionSettingsModal();
+    const actionType = button.dataset.actionType;
+    const settings = await getSettings();
+    const connection = settings.connections.find(c => c.id === connectionToModifyId);
+    if (connection && connection.actions.some(a => a.type === actionType)) {
+        alert('This connection already has this action.'); return;
     }
+    populateAndShowActionSettingsModal(actionType);
 }
 
-function populateAndShowActionSettingsModal(config) {
-    const defaults = { color: '#92d050', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
-    const settings = { ...defaults, ...config };
-    document.querySelectorAll('.color-swatch').forEach(swatch => swatch.classList.toggle('selected', swatch.dataset.color === settings.color));
-    document.getElementById('custom-color-input').value = settings.color;
-    document.getElementById(`sheet-${settings.sheetType}`).checked = true;
-    const customSheetInput = document.getElementById('custom-sheet-name');
-    customSheetInput.classList.toggle('hidden', settings.sheetType !== 'custom');
-    customSheetInput.value = settings.customSheetName;
-    document.getElementById('ignore-columns').value = settings.ignoreColumns;
+function populateAndShowActionSettingsModal(actionType, config) {
+    currentActionType = actionType;
+    const titleEl = document.getElementById('action-settings-title');
+    const highlightSettings = document.getElementById('auto-highlight-settings');
+    const updateCellSettings = document.getElementById('update-cell-settings');
+
+    // Hide all sections first
+    highlightSettings.classList.add('hidden');
+    updateCellSettings.classList.add('hidden');
+
+    if (actionType === 'autoHighlight') {
+        titleEl.textContent = 'Auto Highlight Settings';
+        const defaults = { color: '#92d050', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
+        const settings = { ...defaults, ...config };
+        document.querySelectorAll('.color-swatch').forEach(swatch => swatch.classList.toggle('selected', swatch.dataset.color === settings.color));
+        document.getElementById('custom-color-input').value = settings.color;
+        document.getElementById(`sheet-${settings.sheetType}`).checked = true;
+        const customSheetInput = document.getElementById('custom-sheet-name');
+        customSheetInput.classList.toggle('hidden', settings.sheetType !== 'custom');
+        customSheetInput.value = settings.customSheetName;
+        document.getElementById('ignore-columns').value = settings.ignoreColumns;
+        highlightSettings.classList.remove('hidden');
+    } else if (actionType === 'updateCell') {
+        titleEl.textContent = 'Update Cell Settings';
+        const defaults = { targetColumn: '', value: '', append: false };
+        const settings = { ...defaults, ...config };
+        document.getElementById('update-cell-target-column').value = settings.targetColumn;
+        document.getElementById('update-cell-value').value = settings.value;
+        document.getElementById('update-cell-append-mode').checked = settings.append;
+        updateCellSettings.classList.remove('hidden');
+    }
+    
     showActionSettingsModal();
 }
 
@@ -271,17 +294,32 @@ async function handleSaveActionSettings() {
     const settings = await getSettings();
     const connection = settings.connections.find(c => c.id === connectionToModifyId);
     if (!connection) return;
-    const actionConfig = {
-        color: document.getElementById('custom-color-input').value.trim() || '#92d050',
-        sheetType: document.querySelector('input[name="sheet-choice"]:checked').value,
-        customSheetName: document.getElementById('custom-sheet-name').value.trim(),
-        ignoreColumns: document.getElementById('ignore-columns').value.trim()
-    };
+
+    let actionConfig;
+    let actionName;
+
+    if (currentActionType === 'autoHighlight') {
+        actionName = 'Auto Highlight';
+        actionConfig = {
+            color: document.getElementById('custom-color-input').value.trim() || '#92d050',
+            sheetType: document.querySelector('input[name="sheet-choice"]:checked').value,
+            customSheetName: document.getElementById('custom-sheet-name').value.trim(),
+            ignoreColumns: document.getElementById('ignore-columns').value.trim()
+        };
+    } else if (currentActionType === 'updateCell') {
+        actionName = 'Update Cell Value';
+        actionConfig = {
+            targetColumn: document.getElementById('update-cell-target-column').value.trim(),
+            value: document.getElementById('update-cell-value').value.trim(),
+            append: document.getElementById('update-cell-append-mode').checked
+        };
+    }
+
     if (actionToModifyId) {
         const action = connection.actions.find(a => a.id === actionToModifyId);
         if (action) action.config = actionConfig;
     } else {
-        const newAction = { id: `action_${new Date().getTime()}`, type: 'liveHighlight', name: 'Auto Highlight', config: actionConfig, history: [] };
+        const newAction = { id: `action_${new Date().getTime()}`, type: currentActionType, name: actionName, config: actionConfig, history: [] };
         connection.actions.push(newAction);
     }
     await saveSettings(settings);
@@ -358,17 +396,13 @@ function populateAndShowHistoryModal(history) {
     const container = document.getElementById('history-list-container');
     const totalCountEl = document.getElementById('history-total-count');
     const failedCountEl = document.getElementById('history-failed-count');
-
     container.innerHTML = '';
-
     const historyData = history || [];
     const totalEntries = historyData.length;
     const failedEntries = historyData.filter(entry => entry.status === 'Failed').length;
-
     totalCountEl.textContent = `Total: ${totalEntries}`;
     failedCountEl.textContent = `Failed: ${failedEntries}`;
     failedCountEl.classList.toggle('hidden', failedEntries === 0);
-
     if (totalEntries === 0) {
         container.innerHTML = '<p class="text-center text-gray-500 p-4">No history recorded yet.</p>';
     } else {
@@ -426,27 +460,42 @@ function connectToPusher(connection) {
     }
     try {
         updateConnectionStatus(id, "connecting", "Connecting...");
+        logToUI(`Initializing Pusher connection for '${connection.name}'...`);
         const pusher = new Pusher(config.key, { cluster: config.cluster, authorizer: (channel, options) => ({
             authorize: async (socketId, callback) => {
                 try {
                     const signature = await createPusherSignature(config.secret, `${socketId}:${channel.name}`);
                     callback(null, { auth: `${config.key}:${signature}` });
-                } catch (error) { callback(error, null); }
+                } catch (error) { logToUI(`Pusher signature failed for '${connection.name}': ${error.message}`, "ERROR"); callback(error, null); }
             }
         })});
         const channel = pusher.subscribe(config.channel);
-        channel.bind('pusher:subscription_succeeded', () => updateConnectionStatus(id, "connected", `Connected & listening on '${config.channel}'`));
-        channel.bind('pusher:subscription_error', (status) => updateConnectionStatus(id, "error", `Subscription Error: ${status?.error?.message || JSON.stringify(status)}`));
+        channel.bind('pusher:subscription_succeeded', () => {
+            const successMsg = `Connected & listening on '${config.channel}'`;
+            updateConnectionStatus(id, "connected", successMsg);
+            logToUI(`Pusher connection for '${connection.name}' successful.`, 'SUCCESS');
+        });
+        channel.bind('pusher:subscription_error', (status) => {
+            const errorMsg = status?.error?.message || JSON.stringify(status);
+            updateConnectionStatus(id, "error", `Subscription Error: ${errorMsg}`);
+            logToUI(`Pusher subscription failed for '${connection.name}': ${errorMsg}`, "ERROR");
+        });
         const eventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
         channel.bind(eventName, (data) => {
             logToUI(`Event received on '${connection.name}': ${JSON.stringify(data)}`, "SUCCESS");
-            const highlightAction = actions.find(a => a.type === 'liveHighlight');
-            if (highlightAction && data && data.name) {
-                highlightStudentInSheet(data, highlightAction.config, id, highlightAction.id);
-            }
+            actions.forEach(action => {
+                if (action.type === 'autoHighlight' && data && data.name) {
+                    highlightStudentInSheet(data, action.config, id, action.id);
+                } else if (action.type === 'updateCell' && data && data.name) {
+                    updateCellValueInSheet(data, action.config, id, action.id);
+                }
+            });
         });
         activePusherInstances[id] = { pusher, channel };
-    } catch (error) { updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`); }
+    } catch (error) {
+        updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
+        logToUI(`Pusher connection setup failed for '${connection.name}': ${error.message}`, "ERROR");
+    }
 }
 
 function updateConnectionStatus(connectionId, status, message) {
@@ -483,65 +532,58 @@ async function addHistoryToAction(connectionId, actionId, historyEntry) {
     }
 }
 
+async function findStudentRow(context, sheet, studentName) {
+    const usedRange = sheet.getUsedRange();
+    usedRange.load("values");
+    await context.sync();
+    if (!usedRange.values || usedRange.values.length === 0) throw new Error(`Sheet '${sheet.name}' is empty.`);
+    const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
+    const nameColumnIndex = headers.indexOf("studentname");
+    if (nameColumnIndex === -1) throw new Error(`'StudentName' column not found in '${sheet.name}'.`);
+    const nameColumn = usedRange.getColumn(nameColumnIndex);
+    let searchResult;
+    try {
+        searchResult = nameColumn.find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+        searchResult.load("rowIndex");
+        await context.sync();
+    } catch (error) {
+        if (error instanceof OfficeExtension.Error && error.code === "ItemNotFound") {
+            const alternateName = reformatName(studentName);
+            logToUI(`'${studentName}' not found. Trying '${alternateName}'...`);
+            searchResult = nameColumn.find(alternateName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+            searchResult.load("rowIndex");
+            await context.sync();
+        } else throw error;
+    }
+    return { foundRowIndex: searchResult.rowIndex, headers, usedRange };
+}
+
 async function highlightStudentInSheet(eventData, actionConfig, connectionId, actionId) {
     const { name: studentName, time, timestamp } = eventData;
     const config = { color: '#92d050', sheetType: 'today', ignoreColumns: '', ...actionConfig };
     let sheetName = config.sheetType === 'today' ? getTodaysLdaSheetName() : (config.sheetType === 'custom' && config.customSheetName ? config.customSheetName : "Master List");
     logToUI(`Highlighting '${studentName}' on sheet '${sheetName}'...`);
-    const historyEntry = { 
-        id: Date.now(), 
-        name: studentName, 
-        timestamp: timestamp || new Date().toISOString(), 
-        time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'Failed', 
-        reason: '' 
-    };
-
+    const historyEntry = { id: Date.now(), name: studentName, timestamp: timestamp || new Date().toISOString(), time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'Failed', reason: '' };
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const autoFilter = sheet.autoFilter;
             autoFilter.load("enabled");
             await context.sync();
-            if (autoFilter.enabled) {
-                logToUI(`Active filter found on sheet '${sheetName}'. Clearing.`);
-                autoFilter.clearCriteria();
-            }
-            const usedRange = sheet.getUsedRange();
-            usedRange.load("values, rowCount, columnCount");
-            await context.sync();
-            if (!usedRange.values || usedRange.values.length === 0) throw new Error(`Sheet '${sheetName}' is empty.`);
-            const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
-            const nameColumnIndex = headers.indexOf("studentname");
-            if (nameColumnIndex === -1) throw new Error(`'StudentName' column not found in '${sheetName}'.`);
-            const nameColumn = usedRange.getColumn(nameColumnIndex);
-            let searchResult;
-            try {
-                searchResult = nameColumn.find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
-                searchResult.load("rowIndex");
-                await context.sync();
-            } catch (error) {
-                if (error instanceof OfficeExtension.Error && error.code === "ItemNotFound") {
-                    const alternateName = reformatName(studentName);
-                    logToUI(`'${studentName}' not found. Trying '${alternateName}'...`);
-                    searchResult = nameColumn.find(alternateName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
-                    searchResult.load("rowIndex");
-                    await context.sync();
-                } else throw error;
-            }
-            const foundRowIndex = searchResult.rowIndex;
+            if (autoFilter.enabled) { logToUI(`Active filter on '${sheetName}'. Clearing.`); autoFilter.clearCriteria(); }
+            const { foundRowIndex, headers, usedRange } = await findStudentRow(context, sheet, studentName);
             const ignoredHeaders = new Set((config.ignoreColumns || '').toLowerCase().split(',').map(h => h.trim()).filter(Boolean));
             const ignoredColumnIndices = new Set(headers.map((h, i) => ignoredHeaders.has(h) ? i : -1).filter(i => i !== -1));
             let startCol = -1;
-            for (let i = 0; i < usedRange.columnCount; i++) {
+            for (let i = 0; i < headers.length; i++) {
                 if (!ignoredColumnIndices.has(i) && startCol === -1) startCol = i;
                 else if (ignoredColumnIndices.has(i) && startCol !== -1) {
                     sheet.getRangeByIndexes(foundRowIndex, startCol, 1, i - startCol).format.fill.color = config.color;
                     startCol = -1;
                 }
             }
-            if (startCol !== -1) sheet.getRangeByIndexes(foundRowIndex, startCol, 1, usedRange.columnCount - startCol).format.fill.color = config.color;
-            sheet.getCell(foundRowIndex, nameColumnIndex).select();
+            if (startCol !== -1) sheet.getRangeByIndexes(foundRowIndex, startCol, 1, headers.length - startCol).format.fill.color = config.color;
+            sheet.getCell(foundRowIndex, headers.indexOf("studentname")).select();
             await context.sync();
             historyEntry.status = 'Success';
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
@@ -555,6 +597,45 @@ async function highlightStudentInSheet(eventData, actionConfig, connectionId, ac
         }
         historyEntry.reason = errorMessage;
         logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
+    } finally {
+        await addHistoryToAction(connectionId, actionId, historyEntry);
+    }
+}
+
+async function updateCellValueInSheet(eventData, actionConfig, connectionId, actionId) {
+    const { name: studentName, time, timestamp } = eventData;
+    const config = { targetColumn: '', value: '', append: false, ...actionConfig };
+    logToUI(`Updating cell for '${studentName}' in column '${config.targetColumn}'...`);
+    const historyEntry = { id: Date.now(), name: studentName, timestamp: timestamp || new Date().toISOString(), time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'Failed', reason: '' };
+    try {
+        if (!config.targetColumn) throw new Error("Target Column is not specified in action settings.");
+        
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem("Master List");
+            const { foundRowIndex, headers } = await findStudentRow(context, sheet, studentName);
+            const targetColumnIndex = headers.indexOf(config.targetColumn.toLowerCase());
+            if (targetColumnIndex === -1) throw new Error(`Column '${config.targetColumn}' not found.`);
+            
+            const targetCell = sheet.getCell(foundRowIndex, targetColumnIndex);
+            if (config.append) {
+                targetCell.load("values");
+                await context.sync();
+                const originalValue = targetCell.values[0][0];
+                targetCell.values = [[(originalValue ? originalValue + ' ' : '') + config.value]];
+            } else {
+                targetCell.values = [[config.value]];
+            }
+            await context.sync();
+            historyEntry.status = 'Success';
+            logToUI(`Successfully updated cell for '${studentName}'.`, "SUCCESS");
+        });
+    } catch (error) {
+        let errorMessage = error.message;
+        if (error instanceof OfficeExtension.Error) {
+            errorMessage = error.debugInfo?.message || error.message;
+        }
+        historyEntry.reason = errorMessage;
+        logToUI(`Error updating cell: ${errorMessage}`, "ERROR");
     } finally {
         await addHistoryToAction(connectionId, actionId, historyEntry);
     }
