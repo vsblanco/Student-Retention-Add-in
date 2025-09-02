@@ -20,6 +20,9 @@
         .options-menu.open { display: block; }
         .color-swatch { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
         .color-swatch.selected { border-color: #3b82f6; } /* blue-500 */
+        .toggle-bg:after { content: ''; position: absolute; top: 2px; left: 2px; background: white; border-radius: 9999px; height: 16px; width: 16px; transition: 0.2s; }
+        input:checked + .toggle-bg:after { transform: translateX(100%); }
+        input:checked + .toggle-bg { background-color: #3b82f6; }
     </style>
 </head>
 <body class="bg-gray-100 p-4 font-sans">
@@ -47,14 +50,11 @@
                     <svg id="log-arrow" class="w-4 h-4 text-gray-400 transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </div>
             </div>
-            <div id="log-container" class="hidden p-2 text-xs font-mono h-48 overflow-y-auto">
-                <!-- Log messages will be injected here -->
-            </div>
+            <div id="log-container" class="hidden p-2 text-xs font-mono h-48 overflow-y-auto"></div>
         </div>
     </div>
 
     <!-- Modals -->
-    <!-- Select Service Modal -->
     <div id="select-service-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-20">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
              <div class="modal-header flex justify-between items-center pb-3 border-b">
@@ -81,7 +81,6 @@
         </div>
     </div>
 
-    <!-- Pusher Config Modal (Create) -->
     <div id="pusher-config-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-30">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="modal-header flex justify-between items-center pb-3 border-b"><h3 class="text-lg font-medium">New Pusher Connection</h3><button id="cancel-pusher-config-button" class="text-gray-400 hover:text-gray-600">&times;</button></div>
@@ -97,7 +96,6 @@
         </div>
     </div>
 
-    <!-- Pusher Config Modal (Edit) -->
     <div id="edit-pusher-config-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-30">
          <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
             <div class="modal-header flex justify-between items-center pb-3 border-b"><h3 class="text-lg font-medium">Edit Pusher Connection</h3><button id="cancel-edit-pusher-config-button" class="text-gray-400 hover:text-gray-600">&times;</button></div>
@@ -113,47 +111,70 @@
         </div>
     </div>
 
-    <!-- Add Action Modal -->
     <div id="add-action-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
             <div class="modal-header flex justify-between items-center pb-3 border-b"><h3 class="text-lg font-medium">Add Action</h3><button id="cancel-add-action-button" class="text-gray-400 hover:text-gray-600">&times;</button></div>
             <div class="modal-body mt-4 space-y-2">
-                 <button data-action-type="liveHighlight" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
+                 <button data-action-type="autoHighlight" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
                     <p class="font-semibold text-gray-800">Auto Highlight</p>
                     <p class="text-sm text-gray-500">Highlights a student's row when an event is received.</p>
+                </button>
+                <button data-action-type="updateCell" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
+                    <p class="font-semibold text-gray-800">Update Cell Value</p>
+                    <p class="text-sm text-gray-500">Updates a specific cell in the student's row.</p>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Highlight Action Settings Modal -->
-    <div id="highlight-action-settings-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div id="action-settings-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-gray-50">
-            <div class="modal-header pb-3 border-b"><h3 class="text-lg font-medium text-gray-900">Auto Highlight Settings</h3></div>
+            <div class="modal-header pb-3 border-b"><h3 id="action-settings-title" class="text-lg font-medium text-gray-900">Action Settings</h3></div>
             <div class="modal-body mt-4 space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Highlight Color</label>
-                    <div id="color-picker" class="mt-2 flex items-center space-x-3">
-                        <span class="color-swatch" data-color="#92d050" style="background-color: #92d050;"></span>
-                        <span class="color-swatch" data-color="#ffc000" style="background-color: #ffc000;"></span>
-                        <span class="color-swatch" data-color="#00b0f0" style="background-color: #00b0f0;"></span>
-                        <span class="color-swatch" data-color="#ff0000" style="background-color: #ff0000;"></span>
-                        <input id="custom-color-input" type="text" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., #RRGGBB">
+                <!-- Auto Highlight Settings -->
+                <div id="auto-highlight-settings" class="hidden space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Highlight Color</label>
+                        <div id="color-picker" class="mt-2 flex items-center space-x-3">
+                            <span class="color-swatch" data-color="#92d050" style="background-color: #92d050;"></span>
+                            <span class="color-swatch" data-color="#ffc000" style="background-color: #ffc000;"></span>
+                            <span class="color-swatch" data-color="#00b0f0" style="background-color: #00b0f0;"></span>
+                            <span class="color-swatch" data-color="#ff0000" style="background-color: #ff0000;"></span>
+                            <input id="custom-color-input" type="text" class="w-24 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., #RRGGBB">
+                        </div>
+                    </div>
+                    <div id="sheet-options">
+                        <label class="block text-sm font-medium text-gray-700">Target Sheet</label>
+                        <div class="mt-2 space-y-2">
+                            <div class="flex items-center"><input id="sheet-today" type="radio" name="sheet-choice" value="today" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-today" class="ml-2 block text-sm text-gray-900">Today's LDA Sheet</label></div>
+                            <div class="flex items-center"><input id="sheet-master" type="radio" name="sheet-choice" value="master" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-master" class="ml-2 block text-sm text-gray-900">Master List</label></div>
+                            <div class="flex items-center"><input id="sheet-custom" type="radio" name="sheet-choice" value="custom" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-custom" class="ml-2 block text-sm text-gray-900">Other:</label></div>
+                            <input type="text" id="custom-sheet-name" class="hidden ml-6 w-1/2 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Enter sheet name">
+                        </div>
+                    </div>
+                     <div>
+                        <label for="ignore-columns" class="block text-sm font-medium text-gray-700">Ignore Columns</label>
+                        <input type="text" id="ignore-columns" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., StudentID, Comments">
+                        <p class="text-xs text-gray-500 mt-1">Comma-separated list of column headers to NOT highlight.</p>
                     </div>
                 </div>
-                <div id="sheet-options">
-                    <label class="block text-sm font-medium text-gray-700">Target Sheet</label>
-                    <div class="mt-2 space-y-2">
-                        <div class="flex items-center"><input id="sheet-today" type="radio" name="sheet-choice" value="today" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-today" class="ml-2 block text-sm text-gray-900">Today's LDA Sheet</label></div>
-                        <div class="flex items-center"><input id="sheet-master" type="radio" name="sheet-choice" value="master" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-master" class="ml-2 block text-sm text-gray-900">Master List</label></div>
-                        <div class="flex items-center"><input id="sheet-custom" type="radio" name="sheet-choice" value="custom" class="h-4 w-4 text-blue-600 border-gray-300"><label for="sheet-custom" class="ml-2 block text-sm text-gray-900">Other:</label></div>
-                        <input type="text" id="custom-sheet-name" class="hidden ml-6 w-1/2 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Enter sheet name">
+                <!-- Update Cell Settings -->
+                <div id="update-cell-settings" class="hidden space-y-4">
+                    <div>
+                        <label for="update-cell-target-column" class="block text-sm font-medium text-gray-700">Target Column</label>
+                        <input type="text" id="update-cell-target-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Status">
                     </div>
-                </div>
-                 <div>
-                    <label for="ignore-columns" class="block text-sm font-medium text-gray-700">Ignore Columns</label>
-                    <input type="text" id="ignore-columns" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., StudentID, Comments">
-                    <p class="text-xs text-gray-500 mt-1">Comma-separated list of column headers to NOT highlight.</p>
+                    <div>
+                        <label for="update-cell-value" class="block text-sm font-medium text-gray-700">Value to Insert</label>
+                        <textarea id="update-cell-value" rows="3" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Contacted"></textarea>
+                    </div>
+                    <div class="flex items-center">
+                        <label for="update-cell-append-mode" class="text-sm font-medium text-gray-700 mr-3">Append to existing text?</label>
+                        <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="update-cell-append-mode" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="update-cell-append-mode" class="toggle-bg block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer mt-6 flex justify-end space-x-2">
@@ -163,7 +184,6 @@
         </div>
     </div>
 
-     <!-- Action History Modal -->
     <div id="action-history-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-40">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-gray-50">
             <div class="modal-header flex justify-between items-center pb-3 border-b">
@@ -179,17 +199,12 @@
                 </button>
             </div>
             <div class="modal-body mt-4">
-                <div class="flex justify-end mb-2">
-                    <button id="clear-history-button" class="text-xs text-red-600 hover:underline">Clear History</button>
-                </div>
-                <div id="history-list-container" class="space-y-2 max-h-96 overflow-y-auto">
-                    <!-- History items will be injected here -->
-                </div>
+                <div class="flex justify-end mb-2"><button id="clear-history-button" class="text-xs text-red-600 hover:underline">Clear History</button></div>
+                <div id="history-list-container" class="space-y-2 max-h-96 overflow-y-auto"></div>
             </div>
         </div>
     </div>
 
-    <!-- Confirm Delete Modal -->
     <div id="confirm-delete-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
          <div class="relative top-40 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <h3 class="text-lg font-bold text-gray-800">Confirm Deletion</h3>
