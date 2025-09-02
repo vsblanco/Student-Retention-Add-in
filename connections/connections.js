@@ -457,6 +457,12 @@ async function addHistoryToAction(connectionId, actionId, historyEntry) {
     const conn = settings.connections.find(c => c.id === connectionId);
     const action = conn?.actions.find(a => a.id === actionId);
     if (action) {
+        // Check for duplicates by name
+        if (action.history.some(entry => entry.name === historyEntry.name)) {
+            logToUI(`Duplicate history entry for '${historyEntry.name}' ignored.`, 'INFO');
+            return; // Stop if a duplicate is found
+        }
+        
         action.history.push(historyEntry);
         if (action.history.length > 100) action.history.shift();
         await saveSettings(settings);
