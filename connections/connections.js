@@ -93,7 +93,13 @@ function hideEditPusherConfigModal() { document.getElementById("edit-pusher-conf
 function showAddActionModal(connectionId) { connectionToModifyId = connectionId; document.getElementById("add-action-modal").classList.remove('hidden'); }
 function hideAddActionModal() { document.getElementById("add-action-modal").classList.add('hidden'); connectionToModifyId = null; }
 function showActionSettingsModal() { document.getElementById("highlight-action-settings-modal").classList.remove('hidden'); }
-function hideActionSettingsModal() { document.getElementById("highlight-action-settings-modal").classList.add('hidden'); connectionToModifyId = null; actionToModifyId = null; }
+function hideActionSettingsModal() { 
+    document.getElementById("highlight-action-settings-modal").classList.add('hidden');
+    // Also hide the underlying add action modal
+    document.getElementById("add-action-modal").classList.add('hidden');
+    connectionToModifyId = null; 
+    actionToModifyId = null; 
+}
 function showDeleteConfirmModal(connectionId) { connectionToModifyId = connectionId; document.getElementById("confirm-delete-modal").classList.remove('hidden'); }
 function hideDeleteConfirmModal() { document.getElementById("confirm-delete-modal").classList.add('hidden'); connectionToModifyId = null; }
 
@@ -239,7 +245,7 @@ async function handleAddActionClick(event) {
         if (connection && connection.actions.some(a => a.type === 'liveHighlight')) {
             alert('This connection already has this action.'); return;
         }
-        hideAddActionModal();
+        // NOTE: We do NOT hide the add action modal here. It gets hidden when the settings modal is closed.
         populateAndShowActionSettingsModal(); // Show with defaults for new action
     }
 }
@@ -369,7 +375,7 @@ async function createPusherSignature(secret, stringToSign) {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secret);
     const messageData = encoder.encode(stringToSign);
-    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-26" }, false, ["sign"]);
+    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
     return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
