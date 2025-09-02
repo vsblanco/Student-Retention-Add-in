@@ -1,69 +1,41 @@
 'use strict';
 
-// --- CONSTANTS ---
-const SETTINGS_KEY = "studentRetentionSettings"; // Combined settings key
+// --- STATE & CONSTANTS ---
+const SETTINGS_KEY = "studentRetentionSettings";
 const MASTER_LIST_SHEET = "Master List";
-let pusher = null;
-let channel = null;
-let wizardState = {};
-let connectionToDeleteIndex = null;
 
+let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
+
+// --- INITIALIZATION ---
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        // New Pusher listeners
-        document.getElementById("save-pusher-config-button").onclick = saveAndConnectPusher;
-
-        // Log panel listeners
-        document.getElementById("log-header").onclick = toggleLogPanel;
-        document.getElementById("clear-log-button").onclick = clearLogPanel;
-
-        // Legacy listeners
-        document.getElementById("new-connection-button").onclick = showNewConnectionModal;
-        document.getElementById("cancel-new-connection-button").onclick = hideNewConnectionModal;
-        document.getElementById("insert-key-button").onclick = showInsertKeyModal;
-        document.getElementById("custom-key-button").onclick = showCustomKeyWizard;
-
-        // Insert Key Modal
-        const insertKeyModal = document.getElementById("insert-key-modal");
-        if (insertKeyModal) {
-            insertKeyModal.querySelector(".cancel-button").onclick = hideInsertKeyModal;
-            document.getElementById("key-file-input").onchange = handleFileSelect;
-            document.getElementById("submit-key-button").onclick = handleSubmitKey;
-        }
-
-        // Custom Key Wizard
-        const customKeyWizard = document.getElementById("custom-key-wizard-modal");
-        if (customKeyWizard) {
-            customKeyWizard.querySelector(".cancel-button").onclick = hideCustomKeyWizard;
-            document.getElementById("wizard-back-button").onclick = navigateWizardBack;
-            document.getElementById("wizard-next-button").onclick = navigateWizardNext;
-            document.getElementById("wizard-finish-button").onclick = finishCustomKeyWizard;
-            document.getElementById("pusher-setup-button").onclick = handlePusherSelect;
-            document.getElementById("manual-setup-button").onclick = handleManualSelect;
-            document.querySelectorAll(".wizard-type-button").forEach(btn => {
-                btn.onclick = () => selectConnectionType(btn);
-            });
-        }
-        
-        // Delete Confirmation Modal
-        const deleteModal = document.getElementById("delete-confirm-modal");
-        if(deleteModal) {
-            document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
-            document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
-        }
-
-
+        initializeEventListeners();
         logToUI("Connections pane ready.");
         loadAndRenderConnections();
     }
 });
 
-// --- LOGGING FUNCTIONS ---
-/**
- * Appends a message to the debug log panel in the UI.
- * @param {string} message The message to log.
- * @param {string} [type='INFO'] The type of log (INFO, ERROR, SUCCESS).
- */
+function initializeEventListeners() {
+    // Main UI
+    document.getElementById("new-connection-button").onclick = showSelectServiceModal;
+    
+    // Select Service Modal
+    document.getElementById("cancel-select-service-button").onclick = hideSelectServiceModal;
+    document.getElementById("select-pusher-button").onclick = showPusherConfigModal;
+    
+    // Pusher Config Modal
+    document.getElementById("cancel-pusher-config-button").onclick = hidePusherConfigModal;
+    document.getElementById("create-pusher-connection-button").onclick = handleCreatePusherConnection;
+    
+    // Log panel
+    document.getElementById("log-header").onclick = toggleLogPanel;
+    document.getElementById("clear-log-button").onclick = clearLogPanel;
+
+    // Event delegation for connection cards
+    document.getElementById("connections-list-container").addEventListener('click', handleConnectionCardAction);
+}
+
+// --- LOGGING ---
 function logToUI(message, type = 'INFO') {
     const logContainer = document.getElementById('log-container');
     if (logContainer) {
@@ -76,208 +48,259 @@ function logToUI(message, type = 'INFO') {
             case 'SUCCESS': p.className = 'text-green-400'; break;
             default: p.className = 'text-gray-300'; break;
         }
-
         logContainer.appendChild(p);
         logContainer.scrollTop = logContainer.scrollHeight;
     }
-    // Also log to the developer console for good measure
-    if (type === 'ERROR') {
-        console.error(message);
-    } else {
-        console.log(message);
-    }
+    console.log(`[${type}] ${message}`);
 }
 
-/**
- * Toggles the visibility of the debug log panel.
- */
 function toggleLogPanel() {
-    const logContainer = document.getElementById('log-container');
-    const logArrow = document.getElementById('log-arrow');
-    logContainer.classList.toggle('hidden');
-    logArrow.style.transform = logContainer.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    document.getElementById('log-container').classList.toggle('hidden');
+    document.getElementById('log-arrow').style.transform = document.getElementById('log-container').classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
 }
 
-/**
- * Clears all messages from the debug log panel.
- * @param {Event} e The click event.
- */
 function clearLogPanel(e) {
-    if (e) e.stopPropagation(); // Prevent the panel from toggling when clearing
-    const logContainer = document.getElementById('log-container');
-    logContainer.innerHTML = '';
+    if (e) e.stopPropagation();
+    document.getElementById('log-container').innerHTML = '';
     logToUI("Log cleared.");
 }
 
+// --- MODAL & UI MANAGEMENT ---
+function showSelectServiceModal() { document.getElementById("select-service-modal").classList.remove('hidden'); }
+function hideSelectServiceModal() { document.getElementById("select-service-modal").classList.add('hidden'); }
+function showPusherConfigModal() { hideSelectServiceModal(); document.getElementById("pusher-config-modal").classList.remove('hidden'); }
+function hidePusherConfigModal() { document.getElementById("pusher-config-modal").classList.add('hidden'); resetPusherForm(); }
 
-// --- PUSHER INTEGRATION FUNCTIONS ---
+function resetPusherForm() {
+    document.getElementById("connection-name").value = '';
+    document.getElementById("pusher-key").value = '';
+    document.getElementById("pusher-secret").value = '';
+    document.getElementById("pusher-cluster").value = '';
+    document.getElementById("pusher-channel").value = '';
+    document.getElementById("pusher-event").value = '';
+}
 
-/**
- * Creates an HMAC-SHA256 signature for Pusher authentication.
- * @param {string} secret The Pusher App Secret.
- * @param {string} stringToSign The string to sign (e.g., "socket_id:channel_name").
- * @returns {Promise<string>} A promise that resolves with the hex signature.
- */
+// --- SETTINGS MANAGEMENT ---
+async function getSettings() {
+    await new Promise(resolve => Office.context.document.settings.refreshAsync(() => resolve()));
+    const settingsString = Office.context.document.settings.get(SETTINGS_KEY);
+    const defaults = { connections: [] };
+    if (settingsString) {
+        try {
+            const settings = JSON.parse(settingsString);
+            return { ...defaults, ...settings };
+        } catch (e) {
+            logToUI("Error parsing settings, returning defaults.", "ERROR");
+            return defaults;
+        }
+    }
+    return defaults;
+}
+
+async function saveSettings(settingsToSave) {
+    Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settingsToSave));
+    await new Promise((resolve, reject) => {
+        Office.context.document.settings.saveAsync(result => {
+            if (result.status === Office.AsyncResultStatus.Failed) {
+                reject(new Error("Failed to save settings: " + result.error.message));
+            } else {
+                logToUI("Settings saved successfully.");
+                resolve();
+            }
+        });
+    });
+}
+
+// --- CONNECTION MANAGEMENT ---
+async function loadAndRenderConnections() {
+    logToUI("Loading all connections...");
+    const settings = await getSettings();
+    renderConnections(settings.connections);
+    settings.connections.forEach(conn => {
+        if (conn.type === 'pusher') {
+            connectToPusher(conn);
+        }
+    });
+}
+
+async function handleCreatePusherConnection() {
+    const newConnection = {
+        id: `conn_${new Date().getTime()}`,
+        type: 'pusher',
+        name: document.getElementById("connection-name").value.trim(),
+        config: {
+            key: document.getElementById("pusher-key").value.trim(),
+            secret: document.getElementById("pusher-secret").value.trim(),
+            cluster: document.getElementById("pusher-cluster").value.trim(),
+            channel: document.getElementById("pusher-channel").value.trim(),
+            event: document.getElementById("pusher-event").value.trim()
+        }
+    };
+
+    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster || !newConnection.config.channel || !newConnection.config.event) {
+        alert("All fields are required to create a connection.");
+        return;
+    }
+
+    const settings = await getSettings();
+    settings.connections.push(newConnection);
+    await saveSettings(settings);
+    
+    hidePusherConfigModal();
+    await loadAndRenderConnections(); // Full re-render and connect
+}
+
+async function handleConnectionCardAction(event) {
+    const button = event.target.closest('button');
+    if (!button) return;
+
+    const card = button.closest('.connection-card');
+    const connectionId = card.dataset.connectionId;
+    
+    if (button.dataset.action === 'delete') {
+        if (confirm('Are you sure you want to delete this connection?')) {
+            const settings = await getSettings();
+            settings.connections = settings.connections.filter(c => c.id !== connectionId);
+            await saveSettings(settings);
+
+            // Disconnect if active
+            const activeInstance = activePusherInstances[connectionId];
+            if (activeInstance) {
+                activeInstance.pusher.disconnect();
+                delete activePusherInstances[connectionId];
+            }
+            
+            await loadAndRenderConnections();
+        }
+    }
+}
+
+function renderConnections(connections) {
+    const container = document.getElementById("connections-list-container");
+    const noConnectionsMessage = document.getElementById("no-connections-message");
+    
+    const activeIds = new Set(connections.map(c => c.id));
+    // Remove cards for connections that no longer exist
+    container.querySelectorAll('.connection-card').forEach(card => {
+        if (!activeIds.has(card.dataset.connectionId)) {
+            card.remove();
+        }
+    });
+
+    if (connections.length === 0) {
+        noConnectionsMessage.classList.remove('hidden');
+    } else {
+        noConnectionsMessage.classList.add('hidden');
+        connections.forEach(conn => {
+            let card = container.querySelector(`.connection-card[data-connection-id="${conn.id}"]`);
+            if (!card) {
+                card = document.createElement('div');
+                card.className = "connection-card bg-white p-4 rounded-lg shadow-sm border border-gray-200";
+                card.dataset.connectionId = conn.id;
+                container.appendChild(card);
+            }
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="flex items-center">
+                            <span class="status-dot disconnected"></span>
+                            <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
+                        </div>
+                        <p class="text-sm text-gray-500 ml-5">${conn.type === 'pusher' ? 'Pusher Real-time' : conn.type}</p>
+                    </div>
+                    <div>
+                        <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="ml-5 mt-2 text-xs text-gray-600" id="status-text-${conn.id}">Status: Not Connected</div>`;
+        });
+    }
+}
+
+// --- PUSHER LOGIC ---
 async function createPusherSignature(secret, stringToSign) {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secret);
     const messageData = encoder.encode(stringToSign);
-
-    const key = await window.crypto.subtle.importKey(
-        "raw",
-        keyData,
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"]
-    );
-    
+    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
-    
     return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-
-/**
- * Loads Pusher settings and attempts to connect automatically.
- */
-async function loadAndConnectPusher() {
-    logToUI("Attempting to load saved Pusher configuration...");
-    const settings = await getSettings();
-    const pusherConfig = settings.pusherConfig;
+function connectToPusher(connection) {
+    const { id, config } = connection;
     
-    if (pusherConfig && pusherConfig.key && pusherConfig.cluster && pusherConfig.channel && pusherConfig.event && pusherConfig.secret) {
-        logToUI("Found saved configuration. Populating UI fields.");
-        document.getElementById("pusher-key").value = pusherConfig.key;
-        document.getElementById("pusher-secret").value = pusherConfig.secret;
-        document.getElementById("pusher-cluster").value = pusherConfig.cluster;
-        document.getElementById("pusher-channel").value = pusherConfig.channel;
-        document.getElementById("pusher-event").value = pusherConfig.event;
-        connectToPusher(pusherConfig);
-    } else {
-        logToUI("No saved Pusher configuration found or it is incomplete.");
-    }
-}
-
-/**
- * Saves the Pusher configuration from the UI and initiates a connection.
- */
-async function saveAndConnectPusher() {
-    logToUI("'Connect & Save' button clicked.");
-    const settings = await getSettings();
-    const pusherConfig = {
-        key: document.getElementById("pusher-key").value.trim(),
-        secret: document.getElementById("pusher-secret").value.trim(),
-        cluster: document.getElementById("pusher-cluster").value.trim(),
-        channel: document.getElementById("pusher-channel").value.trim(),
-        event: document.getElementById("pusher-event").value.trim()
-    };
-
-    if (!pusherConfig.key || !pusherConfig.secret || !pusherConfig.cluster || !pusherConfig.channel || !pusherConfig.event) {
-        updatePusherStatus("All fields are required.", true);
-        logToUI("Pusher config save failed: All fields are required.", "ERROR");
-        return;
+    // Disconnect existing instance for this ID if it exists
+    if (activePusherInstances[id]) {
+        activePusherInstances[id].pusher.disconnect();
     }
 
-    settings.pusherConfig = pusherConfig;
-    await saveSettings(settings);
-    logToUI("Pusher configuration saved to document settings.");
-    
-    if (pusher && channel) {
-        logToUI(`Disconnecting from previous channel: ${channel.name}`);
-        pusher.unsubscribe(channel.name);
-        pusher.disconnect();
-        pusher = null;
-        channel = null;
-    }
-
-    connectToPusher(pusherConfig);
-}
-
-/**
- * Connects to the Pusher service and subscribes to the channel.
- * @param {object} config The Pusher configuration object.
- */
-function connectToPusher(config) {
     try {
-        updatePusherStatus("Connecting...", false);
-        logToUI(`Initializing Pusher with key: ${config.key.substring(0, 5)}... and cluster: ${config.cluster}`);
+        updateConnectionStatus(id, "connecting", "Connecting...");
+        logToUI(`Initializing Pusher for '${connection.name}'...`);
         
-        pusher = new Pusher(config.key, {
+        const pusher = new Pusher(config.key, {
             cluster: config.cluster,
-            authorizer: (channel, options) => {
-                return {
-                    authorize: async (socketId, callback) => {
-                        logToUI(`Authorizing for socketId: ${socketId} and channel: ${channel.name}`);
-                        const stringToSign = `${socketId}:${channel.name}`;
-                        try {
-                            const signature = await createPusherSignature(config.secret, stringToSign);
-                            const authData = { auth: `${config.key}:${signature}` };
-                            logToUI(`Generated auth signature: ${authData.auth.substring(0, 15)}...`, "SUCCESS");
-                            callback(null, authData);
-                        } catch (error) {
-                             logToUI(`Failed to generate signature: ${error.message}`, "ERROR");
-                             callback(error, null);
-                        }
+            authorizer: (channel, options) => ({
+                authorize: async (socketId, callback) => {
+                    const stringToSign = `${socketId}:${channel.name}`;
+                    try {
+                        const signature = await createPusherSignature(config.secret, stringToSign);
+                        const authData = { auth: `${config.key}:${signature}` };
+                        callback(null, authData);
+                    } catch (error) {
+                         logToUI(`Signature failed for '${connection.name}': ${error.message}`, "ERROR");
+                         callback(error, null);
                     }
-                };
-            }
+                }
+            })
         });
 
-        logToUI(`Subscribing to channel: '${config.channel}'...`);
-        channel = pusher.subscribe(config.channel);
+        const channel = pusher.subscribe(config.channel);
+        activePusherInstances[id] = { pusher, channel };
 
         channel.bind('pusher:subscription_succeeded', () => {
-            updatePusherStatus(`Connected & listening on '${config.channel}'`, false);
-            logToUI(`Successfully subscribed to '${config.channel}'!`, "SUCCESS");
+            updateConnectionStatus(id, "connected", `Connected & listening on '${config.channel}'`);
+            logToUI(`'${connection.name}' subscribed successfully!`, "SUCCESS");
         });
 
         channel.bind('pusher:subscription_error', (status) => {
-            const errorMsg = (status && status.error && status.error.message) ? status.error.message : JSON.stringify(status);
-            updatePusherStatus(`Subscription Error: ${errorMsg}`, true);
-            logToUI(`Failed to subscribe to '${config.channel}': ${errorMsg}`, "ERROR");
+            const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
+            updateConnectionStatus(id, "error", `Subscription Error: ${errorMsg}`);
+            logToUI(`Subscription failed for '${connection.name}': ${errorMsg}`, "ERROR");
         });
 
-        const clientEventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
-        logToUI(`Binding to event: '${clientEventName}'...`);
-        
-        channel.bind(clientEventName, (data) => {
-            logToUI(`Received event '${clientEventName}' with data: ${JSON.stringify(data)}`, "SUCCESS");
-            
+        const eventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
+        channel.bind(eventName, (data) => {
+            logToUI(`Event received on '${connection.name}': ${JSON.stringify(data)}`, "SUCCESS");
             if (data && data.name) {
                 highlightStudentInSheet(data.name);
             } else {
-                logToUI(`Event received but missing 'name' property.`, "ERROR");
+                logToUI(`Event on '${connection.name}' missing 'name' property.`, "ERROR");
             }
         });
 
     } catch (error) {
-        updatePusherStatus(`Connection Failed: ${error.message}`, true);
-        logToUI(`Pusher connection error: ${error.message}`, "ERROR");
-        console.error("Pusher connection error:", error);
+        updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
+        logToUI(`Pusher error for '${connection.name}': ${error.message}`, "ERROR");
     }
 }
 
-/**
- * Updates the status text in the Pusher configuration UI.
- * @param {string} message The message to display.
- * @param {boolean} isError Whether the message is an error.
- */
-function updatePusherStatus(message, isError) {
-    const statusEl = document.getElementById("pusher-status");
-    const statusSpan = statusEl.querySelector('span');
-    statusSpan.textContent = message;
-    if (isError) {
-        statusSpan.className = 'text-red-600';
-    } else {
-        statusSpan.className = 'text-green-600';
+function updateConnectionStatus(connectionId, status, message) {
+    const card = document.querySelector(`.connection-card[data-connection-id="${connectionId}"]`);
+    if (card) {
+        const dot = card.querySelector('.status-dot');
+        const text = card.querySelector(`#status-text-${connectionId}`);
+        
+        dot.className = `status-dot ${status}`; // status should be 'connecting', 'connected', 'error', or 'disconnected'
+        text.textContent = `Status: ${message}`;
     }
 }
 
-
-/**
- * Finds a student by name in the Master List and highlights their row.
- * @param {string} studentName The name of the student to highlight.
- */
+// --- EXCEL INTERACTION ---
 async function highlightStudentInSheet(studentName) {
     if (!studentName) {
         logToUI("Highlight function called with no student name.", "ERROR");
@@ -289,30 +312,25 @@ async function highlightStudentInSheet(studentName) {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
             
-            // Get the used range and load all necessary properties at once.
             usedRange.load("values, rowCount, columnCount");
             await context.sync();
 
-            // Defensive check: a completely empty sheet might not have values.
             if (!usedRange.values || usedRange.values.length === 0) {
                 throw new Error("The 'Master List' sheet is empty or contains no data.");
             }
             
-            // Get headers from the first row of the used range.
             const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
-            
             const nameColumnIndex = headers.indexOf("studentname");
             
             if (nameColumnIndex === -1) {
                 throw new Error("Could not find a 'StudentName' column in the Master List.");
             }
 
-            // Get just the name column to search efficiently
             const nameColumnRange = usedRange.getColumn(nameColumnIndex);
             logToUI(`Searching for '${studentName}' in the 'StudentName' column.`);
 
             const searchResult = nameColumnRange.find(studentName, {
-                completeMatch: false, // Partial match is okay
+                completeMatch: false,
                 matchCase: false,
                 searchDirection: Excel.SearchDirection.forward
             });
@@ -326,7 +344,6 @@ async function highlightStudentInSheet(studentName) {
             const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount);
             entireRow.format.fill.color = "yellow";
             
-            // Select the cell to bring it into view
             sheet.getCell(foundRowIndex, nameColumnIndex).select();
             
             await context.sync();
@@ -335,7 +352,7 @@ async function highlightStudentInSheet(studentName) {
         });
     } catch (error) {
         let errorMessage = "An unknown error occurred.";
-        if(error instanceof OfficeExtension.Error) {
+        if (error instanceof OfficeExtension.Error) {
             errorMessage = error.debugInfo ? (error.debugInfo.message || error.message) : error.message;
             if (error.code === "ItemNotFound") {
                  errorMessage = `Could not find a student matching '${studentName}' in the 'StudentName' column.`;
@@ -347,381 +364,6 @@ async function highlightStudentInSheet(studentName) {
         }
         logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
         console.error("Error highlighting student:", error);
-    }
-}
-
-
-// --- GENERIC SETTINGS & LEGACY CONNECTION FUNCTIONS ---
-
-async function getSettings() {
-    await new Promise((resolve) => {
-        Office.context.document.settings.refreshAsync(asyncResult => {
-            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                console.error("Error refreshing settings: " + asyncResult.error.message);
-            }
-            resolve();
-        });
-    });
-    const settingsString = Office.context.document.settings.get(SETTINGS_KEY);
-    const defaults = {
-        pusherConfig: {},
-        legacyConnections: []
-    };
-    if (settingsString) {
-        try {
-            const settings = JSON.parse(settingsString);
-            return { ...defaults, ...settings };
-        } catch (e) {
-            console.error("Error parsing settings, returning defaults:", e);
-        }
-    }
-    return defaults;
-}
-
-async function saveSettings(settingsToSave) {
-    Office.context.document.settings.set(SETTINGS_KEY, JSON.stringify(settingsToSave));
-    await new Promise((resolve, reject) => {
-        Office.context.document.settings.saveAsync((asyncResult) => {
-            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                reject(new Error("Failed to save settings: " + asyncResult.error.message));
-            } else {
-                console.log("Settings saved successfully.");
-                resolve();
-            }
-        });
-    });
-}
-
-function showNewConnectionModal() {
-    document.getElementById("new-connection-modal").classList.remove('hidden');
-}
-
-function hideNewConnectionModal() {
-    document.getElementById("new-connection-modal").classList.add('hidden');
-}
-
-async function loadAndRenderConnections() {
-    const settings = await getSettings();
-    renderConnections(settings.legacyConnections);
-    await loadAndConnectPusher();
-}
-
-function renderConnections(connections) {
-    const container = document.getElementById("connections-list-container");
-    const noConnectionsMessage = document.getElementById("no-connections-message");
-
-    container.innerHTML = ''; // Clear previous entries
-    container.appendChild(noConnectionsMessage);
-
-    if (connections && connections.length > 0) {
-        noConnectionsMessage.classList.add('hidden');
-        connections.forEach((conn, index) => {
-            const connectionElement = document.createElement('div');
-            connectionElement.className = "connection-item bg-white p-4 rounded-lg shadow-sm border border-gray-200 relative group";
-            connectionElement.dataset.connectionIndex = index;
-
-            const optionsContainer = document.createElement('div');
-            optionsContainer.className = "absolute top-2 right-2";
-            const optionsButton = document.createElement('button');
-            optionsButton.className = "options-button opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-200 transition-opacity focus:opacity-100";
-            optionsButton.innerHTML = `<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>`;
-            
-            const optionsMenu = document.createElement('div');
-            optionsMenu.className = "options-menu hidden absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg z-10 border";
-            const editLink = document.createElement('a');
-            editLink.href = "#";
-            editLink.className = "edit-btn block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100";
-            editLink.textContent = "Edit";
-            editLink.onclick = (e) => { e.preventDefault(); handleEditConnection(index); };
-            const deleteLink = document.createElement('a');
-            deleteLink.href = "#";
-            deleteLink.className = "delete-btn block px-4 py-2 text-sm text-red-600 hover:bg-gray-100";
-            deleteLink.textContent = "Delete";
-            deleteLink.onclick = (e) => { e.preventDefault(); promptDeleteConnection(index); };
-            
-            optionsMenu.appendChild(editLink);
-            optionsMenu.appendChild(deleteLink);
-            optionsContainer.appendChild(optionsButton);
-            optionsContainer.appendChild(optionsMenu);
-            connectionElement.appendChild(optionsContainer);
-
-            optionsButton.onclick = (e) => {
-                e.stopPropagation();
-                document.querySelectorAll('.options-menu').forEach(menu => {
-                    if (menu !== optionsMenu) menu.classList.add('hidden');
-                });
-                optionsMenu.classList.toggle('hidden');
-            };
-            
-            const nameElement = document.createElement('h3');
-            nameElement.className = "font-bold text-md text-gray-800 pr-8";
-            nameElement.textContent = conn.name || "Unnamed Connection";
-            const descriptionElement = document.createElement('p');
-            descriptionElement.className = "text-sm text-gray-600 mt-1";
-            descriptionElement.textContent = conn.description || "No description provided.";
-            connectionElement.appendChild(nameElement);
-            connectionElement.appendChild(descriptionElement);
-
-            if(conn.type) {
-                const typeElement = document.createElement('span');
-                let providerText = conn.credentials && conn.credentials.provider ? conn.credentials.provider : conn.type;
-                typeElement.className = "text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 uppercase mt-2";
-                typeElement.textContent = providerText;
-                connectionElement.appendChild(typeElement);
-            }
-
-            container.insertBefore(connectionElement, noConnectionsMessage);
-        });
-    } else {
-        noConnectionsMessage.classList.remove('hidden');
-    }
-}
-
-// Close dropdown menu if clicking outside
-window.onclick = function(event) {
-    if (!event.target.matches('.options-button') && !event.target.closest('.options-button')) {
-        document.querySelectorAll('.options-menu').forEach(menu => menu.classList.add('hidden'));
-    }
-}
-
-function showInsertKeyModal() {
-    hideNewConnectionModal(); 
-    document.getElementById("insert-key-modal").classList.remove('hidden');
-}
-
-function hideInsertKeyModal() {
-    document.getElementById("insert-key-modal").classList.add('hidden');
-    resetFileInput();
-}
-
-function handleFileSelect(event) {
-    const fileInput = event.target;
-    const submitButton = document.getElementById("submit-key-button");
-    const fileNameDisplay = document.getElementById("file-name-display");
-
-    if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        if (file.type === "application/json") {
-            fileNameDisplay.textContent = file.name;
-            submitButton.disabled = false;
-        } else {
-            fileNameDisplay.textContent = "Invalid file type. Must be .json";
-            submitButton.disabled = true;
-        }
-    }
-}
-
-function resetFileInput() {
-    document.getElementById("key-file-input").value = "";
-    document.getElementById("submit-key-button").disabled = true;
-    document.getElementById("file-name-display").textContent = "";
-}
-
-async function handleSubmitKey() {
-    const fileInput = document.getElementById("key-file-input");
-    if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const newConnection = JSON.parse(event.target.result);
-                await saveConnection(newConnection);
-                hideInsertKeyModal();
-            } catch (e) {
-                alert("Error: The selected file is not valid JSON.");
-                resetFileInput();
-            }
-        };
-        reader.readAsText(file);
-    }
-}
-
-function showCustomKeyWizard() {
-    hideNewConnectionModal();
-    resetWizard();
-    document.getElementById("custom-key-wizard-modal").classList.remove('hidden');
-}
-
-function hideCustomKeyWizard() {
-    document.getElementById("custom-key-wizard-modal").classList.add('hidden');
-}
-
-function resetWizard() {
-    wizardState = { step: 'setupType' };
-    
-    document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
-    document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
-    document.getElementById('wizard-step-details').classList.add('hidden');
-    document.getElementById('wizard-step-pusher-creds').classList.add('hidden');
-    
-    document.getElementById('wizard-back-button').classList.add('hidden');
-    document.getElementById('wizard-finish-button').classList.add('hidden');
-    const nextButton = document.getElementById('wizard-next-button');
-    nextButton.classList.add('hidden');
-    nextButton.disabled = true;
-
-    document.querySelectorAll(".wizard-type-button, .wizard-setup-button").forEach(btn => {
-        btn.classList.remove('bg-blue-100', 'border-blue-400');
-    });
-    document.getElementById('connection-name').value = '';
-    document.getElementById('connection-description').value = '';
-    document.getElementById('pusher-app-id').value = '';
-    document.getElementById('pusher-key-wizard').value = '';
-    document.getElementById('pusher-secret-wizard').value = '';
-    document.getElementById('pusher-cluster-wizard').value = '';
-}
-
-function handlePusherSelect() {
-    wizardState = { ...wizardState, step: 'details', setupType: 'Pusher', type: 'Webhook' };
-    updateWizardView();
-}
-
-function handleManualSelect() {
-    wizardState = { ...wizardState, step: 'manualType' };
-    updateWizardView();
-}
-
-function selectConnectionType(buttonElement) {
-    wizardState.type = buttonElement.dataset.type;
-    document.querySelectorAll(".wizard-type-button").forEach(btn => btn.classList.remove('bg-blue-100', 'border-blue-400'));
-    buttonElement.classList.add('bg-blue-100', 'border-blue-400');
-    document.getElementById('wizard-next-button').disabled = false;
-}
-
-function navigateWizardNext() {
-    if (wizardState.step === 'manualType') {
-        wizardState.step = 'details';
-    } else if (wizardState.step === 'details' && wizardState.type === 'Webhook') {
-        wizardState.step = 'pusherCreds';
-    }
-    updateWizardView();
-}
-
-function navigateWizardBack() {
-    if (wizardState.step === 'details' && wizardState.setupType === 'Pusher') {
-        wizardState.step = 'setupType';
-    } else if (wizardState.step === 'details' && wizardState.setupType !== 'Pusher') {
-        wizardState.step = 'manualType';
-    } else if (wizardState.step === 'manualType') {
-        wizardState.step = 'setupType';
-    } else if (wizardState.step === 'pusherCreds') {
-        wizardState.step = 'details';
-    }
-    updateWizardView();
-}
-
-function updateWizardView() {
-    const { step, type, setupType } = wizardState;
-    
-    document.getElementById('wizard-step-1-setup-type').classList.add('hidden');
-    document.getElementById('wizard-step-1-manual-type').classList.add('hidden');
-    document.getElementById('wizard-step-details').classList.add('hidden');
-    document.getElementById('wizard-step-pusher-creds').classList.add('hidden');
-
-    const nextButton = document.getElementById('wizard-next-button');
-    const backButton = document.getElementById('wizard-back-button');
-    const finishButton = document.getElementById('wizard-finish-button');
-
-    if (step === 'setupType') {
-        document.getElementById('wizard-step-1-setup-type').classList.remove('hidden');
-        backButton.classList.add('hidden');
-        nextButton.classList.add('hidden');
-        finishButton.classList.add('hidden');
-    } else if (step === 'manualType') {
-        document.getElementById('wizard-step-1-manual-type').classList.remove('hidden');
-        backButton.classList.remove('hidden');
-        nextButton.classList.remove('hidden');
-        nextButton.disabled = !type;
-        finishButton.classList.add('hidden');
-    } else if (step === 'details') {
-        document.getElementById('wizard-step-details').classList.remove('hidden');
-        document.getElementById('connection-type-display').textContent = setupType === 'Pusher' ? 'Pusher Webhook' : type;
-        backButton.classList.remove('hidden');
-        if (type === 'Webhook') {
-            nextButton.classList.remove('hidden');
-            nextButton.disabled = false;
-            finishButton.classList.add('hidden');
-        } else {
-            nextButton.classList.add('hidden');
-            finishButton.classList.remove('hidden');
-        }
-    } else if (step === 'pusherCreds') {
-        document.getElementById('wizard-step-pusher-creds').classList.remove('hidden');
-        backButton.classList.remove('hidden');
-        nextButton.classList.add('hidden');
-        finishButton.classList.remove('hidden');
-    }
-}
-
-async function finishCustomKeyWizard() {
-    const name = document.getElementById('connection-name').value.trim();
-    const description = document.getElementById('connection-description').value.trim();
-    
-    if (!name) {
-        alert("Please enter a connection name.");
-        return;
-    }
-
-    const newConnection = {
-        type: wizardState.type,
-        name: name,
-        description: description
-    };
-    
-    if (wizardState.type === 'Webhook') {
-        const appId = document.getElementById('pusher-app-id').value.trim();
-        const key = document.getElementById('pusher-key-wizard').value.trim();
-        const secret = document.getElementById('pusher-secret-wizard').value.trim();
-        const cluster = document.getElementById('pusher-cluster-wizard').value.trim();
-
-        if (!appId || !key || !secret || !cluster) {
-            alert("Please fill out all Pusher credential fields.");
-            return;
-        }
-
-        newConnection.credentials = {
-            provider: 'Pusher',
-            appId: appId,
-            key: key,
-            secret: secret,
-            cluster: cluster
-        };
-    }
-
-    await saveConnection(newConnection);
-    hideCustomKeyWizard();
-}
-
-async function saveConnection(newConnection) {
-    const settings = await getSettings();
-    settings.legacyConnections.push(newConnection);
-    await saveSettings(settings);
-    renderConnections(settings.legacyConnections);
-}
-
-
-async function handleEditConnection(index) {
-    console.log("Editing connection at index:", index);
-    alert("Editing functionality is not yet implemented.");
-}
-
-function promptDeleteConnection(index) {
-    connectionToDeleteIndex = index;
-    document.getElementById("delete-confirm-modal").classList.remove('hidden');
-}
-
-function hideDeleteConfirmModal() {
-    document.getElementById("delete-confirm-modal").classList.add('hidden');
-    connectionToDeleteIndex = null;
-}
-
-async function handleDeleteConnection() {
-    if (connectionToDeleteIndex !== null) {
-        const settings = await getSettings();
-        settings.legacyConnections.splice(connectionToDeleteIndex, 1);
-        await saveSettings(settings);
-        renderConnections(settings.legacyConnections);
-        hideDeleteConfirmModal();
     }
 }
 
