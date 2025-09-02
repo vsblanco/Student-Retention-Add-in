@@ -460,6 +460,12 @@ async function addHistoryToAction(connectionId, actionId, historyEntry) {
         action.history.push(historyEntry);
         if (action.history.length > 100) action.history.shift();
         await saveSettings(settings);
+
+        // Refresh the history modal if it's currently open for this action
+        const historyModal = document.getElementById('action-history-modal');
+        if (!historyModal.classList.contains('hidden') && connectionId === connectionToModifyId && actionId === actionToModifyId) {
+            populateAndShowHistoryModal(action.history);
+        }
     }
 }
 
@@ -472,7 +478,7 @@ async function highlightStudentInSheet(eventData, actionConfig, connectionId, ac
         id: Date.now(), 
         name: studentName, 
         timestamp: timestamp || new Date().toISOString(), 
-        time: time || new Date().toLocaleTimeString(),
+        time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'Failed', 
         reason: '' 
     };
