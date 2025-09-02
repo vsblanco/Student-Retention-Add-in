@@ -3,6 +3,10 @@
 // --- STATE & CONSTANTS ---
 const SETTINGS_KEY = "studentRetentionSettings";
 const MASTER_LIST_SHEET = "Master List";
+const LOGO_MAP = {
+    pusher: 'images/pusher-icon.png',
+    'power-automate': 'images/power-automate-icon.png'
+};
 
 let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
 let currentConnectionIdForAction = null; // To know which connection to add an action to
@@ -225,7 +229,6 @@ async function handleAddActionClick(event) {
             if (!connection.actions) {
                 connection.actions = [];
             }
-
             if (connection.actions.some(a => a.type === 'liveHighlight')) {
                 alert('This connection already has a "Live Submission Highlighting" action.');
                 return;
@@ -265,14 +268,17 @@ function renderConnections(connections) {
                 `).join('');
             }
             
+            const logoSrc = LOGO_MAP[conn.type] || '';
+            const logoHtml = logoSrc ? `<img src="${logoSrc}" alt="${conn.type} logo" class="h-6 w-6 mr-2">` : '';
+
             card.innerHTML = `
                 <div class="flex justify-between items-start">
                     <div>
                         <div class="flex items-center">
                             <span class="status-dot disconnected"></span>
+                            ${logoHtml}
                             <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
                         </div>
-                        <p class="text-sm text-gray-500 ml-5">${conn.type === 'pusher' ? 'Pusher Real-time' : conn.type}</p>
                     </div>
                     <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -288,6 +294,7 @@ function renderConnections(connections) {
         });
     }
 }
+
 
 // --- PUSHER LOGIC ---
 async function createPusherSignature(secret, stringToSign) {
@@ -307,7 +314,7 @@ function connectToPusher(connection) {
     }
     
     if (!actions || actions.length === 0) {
-        logToUI(`Connection '${connection.name}' has no actions, but is configured. Ready to listen.`);
+        logToUI(`Connection '${connection.name}' has no actions configured. Skipping connection.`);
         updateConnectionStatus(id, 'disconnected', 'Ready. Add an action to begin listening.');
         return;
     }
@@ -447,4 +454,4 @@ async function highlightStudentInSheet(studentName) {
         console.error("Error highlighting student:", error);
     }
 }
-
+```
