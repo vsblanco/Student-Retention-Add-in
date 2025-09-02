@@ -435,6 +435,23 @@ function updateConnectionStatus(connectionId, status, message) {
 }
 
 // --- EXCEL INTERACTION ---
+function reformatName(name) {
+    const parts = name.split(',').map(p => p.trim());
+    if (parts.length === 2) {
+        // Was "Last, First", convert to "First Last"
+        return `${parts[1]} ${parts[0]}`;
+    } else {
+        // Was "First Last", convert to "Last, First"
+        const spaceIndex = name.lastIndexOf(' ');
+        if (spaceIndex !== -1) {
+            const first = name.substring(0, spaceIndex);
+            const last = name.substring(spaceIndex + 1);
+            return `${last}, ${first}`;
+        }
+    }
+    return name; // Return original if format is unexpected
+}
+
 async function highlightStudentInSheet(studentName, actionConfig) {
     const config = { color: '#92d050', sheetType: 'today', ignoreColumns: '', ...actionConfig };
     let sheetName = "Master List";
@@ -455,9 +472,24 @@ async function highlightStudentInSheet(studentName, actionConfig) {
             const nameColumnIndex = headers.indexOf("studentname");
             if (nameColumnIndex === -1) throw new Error(`Could not find a 'StudentName' column in '${sheetName}'.`);
             
-            const searchResult = usedRange.getColumn(nameColumnIndex).find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
-            searchResult.load("rowIndex");
-            await context.sync();
+            const nameColumn = usedRange.getColumn(nameColumnIndex);
+            let searchResult;
+
+            try {
+                searchResult = nameColumn.find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+                searchResult.load("rowIndex");
+                await context.sync();
+            } catch (error) {
+                if (error instanceof OfficeExtension.Error && error.code === "ItemNotFound") {
+                    const alternateName = reformatName(studentName);
+                    logToUI(`'${studentName}' not found. Trying alternate format: '${alternateName}'...`);
+                    searchResult = nameColumn.find(alternateName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+                    searchResult.load("rowIndex");
+                    await context.sync(); // This will throw the final error if it's still not found
+                } else {
+                    throw error; // Re-throw other types of errors
+                }
+            }
 
             const foundRowIndex = searchResult.rowIndex;
             
@@ -485,7 +517,7 @@ async function highlightStudentInSheet(studentName, actionConfig) {
         let errorMessage = error.message;
         if (error instanceof OfficeExtension.Error) {
             errorMessage = error.debugInfo?.message || error.message;
-            if (error.code === "ItemNotFound") errorMessage = `Could not find '${studentName}' in sheet '${sheetName}'.`;
+            if (error.code === "ItemNotFound") errorMessage = `Could not find student matching '${studentName}' in sheet '${sheetName}'.`;
             else if (error.code === "WorksheetNotFound") errorMessage = `The worksheet '${sheetName}' could not be found.`;
         }
         logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
