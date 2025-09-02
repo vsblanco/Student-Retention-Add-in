@@ -24,7 +24,6 @@
         }
         #log-header { cursor: pointer; }
         #log-arrow { transition: transform 0.2s; }
-        #log-container.hidden { display: none; }
         .status-dot {
             width: 10px;
             height: 10px;
@@ -37,6 +36,25 @@
         .status-dot.connecting { background-color: #f59e0b; } /* amber-500 */
         .status-dot.connected { background-color: #22c55e; } /* green-500 */
         .status-dot.error { background-color: #ef4444; } /* red-500 */
+
+        /* Tooltip styles */
+        .tooltip {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Dropdown styles */
+        .options-menu {
+            display: none;
+        }
+        .options-menu.open {
+            display: block;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans">
@@ -77,20 +95,19 @@
         </div>
     </div>
 
-    <!-- Modals -->
+    <!-- MODALS -->
+
     <!-- Select Service Modal -->
     <div id="select-service-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-40">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">Add a New Connection</h2>
             <p class="text-sm text-gray-600 mb-6 text-center">Select a service to connect to.</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <!-- Power Automate Card -->
                 <button disabled class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex flex-col items-center justify-center text-center opacity-60 cursor-not-allowed">
                     <img src="../images/power-automate-icon.png" alt="Power Automate Logo" class="h-16 w-16">
                     <h3 class="font-semibold text-gray-700 mt-3">Power Automate</h3>
                     <p class="text-xs text-gray-500 mt-1">Coming Soon</p>
                 </button>
-                <!-- Pusher Card -->
                 <button id="select-pusher-button" class="bg-white p-4 rounded-xl shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col items-center justify-center text-center">
                      <img src="../images/pusher-icon.png" alt="Pusher Logo" class="h-16 w-16">
                     <h3 class="font-semibold text-gray-800 mt-3">Pusher</h3>
@@ -103,7 +120,7 @@
         </div>
     </div>
 
-    <!-- Pusher Configuration Modal -->
+    <!-- Pusher Configuration Modal (Create) -->
     <div id="pusher-config-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Configure Pusher Connection</h2>
@@ -112,29 +129,12 @@
                     <label for="connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label>
                     <input type="text" id="connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., Submission Checker">
                 </div>
-                <div>
-                    <label for="pusher-key" class="block text-sm font-medium text-gray-700">App Key</label>
-                    <input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Key">
-                </div>
-                <div>
-                    <label for="pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label>
-                    <input type="password" id="pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Secret">
-                </div>
-                <div>
-                    <label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label>
-                    <input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., us2, eu">
-                </div>
-                <div>
-                    <label for="pusher-channel" class="block text-sm font-medium text-gray-700">Channel Name</label>
-                    <input type="text" id="pusher-channel" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., private-my-channel">
-                </div>
-                <div>
-                    <label for="pusher-event" class="block text-sm font-medium text-gray-700">Event Name</label>
-                    <input type="text" id="pusher-event" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., new-submission-found">
-                </div>
-                 <div class="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                    <p class="text-xs text-yellow-800"><strong>Security Note:</strong> The App Secret is stored within your Excel workbook.</p>
-                </div>
+                <div><label for="pusher-key" class="block text-sm font-medium text-gray-700">App Key</label><input type="text" id="pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Key"></div>
+                <div><label for="pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label><input type="password" id="pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Your Pusher App Secret"></div>
+                <div><label for="pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label><input type="text" id="pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., us2, eu"></div>
+                <div><label for="pusher-channel" class="block text-sm font-medium text-gray-700">Channel Name</label><input type="text" id="pusher-channel" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., private-my-channel"></div>
+                <div><label for="pusher-event" class="block text-sm font-medium text-gray-700">Event Name</label><input type="text" id="pusher-event" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="e.g., new-submission-found"></div>
+                 <div class="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p class="text-xs text-yellow-800"><strong>Security Note:</strong> The App Secret is stored within your Excel workbook.</p></div>
             </div>
             <div class="mt-6 flex justify-end gap-2">
                 <button id="cancel-pusher-config-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button>
@@ -142,6 +142,29 @@
             </div>
         </div>
     </div>
+    
+    <!-- Pusher Configuration Modal (Edit) -->
+    <div id="edit-pusher-config-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-md border border-white/20">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Edit Pusher Connection</h2>
+            <div class="space-y-3 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                 <div>
+                    <label for="edit-connection-name" class="block text-sm font-medium text-gray-700">Connection Name</label>
+                    <input type="text" id="edit-connection-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+                </div>
+                <div><label for="edit-pusher-key" class="block text-sm font-medium text-gray-700">App Key</label><input type="text" id="edit-pusher-key" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-pusher-secret" class="block text-sm font-medium text-gray-700">App Secret</label><input type="password" id="edit-pusher-secret" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter new secret to update"></div>
+                <div><label for="edit-pusher-cluster" class="block text-sm font-medium text-gray-700">Cluster</label><input type="text" id="edit-pusher-cluster" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-pusher-channel" class="block text-sm font-medium text-gray-700">Channel Name</label><input type="text" id="edit-pusher-channel" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                <div><label for="edit-pusher-event" class="block text-sm font-medium text-gray-700">Event Name</label><input type="text" id="edit-pusher-event" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button id="cancel-edit-pusher-config-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button>
+                <button id="update-pusher-connection-button" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Update</button>
+            </div>
+        </div>
+    </div>
+
 
      <!-- Add Action Modal -->
     <div id="add-action-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
@@ -156,6 +179,18 @@
             </div>
             <div class="mt-6 flex justify-end">
                 <button id="cancel-add-action-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+        <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-white/20">
+            <h2 class="text-xl font-bold text-gray-800 text-center">Are you sure?</h2>
+            <p class="text-sm text-gray-600 mt-2 text-center">This will permanently delete the connection. This action cannot be undone.</p>
+            <div class="mt-6 flex justify-center gap-4">
+                <button id="cancel-delete-button" class="px-6 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300">Cancel</button>
+                <button id="confirm-delete-button" class="px-6 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700">Delete</button>
             </div>
         </div>
     </div>
