@@ -287,18 +287,28 @@ async function highlightStudentInSheet(studentName) {
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
             const headerRange = sheet.getRange("1:1");
-            const foundHeader = headerRange.find("StudentName", { completeMatch: true, matchCase: false });
-            foundHeader.load("columnIndex");
+
+            // Load all necessary properties in one batch to prevent errors
+            usedRange.load("rowCount, columnCount");
+            headerRange.load("values");
             await context.sync();
 
-            const nameColumnIndex = foundHeader.columnIndex;
-            const searchRange = sheet.getRangeByIndexes(0, nameColumnIndex, sheet.getUsedRange().rowCount, 1);
+            // Find the student name column index from the loaded headers
+            const headers = headerRange.values[0].map(h => String(h || '').toLowerCase());
+            const nameColumnIndex = headers.indexOf("studentname");
             
+            if (nameColumnIndex === -1) {
+                throw new Error("Could not find a 'StudentName' column in the Master List.");
+            }
+
+            // Now safely use the loaded rowCount
+            const searchRange = sheet.getRangeByIndexes(0, nameColumnIndex, usedRange.rowCount, 1);
             logToUI(`Searching for '${studentName}' in column ${String.fromCharCode(65 + nameColumnIndex)}.`);
 
             const searchResult = searchRange.find(studentName, {
-                completeMatch: false,
+                completeMatch: false, // Partial match is okay
                 matchCase: false,
                 searchDirection: Excel.SearchDirection.forward
             });
@@ -309,9 +319,11 @@ async function highlightStudentInSheet(studentName) {
             const foundRowIndex = searchResult.rowIndex;
             logToUI(`Match found for '${studentName}' at row ${foundRowIndex + 1}.`);
             
-            const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, sheet.getUsedRange().columnCount);
+            // Now safely use the loaded columnCount
+            const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount);
             entireRow.format.fill.color = "yellow";
             
+            // Select the cell to bring it into view
             sheet.getRangeByIndexes(foundRowIndex, nameColumnIndex, 1, 1).select();
             
             await context.sync();
@@ -709,4 +721,3 @@ async function handleDeleteConnection() {
         hideDeleteConfirmModal();
     }
 }
-
