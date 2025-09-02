@@ -246,7 +246,7 @@ async function handleAddActionClick(event) {
 
 function populateAndShowActionSettingsModal(config) {
     // Defaults for a new action
-    const defaults = { color: '#4ade80', sheetType: 'today', customSheetName: '' };
+    const defaults = { color: '#4ade80', sheetType: 'today', customSheetName: '', ignoreColumns: '' };
     const settings = { ...defaults, ...config };
 
     // Set color
@@ -261,6 +261,9 @@ function populateAndShowActionSettingsModal(config) {
     customSheetInput.classList.toggle('hidden', settings.sheetType !== 'custom');
     customSheetInput.value = settings.customSheetName;
 
+    // Set ignored columns
+    document.getElementById('ignore-columns').value = settings.ignoreColumns;
+
     showActionSettingsModal();
 }
 
@@ -269,11 +272,12 @@ async function handleSaveActionSettings() {
     const connection = settings.connections.find(c => c.id === connectionToModifyId);
     if (!connection) return;
 
-    const color = document.getElementById('custom-color-input').value || '#4ade80';
+    const color = document.getElementById('custom-color-input').value.trim() || '#4ade80';
     const sheetType = document.querySelector('input[name="sheet-choice"]:checked').value;
-    const customSheetName = document.getElementById('custom-sheet-name').value;
+    const customSheetName = document.getElementById('custom-sheet-name').value.trim();
+    const ignoreColumns = document.getElementById('ignore-columns').value.trim();
 
-    const actionConfig = { color, sheetType, customSheetName };
+    const actionConfig = { color, sheetType, customSheetName, ignoreColumns };
 
     if (actionToModifyId) { // Editing existing action
         const action = connection.actions.find(a => a.id === actionToModifyId);
@@ -365,7 +369,7 @@ async function createPusherSignature(secret, stringToSign) {
     const encoder = new TextEncoder();
     const keyData = encoder.encode(secret);
     const messageData = encoder.encode(stringToSign);
-    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const key = await window.crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-26" }, false, ["sign"]);
     const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
     return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -426,13 +430,10 @@ function updateConnectionStatus(connectionId, status, message) {
 
 // --- EXCEL INTERACTION ---
 async function highlightStudentInSheet(studentName, actionConfig) {
-    const config = { color: '#4ade80', sheetType: 'today', ...actionConfig };
+    const config = { color: '#4ade80', sheetType: 'today', ignoreColumns: '', ...actionConfig };
     let sheetName = "Master List";
-    if (config.sheetType === 'today') {
-        sheetName = getTodaysLdaSheetName();
-    } else if (config.sheetType === 'custom' && config.customSheetName) {
-        sheetName = config.customSheetName;
-    }
+    if (config.sheetType === 'today') sheetName = getTodaysLdaSheetName();
+    else if (config.sheetType === 'custom' && config.customSheetName) sheetName = config.customSheetName;
 
     logToUI(`Highlighting '${studentName}' on sheet '${sheetName}' with color ${config.color}...`);
     try {
@@ -441,15 +442,35 @@ async function highlightStudentInSheet(studentName, actionConfig) {
             const usedRange = sheet.getUsedRange();
             usedRange.load("values, rowCount, columnCount");
             await context.sync();
+
             if (!usedRange.values || usedRange.values.length === 0) throw new Error(`Sheet '${sheetName}' is empty.`);
+            
             const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
             const nameColumnIndex = headers.indexOf("studentname");
             if (nameColumnIndex === -1) throw new Error(`Could not find a 'StudentName' column in '${sheetName}'.`);
+            
             const searchResult = usedRange.getColumn(nameColumnIndex).find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
             searchResult.load("rowIndex");
             await context.sync();
+
             const foundRowIndex = searchResult.rowIndex;
-            sheet.getRangeByIndexes(foundRowIndex, 0, 1, usedRange.columnCount).format.fill.color = config.color;
+            
+            const ignoredHeaders = new Set((config.ignoreColumns || '').toLowerCase().split(',').map(h => h.trim()).filter(Boolean));
+            const ignoredColumnIndices = new Set(headers.map((h, i) => ignoredHeaders.has(h) ? i : -1).filter(i => i !== -1));
+
+            let startCol = -1;
+            for (let i = 0; i < usedRange.columnCount; i++) {
+                if (!ignoredColumnIndices.has(i) && startCol === -1) {
+                    startCol = i;
+                } else if (ignoredColumnIndices.has(i) && startCol !== -1) {
+                    sheet.getRangeByIndexes(foundRowIndex, startCol, 1, i - startCol).format.fill.color = config.color;
+                    startCol = -1;
+                }
+            }
+            if (startCol !== -1) {
+                sheet.getRangeByIndexes(foundRowIndex, startCol, 1, usedRange.columnCount - startCol).format.fill.color = config.color;
+            }
+
             sheet.getCell(foundRowIndex, nameColumnIndex).select();
             await context.sync();
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
