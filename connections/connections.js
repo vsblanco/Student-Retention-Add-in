@@ -320,7 +320,7 @@ function renderConnections(connections) {
                 <div class="flex justify-between items-center">
                     <div class="flex items-center">
                          <div class="relative has-tooltip">
-                            <span id="status-dot-${conn.id}" class="status-dot disconnected"></span>
+                            <span id="status-dot-${conn.id}" class="status-dot inline-block disconnected"></span>
                             <div id="status-tooltip-${conn.id}" class="tooltip absolute bottom-full mb-2 w-max px-2 py-1 bg-gray-700 text-white text-xs rounded">Status: Not Connected</div>
                         </div>
                         ${logoHtml} <h3 class="font-bold text-md text-gray-800">${conn.name}</h3>
@@ -440,7 +440,7 @@ function connectToPusher(connection) {
 function updateConnectionStatus(connectionId, status, message) {
     const dot = document.getElementById(`status-dot-${connectionId}`);
     const tooltip = document.getElementById(`status-tooltip-${connectionId}`);
-    if (dot && tooltip) { dot.className = `status-dot ${status}`; tooltip.textContent = `Status: ${message}`; }
+    if (dot && tooltip) { dot.className = `status-dot inline-block ${status}`; tooltip.textContent = `Status: ${message}`; }
 }
 
 // --- EXCEL INTERACTION ---
@@ -460,8 +460,6 @@ async function addHistoryToAction(connectionId, actionId, historyEntry) {
         action.history.push(historyEntry);
         if (action.history.length > 100) action.history.shift();
         await saveSettings(settings);
-
-        // Refresh the history modal if it's currently open for this action
         const historyModal = document.getElementById('action-history-modal');
         if (!historyModal.classList.contains('hidden') && connectionId === connectionToModifyId && actionId === actionToModifyId) {
             populateAndShowHistoryModal(action.history);
