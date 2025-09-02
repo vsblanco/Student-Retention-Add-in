@@ -83,9 +83,6 @@ function showAddActionModal(connectionId) {
 function hideAddActionModal() { 
     document.getElementById("add-action-modal").classList.add('hidden'); 
     currentConnectionIdForAction = null;
-    // Clear action-specific fields
-    document.getElementById("pusher-channel").value = '';
-    document.getElementById("pusher-event").value = '';
 }
 
 function resetPusherForm() {
@@ -93,6 +90,8 @@ function resetPusherForm() {
     document.getElementById("pusher-key").value = '';
     document.getElementById("pusher-secret").value = '';
     document.getElementById("pusher-cluster").value = '';
+    document.getElementById("pusher-channel").value = '';
+    document.getElementById("pusher-event").value = '';
 }
 
 // --- SETTINGS MANAGEMENT ---
@@ -103,6 +102,11 @@ async function getSettings() {
     if (settingsString) {
         try {
             const settings = JSON.parse(settingsString);
+            if (settings.connections && Array.isArray(settings.connections)) {
+                settings.connections.forEach(conn => {
+                    if (!conn.actions) conn.actions = [];
+                });
+            }
             return { ...defaults, ...settings };
         } catch (e) {
             logToUI("Error parsing settings, returning defaults.", "ERROR");
@@ -146,12 +150,14 @@ async function handleCreatePusherConnection() {
         config: {
             key: document.getElementById("pusher-key").value.trim(),
             secret: document.getElementById("pusher-secret").value.trim(),
-            cluster: document.getElementById("pusher-cluster").value.trim()
+            cluster: document.getElementById("pusher-cluster").value.trim(),
+            channel: document.getElementById("pusher-channel").value.trim(),
+            event: document.getElementById("pusher-event").value.trim()
         },
         actions: []
     };
 
-    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster) {
+    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster || !newConnection.config.channel || !newConnection.config.event) {
         alert("All fields are required to create a connection.");
         return;
     }
@@ -188,14 +194,13 @@ async function handleConnectionCardAction(event) {
     } else if (button.dataset.action === 'add-action') {
         showAddActionModal(connectionId);
     } else if (button.dataset.action === 'delete-action') {
-        const actionType = button.dataset.actionType;
+        const actionId = button.dataset.actionId;
         if (confirm(`Are you sure you want to remove this action?`)) {
             const settings = await getSettings();
             const conn = settings.connections.find(c => c.id === connectionId);
             if (conn) {
-                conn.actions = conn.actions.filter(a => a.type !== actionType);
+                conn.actions = conn.actions.filter(a => a.id !== actionId);
                 await saveSettings(settings);
-                // Reconnect to update subscriptions
                 await loadAndRenderConnections();
             }
         }
@@ -211,22 +216,16 @@ async function handleAddActionClick(event) {
         const newAction = {
             id: `action_${new Date().getTime()}`,
             type: 'liveHighlight',
-            name: 'Live Submission Highlighting',
-            config: {
-                channel: document.getElementById("pusher-channel").value.trim(),
-                event: document.getElementById("pusher-event").value.trim()
-            }
+            name: 'Live Submission Highlighting'
         };
-
-        if (!newAction.config.channel || !newAction.config.event) {
-             alert("Channel and Event names are required for this action.");
-             return;
-        }
 
         const settings = await getSettings();
         const connection = settings.connections.find(c => c.id === currentConnectionIdForAction);
         if (connection) {
-            // Prevent adding duplicate action types
+            if (!connection.actions) {
+                connection.actions = [];
+            }
+
             if (connection.actions.some(a => a.type === 'liveHighlight')) {
                 alert('This connection already has a "Live Submission Highlighting" action.');
                 return;
@@ -234,7 +233,6 @@ async function handleAddActionClick(event) {
             connection.actions.push(newAction);
             await saveSettings(settings);
             hideAddActionModal();
-            // Reconnect to bind the new action's events
             await loadAndRenderConnections();
         }
     }
@@ -246,7 +244,7 @@ function renderConnections(connections) {
     container.innerHTML = '';
     container.appendChild(noConnectionsMessage);
 
-    if (connections.length === 0) {
+    if (!connections || connections.length === 0) {
         noConnectionsMessage.classList.remove('hidden');
     } else {
         noConnectionsMessage.classList.add('hidden');
@@ -260,7 +258,7 @@ function renderConnections(connections) {
                 actionsHtml = conn.actions.map(action => `
                     <div class="flex items-center justify-between text-sm text-gray-700 py-1 pl-2 border-l-2 border-blue-200">
                         <span>${action.name}</span>
-                        <button data-action="delete-action" data-action-type="${action.type}" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                        <button data-action="delete-action" data-action-id="${action.id}" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
                         </button>
                     </div>
@@ -291,7 +289,6 @@ function renderConnections(connections) {
     }
 }
 
-
 // --- PUSHER LOGIC ---
 async function createPusherSignature(secret, stringToSign) {
     const encoder = new TextEncoder();
@@ -302,7 +299,6 @@ async function createPusherSignature(secret, stringToSign) {
     return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// THIS FUNCTION HAS BEEN REVERTED TO A SIMPLER, PREVIOUSLY WORKING STATE
 function connectToPusher(connection) {
     const { id, config, actions } = connection;
 
@@ -310,10 +306,15 @@ function connectToPusher(connection) {
         activePusherInstances[id].pusher.disconnect();
     }
     
-    // An action must exist to connect
     if (!actions || actions.length === 0) {
-        logToUI(`Connection '${connection.name}' has no actions configured. Skipping connection.`);
-        updateConnectionStatus(id, 'disconnected', 'No actions configured');
+        logToUI(`Connection '${connection.name}' has no actions, but is configured. Ready to listen.`);
+        updateConnectionStatus(id, 'disconnected', 'Ready. Add an action to begin listening.');
+        return;
+    }
+    
+    if (!config.channel || !config.event) {
+        logToUI(`Connection '${connection.name}' is missing channel or event name.`, "ERROR");
+        updateConnectionStatus(id, 'error', 'Missing Channel or Event name');
         return;
     }
 
@@ -337,42 +338,32 @@ function connectToPusher(connection) {
             })
         });
 
-        // This restored logic assumes one primary action, but is extensible.
-        // It subscribes to all unique channels needed by all actions.
-        const channelsToSubscribe = [...new Set(actions.map(a => a.config.channel))];
+        logToUI(`Subscribing to channel: '${config.channel}' for connection '${connection.name}'`);
+        const channel = pusher.subscribe(config.channel);
 
-        channelsToSubscribe.forEach(channelName => {
-            logToUI(`Subscribing to channel: '${channelName}' for connection '${connection.name}'`);
-            const channel = pusher.subscribe(channelName);
-
-            channel.bind('pusher:subscription_succeeded', () => {
-                updateConnectionStatus(id, "connected", `Connected & listening on '${channelName}'`);
-                logToUI(`'${connection.name}' subscribed to '${channelName}' successfully!`, "SUCCESS");
-            });
-
-            channel.bind('pusher:subscription_error', (status) => {
-                const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
-                updateConnectionStatus(id, "error", `Subscription Error on '${channelName}': ${errorMsg}`);
-                logToUI(`Subscription failed for '${connection.name}' on '${channelName}': ${errorMsg}`, "ERROR");
-            });
-
-            // Find all actions for this specific channel and bind their events
-            actions.filter(a => a.config.channel === channelName).forEach(action => {
-                const eventName = action.config.event.startsWith('client-') ? action.config.event : `client-${action.config.event}`;
-                logToUI(`Binding to event: '${eventName}' for action '${action.name}'`);
-                channel.bind(eventName, (data) => {
-                    logToUI(`Event received for action '${action.name}': ${JSON.stringify(data)}`, "SUCCESS");
-                    if (action.type === 'liveHighlight' && data && data.name) {
-                        highlightStudentInSheet(data.name);
-                    } else if (action.type === 'liveHighlight') {
-                        logToUI(`Action '${action.name}' received event but was missing 'name' property.`, "ERROR");
-                    }
-                    // Future actions can be handled here with 'else if (action.type === '...')'
-                });
-            });
+        channel.bind('pusher:subscription_succeeded', () => {
+            updateConnectionStatus(id, "connected", `Connected & listening on '${config.channel}'`);
+            logToUI(`'${connection.name}' subscribed successfully!`, "SUCCESS");
         });
 
-        activePusherInstances[id] = { pusher };
+        channel.bind('pusher:subscription_error', (status) => {
+            const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
+            updateConnectionStatus(id, "error", `Subscription Error: ${errorMsg}`);
+            logToUI(`Subscription failed for '${connection.name}': ${errorMsg}`, "ERROR");
+        });
+
+        const eventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
+        logToUI(`Binding to event: '${eventName}'`);
+        channel.bind(eventName, (data) => {
+            logToUI(`Event received on '${connection.name}': ${JSON.stringify(data)}`, "SUCCESS");
+            if (actions.some(a => a.type === 'liveHighlight') && data && data.name) {
+                highlightStudentInSheet(data.name);
+            } else if (actions.some(a => a.type === 'liveHighlight')) {
+                logToUI(`'liveHighlight' action for '${connection.name}' received event but was missing 'name' property.`, "ERROR");
+            }
+        });
+
+        activePusherInstances[id] = { pusher, channel };
 
     } catch (error) {
         updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
