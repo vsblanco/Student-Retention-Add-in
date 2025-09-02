@@ -5,6 +5,7 @@ const SETTINGS_KEY = "studentRetentionSettings";
 const MASTER_LIST_SHEET = "Master List";
 
 let activePusherInstances = {}; // Stores { connectionId: { pusher, channel } }
+let currentConnectionIdForAction = null; // To know which connection to add an action to
 
 // --- INITIALIZATION ---
 Office.onReady((info) => {
@@ -27,6 +28,11 @@ function initializeEventListeners() {
     document.getElementById("cancel-pusher-config-button").onclick = hidePusherConfigModal;
     document.getElementById("create-pusher-connection-button").onclick = handleCreatePusherConnection;
     
+    // Add Action Modal
+    const addActionModal = document.getElementById("add-action-modal");
+    addActionModal.addEventListener('click', handleAddActionClick);
+    document.getElementById("cancel-add-action-button").onclick = hideAddActionModal;
+
     // Log panel
     document.getElementById("log-header").onclick = toggleLogPanel;
     document.getElementById("clear-log-button").onclick = clearLogPanel;
@@ -70,14 +76,20 @@ function showSelectServiceModal() { document.getElementById("select-service-moda
 function hideSelectServiceModal() { document.getElementById("select-service-modal").classList.add('hidden'); }
 function showPusherConfigModal() { hideSelectServiceModal(); document.getElementById("pusher-config-modal").classList.remove('hidden'); }
 function hidePusherConfigModal() { document.getElementById("pusher-config-modal").classList.add('hidden'); resetPusherForm(); }
+function showAddActionModal(connectionId) { 
+    currentConnectionIdForAction = connectionId;
+    document.getElementById("add-action-modal").classList.remove('hidden'); 
+}
+function hideAddActionModal() { 
+    document.getElementById("add-action-modal").classList.add('hidden'); 
+    currentConnectionIdForAction = null;
+}
 
 function resetPusherForm() {
     document.getElementById("connection-name").value = '';
     document.getElementById("pusher-key").value = '';
     document.getElementById("pusher-secret").value = '';
     document.getElementById("pusher-cluster").value = '';
-    document.getElementById("pusher-channel").value = '';
-    document.getElementById("pusher-event").value = '';
 }
 
 // --- SETTINGS MANAGEMENT ---
@@ -111,7 +123,7 @@ async function saveSettings(settingsToSave) {
     });
 }
 
-// --- CONNECTION MANAGEMENT ---
+// --- CONNECTION & ACTION MANAGEMENT ---
 async function loadAndRenderConnections() {
     logToUI("Loading all connections...");
     const settings = await getSettings();
@@ -131,13 +143,12 @@ async function handleCreatePusherConnection() {
         config: {
             key: document.getElementById("pusher-key").value.trim(),
             secret: document.getElementById("pusher-secret").value.trim(),
-            cluster: document.getElementById("pusher-cluster").value.trim(),
-            channel: document.getElementById("pusher-channel").value.trim(),
-            event: document.getElementById("pusher-event").value.trim()
-        }
+            cluster: document.getElementById("pusher-cluster").value.trim()
+        },
+        actions: []
     };
 
-    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster || !newConnection.config.channel || !newConnection.config.event) {
+    if (!newConnection.name || !newConnection.config.key || !newConnection.config.secret || !newConnection.config.cluster) {
         alert("All fields are required to create a connection.");
         return;
     }
@@ -147,7 +158,7 @@ async function handleCreatePusherConnection() {
     await saveSettings(settings);
     
     hidePusherConfigModal();
-    await loadAndRenderConnections(); // Full re-render and connect
+    await loadAndRenderConnections();
 }
 
 async function handleConnectionCardAction(event) {
@@ -163,7 +174,6 @@ async function handleConnectionCardAction(event) {
             settings.connections = settings.connections.filter(c => c.id !== connectionId);
             await saveSettings(settings);
 
-            // Disconnect if active
             const activeInstance = activePusherInstances[connectionId];
             if (activeInstance) {
                 activeInstance.pusher.disconnect();
@@ -172,32 +182,79 @@ async function handleConnectionCardAction(event) {
             
             await loadAndRenderConnections();
         }
+    } else if (button.dataset.action === 'add-action') {
+        showAddActionModal(connectionId);
+    } else if (button.dataset.action === 'delete-action') {
+        const actionType = button.dataset.actionType;
+        if (confirm(`Are you sure you want to remove the "${actionType}" action?`)) {
+            const settings = await getSettings();
+            const conn = settings.connections.find(c => c.id === connectionId);
+            if (conn) {
+                conn.actions = conn.actions.filter(a => a.type !== actionType);
+                await saveSettings(settings);
+                await loadAndRenderConnections();
+            }
+        }
+    }
+}
+
+async function handleAddActionClick(event) {
+    const button = event.target.closest('button[data-action-type]');
+    if (!button) return;
+
+    const actionType = button.dataset.actionType;
+    if (actionType === 'liveHighlight') {
+        const newAction = {
+            id: `action_${new Date().getTime()}`,
+            type: 'liveHighlight',
+            name: 'Live Submission Highlighting',
+            config: {
+                channel: document.getElementById("pusher-channel").value.trim(),
+                event: document.getElementById("pusher-event").value.trim()
+            }
+        };
+
+        if (!newAction.config.channel || !newAction.config.event) {
+             alert("Channel and Event names are required for this action.");
+             return;
+        }
+
+        const settings = await getSettings();
+        const connection = settings.connections.find(c => c.id === currentConnectionIdForAction);
+        if (connection) {
+            connection.actions.push(newAction);
+            await saveSettings(settings);
+            hideAddActionModal();
+            await loadAndRenderConnections();
+        }
     }
 }
 
 function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
-    
-    const activeIds = new Set(connections.map(c => c.id));
-    // Remove cards for connections that no longer exist
-    container.querySelectorAll('.connection-card').forEach(card => {
-        if (!activeIds.has(card.dataset.connectionId)) {
-            card.remove();
-        }
-    });
+    container.innerHTML = '';
+    container.appendChild(noConnectionsMessage);
 
     if (connections.length === 0) {
         noConnectionsMessage.classList.remove('hidden');
     } else {
         noConnectionsMessage.classList.add('hidden');
         connections.forEach(conn => {
-            let card = container.querySelector(`.connection-card[data-connection-id="${conn.id}"]`);
-            if (!card) {
-                card = document.createElement('div');
-                card.className = "connection-card bg-white p-4 rounded-lg shadow-sm border border-gray-200";
-                card.dataset.connectionId = conn.id;
-                container.appendChild(card);
+            const card = document.createElement('div');
+            card.className = "connection-card bg-white p-4 rounded-lg shadow-sm border border-gray-200";
+            card.dataset.connectionId = conn.id;
+
+            let actionsHtml = '<p class="text-xs text-gray-400 italic">No actions configured.</p>';
+            if (conn.actions && conn.actions.length > 0) {
+                actionsHtml = conn.actions.map(action => `
+                    <div class="flex items-center justify-between text-sm text-gray-700 py-1">
+                        <span>${action.name}</span>
+                        <button data-action="delete-action" data-action-type="${action.type}" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+                        </button>
+                    </div>
+                `).join('');
             }
             
             card.innerHTML = `
@@ -209,16 +266,21 @@ function renderConnections(connections) {
                         </div>
                         <p class="text-sm text-gray-500 ml-5">${conn.type === 'pusher' ? 'Pusher Real-time' : conn.type}</p>
                     </div>
-                    <div>
-                        <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        </button>
-                    </div>
+                    <button data-action="delete" class="p-1 text-gray-400 hover:text-red-600 rounded-full">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
                 </div>
-                <div class="ml-5 mt-2 text-xs text-gray-600" id="status-text-${conn.id}">Status: Not Connected</div>`;
+                <div class="ml-5 mt-2 text-xs text-gray-600" id="status-text-${conn.id}">Status: Not Connected</div>
+                <div class="mt-4 ml-5 pl-4 border-l-2 border-gray-200">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Configured Actions</h4>
+                    ${actionsHtml}
+                    <button data-action="add-action" class="mt-2 text-xs text-blue-600 hover:underline">+ Add Action</button>
+                </div>`;
+            container.appendChild(card);
         });
     }
 }
+
 
 // --- PUSHER LOGIC ---
 async function createPusherSignature(secret, stringToSign) {
@@ -231,9 +293,8 @@ async function createPusherSignature(secret, stringToSign) {
 }
 
 function connectToPusher(connection) {
-    const { id, config } = connection;
+    const { id, config, actions } = connection;
     
-    // Disconnect existing instance for this ID if it exists
     if (activePusherInstances[id]) {
         activePusherInstances[id].pusher.disconnect();
     }
@@ -249,39 +310,47 @@ function connectToPusher(connection) {
                     const stringToSign = `${socketId}:${channel.name}`;
                     try {
                         const signature = await createPusherSignature(config.secret, stringToSign);
-                        const authData = { auth: `${config.key}:${signature}` };
-                        callback(null, authData);
+                        callback(null, { auth: `${config.key}:${signature}` });
                     } catch (error) {
-                         logToUI(`Signature failed for '${connection.name}': ${error.message}`, "ERROR");
-                         callback(error, null);
+                        logToUI(`Signature failed for '${connection.name}': ${error.message}`, "ERROR");
+                        callback(error, null);
                     }
                 }
             })
         });
 
-        const channel = pusher.subscribe(config.channel);
-        activePusherInstances[id] = { pusher, channel };
+        // Subscribe to all unique channels defined in actions
+        const channels = [...new Set(actions.map(a => a.config.channel))];
+        channels.forEach(channelName => {
+            const channel = pusher.subscribe(channelName);
+            
+            channel.bind('pusher:subscription_succeeded', () => {
+                updateConnectionStatus(id, "connected", `Connected & listening on '${channelName}'`);
+                logToUI(`'${connection.name}' subscribed to '${channelName}' successfully!`, "SUCCESS");
+            });
 
-        channel.bind('pusher:subscription_succeeded', () => {
-            updateConnectionStatus(id, "connected", `Connected & listening on '${config.channel}'`);
-            logToUI(`'${connection.name}' subscribed successfully!`, "SUCCESS");
-        });
+            channel.bind('pusher:subscription_error', status => {
+                const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
+                updateConnectionStatus(id, "error", `Subscription Error on '${channelName}': ${errorMsg}`);
+                logToUI(`Subscription failed for '${connection.name}' on channel '${channelName}': ${errorMsg}`, "ERROR");
+            });
 
-        channel.bind('pusher:subscription_error', (status) => {
-            const errorMsg = (status && status.error) ? status.error.message : JSON.stringify(status);
-            updateConnectionStatus(id, "error", `Subscription Error: ${errorMsg}`);
-            logToUI(`Subscription failed for '${connection.name}': ${errorMsg}`, "ERROR");
+            // Bind events for actions on this channel
+            actions.filter(a => a.config.channel === channelName).forEach(action => {
+                const eventName = action.config.event.startsWith('client-') ? action.config.event : `client-${action.config.event}`;
+                channel.bind(eventName, (data) => {
+                    logToUI(`Event received for action '${action.name}': ${JSON.stringify(data)}`, "SUCCESS");
+                    
+                    if (action.type === 'liveHighlight' && data && data.name) {
+                        highlightStudentInSheet(data.name);
+                    } else if (action.type === 'liveHighlight') {
+                         logToUI(`Action '${action.name}' received event but missing 'name' property.`, "ERROR");
+                    }
+                });
+            });
         });
-
-        const eventName = config.event.startsWith('client-') ? config.event : `client-${config.event}`;
-        channel.bind(eventName, (data) => {
-            logToUI(`Event received on '${connection.name}': ${JSON.stringify(data)}`, "SUCCESS");
-            if (data && data.name) {
-                highlightStudentInSheet(data.name);
-            } else {
-                logToUI(`Event on '${connection.name}' missing 'name' property.`, "ERROR");
-            }
-        });
+        
+        activePusherInstances[id] = { pusher };
 
     } catch (error) {
         updateConnectionStatus(id, "error", `Connection Failed: ${error.message}`);
@@ -294,8 +363,7 @@ function updateConnectionStatus(connectionId, status, message) {
     if (card) {
         const dot = card.querySelector('.status-dot');
         const text = card.querySelector(`#status-text-${connectionId}`);
-        
-        dot.className = `status-dot ${status}`; // status should be 'connecting', 'connected', 'error', or 'disconnected'
+        dot.className = `status-dot ${status}`;
         text.textContent = `Status: ${message}`;
     }
 }
@@ -348,7 +416,6 @@ async function highlightStudentInSheet(studentName) {
             
             await context.sync();
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
-
         });
     } catch (error) {
         let errorMessage = "An unknown error occurred.";
