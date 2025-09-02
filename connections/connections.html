@@ -83,23 +83,21 @@
         <div class="glass-modal-bg p-8 rounded-2xl shadow-2xl w-full max-w-lg border border-white/20">
             <h2 class="text-xl font-bold text-gray-800 mb-2 text-center">Add a New Connection</h2>
             <p class="text-sm text-gray-600 mb-6 text-center">Select a service to connect to.</p>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <!-- Power Automate Card -->
-                <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200 opacity-50 cursor-not-allowed">
-                    <h3 class="text-lg font-semibold text-gray-800">Power Automate</h3>
-                    <p class="text-sm text-gray-500 mt-2">Automate workflows between your favorite apps and services.</p>
-                    <button class="w-full mt-4 bg-gray-400 text-white font-bold py-2 px-4 rounded-lg cursor-not-allowed">Coming Soon</button>
-                </div>
+                <button disabled class="bg-white p-4 rounded-xl shadow-md border border-gray-200 flex flex-col items-center justify-center text-center opacity-60 cursor-not-allowed">
+                    <img src="images/power-automate-icon.png" alt="Power Automate Logo" class="h-16 w-16">
+                    <h3 class="font-semibold text-gray-700 mt-3">Power Automate</h3>
+                    <p class="text-xs text-gray-500 mt-1">Coming Soon</p>
+                </button>
                 <!-- Pusher Card -->
-                <button id="select-pusher-button" class="bg-white p-6 rounded-lg shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all text-left">
-                    <h3 class="text-lg font-semibold text-gray-800">Pusher</h3>
-                    <p class="text-sm text-gray-500 mt-2">Enable real-time features like live submission highlighting.</p>
-                    <div class="w-full mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg text-center">
-                        Configure
-                    </div>
+                <button id="select-pusher-button" class="bg-white p-4 rounded-xl shadow-md border border-gray-200 hover:border-blue-500 hover:shadow-lg transition-all flex flex-col items-center justify-center text-center">
+                     <img src="images/pusher-icon.png" alt="Pusher Logo" class="h-16 w-16">
+                    <h3 class="font-semibold text-gray-800 mt-3">Pusher</h3>
+                     <p class="text-xs text-gray-500 mt-1">Real-time features</p>
                 </button>
             </div>
-            <div class="mt-6 flex justify-end">
+            <div class="mt-8 flex justify-end">
                 <button id="cancel-select-service-button" class="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300 transition-colors">Cancel</button>
             </div>
         </div>
