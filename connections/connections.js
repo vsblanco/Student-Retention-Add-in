@@ -22,20 +22,36 @@ Office.onReady((info) => {
         document.getElementById("cancel-new-connection-button").onclick = hideNewConnectionModal;
         document.getElementById("insert-key-button").onclick = showInsertKeyModal;
         document.getElementById("custom-key-button").onclick = showCustomKeyWizard;
-        document.getElementById("cancel-upload-button").onclick = hideInsertKeyModal;
-        document.getElementById("key-file-input").onchange = handleFileSelect;
-        document.getElementById("submit-key-button").onclick = handleSubmitKey;
-        document.getElementById("wizard-cancel-button").onclick = hideCustomKeyWizard;
-        document.getElementById("wizard-back-button").onclick = navigateWizardBack;
-        document.getElementById("wizard-next-button").onclick = navigateWizardNext;
-        document.getElementById("wizard-finish-button").onclick = finishCustomKeyWizard;
-        document.getElementById("pusher-setup-button").onclick = handlePusherSelect;
-        document.getElementById("manual-setup-button").onclick = handleManualSelect;
-        document.querySelectorAll(".wizard-type-button").forEach(btn => {
-            btn.addEventListener('click', (e) => selectConnectionType(e.currentTarget));
-        });
-        document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
-        document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
+
+        // Insert Key Modal
+        const insertKeyModal = document.getElementById("insert-key-modal");
+        if (insertKeyModal) {
+            insertKeyModal.querySelector(".cancel-button").onclick = hideInsertKeyModal;
+            document.getElementById("key-file-input").onchange = handleFileSelect;
+            document.getElementById("submit-key-button").onclick = handleSubmitKey;
+        }
+
+        // Custom Key Wizard
+        const customKeyWizard = document.getElementById("custom-key-wizard-modal");
+        if (customKeyWizard) {
+            customKeyWizard.querySelector(".cancel-button").onclick = hideCustomKeyWizard;
+            document.getElementById("wizard-back-button").onclick = navigateWizardBack;
+            document.getElementById("wizard-next-button").onclick = navigateWizardNext;
+            document.getElementById("wizard-finish-button").onclick = finishCustomKeyWizard;
+            document.getElementById("pusher-setup-button").onclick = handlePusherSelect;
+            document.getElementById("manual-setup-button").onclick = handleManualSelect;
+            document.querySelectorAll(".wizard-type-button").forEach(btn => {
+                btn.onclick = () => selectConnectionType(btn);
+            });
+        }
+        
+        // Delete Confirmation Modal
+        const deleteModal = document.getElementById("delete-confirm-modal");
+        if(deleteModal) {
+            document.getElementById("cancel-delete-button").onclick = hideDeleteConfirmModal;
+            document.getElementById("confirm-delete-button").onclick = handleDeleteConnection;
+        }
+
 
         logToUI("Connections pane ready.");
         loadAndRenderConnections();
@@ -87,7 +103,7 @@ function toggleLogPanel() {
  * @param {Event} e The click event.
  */
 function clearLogPanel(e) {
-    e.stopPropagation(); // Prevent the panel from toggling when clearing
+    if (e) e.stopPropagation(); // Prevent the panel from toggling when clearing
     const logContainer = document.getElementById('log-container');
     logContainer.innerHTML = '';
     logToUI("Log cleared.");
@@ -98,7 +114,6 @@ function clearLogPanel(e) {
 
 /**
  * Creates an HMAC-SHA256 signature for Pusher authentication.
- * This is an async function because it uses the SubtleCrypto API.
  * @param {string} secret The Pusher App Secret.
  * @param {string} stringToSign The string to sign (e.g., "socket_id:channel_name").
  * @returns {Promise<string>} A promise that resolves with the hex signature.
@@ -118,7 +133,6 @@ async function createPusherSignature(secret, stringToSign) {
     
     const signature = await window.crypto.subtle.sign("HMAC", key, messageData);
     
-    // Convert ArrayBuffer to hex string
     return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -152,7 +166,7 @@ async function saveAndConnectPusher() {
     const settings = await getSettings();
     const pusherConfig = {
         key: document.getElementById("pusher-key").value.trim(),
-        secret: document.getElementById("pusher-secret").value.trim(), // NEW
+        secret: document.getElementById("pusher-secret").value.trim(),
         cluster: document.getElementById("pusher-cluster").value.trim(),
         channel: document.getElementById("pusher-channel").value.trim(),
         event: document.getElementById("pusher-event").value.trim()
@@ -190,7 +204,6 @@ function connectToPusher(config) {
         
         pusher = new Pusher(config.key, {
             cluster: config.cluster,
-            // NEW: Client-side authorizer for private channels
             authorizer: (channel, options) => {
                 return {
                     authorize: async (socketId, callback) => {
@@ -229,10 +242,11 @@ function connectToPusher(config) {
         
         channel.bind(clientEventName, (data) => {
             logToUI(`Received event '${clientEventName}' with data: ${JSON.stringify(data)}`, "SUCCESS");
-            if (data && data.studentName) {
-                highlightStudentInSheet(data.studentName);
+            
+            if (data && data.name) {
+                highlightStudentInSheet(data.name);
             } else {
-                logToUI(`Event received but missing 'studentName' property.`, "ERROR");
+                logToUI(`Event received but missing 'name' property.`, "ERROR");
             }
         });
 
@@ -265,52 +279,56 @@ function updatePusherStatus(message, isError) {
  * @param {string} studentName The name of the student to highlight.
  */
 async function highlightStudentInSheet(studentName) {
+    if (!studentName) {
+        logToUI("Highlight function called with no student name.", "ERROR");
+        return;
+    }
     logToUI(`Attempting to highlight student: '${studentName}'...`);
     try {
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(MASTER_LIST_SHEET);
-            const range = sheet.getUsedRange();
-            range.load("values, address");
+            const headerRange = sheet.getRange("1:1");
+            const foundHeader = headerRange.find("StudentName", { completeMatch: true, matchCase: false });
+            foundHeader.load("columnIndex");
             await context.sync();
-            logToUI(`Searching in range ${range.address} for '${studentName}'.`);
 
-            const values = range.values;
-            const headers = values[0].map(h => String(h || '').toLowerCase());
-            const nameColIdx = headers.indexOf("studentname");
-            const outreachColIdx = headers.indexOf("outreach");
+            const nameColumnIndex = foundHeader.columnIndex;
+            const searchRange = sheet.getRangeByIndexes(0, nameColumnIndex, sheet.getUsedRange().rowCount, 1);
+            
+            logToUI(`Searching for '${studentName}' in column ${String.fromCharCode(65 + nameColumnIndex)}.`);
 
-            if (nameColIdx === -1) {
-                logToUI("'StudentName' column not found in Master List.", "ERROR");
-                return;
-            }
+            const searchResult = searchRange.find(studentName, {
+                completeMatch: false,
+                matchCase: false,
+                searchDirection: Excel.SearchDirection.forward
+            });
+            
+            searchResult.load("address, rowIndex");
+            await context.sync();
 
-            for (let i = 1; i < values.length; i++) {
-                const rowName = values[i][nameColIdx];
-                const normalizedRowName = String(rowName || '').toLowerCase().replace(/, /g, ' ').split(' ').reverse().join(' ');
-                const normalizedSearchName = String(studentName || '').toLowerCase().replace(/, /g, ' ').split(' ').reverse().join(' ');
-                
-                if (normalizedRowName === normalizedSearchName) {
-                    logToUI(`Match found for '${studentName}' at row ${i + 1}.`);
-                    const startCol = outreachColIdx !== -1 ? Math.min(nameColIdx, outreachColIdx) : nameColIdx;
-                    const endCol = outreachColIdx !== -1 ? Math.max(nameColIdx, outreachColIdx) : nameColIdx;
-                    const colCount = endCol - startCol + 1;
-                    
-                    const highlightRange = sheet.getRangeByIndexes(i, startCol, 1, colCount);
-                    highlightRange.format.fill.color = "yellow";
-                    
-                    sheet.getRangeByIndexes(i, 0, 1, 1).select();
-                    
-                    await context.sync();
-                    logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
-                    return; 
-                }
-            }
-            logToUI(`Could not find a matching row for '${studentName}'.`);
+            const foundRowIndex = searchResult.rowIndex;
+            logToUI(`Match found for '${studentName}' at row ${foundRowIndex + 1}.`);
+            
+            const entireRow = sheet.getRangeByIndexes(foundRowIndex, 0, 1, sheet.getUsedRange().columnCount);
+            entireRow.format.fill.color = "yellow";
+            
+            sheet.getRangeByIndexes(foundRowIndex, nameColumnIndex, 1, 1).select();
+            
+            await context.sync();
+            logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
+
         });
     } catch (error) {
-        let errorMessage = error.message;
+        let errorMessage = "An unknown error occurred.";
         if(error instanceof OfficeExtension.Error) {
-            errorMessage = error.debugInfo.message || error.message;
+            errorMessage = error.debugInfo ? (error.debugInfo.message || error.message) : error.message;
+            if (error.code === "ItemNotFound") {
+                 errorMessage = `Could not find a student matching '${studentName}' in the 'StudentName' column.`;
+            } else if (error.code === "WorksheetNotFound") {
+                errorMessage = `The '${MASTER_LIST_SHEET}' worksheet could not be found.`;
+            }
+        } else {
+            errorMessage = error.message;
         }
         logToUI(`Error during highlight: ${errorMessage}`, "ERROR");
         console.error("Error highlighting student:", error);
@@ -369,9 +387,7 @@ function hideNewConnectionModal() {
 
 async function loadAndRenderConnections() {
     const settings = await getSettings();
-    const connectionsString = Office.context.document.settings.get("studentRetentionConnections");
-    const connections = connectionsString ? JSON.parse(connectionsString) : [];
-    renderConnections(connections);
+    renderConnections(settings.legacyConnections);
     await loadAndConnectPusher();
 }
 
@@ -379,7 +395,7 @@ function renderConnections(connections) {
     const container = document.getElementById("connections-list-container");
     const noConnectionsMessage = document.getElementById("no-connections-message");
 
-    container.innerHTML = '';
+    container.innerHTML = ''; // Clear previous entries
     container.appendChild(noConnectionsMessage);
 
     if (connections && connections.length > 0) {
@@ -394,6 +410,7 @@ function renderConnections(connections) {
             const optionsButton = document.createElement('button');
             optionsButton.className = "options-button opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-200 transition-opacity focus:opacity-100";
             optionsButton.innerHTML = `<svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>`;
+            
             const optionsMenu = document.createElement('div');
             optionsMenu.className = "options-menu hidden absolute right-0 mt-2 w-32 bg-white rounded-md shadow-lg z-10 border";
             const editLink = document.createElement('a');
@@ -406,12 +423,14 @@ function renderConnections(connections) {
             deleteLink.className = "delete-btn block px-4 py-2 text-sm text-red-600 hover:bg-gray-100";
             deleteLink.textContent = "Delete";
             deleteLink.onclick = (e) => { e.preventDefault(); promptDeleteConnection(index); };
+            
             optionsMenu.appendChild(editLink);
             optionsMenu.appendChild(deleteLink);
             optionsContainer.appendChild(optionsButton);
             optionsContainer.appendChild(optionsMenu);
             connectionElement.appendChild(optionsContainer);
-             optionsButton.onclick = (e) => {
+
+            optionsButton.onclick = (e) => {
                 e.stopPropagation();
                 document.querySelectorAll('.options-menu').forEach(menu => {
                     if (menu !== optionsMenu) menu.classList.add('hidden');
@@ -440,6 +459,13 @@ function renderConnections(connections) {
         });
     } else {
         noConnectionsMessage.classList.remove('hidden');
+    }
+}
+
+// Close dropdown menu if clicking outside
+window.onclick = function(event) {
+    if (!event.target.matches('.options-button') && !event.target.closest('.options-button')) {
+        document.querySelectorAll('.options-menu').forEach(menu => menu.classList.add('hidden'));
     }
 }
 
@@ -476,15 +502,15 @@ function resetFileInput() {
     document.getElementById("file-name-display").textContent = "";
 }
 
-function handleSubmitKey() {
+async function handleSubmitKey() {
     const fileInput = document.getElementById("key-file-input");
     if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             try {
                 const newConnection = JSON.parse(event.target.result);
-                saveConnection(newConnection);
+                await saveConnection(newConnection);
                 hideInsertKeyModal();
             } catch (e) {
                 alert("Error: The selected file is not valid JSON.");
@@ -525,9 +551,9 @@ function resetWizard() {
     document.getElementById('connection-name').value = '';
     document.getElementById('connection-description').value = '';
     document.getElementById('pusher-app-id').value = '';
-    document.getElementById('pusher-key').value = '';
-    document.getElementById('pusher-secret').value = '';
-    document.getElementById('pusher-cluster').value = '';
+    document.getElementById('pusher-key-wizard').value = '';
+    document.getElementById('pusher-secret-wizard').value = '';
+    document.getElementById('pusher-cluster-wizard').value = '';
 }
 
 function handlePusherSelect() {
@@ -612,7 +638,7 @@ function updateWizardView() {
     }
 }
 
-function finishCustomKeyWizard() {
+async function finishCustomKeyWizard() {
     const name = document.getElementById('connection-name').value.trim();
     const description = document.getElementById('connection-description').value.trim();
     
@@ -629,9 +655,9 @@ function finishCustomKeyWizard() {
     
     if (wizardState.type === 'Webhook') {
         const appId = document.getElementById('pusher-app-id').value.trim();
-        const key = document.getElementById('pusher-key').value.trim();
-        const secret = document.getElementById('pusher-secret').value.trim();
-        const cluster = document.getElementById('pusher-cluster').value.trim();
+        const key = document.getElementById('pusher-key-wizard').value.trim();
+        const secret = document.getElementById('pusher-secret-wizard').value.trim();
+        const cluster = document.getElementById('pusher-cluster-wizard').value.trim();
 
         if (!appId || !key || !secret || !cluster) {
             alert("Please fill out all Pusher credential fields.");
@@ -647,31 +673,19 @@ function finishCustomKeyWizard() {
         };
     }
 
-    saveConnection(newConnection);
+    await saveConnection(newConnection);
     hideCustomKeyWizard();
 }
 
-function saveConnection(newConnection) {
-    const connectionsString = Office.context.document.settings.get("studentRetentionConnections");
-    let connections = connectionsString ? JSON.parse(connectionsString) : [];
-    connections.push(newConnection);
-    saveConnectionsArray(connections);
+async function saveConnection(newConnection) {
+    const settings = await getSettings();
+    settings.legacyConnections.push(newConnection);
+    await saveSettings(settings);
+    renderConnections(settings.legacyConnections);
 }
 
-function saveConnectionsArray(connections) {
-     Office.context.document.settings.set("studentRetentionConnections", JSON.stringify(connections));
-    Office.context.document.settings.saveAsync((asyncResult) => {
-        if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-            console.error("Failed to save settings: " + asyncResult.error.message);
-            alert("Error: Could not save the connections.");
-        } else {
-            console.log("Settings saved successfully.");
-            renderConnections(connections);
-        }
-    });
-}
 
-function handleEditConnection(index) {
+async function handleEditConnection(index) {
     console.log("Editing connection at index:", index);
     alert("Editing functionality is not yet implemented.");
 }
@@ -686,23 +700,13 @@ function hideDeleteConfirmModal() {
     connectionToDeleteIndex = null;
 }
 
-function handleDeleteConnection() {
+async function handleDeleteConnection() {
     if (connectionToDeleteIndex !== null) {
-        const connectionsString = Office.context.document.settings.get("studentRetentionConnections");
-        let connections = connectionsString ? JSON.parse(connectionsString) : [];
-        connections.splice(connectionToDeleteIndex, 1);
-        saveConnectionsArray(connections);
+        const settings = await getSettings();
+        settings.legacyConnections.splice(connectionToDeleteIndex, 1);
+        await saveSettings(settings);
+        renderConnections(settings.legacyConnections);
         hideDeleteConfirmModal();
     }
 }
-
-// Close dropdown menu if clicked outside
-document.addEventListener('click', (event) => {
-    document.querySelectorAll('.options-menu').forEach(menu => {
-        const button = menu.previousElementSibling;
-        if (!menu.contains(event.target) && !button.contains(event.target)) {
-            menu.classList.add('hidden');
-        }
-    });
-});
 
