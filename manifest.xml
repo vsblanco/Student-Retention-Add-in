@@ -36,26 +36,43 @@
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <CustomTab id="Victor.RetentionTab">
               <Label resid="RetentionTab.Label"/>
-              <Group id="CommandsGroup">
-                <Label resid="CommandsGroup.Label"/>
+              <Group id="SystemGroup">
+                <Label resid="SystemGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Control xsi:type="Button" id="ContactedButton">
-                  <Label resid="ContactedButton.Label"/>
+                <Control xsi:type="Button" id="SettingsButton">
+                  <Label resid="SettingsButton.Label"/>
                   <Supertip>
-                    <Title resid="ContactedButton.Label"/>
-                    <Description resid="ContactedButton.Tooltip"/>
+                    <Title resid="SettingsButton.Label"/>
+                    <Description resid="SettingsButton.Tooltip"/>
                   </Supertip>
                   <Icon>
-                    <bt:Image size="16" resid="ContactedIcon.16x16"/>
-                    <bt:Image size="32" resid="ContactedIcon.32x32"/>
-                    <bt:Image size="80" resid="ContactedIcon.80x80"/>
+                    <bt:Image size="16" resid="SettingsIcon.16x16"/>
+                    <bt:Image size="32" resid="SettingsIcon.32x32"/>
+                    <bt:Image size="80" resid="SettingsIcon.80x80"/>
                   </Icon>
-                  <Action xsi:type="ExecuteFunction">
-                    <FunctionName>toggleHighlight</FunctionName>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Settings</TaskpaneId>
+                    <SourceLocation resid="Settings.Url"/>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="AboutButton">
+                  <Label resid="AboutButton.Label"/>
+                  <Supertip>
+                    <Title resid="AboutButton.Label"/>
+                    <Description resid="AboutButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="AboutIcon.16x16"/>
+                    <bt:Image size="32" resid="AboutIcon.32x32"/>
+                    <bt:Image size="80" resid="AboutIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>About</TaskpaneId>
+                    <SourceLocation resid="About.Url"/>
                   </Action>
                 </Control>
               </Group>
@@ -170,12 +187,12 @@
                   </Action>
                 </Control>
               </Group>
-              <Group id="SystemGroup">
-                <Label resid="SystemGroup.Label"/>
+              <Group id="ViewTaskpaneGroup">
+                <Label resid="ViewTaskpaneGroup.Label"/>
                 <Icon>
-                  <bt:Image size="16" resid="Icon.16x16"/>
-                  <bt:Image size="32" resid="Icon.32x32"/>
-                  <bt:Image size="80" resid="Icon.80x80"/>
+                  <bt:Image size="16" resid="DetailsIcon.16x16"/>
+                  <bt:Image size="32" resid="DetailsIcon.32x32"/>
+                  <bt:Image size="80" resid="DetailsIcon.80x80"/>
                 </Icon>
                 <Control xsi:type="Button" id="TaskpaneButton">
                   <Label resid="TaskpaneButton.Label"/>
@@ -191,38 +208,6 @@
                   <Action xsi:type="ShowTaskpane">
                     <TaskpaneId>ButtonId1</TaskpaneId>
                     <SourceLocation resid="Taskpane.Url"/>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="SettingsButton">
-                  <Label resid="SettingsButton.Label"/>
-                  <Supertip>
-                    <Title resid="SettingsButton.Label"/>
-                    <Description resid="SettingsButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="SettingsIcon.16x16"/>
-                    <bt:Image size="32" resid="SettingsIcon.32x32"/>
-                    <bt:Image size="80" resid="SettingsIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>Settings</TaskpaneId>
-                    <SourceLocation resid="Settings.Url"/>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="AboutButton">
-                  <Label resid="AboutButton.Label"/>
-                  <Supertip>
-                    <Title resid="AboutButton.Label"/>
-                    <Description resid="AboutButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="AboutIcon.16x16"/>
-                    <bt:Image size="32" resid="AboutIcon.32x32"/>
-                    <bt:Image size="80" resid="AboutIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>About</TaskpaneId>
-                    <SourceLocation resid="About.Url"/>
                   </Action>
                 </Control>
               </Group>
@@ -257,9 +242,6 @@
         <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
         <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
         <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
-        <bt:Image id="ContactedIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
-        <bt:Image id="ContactedIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
-        <bt:Image id="ContactedIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/contacted-icon.png"/>
         <bt:Image id="SettingsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
         <bt:Image id="SettingsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
         <bt:Image id="SettingsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
@@ -283,12 +265,11 @@
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
         <bt:String id="RetentionTab.Label" DefaultValue="Retention"/>
-        <bt:String id="CommandsGroup.Label" DefaultValue="Actions"/>
         <bt:String id="DataGroup.Label" DefaultValue="Data"/>
         <bt:String id="SystemGroup.Label" DefaultValue="System"/>
         <bt:String id="ReportGroup.Label" DefaultValue="Report"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="Show Details"/>
-        <bt:String id="ContactedButton.Label" DefaultValue="Contacted"/>
+        <bt:String id="ViewTaskpaneGroup.Label" DefaultValue="View"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Student View"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
         <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
@@ -300,8 +281,7 @@
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student details pane."/>
-        <bt:String id="ContactedButton.Tooltip" DefaultValue="Toggles a yellow highlight on the selected student row to mark as contacted."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student view pane."/>
         <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
         <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
