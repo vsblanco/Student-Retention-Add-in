@@ -506,13 +506,40 @@ function updateConnectionStatus(connectionId, status, message) {
 }
 
 // --- EXCEL INTERACTION ---
-function reformatName(name) {
+/**
+ * Reformats a name into different variations.
+ * @param {string} name The name to reformat.
+ * @param {'lastFirst' | 'middleLastFirst'} [formatType='lastFirst'] The desired output format.
+ * @returns {string} The reformatted name.
+ */
+function reformatName(name, formatType = 'lastFirst') {
+    if (!name || typeof name !== 'string') return name;
+
     const parts = name.split(',').map(p => p.trim());
-    if (parts.length === 2) return `${parts[1]} ${parts[0]}`;
-    const spaceIndex = name.lastIndexOf(' ');
-    if (spaceIndex !== -1) return `${name.substring(spaceIndex + 1)}, ${name.substring(0, spaceIndex)}`;
-    return name;
+    // If it's already in "Last, First" format, convert it to "First Last" for consistent processing
+    const nameToProcess = parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
+
+    const words = nameToProcess.split(' ').filter(Boolean);
+    if (words.length <= 1) return name; // Can't reformat a single name
+
+    if (formatType === 'lastFirst') {
+        const lastName = words.pop();
+        const firstName = words.join(' ');
+        return `${lastName}, ${firstName}`;
+    } else if (formatType === 'middleLastFirst') {
+        if (words.length > 2) {
+            const firstName = words.shift();
+            const lastNames = words.join(' ');
+            return `${lastNames}, ${firstName}`;
+        }
+    }
+
+    // Default or if other formats don't apply, return original logic's output
+    const lastName = words.pop();
+    const firstName = words.join(' ');
+    return `${lastName}, ${firstName}`;
 }
+
 
 async function addHistoryToAction(connectionId, actionId, historyEntry) {
     const settings = await getSettings();
@@ -541,23 +568,45 @@ async function findStudentRow(context, sheet, studentName) {
     const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
     const nameColumnIndex = headers.indexOf("studentname");
     if (nameColumnIndex === -1) throw new Error(`'StudentName' column not found in '${sheet.name}'.`);
+    
     const nameColumn = usedRange.getColumn(nameColumnIndex);
     let searchResult;
     try {
+        // Attempt 1: Exact match as provided
         searchResult = nameColumn.find(studentName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
         searchResult.load("rowIndex");
         await context.sync();
     } catch (error) {
         if (error instanceof OfficeExtension.Error && error.code === "ItemNotFound") {
-            const alternateName = reformatName(studentName);
-            logToUI(`'${studentName}' not found. Trying '${alternateName}'...`);
-            searchResult = nameColumn.find(alternateName, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
-            searchResult.load("rowIndex");
-            await context.sync();
-        } else throw error;
+            // Attempt 2: "Last, First Middle" format
+            const alternateName1 = reformatName(studentName, 'lastFirst');
+            logToUI(`'${studentName}' not found. Trying '${alternateName1}'...`);
+            try {
+                searchResult = nameColumn.find(alternateName1, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+                searchResult.load("rowIndex");
+                await context.sync();
+            } catch (error2) {
+                if (error2 instanceof OfficeExtension.Error && error2.code === "ItemNotFound") {
+                     // Attempt 3: "Middle Last, First" format
+                    const alternateName2 = reformatName(studentName, 'middleLastFirst');
+                    logToUI(`'${alternateName1}' not found. Trying '${alternateName2}'...`);
+                    // This is the final attempt; it will throw an error if it fails.
+                    searchResult = nameColumn.find(alternateName2, { completeMatch: false, matchCase: false, searchDirection: Excel.SearchDirection.forward });
+                    searchResult.load("rowIndex");
+                    await context.sync();
+                } else {
+                    // Re-throw other errors from the second attempt
+                    throw error2;
+                }
+            }
+        } else {
+            // Re-throw other errors from the first attempt
+            throw error;
+        }
     }
     return { foundRowIndex: searchResult.rowIndex, headers, usedRange };
 }
+
 
 async function highlightStudentInSheet(eventData, actionConfig, connectionId, actionId) {
     const { name: studentName, time, timestamp } = eventData;
@@ -641,4 +690,3 @@ async function updateCellValueInSheet(eventData, actionConfig, connectionId, act
         await addHistoryToAction(connectionId, actionId, historyEntry);
     }
 }
-
