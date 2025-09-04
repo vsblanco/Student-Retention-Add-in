@@ -66,9 +66,9 @@
             <div class="modal-body mt-4">
                 <p class="text-sm text-gray-600 mb-4">Choose a service to connect to your workbook.</p>
                 <div class="grid grid-cols-2 gap-4">
-                    <button id="select-powerautomate-button" class="service-card p-4 border rounded-lg text-center hover:bg-gray-100 hover:border-gray-400 cursor-not-allowed opacity-50" disabled>
-                        <img src="../images/power-automate-icon.png" alt="Power Automate" class="h-12 w-12 mx-auto mb-2">
-                        <p class="font-semibold text-gray-800">Power Automate</p>
+                    <button id="select-canvas-button" class="service-card p-4 border rounded-lg text-center hover:bg-gray-100 hover:border-gray-400 cursor-not-allowed opacity-50" disabled>
+                        <img src="../images/canvas-icon.png" alt="Canvas" class="h-12 w-12 mx-auto mb-2">
+                        <p class="font-semibold text-gray-800">Canvas</p>
                         <p class="text-xs text-gray-500">(Coming Soon)</p>
                     </button>
                     <button id="select-pusher-button" class="service-card p-4 border rounded-lg text-center hover:bg-gray-100 hover:border-blue-500">
@@ -122,6 +122,10 @@
                 <button data-action-type="updateCell" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
                     <p class="font-semibold text-gray-800">Update Cell Value</p>
                     <p class="text-sm text-gray-500">Updates a specific cell in the student's row.</p>
+                </button>
+                <button data-action-type="powerAutomate" class="w-full text-left p-3 rounded-md hover:bg-gray-100 cursor-not-allowed opacity-50" disabled>
+                    <p class="font-semibold text-gray-800">Power Automate</p>
+                    <p class="text-sm text-gray-500">Advanced Automation (Coming Soon).</p>
                 </button>
             </div>
         </div>
@@ -219,4 +223,3 @@
     <script type="text/javascript" src="connections.js"></script>
 </body>
 </html>
-
