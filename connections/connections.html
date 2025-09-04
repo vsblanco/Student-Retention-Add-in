@@ -115,17 +115,36 @@
         <div class="relative top-20 mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white">
             <div class="modal-header flex justify-between items-center pb-3 border-b"><h3 class="text-lg font-medium">Add Action</h3><button id="cancel-add-action-button" class="text-gray-400 hover:text-gray-600">&times;</button></div>
             <div class="modal-body mt-4 space-y-2">
-                 <button data-action-type="autoHighlight" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
-                    <p class="font-semibold text-gray-800">Auto Highlight</p>
-                    <p class="text-sm text-gray-500">Highlights a student's row when an event is received.</p>
+                <button data-action-type="autoHighlight" class="w-full text-left p-3 rounded-md hover:bg-gray-100 flex items-center">
+                    <div class="w-10 h-10 mr-4 flex-shrink-0 flex items-center justify-center bg-yellow-100 rounded-lg">
+                        <svg class="w-6 h-6 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-800">Auto Highlight</p>
+                        <p class="text-sm text-gray-500">Highlights a student's row when an event is received.</p>
+                    </div>
                 </button>
-                <button data-action-type="updateCell" class="w-full text-left p-3 rounded-md hover:bg-gray-100">
-                    <p class="font-semibold text-gray-800">Update Cell Value</p>
-                    <p class="text-sm text-gray-500">Updates a specific cell in the student's row.</p>
+                <button data-action-type="updateCell" class="w-full text-left p-3 rounded-md hover:bg-gray-100 flex items-center">
+                    <div class="w-10 h-10 mr-4 flex-shrink-0 flex items-center justify-center bg-blue-100 rounded-lg">
+                        <svg class="w-6 h-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-800">Update Cell Value</p>
+                        <p class="text-sm text-gray-500">Updates a specific cell in the student's row.</p>
+                    </div>
                 </button>
-                <button data-action-type="powerAutomate" class="w-full text-left p-3 rounded-md hover:bg-gray-100 cursor-not-allowed opacity-50" disabled>
-                    <p class="font-semibold text-gray-800">Power Automate</p>
-                    <p class="text-sm text-gray-500">Advanced Automation (Coming Soon).</p>
+                <button data-action-type="powerAutomate" class="w-full text-left p-3 rounded-md hover:bg-gray-100 cursor-not-allowed opacity-50 flex items-center" disabled>
+                    <div class="w-10 h-10 mr-4 flex-shrink-0 flex items-center justify-center">
+                        <img src="../images/power-automate-icon.png" alt="Power Automate" class="h-7 w-7">
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-800">Power Automate</p>
+                        <p class="text-sm text-gray-500">Advanced Automation (Coming Soon).</p>
+                    </div>
                 </button>
             </div>
         </div>
@@ -223,3 +242,4 @@
     <script type="text/javascript" src="connections.js"></script>
 </body>
 </html>
+
