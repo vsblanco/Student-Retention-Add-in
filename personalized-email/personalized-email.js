@@ -12,8 +12,13 @@ Office.onReady((info) => {
         document.getElementById("send-email-button").onclick = sendEmail;
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById('show-example-button').onclick = showExample;
+        document.getElementById('show-payload-button').onclick = showPayload;
+
         document.getElementById('close-example-modal-button').onclick = () => {
             document.getElementById('example-modal').classList.add('hidden');
+        };
+        document.getElementById('close-payload-modal-button').onclick = () => {
+            document.getElementById('payload-modal').classList.add('hidden');
         };
 
         // Initialize Quill Editor
@@ -199,6 +204,12 @@ async function getStudentData() {
     });
 }
 
+const renderTemplate = (template, data) => {
+    return template.replace(/\{(\w+)\}/g, (match, key) => {
+        return data.hasOwnProperty(key) ? data[key] : match;
+    });
+};
+
 async function showExample() {
     const status = document.getElementById('status');
     try {
@@ -215,17 +226,39 @@ async function showExample() {
         const subjectTemplate = document.getElementById('email-subject').value;
         const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
 
-        const renderTemplate = (template, data) => {
-            return template.replace(/\{(\w+)\}/g, (match, key) => {
-                return data.hasOwnProperty(key) ? data[key] : match;
-            });
-        };
-
         document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
         document.getElementById('example-subject').textContent = renderTemplate(subjectTemplate, randomStudent);
         document.getElementById('example-body').innerHTML = renderTemplate(bodyTemplate, randomStudent);
 
         document.getElementById('example-modal').classList.remove('hidden');
+
+    } catch (error) {
+        // Error message is already set by getStudentData
+    }
+}
+
+async function showPayload() {
+    const status = document.getElementById('status');
+    try {
+        await getStudentData();
+
+        if (studentDataCache.length === 0) {
+            status.textContent = 'No students found to generate a payload.';
+            status.style.color = 'orange';
+            return;
+        }
+
+        const subjectTemplate = document.getElementById('email-subject').value;
+        const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
+
+        const payload = studentDataCache.map(student => ({
+            to: student.StudentEmail || '',
+            subject: renderTemplate(subjectTemplate, student),
+            body: renderTemplate(bodyTemplate, student)
+        }));
+
+        document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
+        document.getElementById('payload-modal').classList.remove('hidden');
 
     } catch (error) {
         // Error message is already set by getStudentData
