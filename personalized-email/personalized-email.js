@@ -6,6 +6,7 @@ let lastFocusedInput = null;
 let quill; // To hold the editor instance
 
 const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'Grade', 'DaysOut', 'Assigned'];
+const EMAIL_TEMPLATES_KEY = "emailTemplates";
 
 const PAYLOAD_SCHEMA = {
     "type": "array",
@@ -23,21 +24,23 @@ const PAYLOAD_SCHEMA = {
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
+        // Main Buttons
         document.getElementById("send-email-button").onclick = sendEmail;
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById('show-example-button').onclick = showExample;
         document.getElementById('show-payload-button').onclick = showPayload;
+        document.getElementById('templates-button').onclick = showTemplatesModal;
 
-        document.getElementById('close-example-modal-button').onclick = () => {
-            document.getElementById('example-modal').classList.add('hidden');
-        };
+        // Modal Close Buttons
+        document.getElementById('close-example-modal-button').onclick = () => document.getElementById('example-modal').classList.add('hidden');
+        document.getElementById('close-payload-modal-button').onclick = () => document.getElementById('payload-modal').classList.add('hidden');
+        document.getElementById('close-templates-modal-button').onclick = () => document.getElementById('templates-modal').classList.add('hidden');
+        document.getElementById('cancel-save-template-button').onclick = () => document.getElementById('save-template-modal').classList.add('hidden');
         
-        // --- Payload Modal Listeners ---
-        document.getElementById('close-payload-modal-button').onclick = () => {
-            document.getElementById('payload-modal').classList.add('hidden');
-        };
+        // Modal Action Buttons
         document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
-
+        document.getElementById('save-current-template-button').onclick = showSaveTemplateModal;
+        document.getElementById('confirm-save-template-button').onclick = saveTemplate;
 
         // Initialize Quill Editor
         quill = new Quill('#editor-container', {
@@ -69,6 +72,7 @@ Office.onReady((info) => {
 
 function populateParameterButtons() {
     const container = document.getElementById('parameter-buttons');
+    container.innerHTML = ''; // Clear existing
     availableParameters.forEach(param => {
         const button = document.createElement('button');
         button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
@@ -342,5 +346,122 @@ function isValidHttpUrl(string) {
         return false;
     }
     return url.protocol === "http:" || url.protocol === "https:";
+}
+
+// --- Template Functions ---
+
+async function getTemplates() {
+    return Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
+        templatesSetting.load("value");
+        await context.sync();
+        return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
+    });
+}
+
+async function saveTemplates(templates) {
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templates));
+        await context.sync();
+    });
+}
+
+async function showTemplatesModal() {
+    const container = document.getElementById('templates-list-container');
+    container.innerHTML = '<p class="text-gray-500">Loading templates...</p>';
+    document.getElementById('templates-modal').classList.remove('hidden');
+
+    const templates = await getTemplates();
+    container.innerHTML = '';
+    if (templates.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center">No saved templates found.</p>';
+        return;
+    }
+
+    templates.forEach(template => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border rounded-md bg-gray-50';
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">${template.name}</p>
+                    <p class="text-xs text-gray-500">by ${template.author} on ${new Date(template.timestamp).toLocaleDateString()}</p>
+                </div>
+                <div class="flex gap-2">
+                    <button data-id="${template.id}" class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
+                    <button data-id="${template.id}" class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+    
+    container.querySelectorAll('.load-template-btn').forEach(btn => {
+        btn.onclick = () => loadTemplate(btn.dataset.id);
+    });
+    container.querySelectorAll('.delete-template-btn').forEach(btn => {
+        btn.onclick = () => deleteTemplate(btn.dataset.id);
+    });
+}
+
+function showSaveTemplateModal() {
+    document.getElementById('templates-modal').classList.add('hidden');
+    document.getElementById('template-name').value = '';
+    document.getElementById('template-author').value = ''; // You might want to pre-fill this later
+    document.getElementById('save-template-status').textContent = '';
+    document.getElementById('save-template-modal').classList.remove('hidden');
+}
+
+async function saveTemplate() {
+    const name = document.getElementById('template-name').value.trim();
+    const author = document.getElementById('template-author').value.trim();
+    const status = document.getElementById('save-template-status');
+
+    if (!name || !author) {
+        status.textContent = 'Name and Author are required.';
+        status.style.color = 'red';
+        return;
+    }
+
+    status.textContent = 'Saving...';
+    status.style.color = 'gray';
+
+    const newTemplate = {
+        id: 'template_' + new Date().getTime(),
+        name: name,
+        author: author,
+        timestamp: new Date().toISOString(),
+        subject: document.getElementById('email-subject').value,
+        body: quill.root.innerHTML
+    };
+
+    const templates = await getTemplates();
+    templates.push(newTemplate);
+    await saveTemplates(templates);
+
+    status.textContent = 'Template saved!';
+    status.style.color = 'green';
+    setTimeout(() => {
+        document.getElementById('save-template-modal').classList.add('hidden');
+    }, 1500);
+}
+
+async function loadTemplate(templateId) {
+    const templates = await getTemplates();
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+        document.getElementById('email-subject').value = template.subject;
+        quill.root.innerHTML = template.body;
+        document.getElementById('templates-modal').classList.add('hidden');
+    }
+}
+
+async function deleteTemplate(templateId) {
+    let templates = await getTemplates();
+    templates = templates.filter(t => t.id !== templateId);
+    await saveTemplates(templates);
+    await showTemplatesModal(); // Refresh the list
 }
 
