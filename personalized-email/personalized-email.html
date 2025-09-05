@@ -7,13 +7,13 @@
     <title>Send Personalized Email</title>
 
     <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Task Pane Code -->
-    <script type="text/javascript" src="personalized-email.js"></script>
+    <script type="module" src="personalized-email.js"></script>
 </head>
 <body class="bg-gray-50 p-4">
     <div class="max-w-md mx-auto">
@@ -45,6 +45,13 @@
             
             <div class="space-y-4">
                 <div>
+                    <label for="recipient-list" class="block text-sm font-medium text-gray-700">To</label>
+                    <select id="recipient-list" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="lda">Today's LDA Sheet</option>
+                        <option value="master">Master List</option>
+                    </select>
+                </div>
+                <div>
                     <label for="email-subject" class="block text-sm font-medium text-gray-700">Subject</label>
                     <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Email Subject">
                 </div>
@@ -52,14 +59,46 @@
                     <label for="email-body" class="block text-sm font-medium text-gray-700">Body</label>
                     <textarea id="email-body" rows="8" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Compose your email..."></textarea>
                 </div>
+                <div>
+                    <p class="text-xs text-gray-500">
+                        Use parameters like {StudentName}, {Grade}, {DaysOut}, {Assigned}, {StudentEmail} to personalize your email.
+                    </p>
+                </div>
             </div>
 
-            <div class="mt-6">
-                <button id="send-email-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
+            <div class="mt-6 flex space-x-2">
+                <button id="show-example-button" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
+                    Show Example
+                </button>
+                <button id="send-email-button" class="flex-1 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
                     Send Email
                 </button>
             </div>
             <p id="status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
+        </div>
+
+        <!-- Example Modal -->
+        <div id="example-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-60">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Preview</h3>
+                <div class="space-y-3 text-sm border-t border-b py-4">
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">To:</label>
+                        <p id="example-to" class="text-gray-800"></p>
+                    </div>
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">Subject:</label>
+                        <p id="example-subject" class="text-gray-800 font-medium"></p>
+                    </div>
+                    <div class="flex items-start">
+                        <label class="font-semibold text-gray-600 w-16 mt-1">Body:</label>
+                        <div id="example-body" class="text-gray-800 border rounded-md p-2 bg-gray-50 max-h-64 overflow-y-auto w-full"></div>
+                    </div>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <button id="close-example-modal-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+                </div>
+            </div>
         </div>
     </div>
 </body>
