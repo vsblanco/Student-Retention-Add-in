@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Send Personalized Email</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Task Pane Code -->
+    <script type="text/javascript" src="personalized-email.js"></script>
+</head>
+<body class="bg-gray-50 p-4">
+    <div class="max-w-md mx-auto">
+        <h1 class="text-xl font-bold text-gray-800 mb-4">Personalized Email</h1>
+        <p class="text-sm text-gray-600 mb-6">This feature is under development. The button below is a placeholder.</p>
+        
+        <div class="space-y-4">
+            <div>
+                <label for="email-subject" class="block text-sm font-medium text-gray-700">Subject</label>
+                <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Email Subject">
+            </div>
+            <div>
+                <label for="email-body" class="block text-sm font-medium text-gray-700">Body</label>
+                <textarea id="email-body" rows="8" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Compose your email..."></textarea>
+            </div>
+        </div>
+
+        <div class="mt-6">
+            <button id="send-email-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
+                Send Email
+            </button>
+        </div>
+        <p id="status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
+    </div>
+</body>
+</html>
