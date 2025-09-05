@@ -70,6 +70,10 @@
                     <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Email Subject">
                 </div>
                 <div>
+                    <label for="email-cc" class="block text-sm font-medium text-gray-700">CC</label>
+                    <input type="text" id="email-cc" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="CC Recipients (e.g., {PersonalEmail})">
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700">Body</label>
                     <!-- Quill Editor Container -->
                     <div id="editor-container" class="mt-1 h-48 bg-white"></div>
@@ -104,6 +108,10 @@
                     <div class="flex">
                         <label class="font-semibold text-gray-600 w-16">To:</label>
                         <p id="example-to" class="text-gray-800"></p>
+                    </div>
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">CC:</label>
+                        <p id="example-cc" class="text-gray-800"></p>
                     </div>
                     <div class="flex">
                         <label class="font-semibold text-gray-600 w-16">Subject:</label>
