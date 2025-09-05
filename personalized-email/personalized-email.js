@@ -12,6 +12,9 @@ async function checkConnection() {
     await Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const connectionsSetting = settings.getItemOrNullObject("connections");
+        
+        // Load the 'value' property of the setting object before reading it.
+        connectionsSetting.load("value");
         await context.sync();
 
         const connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
@@ -45,6 +48,9 @@ async function createConnection() {
     await Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const connectionsSetting = settings.getItemOrNullObject("connections");
+
+        // Load the 'value' property before reading it.
+        connectionsSetting.load("value");
         await context.sync();
 
         let connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
