@@ -31,6 +31,9 @@ Office.onReady((info) => {
         document.getElementById('show-payload-button').onclick = showPayload;
         document.getElementById('templates-button').onclick = showTemplatesModal;
 
+        // Dropdown listener
+        document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
+
         // Modal Close Buttons
         document.getElementById('close-example-modal-button').onclick = () => document.getElementById('example-modal').classList.add('hidden');
         document.getElementById('close-payload-modal-button').onclick = () => document.getElementById('payload-modal').classList.add('hidden');
@@ -67,6 +70,7 @@ Office.onReady((info) => {
 
         populateParameterButtons();
         checkConnection();
+        toggleCustomSheetInput(); // Set initial state
     }
 });
 
@@ -98,6 +102,16 @@ function insertParameter(param) {
         quill.focus();
         const length = quill.getLength();
         quill.insertText(length, param, 'user');
+    }
+}
+
+function toggleCustomSheetInput() {
+    const recipientList = document.getElementById('recipient-list');
+    const customSheetContainer = document.getElementById('custom-sheet-container');
+    if (recipientList.value === 'custom') {
+        customSheetContainer.classList.remove('hidden');
+    } else {
+        customSheetContainer.classList.add('hidden');
     }
 }
 
@@ -169,9 +183,21 @@ async function createConnection() {
 }
 
 async function getStudentData() {
-    const recipientList = document.getElementById('recipient-list').value;
-    const sheetName = recipientList === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+    const recipientListValue = document.getElementById('recipient-list').value;
     const status = document.getElementById('status');
+    let sheetName;
+
+    if (recipientListValue === 'custom') {
+        sheetName = document.getElementById('custom-sheet-name').value.trim();
+        if (!sheetName) {
+            status.textContent = 'Please enter a custom sheet name.';
+            status.style.color = 'red';
+            throw new Error('Custom sheet name is required.');
+        }
+    } else {
+        sheetName = recipientListValue === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+    }
+    
     status.textContent = `Fetching students from "${sheetName}"...`;
     status.style.color = 'gray';
     
