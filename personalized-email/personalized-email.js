@@ -39,11 +39,14 @@ Office.onReady((info) => {
         document.getElementById('close-payload-modal-button').onclick = () => document.getElementById('payload-modal').classList.add('hidden');
         document.getElementById('close-templates-modal-button').onclick = () => document.getElementById('templates-modal').classList.add('hidden');
         document.getElementById('cancel-save-template-button').onclick = () => document.getElementById('save-template-modal').classList.add('hidden');
+        document.getElementById('cancel-send-button').onclick = () => document.getElementById('send-confirm-modal').classList.add('hidden');
+
         
         // Modal Action Buttons
         document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
         document.getElementById('save-current-template-button').onclick = showSaveTemplateModal;
         document.getElementById('confirm-save-template-button').onclick = saveTemplate;
+        document.getElementById('confirm-send-button').onclick = executeSend;
 
         // Initialize Quill Editor
         quill = new Quill('#editor-container', {
@@ -342,10 +345,9 @@ function togglePayloadView() {
     }
 }
 
-
 async function sendEmail() {
     const status = document.getElementById('status');
-     try {
+    try {
         await getStudentData();
 
         if (studentDataCache.length === 0) {
@@ -353,16 +355,60 @@ async function sendEmail() {
             status.style.color = 'orange';
             return;
         }
-
-        status.textContent = `Preparing to send ${studentDataCache.length} emails... (Not implemented)`;
-        console.log("Send Email button clicked.");
-        console.log("Using Power Automate URL:", powerAutomateConnection.url);
-        console.log("Recipients:", studentDataCache);
+        
+        const confirmMessage = document.getElementById('send-confirm-message');
+        confirmMessage.textContent = `You are about to send emails to ${studentDataCache.length} student(s). Do you want to proceed?`;
+        document.getElementById('send-confirm-modal').classList.remove('hidden');
 
     } catch (error) {
         // Error message is already set by getStudentData
     }
 }
+
+
+async function executeSend() {
+    document.getElementById('send-confirm-modal').classList.add('hidden');
+    const status = document.getElementById('status');
+    status.textContent = `Sending ${studentDataCache.length} emails...`;
+    status.style.color = 'gray';
+
+    const subjectTemplate = document.getElementById('email-subject').value;
+    const bodyTemplate = quill.root.innerHTML;
+
+    const payload = studentDataCache.map(student => ({
+        to: student.StudentEmail || '',
+        subject: renderTemplate(subjectTemplate, student),
+        body: renderTemplate(bodyTemplate, student)
+    })).filter(email => email.to); // Filter out students with no email address
+
+    if(payload.length === 0) {
+        status.textContent = 'No students with valid email addresses found.';
+        status.style.color = 'orange';
+        return;
+    }
+
+    try {
+        const response = await fetch(powerAutomateConnection.url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        status.textContent = `Successfully sent ${payload.length} emails!`;
+        status.style.color = 'green';
+    } catch (error) {
+        status.textContent = `Failed to send emails: ${error.message}`;
+        status.style.color = 'red';
+        console.error("Error sending emails:", error);
+    }
+}
+
 
 function isValidHttpUrl(string) {
     let url;
