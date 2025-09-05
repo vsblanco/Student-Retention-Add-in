@@ -45,7 +45,12 @@
 
         <!-- Email Composer View -->
         <div id="email-composer" class="hidden">
-            <h1 class="text-xl font-bold text-gray-800 mb-4">Personalized Email</h1>
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-bold text-gray-800">Personalized Email</h1>
+                <button id="templates-button" class="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300">
+                    Templates
+                </button>
+            </div>
             
             <div class="space-y-4">
                 <div>
@@ -74,10 +79,10 @@
 
             <div class="mt-6 flex space-x-2">
                 <button id="show-example-button" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
-                    Show Example
+                    Example
                 </button>
                  <button id="show-payload-button" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
-                    Show Payload
+                    Payload
                 </button>
                 <button id="send-email-button" class="flex-1 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
                     Send Email
@@ -86,7 +91,7 @@
             <p id="status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
         </div>
 
-        <!-- Example Modal -->
+        <!-- Modals -->
         <div id="example-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-60">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
                 <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Preview</h3>
@@ -110,7 +115,6 @@
             </div>
         </div>
         
-        <!-- Payload Modal -->
         <div id="payload-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-70">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
                 <h3 id="payload-modal-title" class="text-lg font-semibold text-gray-800 mb-4">Request Payload</h3>
@@ -119,6 +123,40 @@
                 <div class="flex justify-end gap-2 mt-4">
                     <button id="toggle-payload-schema-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Show Schema</button>
                     <button id="close-payload-modal-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="templates-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-80">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-xl">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Templates</h3>
+                <div id="templates-list-container" class="space-y-2 max-h-80 overflow-y-auto border-t border-b py-4">
+                    <!-- Templates will be listed here -->
+                </div>
+                <div class="flex justify-between mt-4">
+                    <button id="save-current-template-button" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Save Current as Template</button>
+                    <button id="close-templates-modal-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="save-template-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-90">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Save Template</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="template-name" class="block text-sm font-medium text-gray-700">Template Name</label>
+                        <input type="text" id="template-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Mid-term Check-in">
+                    </div>
+                    <div>
+                        <label for="template-author" class="block text-sm font-medium text-gray-700">Author</label>
+                        <input type="text" id="template-author" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Your Name">
+                    </div>
+                </div>
+                <p id="save-template-status" class="text-xs mt-2 h-4 text-center"></p>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button id="cancel-save-template-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button id="confirm-save-template-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
                 </div>
             </div>
         </div>
