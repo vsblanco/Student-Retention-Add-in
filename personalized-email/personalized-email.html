@@ -9,6 +9,10 @@
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     
+    <!-- Quill WYSIWYG Editor-->
+    <link href="quill.snow.css" rel="stylesheet">
+    <script src="quill.js"></script>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -56,8 +60,9 @@
                     <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Email Subject">
                 </div>
                 <div>
-                    <label for="email-body" class="block text-sm font-medium text-gray-700">Body</label>
-                    <textarea id="email-body" rows="8" class="mt-1 block w-full p-2 border border-gray-300 rounded-md" placeholder="Compose your email..."></textarea>
+                    <label class="block text-sm font-medium text-gray-700">Body</label>
+                    <!-- Quill Editor Container -->
+                    <div id="editor-container" class="mt-1 h-48 bg-white"></div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Insert Parameter</label>
