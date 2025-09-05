@@ -5,7 +5,7 @@ let studentDataCache = [];
 let lastFocusedInput = null;
 let quill; // To hold the editor instance
 
-const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'Grade', 'DaysOut', 'Assigned'];
+const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
 const EMAIL_TEMPLATES_KEY = "emailTemplates";
 
 const PAYLOAD_SCHEMA = {
@@ -14,6 +14,7 @@ const PAYLOAD_SCHEMA = {
         "type": "object",
         "properties": {
             "to": { "type": "string" },
+            "cc": { "type": "string" },
             "subject": { "type": "string" },
             "body": { "type": "string" }
         },
@@ -62,9 +63,11 @@ Office.onReady((info) => {
         });
 
         const subjectInput = document.getElementById('email-subject');
+        const ccInput = document.getElementById('email-cc');
         
         // Track last focused element to insert parameters correctly
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
+        ccInput.addEventListener('focus', () => lastFocusedInput = ccInput);
         quill.on('selection-change', (range) => {
             if (range) {
                 lastFocusedInput = quill;
@@ -93,7 +96,7 @@ function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
         const range = lastFocusedInput.getSelection(true);
         lastFocusedInput.insertText(range.index, param, 'user');
-    } else if (lastFocusedInput) { // It's the subject input
+    } else if (lastFocusedInput) { // It's the subject or cc input
         const start = lastFocusedInput.selectionStart;
         const end = lastFocusedInput.selectionEnd;
         const text = lastFocusedInput.value;
@@ -219,6 +222,7 @@ async function getStudentData() {
             const colIndices = {
                 StudentName: findColumnIndex(headers, ["studentname", "student name"]),
                 StudentEmail: findColumnIndex(headers, ["student email", "school email", "email"]),
+                PersonalEmail: findColumnIndex(headers, ["personal email", "otheremail"]),
                 Grade: findColumnIndex(headers, ["grade", "course grade"]),
                 DaysOut: findColumnIndex(headers, ["days out", "daysout"]),
                 Assigned: findColumnIndex(headers, ["assigned"])
@@ -234,6 +238,7 @@ async function getStudentData() {
                     FirstName: nameParts.first,
                     LastName: nameParts.last,
                     StudentEmail: row[colIndices.StudentEmail] || '',
+                    PersonalEmail: row[colIndices.PersonalEmail] || '',
                     Grade: row[colIndices.Grade] || '',
                     DaysOut: row[colIndices.DaysOut] || '',
                     Assigned: row[colIndices.Assigned] || ''
@@ -275,9 +280,11 @@ async function showExample() {
         const randomStudent = studentDataCache[Math.floor(Math.random() * studentDataCache.length)];
         
         const subjectTemplate = document.getElementById('email-subject').value;
+        const ccTemplate = document.getElementById('email-cc').value;
         const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
 
         document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
+        document.getElementById('example-cc').textContent = renderTemplate(ccTemplate, randomStudent) || '[Not Specified]';
         document.getElementById('example-subject').textContent = renderTemplate(subjectTemplate, randomStudent);
         document.getElementById('example-body').innerHTML = renderTemplate(bodyTemplate, randomStudent);
 
@@ -300,10 +307,12 @@ async function showPayload() {
         }
 
         const subjectTemplate = document.getElementById('email-subject').value;
+        const ccTemplate = document.getElementById('email-cc').value;
         const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
 
         const payload = studentDataCache.map(student => ({
             to: student.StudentEmail || '',
+            cc: renderTemplate(ccTemplate, student) || '',
             subject: renderTemplate(subjectTemplate, student),
             body: renderTemplate(bodyTemplate, student)
         }));
@@ -373,10 +382,12 @@ async function executeSend() {
     status.style.color = 'gray';
 
     const subjectTemplate = document.getElementById('email-subject').value;
+    const ccTemplate = document.getElementById('email-cc').value;
     const bodyTemplate = quill.root.innerHTML;
 
     const payload = studentDataCache.map(student => ({
         to: student.StudentEmail || '',
+        cc: renderTemplate(ccTemplate, student) || '',
         subject: renderTemplate(subjectTemplate, student),
         body: renderTemplate(bodyTemplate, student)
     })).filter(email => email.to); // Filter out students with no email address
@@ -506,6 +517,7 @@ async function saveTemplate() {
         author: author,
         timestamp: new Date().toISOString(),
         subject: document.getElementById('email-subject').value,
+        cc: document.getElementById('email-cc').value,
         body: quill.root.innerHTML
     };
 
@@ -525,6 +537,7 @@ async function loadTemplate(templateId) {
     const template = templates.find(t => t.id === templateId);
     if (template) {
         document.getElementById('email-subject').value = template.subject;
+        document.getElementById('email-cc').value = template.cc || '';
         quill.root.innerHTML = template.body;
         document.getElementById('templates-modal').classList.add('hidden');
     }
