@@ -1,7 +1,10 @@
-import { findColumnIndex, getTodaysLdaSheetName } from './utils.js';
+import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 
 let powerAutomateConnection = null;
-let studentDataCache = []; // To store the fetched student list
+let studentDataCache = [];
+let lastFocusedInput = null; // To track the last focused subject/body input
+
+const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'Grade', 'DaysOut', 'Assigned'];
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -11,9 +14,44 @@ Office.onReady((info) => {
         document.getElementById('close-example-modal-button').onclick = () => {
             document.getElementById('example-modal').classList.add('hidden');
         };
+
+        const subjectInput = document.getElementById('email-subject');
+        const bodyInput = document.getElementById('email-body');
+        subjectInput.onfocus = () => lastFocusedInput = subjectInput;
+        bodyInput.onfocus = () => lastFocusedInput = bodyInput;
+
+        populateParameterButtons();
         checkConnection();
     }
 });
+
+function populateParameterButtons() {
+    const container = document.getElementById('parameter-buttons');
+    availableParameters.forEach(param => {
+        const button = document.createElement('button');
+        button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
+        button.textContent = `{${param}}`;
+        button.onclick = () => insertParameter(`{${param}}`);
+        container.appendChild(button);
+    });
+}
+
+function insertParameter(param) {
+    if (lastFocusedInput) {
+        const start = lastFocusedInput.selectionStart;
+        const end = lastFocusedInput.selectionEnd;
+        const text = lastFocusedInput.value;
+        lastFocusedInput.value = text.substring(0, start) + param + text.substring(end);
+        lastFocusedInput.focus();
+        lastFocusedInput.selectionStart = lastFocusedInput.selectionEnd = start + param.length;
+    } else {
+        // Default to body if no input has been focused yet
+        const bodyInput = document.getElementById('email-body');
+        bodyInput.value += param;
+        bodyInput.focus();
+    }
+}
+
 
 async function checkConnection() {
     await Excel.run(async (context) => {
@@ -110,8 +148,13 @@ async function getStudentData() {
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
+                const studentName = row[colIndices.StudentName] || '';
+                const nameParts = getNameParts(studentName);
+
                 const student = {
-                    StudentName: row[colIndices.StudentName] || '',
+                    StudentName: studentName,
+                    FirstName: nameParts.first,
+                    LastName: nameParts.last,
                     StudentEmail: row[colIndices.StudentEmail] || '',
                     Grade: row[colIndices.Grade] || '',
                     DaysOut: row[colIndices.DaysOut] || '',
@@ -129,7 +172,7 @@ async function getStudentData() {
             }
             status.style.color = 'red';
             console.error(error);
-            throw error; // Propagate error to stop further execution
+            throw error;
         }
     });
 }
@@ -180,7 +223,6 @@ async function sendEmail() {
         }
 
         status.textContent = `Preparing to send ${studentDataCache.length} emails... (Not implemented)`;
-        // Placeholder for future functionality
         console.log("Send Email button clicked.");
         console.log("Using Power Automate URL:", powerAutomateConnection.url);
         console.log("Recipients:", studentDataCache);
