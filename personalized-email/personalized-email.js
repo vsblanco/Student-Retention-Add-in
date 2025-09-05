@@ -14,12 +14,13 @@ const PAYLOAD_SCHEMA = {
     "items": {
         "type": "object",
         "properties": {
+            "from": { "type": "string" },
             "to": { "type": "string" },
             "cc": { "type": "string" },
             "subject": { "type": "string" },
             "body": { "type": "string" }
         },
-        "required": ["to", "subject", "body"]
+        "required": ["from", "to", "subject", "body"]
     }
 };
 
@@ -65,9 +66,11 @@ Office.onReady((info) => {
         
         setupCcInput();
         const subjectInput = document.getElementById('email-subject');
+        const fromInput = document.getElementById('email-from');
         
         // Track last focused element to insert parameters correctly
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
+        fromInput.addEventListener('focus', () => lastFocusedInput = fromInput);
         quill.on('selection-change', (range) => {
             if (range) {
                 lastFocusedInput = quill;
@@ -98,7 +101,7 @@ function insertParameter(param) {
         lastFocusedInput.insertText(range.index, param, 'user');
     } else if (lastFocusedInput && lastFocusedInput.id === 'email-cc-input') {
         addCcRecipient(param);
-    } else if (lastFocusedInput) { // It's the subject input
+    } else if (lastFocusedInput) { // It's the subject or from input
         const start = lastFocusedInput.selectionStart;
         const end = lastFocusedInput.selectionEnd;
         const text = lastFocusedInput.value;
@@ -287,9 +290,11 @@ async function showExample() {
 
         const randomStudent = studentDataCache[Math.floor(Math.random() * studentDataCache.length)];
         
+        const fromTemplate = document.getElementById('email-from').value;
         const subjectTemplate = document.getElementById('email-subject').value;
         const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
 
+        document.getElementById('example-from').textContent = renderTemplate(fromTemplate, randomStudent) || '[Not Specified]';
         document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
         document.getElementById('example-cc').textContent = renderCCTemplate(ccRecipients, randomStudent) || '[Not Specified]';
         document.getElementById('example-subject').textContent = renderTemplate(subjectTemplate, randomStudent);
@@ -313,10 +318,12 @@ async function showPayload() {
             return;
         }
 
+        const fromTemplate = document.getElementById('email-from').value;
         const subjectTemplate = document.getElementById('email-subject').value;
-        const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
+        const bodyTemplate = quill.root.innerHTML;
 
         const payload = studentDataCache.map(student => ({
+            from: renderTemplate(fromTemplate, student),
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccRecipients, student),
             subject: renderTemplate(subjectTemplate, student),
@@ -387,18 +394,20 @@ async function executeSend() {
     status.textContent = `Sending ${studentDataCache.length} emails...`;
     status.style.color = 'gray';
 
+    const fromTemplate = document.getElementById('email-from').value;
     const subjectTemplate = document.getElementById('email-subject').value;
     const bodyTemplate = quill.root.innerHTML;
 
     const payload = studentDataCache.map(student => ({
+        from: renderTemplate(fromTemplate, student),
         to: student.StudentEmail || '',
         cc: renderCCTemplate(ccRecipients, student),
         subject: renderTemplate(subjectTemplate, student),
         body: renderTemplate(bodyTemplate, student)
-    })).filter(email => email.to); // Filter out students with no email address
+    })).filter(email => email.to && email.from); // Filter out students with no email address or from address
 
     if(payload.length === 0) {
-        status.textContent = 'No students with valid email addresses found.';
+        status.textContent = 'No students with valid "To" and "From" email addresses found.';
         status.style.color = 'orange';
         return;
     }
@@ -521,6 +530,7 @@ async function saveTemplate() {
         name: name,
         author: author,
         timestamp: new Date().toISOString(),
+        from: document.getElementById('email-from').value,
         subject: document.getElementById('email-subject').value,
         cc: ccRecipients,
         body: quill.root.innerHTML
@@ -541,6 +551,7 @@ async function loadTemplate(templateId) {
     const templates = await getTemplates();
     const template = templates.find(t => t.id === templateId);
     if (template) {
+        document.getElementById('email-from').value = template.from || '';
         document.getElementById('email-subject').value = template.subject;
         ccRecipients = template.cc || [];
         renderCCPills();
