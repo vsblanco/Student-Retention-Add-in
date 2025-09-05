@@ -113,10 +113,12 @@
         <!-- Payload Modal -->
         <div id="payload-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-70">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
-                <h3 class="text-lg font-semibold text-gray-800 mb-4">Request Payload</h3>
+                <h3 id="payload-modal-title" class="text-lg font-semibold text-gray-800 mb-4">Request Payload</h3>
                 <pre id="payload-content" class="text-xs bg-gray-100 p-4 rounded-md overflow-x-auto h-96"></pre>
-                <div class="flex justify-end mt-4">
-                    <button id="close-payload-modal-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+                <pre id="schema-content" class="hidden text-xs bg-gray-100 p-4 rounded-md overflow-x-auto h-96"></pre>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button id="toggle-payload-schema-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Show Schema</button>
+                    <button id="close-payload-modal-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Close</button>
                 </div>
             </div>
         </div>
