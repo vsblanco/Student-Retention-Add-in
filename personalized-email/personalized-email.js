@@ -7,6 +7,20 @@ let quill; // To hold the editor instance
 
 const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'Grade', 'DaysOut', 'Assigned'];
 
+const PAYLOAD_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "to": { "type": "string" },
+            "subject": { "type": "string" },
+            "body": { "type": "string" }
+        },
+        "required": ["to", "subject", "body"]
+    }
+};
+
+
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         document.getElementById("send-email-button").onclick = sendEmail;
@@ -17,9 +31,13 @@ Office.onReady((info) => {
         document.getElementById('close-example-modal-button').onclick = () => {
             document.getElementById('example-modal').classList.add('hidden');
         };
+        
+        // --- Payload Modal Listeners ---
         document.getElementById('close-payload-modal-button').onclick = () => {
             document.getElementById('payload-modal').classList.add('hidden');
         };
+        document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
+
 
         // Initialize Quill Editor
         quill = new Quill('#editor-container', {
@@ -258,10 +276,39 @@ async function showPayload() {
         }));
 
         document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
+        document.getElementById('schema-content').textContent = JSON.stringify(PAYLOAD_SCHEMA, null, 2);
+        
+        // Reset to payload view by default
+        document.getElementById('payload-content').classList.remove('hidden');
+        document.getElementById('schema-content').classList.add('hidden');
+        document.getElementById('payload-modal-title').textContent = 'Request Payload';
+        document.getElementById('toggle-payload-schema-button').textContent = 'Show Schema';
+
         document.getElementById('payload-modal').classList.remove('hidden');
 
     } catch (error) {
         // Error message is already set by getStudentData
+    }
+}
+
+function togglePayloadView() {
+    const payloadContent = document.getElementById('payload-content');
+    const schemaContent = document.getElementById('schema-content');
+    const title = document.getElementById('payload-modal-title');
+    const button = document.getElementById('toggle-payload-schema-button');
+
+    if (!payloadContent.classList.contains('hidden')) {
+        // Switch to schema view
+        payloadContent.classList.add('hidden');
+        schemaContent.classList.remove('hidden');
+        title.textContent = 'Request Body JSON Schema';
+        button.textContent = 'Show Payload';
+    } else {
+        // Switch to payload view
+        payloadContent.classList.remove('hidden');
+        schemaContent.classList.add('hidden');
+        title.textContent = 'Request Payload';
+        button.textContent = 'Show Schema';
     }
 }
 
