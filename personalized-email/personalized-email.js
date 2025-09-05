@@ -235,18 +235,18 @@ async function getStudentData() {
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
-                const studentName = row[colIndices.StudentName] || '';
+                const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
 
                 const student = {
                     StudentName: studentName,
                     FirstName: nameParts.first,
                     LastName: nameParts.last,
-                    StudentEmail: row[colIndices.StudentEmail] || '',
-                    PersonalEmail: row[colIndices.PersonalEmail] || '',
-                    Grade: row[colIndices.Grade] || '',
-                    DaysOut: row[colIndices.DaysOut] || '',
-                    Assigned: row[colIndices.Assigned] || ''
+                    StudentEmail: row[colIndices.StudentEmail] ?? '',
+                    PersonalEmail: row[colIndices.PersonalEmail] ?? '',
+                    Grade: row[colIndices.Grade] ?? '',
+                    DaysOut: row[colIndices.DaysOut] ?? '',
+                    Assigned: row[colIndices.Assigned] ?? ''
                 };
                 studentDataCache.push(student);
             }
@@ -268,7 +268,8 @@ async function getStudentData() {
 const renderTemplate = (template, data) => {
     if (!template) return '';
     return template.replace(/\{(\w+)\}/g, (match, key) => {
-        return data.hasOwnProperty(key) ? data[key] : match;
+        // Use ?? to handle cases where the value is 0
+        return (data[key] ?? match);
     });
 };
 
