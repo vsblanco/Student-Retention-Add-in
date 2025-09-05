@@ -186,9 +186,25 @@
                     <SourceLocation resid="RiskIndex.Url"/>
                   </Action>
                 </Control>
+                 <Control xsi:type="Button" id="PersonalizedEmailButton">
+                  <Label resid="PersonalizedEmailButton.Label"/>
+                  <Supertip>
+                    <Title resid="PersonalizedEmailButton.Label"/>
+                    <Description resid="PersonalizedEmailButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="EmailIcon.16x16"/>
+                    <bt:Image size="32" resid="EmailIcon.32x32"/>
+                    <bt:Image size="80" resid="EmailIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>PersonalizedEmail</TaskpaneId>
+                    <SourceLocation resid="PersonalizedEmail.Url"/>
+                  </Action>
+                </Control>
               </Group>
-              <Group id="ViewTaskpaneGroup">
-                <Label resid="ViewTaskpaneGroup.Label"/>
+              <Group id="StudentViewGroup">
+                <Label resid="StudentViewGroup.Label"/>
                 <Icon>
                   <bt:Image size="16" resid="DetailsIcon.16x16"/>
                   <bt:Image size="32" resid="DetailsIcon.32x32"/>
@@ -248,6 +264,9 @@
         <bt:Image id="ConnectionsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
         <bt:Image id="ConnectionsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
         <bt:Image id="ConnectionsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/connections-icon.png"/>
+        <bt:Image id="EmailIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
+        <bt:Image id="EmailIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
+        <bt:Image id="EmailIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
@@ -261,6 +280,7 @@
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html"/>
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
         <bt:Url id="Connections.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/connections/connections.html"/>
+        <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/personalized-email/personalized-email.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -268,7 +288,7 @@
         <bt:String id="DataGroup.Label" DefaultValue="Data"/>
         <bt:String id="SystemGroup.Label" DefaultValue="System"/>
         <bt:String id="ReportGroup.Label" DefaultValue="Report"/>
-        <bt:String id="ViewTaskpaneGroup.Label" DefaultValue="View"/>
+        <bt:String id="StudentViewGroup.Label" DefaultValue="Student View"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Student View"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
         <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
@@ -278,10 +298,11 @@
         <bt:String id="AboutButton.Label" DefaultValue="About"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="ConnectionsButton.Label" DefaultValue="Connections"/>
+        <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Personalized Email"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student view pane."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Click to show the student details pane."/>
         <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
         <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
@@ -290,6 +311,7 @@
         <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="ConnectionsButton.Tooltip" DefaultValue="Manage student connections and relationships."/>
+        <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
