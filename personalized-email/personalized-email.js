@@ -100,14 +100,14 @@ Office.onReady((info) => {
                 wrapper.classList.add('randomize-tag-wrapper');
                 wrapper.setAttribute('contenteditable', 'false');
 
-                const node = document.createElement('span'); // Use a generic span for the tag itself
+                const node = document.createElement('span');
                 node.classList.add('randomize-tag');
                 
                 const text = document.createElement('span');
                 text.innerText = '{Randomize}';
                 
                 const arrow = document.createElement('span');
-                arrow.innerHTML = '&#9660;'; // Down arrow
+                arrow.innerHTML = '&#9660;';
                 arrow.classList.add('randomize-arrow');
                 
                 node.appendChild(text);
@@ -139,8 +139,8 @@ Office.onReady((info) => {
                 node.onclick = (e) => {
                     e.stopPropagation();
                     const isOpening = panel.style.display === 'none';
-                    document.querySelectorAll('.randomize-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
-                    document.querySelectorAll('.randomize-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
+                    document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
+                    document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
 
                     panel.style.display = isOpening ? 'block' : 'none';
                     arrow.classList.toggle('open', isOpening);
@@ -186,6 +186,88 @@ Office.onReady((info) => {
         RandomizeBlot.blotName = 'randomize';
         RandomizeBlot.tagName = 'SPAN';
         Quill.register(RandomizeBlot);
+
+        class ConditionBlot extends Embed {
+            static create(value) {
+                const wrapper = document.createElement('span');
+                wrapper.classList.add('condition-tag-wrapper');
+                wrapper.setAttribute('contenteditable', 'false');
+
+                const node = document.createElement('span');
+                node.classList.add('condition-tag');
+                const text = document.createElement('span');
+                text.innerText = '{Condition}';
+                const arrow = document.createElement('span');
+                arrow.innerHTML = '&#9660;';
+                arrow.classList.add('condition-arrow');
+                node.appendChild(text);
+                node.appendChild(arrow);
+
+                const panel = document.createElement('div');
+                panel.classList.add('condition-panel');
+                panel.style.display = 'none';
+
+                const ifClause = document.createElement('div');
+                ifClause.classList.add('condition-clause');
+                ifClause.innerHTML = `
+                    <span class="condition-keyword">IF</span>
+                    <input class="condition-input param-input" placeholder="{Parameter}" value="${value.if_param || ''}">
+                    <select class="condition-operator">
+                        ${['=', '>', '>=', '<', '<='].map(op => `<option ${op === value.operator ? 'selected' : ''}>${op}</option>`).join('')}
+                    </select>
+                    <input class="condition-input value-input" placeholder="Value" value="${value.if_value || ''}">
+                `;
+
+                const thenClause = document.createElement('div');
+                thenClause.classList.add('condition-clause');
+                thenClause.innerHTML = `<span class="condition-keyword then">THEN</span>`;
+                const thenTextarea = document.createElement('textarea');
+                thenTextarea.classList.add('condition-then-input');
+                thenTextarea.placeholder = 'Enter text to show if true... You can use {Parameters} here.';
+                thenTextarea.rows = 2;
+                thenTextarea.value = value.then_text || '';
+                thenClause.appendChild(thenTextarea);
+
+                panel.appendChild(ifClause);
+                panel.appendChild(thenClause);
+                wrapper.appendChild(node);
+                wrapper.appendChild(panel);
+                
+                const update = () => this.updateOptions(wrapper);
+                panel.querySelectorAll('input, select, textarea').forEach(el => el.oninput = update);
+
+                node.onclick = (e) => {
+                    e.stopPropagation();
+                    const isOpening = panel.style.display === 'none';
+                    document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
+                    document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
+
+                    panel.style.display = isOpening ? 'block' : 'none';
+                    arrow.classList.toggle('open', isOpening);
+                };
+                
+                panel.addEventListener('click', e => e.stopPropagation());
+                this.updateOptions(wrapper);
+                return wrapper;
+            }
+            
+            static updateOptions(blotNode) {
+                const data = {
+                    if_param: blotNode.querySelector('.param-input').value.replace(/[{}]/g, ''),
+                    operator: blotNode.querySelector('.condition-operator').value,
+                    if_value: blotNode.querySelector('.value-input').value,
+                    then_text: blotNode.querySelector('.condition-then-input').value
+                };
+                blotNode.dataset.condition = JSON.stringify(data);
+            }
+
+            static value(domNode) {
+                return JSON.parse(domNode.dataset.condition || '{}');
+            }
+        }
+        ConditionBlot.blotName = 'condition';
+        ConditionBlot.tagName = 'SPAN';
+        Quill.register(ConditionBlot);
         
         setupPillboxInput('from');
         setupPillboxInput('subject');
@@ -198,9 +280,9 @@ Office.onReady((info) => {
         });
 
         document.addEventListener('click', (e) => {
-             if (!e.target.closest('.randomize-tag-wrapper')) {
-                document.querySelectorAll('.randomize-panel').forEach(p => p.style.display = 'none');
-                document.querySelectorAll('.randomize-arrow').forEach(a => a.classList.remove('open'));
+             if (!e.target.closest('.randomize-tag-wrapper') && !e.target.closest('.condition-tag-wrapper')) {
+                document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => p.style.display = 'none');
+                document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => a.classList.remove('open'));
             }
         });
 
@@ -241,6 +323,7 @@ async function populateParameterButtons() {
     }
 
     document.getElementById('randomize-parameter-button').onclick = () => insertParameter('{Randomize}');
+    document.getElementById('condition-parameter-button').onclick = () => insertParameter('{Condition}');
 
 }
 
@@ -252,10 +335,12 @@ function insertParameter(param) {
         const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
         addPill(type, param);
     } else {
-        // Default to Quill editor
+        // Default to Quill editor if it's not a known input or if Quill was last focused
         const range = quill.getSelection(true); // Get current position, or end
         if (paramName === 'Randomize') {
             quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
+        } else if (paramName === 'Condition') {
+            quill.insertEmbed(range.index, 'condition', {}, Quill.sources.USER);
         } else {
             const isCustom = customParameters.some(p => p.name === paramName);
             quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
@@ -465,6 +550,27 @@ const renderBodyTemplate = (bodyHtml, data) => {
         tagWrapper.replaceWith(document.createTextNode(choice));
     });
 
+    tempDiv.querySelectorAll('.condition-tag-wrapper').forEach(tagWrapper => {
+        const condition = JSON.parse(tagWrapper.dataset.condition || '{}');
+        const studentValue = data[condition.if_param];
+        let showText = false;
+        
+        const val1 = isNaN(parseFloat(studentValue)) ? String(studentValue).toLowerCase() : parseFloat(studentValue);
+        const val2 = isNaN(parseFloat(condition.if_value)) ? String(condition.if_value).toLowerCase() : parseFloat(condition.if_value);
+
+        switch(condition.operator) {
+            case '=': showText = val1 == val2; break;
+            case '>': showText = val1 > val2; break;
+            case '>=': showText = val1 >= val2; break;
+            case '<': showText = val1 < val2; break;
+            case '<=': showText = val1 <= val2; break;
+        }
+        
+        const outputText = showText ? renderTemplate(condition.then_text, data) : '';
+        tagWrapper.replaceWith(document.createTextNode(outputText));
+    });
+
+
     return tempDiv.innerHTML;
 };
 
@@ -516,8 +622,9 @@ async function showPayload() {
         
         const tempEditorDiv = document.createElement('div');
         tempEditorDiv.innerHTML = quill.root.innerHTML;
-        tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
-             RandomizeBlot.updateOptions(tagNode);
+        tempEditorDiv.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
+            if (tagNode.classList.contains('randomize-tag-wrapper')) RandomizeBlot.updateOptions(tagNode);
+            if (tagNode.classList.contains('condition-tag-wrapper')) ConditionBlot.updateOptions(tagNode);
         });
         const bodyTemplate = tempEditorDiv.innerHTML;
 
@@ -597,8 +704,9 @@ async function executeSend() {
     
     const tempEditorDiv = document.createElement('div');
     tempEditorDiv.innerHTML = quill.root.innerHTML;
-    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
-         RandomizeBlot.updateOptions(tagNode);
+    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
+         if (tagNode.classList.contains('randomize-tag-wrapper')) RandomizeBlot.updateOptions(tagNode);
+         if (tagNode.classList.contains('condition-tag-wrapper')) ConditionBlot.updateOptions(tagNode);
     });
     const bodyTemplate = tempEditorDiv.innerHTML;
 
@@ -731,9 +839,10 @@ async function saveTemplate() {
 
     const tempEditorDiv = document.createElement('div');
     tempEditorDiv.innerHTML = quill.root.innerHTML;
-    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
-         RandomizeBlot.updateOptions(tagNode);
-         const panel = tagNode.querySelector('.randomize-panel');
+    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
+         if (tagNode.classList.contains('randomize-tag-wrapper')) RandomizeBlot.updateOptions(tagNode);
+         if (tagNode.classList.contains('condition-tag-wrapper')) ConditionBlot.updateOptions(tagNode);
+         const panel = tagNode.querySelector('.randomize-panel, .condition-panel');
          if(panel) panel.remove();
     });
 
@@ -1001,7 +1110,7 @@ function setupPillboxInput(type) {
     input.addEventListener('keydown', (e) => {
         if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
             e.preventDefault();
-            addPill(type, input.value.trim(), false);
+            addPill(type, input.value.trim());
             input.value = '';
         } else if (e.key === 'Backspace' && input.value === '') {
             removeLastPill(type);
@@ -1009,12 +1118,12 @@ function setupPillboxInput(type) {
     });
 
     input.addEventListener('blur', () => {
-        addPill(type, input.value.trim(), false);
+        addPill(type, input.value.trim());
         input.value = '';
     });
 }
 
-function addPill(type, text, isParam) {
+function addPill(type, text) {
     if (!text) return;
     const parts = getPartsArray(type);
     parts.push(text);
