@@ -516,42 +516,14 @@ async function saveCustomParameters(params) {
 }
 
 async function showSpecialParamModal() {
-    const status = document.getElementById('status');
-    const sourceColumnSelect = document.getElementById('param-source-column');
-    sourceColumnSelect.innerHTML = '<option>Loading columns...</option>';
+    const sourceColumnInput = document.getElementById('param-source-column');
+    sourceColumnInput.value = '';
     document.getElementById('param-name').value = '';
     document.getElementById('param-default-value').value = '';
     document.getElementById('param-mapping-container').innerHTML = '';
     document.getElementById('save-param-status').textContent = '';
     
     document.getElementById('special-param-modal').classList.remove('hidden');
-
-    try {
-        await Excel.run(async (context) => {
-            const recipientListValue = document.getElementById('recipient-list').value;
-            let sheetName = recipientListValue === 'lda' ? getTodaysLdaSheetName() : 'Master List';
-            if (recipientListValue === 'custom') {
-                sheetName = document.getElementById('custom-sheet-name').value.trim() || 'Master List';
-            }
-            
-            const sheet = context.workbook.worksheets.getItem(sheetName);
-            const headerRange = sheet.getRange("A1").getEntireRow().load("values");
-            await context.sync();
-            
-            const headers = headerRange.values[0].filter(h => h); // Filter out empty headers
-            sourceColumnSelect.innerHTML = '';
-            headers.forEach(header => {
-                const option = document.createElement('option');
-                option.value = header;
-                option.textContent = header;
-                sourceColumnSelect.appendChild(option);
-            });
-        });
-    } catch (error) {
-        sourceColumnSelect.innerHTML = '<option>Could not load columns</option>';
-        status.textContent = 'Error loading sheet columns for parameter creation.';
-        status.style.color = 'red';
-    }
 }
 
 function addMappingRow() {
