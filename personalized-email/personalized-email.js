@@ -765,6 +765,7 @@ async function showManageParamsModal() {
                     <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
                 </div>
                 <div class="flex gap-2">
+                    <button data-id="${param.id}" class="duplicate-param-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Duplicate</button>
                     <button data-id="${param.id}" class="edit-param-btn px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-md hover:bg-yellow-200">Edit</button>
                     <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                 </div>
@@ -774,6 +775,9 @@ async function showManageParamsModal() {
         listContainer.appendChild(div);
     });
 
+    listContainer.querySelectorAll('.duplicate-param-btn').forEach(btn => {
+        btn.onclick = () => duplicateSpecialParameter(btn.dataset.id);
+    });
     listContainer.querySelectorAll('.edit-param-btn').forEach(btn => {
         btn.onclick = () => editSpecialParameter(btn.dataset.id);
     });
@@ -788,6 +792,35 @@ function editSpecialParameter(paramId) {
         document.getElementById('manage-params-modal').classList.add('hidden');
         showSpecialParamModal(param);
     }
+}
+
+async function duplicateSpecialParameter(paramId) {
+    let params = await getCustomParameters();
+    const paramToDuplicate = params.find(p => p.id === paramId);
+
+    if (!paramToDuplicate) {
+        console.error("Parameter to duplicate not found");
+        return;
+    }
+
+    const newParam = JSON.parse(JSON.stringify(paramToDuplicate)); // Deep copy
+
+    // Find a unique name for the copy
+    let newName = `${newParam.name} - Copy`;
+    const allParamNames = [...standardParameters, ...params.map(p => p.name)];
+    while (allParamNames.includes(newName)) {
+        newName = `${newName} - Copy`;
+    }
+    
+    newParam.name = newName;
+    newParam.id = 'sparam_' + new Date().getTime(); // Assign new unique ID
+
+    params.push(newParam);
+    
+    await saveCustomParameters(params);
+    await loadCustomParameters(); 
+    await populateParameterButtons();
+    await showManageParamsModal(); // Refresh the list to show the new copy
 }
 
 async function deleteSpecialParameter(paramId) {
