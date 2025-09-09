@@ -7,7 +7,7 @@ let quill; // To hold the editor instance
 let fromParts = [];
 let subjectParts = [];
 let ccRecipients = [];
-let specialParameters = [];
+let customParameters = [];
 
 const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
 const EMAIL_TEMPLATES_KEY = "emailTemplates";
@@ -37,7 +37,7 @@ Office.onReady((info) => {
         document.getElementById('show-example-button').onclick = showExample;
         document.getElementById('show-payload-button').onclick = showPayload;
         document.getElementById('templates-button').onclick = showTemplatesModal;
-        document.getElementById('create-special-param-button').onclick = () => showSpecialParamModal();
+        document.getElementById('create-custom-param-button').onclick = () => showCustomParamModal();
 
         // Dropdown listener
         document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
@@ -48,17 +48,17 @@ Office.onReady((info) => {
         document.getElementById('close-templates-modal-button').onclick = () => document.getElementById('templates-modal').classList.add('hidden');
         document.getElementById('cancel-save-template-button').onclick = () => document.getElementById('save-template-modal').classList.add('hidden');
         document.getElementById('cancel-send-button').onclick = () => document.getElementById('send-confirm-modal').classList.add('hidden');
-        document.getElementById('cancel-special-param-button').onclick = () => document.getElementById('special-param-modal').classList.add('hidden');
-        document.getElementById('close-manage-params-button').onclick = () => document.getElementById('manage-params-modal').classList.add('hidden');
+        document.getElementById('cancel-custom-param-button').onclick = () => document.getElementById('custom-param-modal').classList.add('hidden');
+        document.getElementById('close-manage-params-button').onclick = () => document.getElementById('manage-custom-params-modal').classList.add('hidden');
         
         // Modal Action Buttons
         document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
         document.getElementById('save-current-template-button').onclick = showSaveTemplateModal;
         document.getElementById('confirm-save-template-button').onclick = saveTemplate;
         document.getElementById('confirm-send-button').onclick = executeSend;
-        document.getElementById('save-special-param-button').onclick = saveSpecialParameter;
+        document.getElementById('save-custom-param-button').onclick = saveCustomParameter;
         document.getElementById('add-mapping-button').onclick = () => addMappingRow();
-        document.getElementById('manage-special-params-button').onclick = showManageParamsModal;
+        document.getElementById('manage-custom-params-button').onclick = showManageCustomParamsModal;
 
         // Initialize Quill Editor
         quill = new Quill('#editor-container', {
@@ -80,12 +80,12 @@ Office.onReady((info) => {
                 node.setAttribute('contenteditable', 'false');
                 node.setAttribute('data-param', value.name);
                 node.classList.add('parameter-tag');
-                if (value.isSpecial) node.classList.add('special');
+                if (value.isCustom) node.classList.add('custom');
                 node.innerText = `{${value.name}}`;
                 return node;
             }
             static formats(node) {
-                return { name: node.getAttribute('data-param'), isSpecial: node.classList.contains('special') };
+                return { name: node.getAttribute('data-param'), isCustom: node.classList.contains('custom') };
             }
         }
         ParameterBlot.blotName = 'parameter';
@@ -108,11 +108,11 @@ Office.onReady((info) => {
 
 async function populateParameterButtons() {
     const standardContainer = document.getElementById('standard-parameter-buttons');
-    const specialContainer = document.getElementById('special-parameter-buttons');
-    const specialSection = document.getElementById('special-parameters-section');
+    const customContainer = document.getElementById('custom-parameter-buttons');
+    const customSection = document.getElementById('custom-parameters-section');
 
     standardContainer.innerHTML = '';
-    specialContainer.innerHTML = '';
+    customContainer.innerHTML = '';
 
     standardParameters.forEach(param => {
         const button = document.createElement('button');
@@ -122,27 +122,31 @@ async function populateParameterButtons() {
         standardContainer.appendChild(button);
     });
 
-    if (specialParameters.length > 0) {
-        specialSection.classList.remove('hidden');
-        specialParameters.forEach(param => {
+    if (customParameters.length > 0) {
+        customSection.classList.remove('hidden');
+        customParameters.forEach(param => {
             const button = document.createElement('button');
             button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
             button.textContent = `{${param.name}}`;
             button.onclick = () => insertParameter(`{${param.name}}`);
-            specialContainer.appendChild(button);
+            customContainer.appendChild(button);
         });
     } else {
-        specialSection.classList.add('hidden');
+        customSection.classList.add('hidden');
     }
+
+    // Placeholder for Randomize button
+    document.getElementById('randomize-parameter-button').onclick = () => insertParameter('{Randomize}');
+
 }
 
 
 function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
         const paramName = param.replace(/[{}]/g, '');
-        const isSpecial = specialParameters.some(p => p.name === paramName);
+        const isCustom = customParameters.some(p => p.name === paramName);
         const range = lastFocusedInput.getSelection(true);
-        lastFocusedInput.insertEmbed(range.index, 'parameter', { name: paramName, isSpecial }, Quill.sources.USER);
+        lastFocusedInput.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
         lastFocusedInput.setSelection(range.index + 1, Quill.sources.USER);
     } else if (lastFocusedInput) {
         const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
@@ -151,8 +155,8 @@ function insertParameter(param) {
         quill.focus();
         const length = quill.getLength();
         const paramName = param.replace(/[{}]/g, '');
-        const isSpecial = specialParameters.some(p => p.name === paramName);
-        quill.insertEmbed(length, 'parameter', { name: paramName, isSpecial: isSpecial }, Quill.sources.USER);
+        const isCustom = customParameters.some(p => p.name === paramName);
+        quill.insertEmbed(length, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
         quill.setSelection(length + 1, Quill.sources.USER);
     }
 }
@@ -271,11 +275,11 @@ async function getStudentData() {
                 DaysOut: findColumnIndex(headers, ["days out", "daysout"]),
             };
 
-            const specialParamIndices = {};
-            specialParameters.forEach(param => {
+            const customParamIndices = {};
+            customParameters.forEach(param => {
                 const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
                 if (headerIndex !== -1) {
-                    specialParamIndices[param.name] = headerIndex;
+                    customParamIndices[param.name] = headerIndex;
                 }
             });
 
@@ -295,8 +299,8 @@ async function getStudentData() {
                     DaysOut: row[colIndices.DaysOut] ?? '',
                 };
 
-                specialParameters.forEach(param => {
-                    const colIndex = specialParamIndices[param.name];
+                customParameters.forEach(param => {
+                    const colIndex = customParamIndices[param.name];
                     let value = param.defaultValue ?? '';
                     if (colIndex !== undefined) {
                         const cellValue = row[colIndex];
@@ -645,11 +649,11 @@ async function deleteTemplate(templateId) {
     await showTemplatesModal();
 }
 
-// --- Special Parameter Functions ---
+// --- Custom Parameter Functions ---
 
 async function loadCustomParameters() {
-    specialParameters = await getCustomParameters();
-    return specialParameters;
+    customParameters = await getCustomParameters();
+    return customParameters;
 }
 
 async function getCustomParameters() {
@@ -670,8 +674,8 @@ async function saveCustomParameters(params) {
     });
 }
 
-function showSpecialParamModal(paramToEdit = null) {
-    const modalTitle = document.getElementById('special-param-modal-title');
+function showCustomParamModal(paramToEdit = null) {
+    const modalTitle = document.getElementById('custom-param-modal-title');
     const nameInput = document.getElementById('param-name');
     const sourceColumnInput = document.getElementById('param-source-column');
     const defaultValueInput = document.getElementById('param-default-value');
@@ -682,7 +686,7 @@ function showSpecialParamModal(paramToEdit = null) {
     document.getElementById('save-param-status').textContent = '';
 
     if (paramToEdit) {
-        modalTitle.textContent = 'Edit Special Parameter';
+        modalTitle.textContent = 'Edit Custom Parameter';
         editIdInput.value = paramToEdit.id;
         nameInput.value = paramToEdit.name;
         sourceColumnInput.value = paramToEdit.sourceColumn;
@@ -691,14 +695,14 @@ function showSpecialParamModal(paramToEdit = null) {
         (paramToEdit.mappings || []).forEach(m => addMappingRow(m.if, m.then));
 
     } else {
-        modalTitle.textContent = 'Create Special Parameter';
+        modalTitle.textContent = 'Create Custom Parameter';
         editIdInput.value = '';
         nameInput.value = '';
         sourceColumnInput.value = '';
         defaultValueInput.value = '';
     }
     
-    document.getElementById('special-param-modal').classList.remove('hidden');
+    document.getElementById('custom-param-modal').classList.remove('hidden');
 }
 
 function addMappingRow(ifValue = '', thenValue = '') {
@@ -716,7 +720,7 @@ function addMappingRow(ifValue = '', thenValue = '') {
     container.appendChild(div);
 }
 
-async function saveSpecialParameter() {
+async function saveCustomParameter() {
     const status = document.getElementById('save-param-status');
     const nameInput = document.getElementById('param-name');
     const name = nameInput.value.trim();
@@ -727,7 +731,7 @@ async function saveSpecialParameter() {
         status.style.color = 'red';
         return;
     }
-    const existingParam = specialParameters.find(p => p.name.toLowerCase() === name.toLowerCase());
+    const existingParam = customParameters.find(p => p.name.toLowerCase() === name.toLowerCase());
     if (standardParameters.includes(name) || (existingParam && existingParam.id !== paramId)) {
         status.textContent = 'This parameter name is already in use.';
         status.style.color = 'red';
@@ -767,20 +771,20 @@ async function saveSpecialParameter() {
     status.textContent = 'Parameter saved successfully!';
     status.style.color = 'green';
     setTimeout(() => {
-        document.getElementById('special-param-modal').classList.add('hidden');
+        document.getElementById('custom-param-modal').classList.add('hidden');
     }, 1500);
 }
 
-async function showManageParamsModal() {
-    document.getElementById('special-param-modal').classList.add('hidden');
+async function showManageCustomParamsModal() {
+    document.getElementById('custom-param-modal').classList.add('hidden');
     const listContainer = document.getElementById('manage-params-list');
     listContainer.innerHTML = '<p class="text-gray-500">Loading...</p>';
-    document.getElementById('manage-params-modal').classList.remove('hidden');
+    document.getElementById('manage-custom-params-modal').classList.remove('hidden');
 
     const params = await getCustomParameters();
     listContainer.innerHTML = '';
     if (params.length === 0) {
-        listContainer.innerHTML = '<p class="text-gray-500 text-center">No special parameters created yet.</p>';
+        listContainer.innerHTML = '<p class="text-gray-500 text-center">No custom parameters created yet.</p>';
         return;
     }
 
@@ -808,20 +812,20 @@ async function showManageParamsModal() {
         listContainer.appendChild(div);
     });
 
-    listContainer.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => duplicateSpecialParameter(btn.dataset.id));
-    listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => editSpecialParameter(btn.dataset.id));
-    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => deleteSpecialParameter(btn.dataset.id));
+    listContainer.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => duplicateCustomParameter(btn.dataset.id));
+    listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => editCustomParameter(btn.dataset.id));
+    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => deleteCustomParameter(btn.dataset.id));
 }
 
-function editSpecialParameter(paramId) {
-    const param = specialParameters.find(p => p.id === paramId);
+function editCustomParameter(paramId) {
+    const param = customParameters.find(p => p.id === paramId);
     if (param) {
-        document.getElementById('manage-params-modal').classList.add('hidden');
-        showSpecialParamModal(param);
+        document.getElementById('manage-custom-params-modal').classList.add('hidden');
+        showCustomParamModal(param);
     }
 }
 
-async function duplicateSpecialParameter(paramId) {
+async function duplicateCustomParameter(paramId) {
     let params = await getCustomParameters();
     const paramToDuplicate = params.find(p => p.id === paramId);
     if (!paramToDuplicate) return;
@@ -836,16 +840,16 @@ async function duplicateSpecialParameter(paramId) {
     await saveCustomParameters(params);
     await loadCustomParameters(); 
     await populateParameterButtons();
-    await showManageParamsModal();
+    await showManageCustomParamsModal();
 }
 
-async function deleteSpecialParameter(paramId) {
+async function deleteCustomParameter(paramId) {
     let params = await getCustomParameters();
     params = params.filter(p => p.id !== paramId);
     await saveCustomParameters(params);
     await loadCustomParameters();
     await populateParameterButtons();
-    await showManageParamsModal();
+    await showManageCustomParamsModal();
 }
 
 // --- Pillbox Input Functions ---
