@@ -289,11 +289,11 @@ async function getStudentData() {
                     const colIndex = specialParamIndices[param.name];
                     let finalValue = param.defaultValue ?? '';
                     const sourceValue = (colIndex !== undefined) ? row[colIndex] : null;
+                    const sourceValueExists = sourceValue !== null && sourceValue !== undefined;
 
                     if (param.conditions && param.conditions.length > 0) {
                         for (const condition of param.conditions) {
                             let conditionMet = false;
-                            const sourceValueExists = sourceValue !== null && sourceValue !== undefined;
                             
                             if (sourceValueExists) {
                                 if (condition.type === 'value') {
@@ -763,34 +763,32 @@ function addConditionRow(condition = null) {
         const selectedType = typeSelect.value;
         logicContainer.innerHTML = ''; 
 
+        const allParams = [...standardParameters, ...specialParameters.map(p => p.name)];
+        const paramOptions = allParams.map(p => `<option value="${p}">${p}</option>`).join('');
+
+        const conditionOperator = (condition && condition.operator) ? condition.operator : '==';
+        const operatorOptions = `
+            <option value="==" ${conditionOperator === '==' ? 'selected' : ''}>=</option>
+            <option value=">" ${conditionOperator === '>' ? 'selected' : ''}>&gt;</option>
+            <option value="<" ${conditionOperator === '<' ? 'selected' : ''}>&lt;</option>
+            <option value=">=" ${conditionOperator === '>=' ? 'selected' : ''}>&ge;</option>
+            <option value="<=" ${conditionOperator === '<=' ? 'selected' : ''}>&le;</option>
+        `;
+
         if (selectedType === 'value') {
-            const currentOp = (condition && condition.type === 'value') ? condition.operator : '==';
+            const ifValue = (condition && condition.type === 'value') ? condition.if : '';
             logicContainer.innerHTML = `
                 <span class="text-sm text-gray-500">cell is</span>
-                <select class="condition-operator text-sm p-1 border rounded-md">
-                    <option value="==" ${currentOp === '==' ? 'selected' : ''}>=</option>
-                    <option value=">" ${currentOp === '>' ? 'selected' : ''}>&gt;</option>
-                    <option value="<" ${currentOp === '<' ? 'selected' : ''}>&lt;</option>
-                    <option value=">=" ${currentOp === '>=' ? 'selected' : ''}>&ge;</option>
-                    <option value="<=" ${currentOp === '<=' ? 'selected' : ''}>&le;</option>
-                </select>
-                <input type="text" class="condition-if-value flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., 85 or Bob" value="${(condition && condition.type === 'value') ? condition.if : ''}">
+                <select class="condition-operator text-sm p-1 border rounded-md">${operatorOptions}</select>
+                <input type="text" class="condition-if-value flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., 85 or Bob" value="${ifValue}">
             `;
         } else { // parameter
-            const allParams = [...standardParameters, ...specialParameters.map(p => p.name)];
-            const options = allParams.map(p => `<option value="${p}" ${ (condition && condition.type === 'parameter' && condition.compareParam === p) ? 'selected' : '' }>${p}</option>`).join('');
-            const currentOp = (condition && condition.type === 'parameter') ? condition.operator : '==';
-            
+            const compareParam = (condition && condition.type === 'parameter') ? condition.compareParam : '';
+            const paramSelect = allParams.map(p => `<option value="${p}" ${compareParam === p ? 'selected' : ''}>${p}</option>`).join('');
             logicContainer.innerHTML = `
                 <span class="text-sm text-gray-500">cell is</span>
-                <select class="condition-operator text-sm p-1 border rounded-md">
-                    <option value="==" ${currentOp === '==' ? 'selected' : ''}>=</option>
-                    <option value=">" ${currentOp === '>' ? 'selected' : ''}>&gt;</option>
-                    <option value="<" ${currentOp === '<' ? 'selected' : ''}>&lt;</option>
-                    <option value=">=" ${currentOp === '>=' ? 'selected' : ''}>&ge;</option>
-                    <option value="<=" ${currentOp === '<=' ? 'selected' : ''}>&le;</option>
-                </select>
-                <select class="condition-compare-param text-sm p-1 border rounded-md bg-blue-50">${options}</select>
+                <select class="condition-operator text-sm p-1 border rounded-md">${operatorOptions}</select>
+                <select class="condition-compare-param text-sm p-1 border rounded-md bg-blue-50">${paramSelect}</select>
             `;
         }
     };
