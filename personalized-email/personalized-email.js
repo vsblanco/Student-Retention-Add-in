@@ -96,29 +96,30 @@ Office.onReady((info) => {
 
         class RandomizeBlot extends Embed {
             static create(value) {
+                const wrapper = document.createElement('span');
+                wrapper.classList.add('randomize-tag-wrapper');
+                wrapper.setAttribute('contenteditable', 'false');
+
                 const node = super.create(value);
-                node.setAttribute('contenteditable', 'false');
                 node.classList.add('randomize-tag');
                 
-                // Header
-                const header = document.createElement('div');
-                header.classList.add('randomize-header');
                 const text = document.createElement('span');
                 text.innerText = '{Randomize}';
-                const arrow = document.createElement('span');
-                arrow.innerText = '▼';
-                arrow.classList.add('randomize-arrow');
-                header.appendChild(text);
-                header.appendChild(arrow);
                 
-                // Panel
+                const arrow = document.createElement('span');
+                arrow.innerHTML = '&#9660;'; // Down arrow
+                arrow.classList.add('randomize-arrow');
+                
+                node.appendChild(text);
+                node.appendChild(arrow);
+                
                 const panel = document.createElement('div');
                 panel.classList.add('randomize-panel');
-                panel.style.display = 'none'; // Initially hidden
+                panel.style.display = 'none';
                 
                 const inputsContainer = document.createElement('div');
                 (value.options || ['']).forEach(optionText => {
-                    this.addOptionInput(inputsContainer, optionText, node);
+                    this.addOptionInput(inputsContainer, optionText, wrapper);
                 });
                 
                 const addButton = document.createElement('button');
@@ -126,26 +127,30 @@ Office.onReady((info) => {
                 addButton.classList.add('add-random-option');
                 addButton.onclick = (e) => {
                     e.stopPropagation();
-                    this.addOptionInput(inputsContainer, '', node);
+                    this.addOptionInput(inputsContainer, '', wrapper);
                 };
                 
                 panel.appendChild(inputsContainer);
                 panel.appendChild(addButton);
                 
-                node.appendChild(header);
-                node.appendChild(panel);
+                wrapper.appendChild(node);
+                wrapper.appendChild(panel);
 
-                header.onclick = () => {
+                node.onclick = (e) => {
+                    e.stopPropagation();
                     const isOpening = panel.style.display === 'none';
+                    // Close all other panels
+                    document.querySelectorAll('.randomize-panel').forEach(p => p.style.display = 'none');
+                    document.querySelectorAll('.randomize-arrow').forEach(a => a.classList.remove('open'));
+
                     panel.style.display = isOpening ? 'block' : 'none';
                     arrow.classList.toggle('open', isOpening);
                 };
 
-                // Stop propagation for panel clicks
                 panel.addEventListener('click', e => e.stopPropagation());
 
-                this.updateOptions(node); // Set initial data attribute
-                return node;
+                this.updateOptions(wrapper);
+                return wrapper;
             }
 
             static addOptionInput(container, value, blotNode) {
@@ -180,6 +185,15 @@ Office.onReady((info) => {
         quill.on('selection-change', (range) => {
             if (range) lastFocusedInput = quill;
         });
+
+        // Global click to close randomize panels
+        document.addEventListener('click', (e) => {
+             if (!e.target.closest('.randomize-tag-wrapper')) {
+                document.querySelectorAll('.randomize-panel').forEach(p => p.style.display = 'none');
+                document.querySelectorAll('.randomize-arrow').forEach(a => a.classList.remove('open'));
+            }
+        });
+
 
         loadCustomParameters().then(populateParameterButtons);
         checkConnection();
@@ -443,10 +457,10 @@ const renderBodyTemplate = (bodyHtml, data) => {
         tag.replaceWith(document.createTextNode(value));
     });
 
-    tempDiv.querySelectorAll('.randomize-tag').forEach(tag => {
-        const options = JSON.parse(tag.dataset.options || '[]');
+    tempDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagWrapper => {
+        const options = JSON.parse(tagWrapper.dataset.options || '[]');
         const choice = options.length > 0 ? options[Math.floor(Math.random() * options.length)] : '';
-        tag.replaceWith(document.createTextNode(choice));
+        tagWrapper.replaceWith(document.createTextNode(choice));
     });
 
     return tempDiv.innerHTML;
@@ -500,7 +514,7 @@ async function showPayload() {
         
         const tempEditorDiv = document.createElement('div');
         tempEditorDiv.innerHTML = quill.root.innerHTML;
-        tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+        tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
              RandomizeBlot.updateOptions(tagNode);
         });
         const bodyTemplate = tempEditorDiv.innerHTML;
@@ -581,7 +595,7 @@ async function executeSend() {
     
     const tempEditorDiv = document.createElement('div');
     tempEditorDiv.innerHTML = quill.root.innerHTML;
-    tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
          RandomizeBlot.updateOptions(tagNode);
     });
     const bodyTemplate = tempEditorDiv.innerHTML;
@@ -713,12 +727,10 @@ async function saveTemplate() {
     status.textContent = 'Saving...';
     status.style.color = 'gray';
 
-    // Before getting innerHTML, update data-options on randomize tags
     const tempEditorDiv = document.createElement('div');
     tempEditorDiv.innerHTML = quill.root.innerHTML;
-    tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+    tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => {
          RandomizeBlot.updateOptions(tagNode);
-         // Clean the UI part for saving
          const panel = tagNode.querySelector('.randomize-panel');
          if(panel) panel.remove();
     });
