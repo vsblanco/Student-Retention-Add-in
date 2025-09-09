@@ -1,76 +1,65 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Personalized Email</title>
-    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <!-- Quill.js CSS -->
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Send Personalized Email</title>
+
+    <!-- Office JavaScript API -->
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    
+    <!-- Quill WYSIWYG Editor-->
     <link href="quill.snow.css" rel="stylesheet">
+    <script src="quill.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Task Pane Code -->
+    <script type="module" src="personalized-email.js"></script>
+
+    <!-- Custom Styles -->
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            margin: 0;
-            padding: 1rem;
-            background-color: #f9fafb;
-        }
-        .setup-card, .composer-card {
-            background-color: white;
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        }
-        .modal-backdrop {
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-        #email-cc-container {
+        .cc-pill-container {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
             gap: 6px;
-            padding: 8px;
+            padding: 5px;
             border: 1px solid #d1d5db;
             border-radius: 0.375rem;
-            min-height: 42px;
-        }
-        #email-cc-input {
-            border: none;
-            outline: none;
-            flex-grow: 1;
-            padding: 2px;
+            background-color: white;
+            cursor: text;
         }
         .cc-pill {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             background-color: #e5e7eb;
             color: #374151;
-            padding: 4px 8px;
-            border-radius: 16px;
+            border-radius: 9999px;
+            padding: 2px 8px;
             font-size: 0.875rem;
+            line-height: 1.25rem;
         }
-         .cc-pill.param {
-            background-color: #dbeafe;
-            color: #1e40af;
+        .cc-pill.param {
+             background-color: #dbeafe;
+             color: #1e40af;
         }
         .cc-pill-remove {
             margin-left: 6px;
             cursor: pointer;
             font-weight: bold;
         }
-        /* Quill Editor Styling */
-        #editor-container {
-            height: 200px;
-            border: 1px solid #d1d5db;
-            border-radius: 0.375rem;
+        .cc-input {
+            flex-grow: 1;
+            border: none;
+            outline: none;
+            padding: 4px;
+            background-color: transparent;
         }
-        .ql-toolbar {
-            border-top-left-radius: 0.375rem;
-            border-top-right-radius: 0.375rem;
-        }
-        .ql-container {
-            border-bottom-left-radius: 0.375rem;
-            border-bottom-right-radius: 0.375rem;
-        }
-        /* New Parameter Tag Styling */
+        
+        /* Parameter Tag Styling for Quill Editor */
         .parameter-tag {
             background-color: #e0e7ff; /* light indigo */
             color: #4338ca; /* darker indigo */
@@ -85,7 +74,6 @@
         }
         .ql-editor .parameter-tag {
              cursor: default;
-             /* Quill adds its own line-height, this helps center it */
              vertical-align: middle;
         }
         .parameter-tag.special {
@@ -94,309 +82,247 @@
         }
     </style>
 </head>
-<body>
+<body class="bg-gray-50 p-4">
+    <div class="max-w-md mx-auto">
+        <!-- Setup Wizard View -->
+        <div id="setup-wizard">
+            <div class="text-center">
+                <img src="https://vsblanco.github.io/Student-Retention-Add-in/images/power-automate-icon.png" alt="Power Automate" class="mx-auto h-16 w-16 mb-4"/>
+                <h1 class="text-xl font-bold text-gray-800">Setup Required</h1>
+                <p class="text-sm text-gray-600 mt-2">To send personalized emails, you need to connect this add-in to a Power Automate flow.</p>
+            </div>
+            
+            <div class="mt-6">
+                <label for="power-automate-url" class="block text-sm font-medium text-gray-700">Power Automate HTTP URL</label>
+                <input type="text" id="power-automate-url" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Paste your flow's URL here">
+                <p class="mt-2 text-xs text-gray-500">This URL is generated by the "When a HTTP request is received" trigger in your Power Automate flow.</p>
+            </div>
 
-    <!-- Main Content -->
-    <div id="app-container">
-        <!-- Setup Wizard -->
-        <div id="setup-wizard" class="setup-card hidden">
-            <h2 class="text-xl font-bold text-gray-800 mb-2">Setup Connection</h2>
-            <p class="text-sm text-gray-600 mb-4">
-                To send emails, you need to connect this add-in to a Power Automate flow.
-                <a href="#" class="text-blue-600 hover:underline">Learn more</a>
-            </p>
-            <div class="space-y-3">
-                <label for="power-automate-url" class="block text-sm font-medium text-gray-700">Power Automate HTTP Request URL</label>
-                <input type="text" id="power-automate-url" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Paste your flow URL here">
-                <button id="create-connection-button" class="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+            <div class="mt-6">
+                <button id="create-connection-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
                     Create Connection
                 </button>
-                <p id="setup-status" class="text-sm text-center mt-2"></p>
             </div>
+            <p id="setup-status" class="text-xs mt-2 h-4 text-center"></p>
         </div>
 
-        <!-- Email Composer -->
-        <div id="email-composer" class="composer-card hidden space-y-4">
-            <div>
-                <h2 class="text-xl font-bold text-gray-800">Send Personalized Email</h2>
-                <p class="text-sm text-gray-500">Compose your email below. Use parameters to personalize the content for each student.</p>
+        <!-- Email Composer View -->
+        <div id="email-composer" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h1 class="text-xl font-bold text-gray-800">Personalized Email</h1>
+                <button id="templates-button" class="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300">
+                    Templates
+                </button>
             </div>
-
-            <!-- Recipient List -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="recipient-list" class="block text-sm font-medium text-gray-700">Recipient List</label>
-                    <select id="recipient-list" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
-                        <option value="lda">Today's LDA Sheet</option>
-                        <option value="master">Master List</option>
-                        <option value="custom">Custom Sheet Name</option>
-                    </select>
-                </div>
-                <div id="custom-sheet-container" class="hidden">
-                    <label for="custom-sheet-name" class="block text-sm font-medium text-gray-700">Custom Sheet Name</label>
-                    <input type="text" id="custom-sheet-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., At-Risk Students">
-                </div>
-            </div>
-
-            <!-- Email Fields -->
-            <div class="space-y-3">
+            
+            <div class="space-y-4">
                 <div>
                     <label for="email-from" class="block text-sm font-medium text-gray-700">From</label>
-                    <input type="text" id="email-from" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., your.name@school.edu or {AdvisorEmail}">
+                    <input type="email" id="email-from" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="sender@example.com or {YourParameter}">
                 </div>
-                 <div>
-                    <label for="email-cc-container" class="block text-sm font-medium text-gray-700">CC</label>
-                    <div id="email-cc-container" class="mt-1">
-                        <input type="text" id="email-cc-input" placeholder="Add recipients or parameters...">
+                <div>
+                    <label for="recipient-list" class="block text-sm font-medium text-gray-700">To</label>
+                    <select id="recipient-list" class="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="lda">Today's LDA Sheet</option>
+                        <option value="master">Master List</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <div id="custom-sheet-container" class="mt-2 hidden">
+                        <label for="custom-sheet-name" class="block text-xs font-medium text-gray-600">Custom Sheet Name</label>
+                        <input type="text" id="custom-sheet-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Enter the exact sheet name">
                     </div>
                 </div>
                 <div>
                     <label for="email-subject" class="block text-sm font-medium text-gray-700">Subject</label>
-                    <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="e.g., Regarding your progress in {CourseName}">
+                    <input type="text" id="email-subject" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Email Subject">
                 </div>
-                 <div>
-                    <label for="editor-container" class="block text-sm font-medium text-gray-700">Body</label>
-                    <div id="editor-container" class="mt-1"></div>
-                </div>
-            </div>
-
-            <!-- Parameter Buttons -->
-            <div>
-                 <h3 class="text-sm font-medium text-gray-700 mb-2">Insert Parameter</h3>
-                 <div class="bg-gray-50 p-3 rounded-lg space-y-2">
-                     <div>
-                        <p class="text-xs font-semibold text-gray-600 mb-2">Standard</p>
-                        <div id="standard-parameter-buttons" class="flex flex-wrap gap-2">
-                           <!-- Buttons will be injected here -->
-                        </div>
-                     </div>
-                     <div id="special-parameters-section" class="hidden">
-                         <p class="text-xs font-semibold text-gray-600 mb-2">Special</p>
-                        <div id="special-parameter-buttons" class="flex flex-wrap gap-2">
-                           <!-- Buttons will be injected here -->
-                        </div>
-                     </div>
-                      <div class="pt-2 text-right">
-                        <button id="create-special-param-button" class="text-xs text-blue-600 hover:underline font-semibold">Create New...</button>
-                        <button id="manage-special-params-button" class="text-xs text-blue-600 hover:underline font-semibold ml-2">Manage</button>
-                    </div>
-                 </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="flex items-center justify-between pt-2">
-                <p id="status" class="text-sm text-gray-600"></p>
-                <div class="flex gap-2">
-                    <button id="templates-button" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold rounded-md hover:bg-gray-200 text-sm">Templates</button>
-                    <button id="show-example-button" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold rounded-md hover:bg-gray-200 text-sm">Preview</button>
-                    <button id="show-payload-button" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold rounded-md hover:bg-gray-200 text-sm">Payload</button>
-                    <button id="send-email-button" class="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm">
-                        Send Emails
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Modals -->
-    <!-- Example Modal -->
-    <div id="example-modal" class="fixed inset-0 z-10 overflow-y-auto hidden">
-        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Email Preview</h3>
-                    <div class="mt-4 text-sm text-gray-700 bg-gray-50 p-4 rounded-md border space-y-2">
-                        <p><strong>From:</strong> <span id="example-from"></span></p>
-                        <p><strong>To:</strong> <span id="example-to"></span></p>
-                        <p><strong>CC:</strong> <span id="example-cc"></span></p>
-                        <p><strong>Subject:</strong> <span id="example-subject"></span></p>
-                        <hr class="my-2">
-                        <div id="example-body"></div>
+                <div>
+                    <label for="email-cc-input" class="block text-sm font-medium text-gray-700">CC</label>
+                    <div id="email-cc-container" class="cc-pill-container mt-1">
+                        <input type="text" id="email-cc-input" class="cc-input" placeholder="Add email or parameter...">
                     </div>
                 </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button id="close-example-modal-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Close
-                    </button>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Body</label>
+                    <!-- Quill Editor Container -->
+                    <div id="editor-container" class="mt-1 h-48 bg-white"></div>
                 </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Payload Modal -->
-    <div id="payload-modal" class="fixed inset-0 z-10 overflow-y-auto hidden">
-         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 id="payload-modal-title" class="text-lg leading-6 font-medium text-gray-900">Request Payload</h3>
-                    <div class="mt-4 text-sm text-gray-700 bg-gray-50 p-2 rounded-md border">
-                        <pre id="payload-content" class="whitespace-pre-wrap text-xs h-96 overflow-y-auto"></pre>
-                        <pre id="schema-content" class="whitespace-pre-wrap text-xs h-96 overflow-y-auto hidden"></pre>
-                    </div>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:justify-between">
-                    <button id="toggle-payload-schema-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">
-                        Show Schema
-                    </button>
-                     <button id="close-payload-modal-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Templates Modal -->
-    <div id="templates-modal" class="fixed inset-0 z-20 overflow-y-auto hidden">
-         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-lg leading-6 font-medium text-gray-900">Email Templates</h3>
-                        <button id="save-current-template-button" class="px-3 py-1 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700">Save Current as Template</button>
-                    </div>
-                    <div id="templates-list-container" class="mt-4 space-y-3 max-h-96 overflow-y-auto">
-                       <!-- Templates list will be injected here -->
-                    </div>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                     <button id="close-templates-modal-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Save Template Modal -->
-    <div id="save-template-modal" class="fixed inset-0 z-30 overflow-y-auto hidden">
-        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Save Template</h3>
-                    <div class="mt-4 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Insert Parameter</label>
+                    <div class="mt-2 space-y-3">
                         <div>
-                            <label for="template-name" class="block text-sm font-medium text-gray-700">Template Name</label>
-                            <input type="text" id="template-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Standard</h4>
+                            <div id="standard-parameter-buttons" class="mt-1 flex flex-wrap gap-2">
+                                <!-- Standard parameter buttons will be inserted here by JS -->
+                            </div>
                         </div>
-                        <div>
-                            <label for="template-author" class="block text-sm font-medium text-gray-700">Author</label>
-                            <input type="text" id="template-author" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                        </div>
-                        <p id="save-template-status" class="text-sm text-center"></p>
-                    </div>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button id="confirm-save-template-button" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">Save</button>
-                    <button id="cancel-save-template-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Send Confirmation Modal -->
-    <div id="send-confirm-modal" class="fixed inset-0 z-30 overflow-y-auto hidden">
-        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <div class="sm:flex sm:items-start">
-                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                             <svg class="h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                        </div>
-                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Confirm Send</h3>
-                            <div class="mt-2">
-                                <p id="send-confirm-message" class="text-sm text-gray-500"></p>
+                        <div id="special-parameters-section" class="hidden">
+                            <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Special</h4>
+                            <div id="special-parameter-buttons" class="mt-1 flex flex-wrap gap-2">
+                                <!-- Special parameter buttons will be inserted here by JS -->
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button id="confirm-send-button" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">Send</button>
-                    <button id="cancel-send-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">Cancel</button>
+                    <button id="create-special-param-button" class="mt-2 text-xs text-blue-600 hover:underline">+ Create Special Parameter</button>
                 </div>
             </div>
+
+            <div class="mt-6 flex space-x-2">
+                <button id="show-example-button" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
+                    Example
+                </button>
+                <button id="show-payload-button" class="flex-1 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
+                    Payload
+                </button>
+                <button id="send-email-button" class="flex-1 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
+                    Send Email
+                </button>
+            </div>
+            <p id="status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
         </div>
-    </div>
-    
-     <!-- Special Parameter Modal -->
-    <div id="special-param-modal" class="fixed inset-0 z-40 overflow-y-auto hidden">
-        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 id="special-param-modal-title" class="text-lg leading-6 font-medium text-gray-900">Create Special Parameter</h3>
-                    <input type="hidden" id="param-edit-id">
-                    <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="param-name" class="block text-sm font-medium text-gray-700">Parameter Name (no spaces)</label>
-                            <div class="mt-1 flex rounded-md shadow-sm">
-                                <span class="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">{</span>
-                                <input type="text" id="param-name" class="flex-1 block w-full rounded-none sm:text-sm border-gray-300" placeholder="e.g., AdvisorEmail">
-                                <span class="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">}</span>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column in Sheet</label>
-                            <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm sm:text-sm" placeholder="e.g., Assigned">
-                        </div>
-                        <div class="md:col-span-2">
-                             <label for="param-default-value" class="block text-sm font-medium text-gray-700">Default Value (if cell is empty)</label>
-                            <input type="text" id="param-default-value" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm sm:text-sm" placeholder="e.g., admissions@school.edu">
-                        </div>
-                         <div class="md:col-span-2">
-                             <label class="block text-sm font-medium text-gray-700">Value Mappings (Optional)</label>
-                             <div id="param-mapping-container" class="mt-2 space-y-2">
-                                <!-- Mappings will be injected here -->
-                             </div>
-                             <button id="add-mapping-button" class="mt-2 text-xs text-blue-600 hover:underline">+ Add Mapping</button>
-                        </div>
+
+        <!-- Modals -->
+        <div id="example-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-60">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Preview</h3>
+                <div class="space-y-3 text-sm border-t border-b py-4">
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">From:</label>
+                        <p id="example-from" class="text-gray-800"></p>
                     </div>
-                     <p id="save-param-status" class="text-sm text-center mt-4"></p>
-                </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button id="save-special-param-button" type="button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:ml-3 sm:w-auto sm:text-sm">Save Parameter</button>
-                    <button id="cancel-special-param-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Manage Special Parameters Modal -->
-    <div id="manage-params-modal" class="fixed inset-0 z-50 overflow-y-auto hidden">
-         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div class="fixed inset-0 transition-opacity modal-backdrop" aria-hidden="true"></div>
-            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-            <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <h3 class="text-lg leading-6 font-medium text-gray-900">Manage Special Parameters</h3>
-                    <div id="manage-params-list" class="mt-4 space-y-2 max-h-96 overflow-y-auto">
-                        <!-- Parameter list will be injected here -->
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">To:</label>
+                        <p id="example-to" class="text-gray-800"></p>
+                    </div>
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">CC:</label>
+                        <p id="example-cc" class="text-gray-800"></p>
+                    </div>
+                    <div class="flex">
+                        <label class="font-semibold text-gray-600 w-16">Subject:</label>
+                        <p id="example-subject" class="text-gray-800 font-medium"></p>
+                    </div>
+                    <div class="flex items-start">
+                        <label class="font-semibold text-gray-600 w-16 mt-1">Body:</label>
+                        <div id="example-body" class="text-gray-800 border rounded-md p-2 bg-gray-50 max-h-64 overflow-y-auto w-full"></div>
                     </div>
                 </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                     <button id="close-manage-params-button" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-                        Close
-                    </button>
+                <div class="flex justify-end mt-4">
+                    <button id="close-example-modal-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
                 </div>
             </div>
         </div>
+        
+        <div id="payload-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-70">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl">
+                <h3 id="payload-modal-title" class="text-lg font-semibold text-gray-800 mb-4">Request Payload</h3>
+                <pre id="payload-content" class="text-xs bg-gray-100 p-4 rounded-md overflow-x-auto h-96"></pre>
+                <pre id="schema-content" class="hidden text-xs bg-gray-100 p-4 rounded-md overflow-x-auto h-96"></pre>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button id="toggle-payload-schema-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Show Schema</button>
+                    <button id="close-payload-modal-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="templates-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-80">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-xl">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Templates</h3>
+                <div id="templates-list-container" class="space-y-2 max-h-80 overflow-y-auto border-t border-b py-4">
+                    <!-- Templates will be listed here -->
+                </div>
+                <div class="flex justify-between mt-4">
+                    <button id="save-current-template-button" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Save Current as Template</button>
+                    <button id="close-templates-modal-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="save-template-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-90">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Save Template</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="template-name" class="block text-sm font-medium text-gray-700">Template Name</label>
+                        <input type="text" id="template-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Mid-term Check-in">
+                    </div>
+                    <div>
+                        <label for="template-author" class="block text-sm font-medium text-gray-700">Author</label>
+                        <input type="text" id="template-author" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Your Name">
+                    </div>
+                </div>
+                <p id="save-template-status" class="text-xs mt-2 h-4 text-center"></p>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button id="cancel-save-template-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button id="confirm-save-template-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="special-param-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-100 overflow-y-auto p-4">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-8">
+                <input type="hidden" id="param-edit-id">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 id="special-param-modal-title" class="text-lg font-semibold text-gray-800">Create Special Parameter</h3>
+                    <button id="manage-special-params-button" class="text-xs text-blue-600 hover:underline">Manage Parameters</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label for="param-name" class="block text-sm font-medium text-gray-700">Parameter Name</label>
+                        <input type="text" id="param-name" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., AdvisorEmail">
+                        <p class="mt-1 text-xs text-gray-500">No spaces or special characters. It will be used like `{YourName}`.</p>
+                    </div>
+                    <div>
+                        <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column</label>
+                        <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Type the exact column name, e.g., Assigned">
+                        <p class="mt-1 text-xs text-gray-500">The column in your sheet that this parameter will read from.</p>
+                    </div>
+                    <div>
+                        <label for="param-default-value" class="block text-sm font-medium text-gray-700">Default Value (Optional)</label>
+                        <input type="text" id="param-default-value" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., general.advisor@school.edu">
+                        <p class="mt-1 text-xs text-gray-500">Used if the source cell is empty or no mapping matches.</p>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Value Mapping (Optional)</h4>
+                        <div id="param-mapping-container" class="space-y-2">
+                            <!-- Mapping rows will be inserted here -->
+                        </div>
+                        <button id="add-mapping-button" class="mt-2 text-xs text-blue-600 hover:underline">+ Add Mapping</button>
+                    </div>
+                </div>
+                <p id="save-param-status" class="text-xs mt-2 h-4 text-center"></p>
+                <div class="flex justify-end gap-2 mt-6 border-t pt-4">
+                    <button id="cancel-special-param-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button id="save-special-param-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save Parameter</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="manage-params-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-110 p-4">
+             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl my-8">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Manage Special Parameters</h3>
+                <div id="manage-params-list" class="max-h-96 overflow-y-auto border-t border-b py-2">
+                    <!-- List of saved params will go here -->
+                </div>
+                <div class="flex justify-end mt-4">
+                    <button id="close-manage-params-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Close</button>
+                </div>
+             </div>
+        </div>
+
+
+        <div id="send-confirm-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-90">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Confirm Send</h3>
+                <p id="send-confirm-message" class="text-sm text-gray-600"></p>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button id="cancel-send-button" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button id="confirm-send-button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Confirm & Send</button>
+                </div>
+            </div>
+        </div>
+
     </div>
-
-
-    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.6/dist/quill.min.js"></script>
-    <script type="module" src="personalized-email.js"></script>
 </body>
 </html>
 
