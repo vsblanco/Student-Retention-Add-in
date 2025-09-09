@@ -100,7 +100,7 @@ Office.onReady((info) => {
                 wrapper.classList.add('randomize-tag-wrapper');
                 wrapper.setAttribute('contenteditable', 'false');
 
-                const node = super.create(value);
+                const node = document.createElement('span'); // Use a generic span for the tag itself
                 node.classList.add('randomize-tag');
                 
                 const text = document.createElement('span');
@@ -139,9 +139,8 @@ Office.onReady((info) => {
                 node.onclick = (e) => {
                     e.stopPropagation();
                     const isOpening = panel.style.display === 'none';
-                    // Close all other panels
-                    document.querySelectorAll('.randomize-panel').forEach(p => p.style.display = 'none');
-                    document.querySelectorAll('.randomize-arrow').forEach(a => a.classList.remove('open'));
+                    document.querySelectorAll('.randomize-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
+                    document.querySelectorAll('.randomize-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
 
                     panel.style.display = isOpening ? 'block' : 'none';
                     arrow.classList.toggle('open', isOpening);
@@ -154,12 +153,22 @@ Office.onReady((info) => {
             }
 
             static addOptionInput(container, value, blotNode) {
-                const input = document.createElement('input');
-                input.classList.add('randomize-input');
-                input.value = value;
-                input.placeholder = 'Enter a phrase...';
-                input.oninput = () => this.updateOptions(blotNode);
-                container.appendChild(input);
+                const textarea = document.createElement('textarea');
+                textarea.classList.add('randomize-input');
+                textarea.value = value;
+                textarea.placeholder = 'Enter a phrase...';
+                textarea.rows = 1;
+
+                const autoResize = () => {
+                    textarea.style.height = 'auto';
+                    textarea.style.height = textarea.scrollHeight + 'px';
+                    this.updateOptions(blotNode);
+                };
+                
+                textarea.oninput = autoResize;
+                
+                container.appendChild(textarea);
+                setTimeout(autoResize, 0);
             }
 
             static updateOptions(blotNode) {
@@ -186,7 +195,6 @@ Office.onReady((info) => {
             if (range) lastFocusedInput = quill;
         });
 
-        // Global click to close randomize panels
         document.addEventListener('click', (e) => {
              if (!e.target.closest('.randomize-tag-wrapper')) {
                 document.querySelectorAll('.randomize-panel').forEach(p => p.style.display = 'none');
