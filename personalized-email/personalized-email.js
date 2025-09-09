@@ -351,13 +351,14 @@ async function populateParameterButtons() {
 function insertParameter(param) {
     const paramName = param.replace(/[{}]/g, '');
 
-    // Check if the last focused element is one of our pillbox inputs OR the condition input
-    if (lastFocusedInput && lastFocusedInput.classList && lastFocusedInput.classList.contains('condition-input')) {
+    // Check if the last focused element is the special input inside the condition panel
+    if (lastFocusedInput && lastFocusedInput.classList && lastFocusedInput.classList.contains('param-input')) {
         lastFocusedInput.value = param;
         // Manually trigger the input event to save the change to the blot's dataset
         lastFocusedInput.dispatchEvent(new Event('input', { bubbles: true }));
     } else if (lastFocusedInput && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedInput.id)) {
-        const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
+        // Check if the last focused element is one of our main pillbox inputs
+        const type = lastFocusedInput.id.replace('email-', '').replace('-input', ''); // from, subject, or cc
         addPill(type, param);
     } else {
         // Default to Quill editor if it's not a known input or if Quill was last focused
