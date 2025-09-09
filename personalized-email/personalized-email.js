@@ -9,6 +9,11 @@ let subjectParts = [];
 let ccRecipients = [];
 let customParameters = [];
 
+// Define Blot classes in a scope accessible by all functions
+let RandomizeBlot;
+let ConditionBlot;
+
+
 const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
 const EMAIL_TEMPLATES_KEY = "emailTemplates";
 const CUSTOM_PARAMS_KEY = "customEmailParameters";
@@ -94,7 +99,8 @@ Office.onReady((info) => {
         ParameterBlot.tagName = 'SPAN';
         Quill.register(ParameterBlot);
 
-        class RandomizeBlot extends Embed {
+        // Assign class definitions to the module-scoped variables
+        RandomizeBlot = class extends Embed {
             static create(value) {
                 const wrapper = document.createElement('span');
                 wrapper.classList.add('randomize-tag-wrapper');
@@ -202,7 +208,7 @@ Office.onReady((info) => {
         RandomizeBlot.tagName = 'SPAN';
         Quill.register(RandomizeBlot);
 
-        class ConditionBlot extends Embed {
+        ConditionBlot = class extends Embed {
             static create(value) {
                 const wrapper = document.createElement('span');
                 wrapper.classList.add('condition-tag-wrapper');
@@ -322,30 +328,32 @@ async function populateParameterButtons() {
     standardContainer.innerHTML = '';
     customContainer.innerHTML = '';
 
-    standardParameters.forEach(param => {
+    const createButton = (param, container, isCustom = false) => {
         const button = document.createElement('button');
-        button.className = 'px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded hover:bg-gray-300';
+        if (isCustom) {
+            button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
+        } else {
+            button.className = 'px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded hover:bg-gray-300';
+        }
         button.textContent = `{${param}}`;
-        button.onclick = () => insertParameter(`{${param}}`);
-        standardContainer.appendChild(button);
-    });
+        button.onmousedown = (e) => {
+            e.preventDefault(); 
+            insertParameter(`{${param}}`);
+        };
+        container.appendChild(button);
+    };
+
+    standardParameters.forEach(param => createButton(param, standardContainer, false));
 
     if (customParameters.length > 0) {
         customSection.classList.remove('hidden');
-        customParameters.forEach(param => {
-            const button = document.createElement('button');
-            button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
-            button.textContent = `{${param.name}}`;
-            button.onclick = () => insertParameter(`{${param.name}}`);
-            customContainer.appendChild(button);
-        });
+        customParameters.forEach(param => createButton(param.name, customContainer, true));
     } else {
         customSection.classList.add('hidden');
     }
 
-    document.getElementById('randomize-parameter-button').onclick = () => insertParameter('{Randomize}');
-    document.getElementById('condition-parameter-button').onclick = () => insertParameter('{Condition}');
-
+    document.getElementById('randomize-parameter-button').onmousedown = (e) => { e.preventDefault(); insertParameter('{Randomize}'); };
+    document.getElementById('condition-parameter-button').onmousedown = (e) => { e.preventDefault(); insertParameter('{Condition}'); };
 }
 
 function insertParameter(param) {
