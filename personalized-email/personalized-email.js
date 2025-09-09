@@ -153,6 +153,9 @@ Office.onReady((info) => {
             }
 
             static addOptionInput(container, value, blotNode) {
+                const optionWrapper = document.createElement('div');
+                optionWrapper.classList.add('randomize-option-wrapper');
+
                 const textarea = document.createElement('textarea');
                 textarea.classList.add('randomize-input');
                 textarea.value = value;
@@ -167,7 +170,19 @@ Office.onReady((info) => {
                 
                 textarea.oninput = autoResize;
                 
-                container.appendChild(textarea);
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.classList.add('randomize-option-delete');
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    optionWrapper.remove();
+                    this.updateOptions(blotNode);
+                };
+
+                optionWrapper.appendChild(textarea);
+                optionWrapper.appendChild(deleteBtn);
+                container.appendChild(optionWrapper);
+
                 setTimeout(autoResize, 0);
             }
 
@@ -209,9 +224,15 @@ Office.onReady((info) => {
 
                 const ifClause = document.createElement('div');
                 ifClause.classList.add('condition-clause');
-                ifClause.innerHTML = `
-                    <span class="condition-keyword">IF</span>
-                    <input class="condition-input param-input" placeholder="{Parameter}" value="${value.if_param || ''}">
+                const ifParamInput = document.createElement('input');
+                ifParamInput.className = 'condition-input param-input';
+                ifParamInput.placeholder = '{Parameter}';
+                ifParamInput.value = value.if_param ? `{${value.if_param}}` : '';
+                ifParamInput.onfocus = () => { lastFocusedInput = ifParamInput };
+                
+                ifClause.innerHTML = `<span class="condition-keyword">IF</span>`;
+                ifClause.appendChild(ifParamInput);
+                ifClause.innerHTML += `
                     <select class="condition-operator">
                         ${['=', '>', '>=', '<', '<='].map(op => `<option ${op === value.operator ? 'selected' : ''}>${op}</option>`).join('')}
                     </select>
@@ -330,13 +351,14 @@ async function populateParameterButtons() {
 function insertParameter(param) {
     const paramName = param.replace(/[{}]/g, '');
 
-    // Check if the last focused element is one of our pillbox inputs
-    if (lastFocusedInput && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedInput.id)) {
-        const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
+    if (lastFocusedInput && lastFocusedInput.classList.contains('condition-input')) {
+        lastFocusedInput.value = param;
+        lastFocusedInput.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (lastFocusedInput && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedInput.id)) {
+        const type = lastFocusedInput.id.split('-')[1];
         addPill(type, param);
     } else {
-        // Default to Quill editor if it's not a known input or if Quill was last focused
-        const range = quill.getSelection(true); // Get current position, or end
+        const range = quill.getSelection(true);
         if (paramName === 'Randomize') {
             quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
         } else if (paramName === 'Condition') {
