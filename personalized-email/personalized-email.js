@@ -5,9 +5,11 @@ let studentDataCache = [];
 let lastFocusedInput = null;
 let quill; // To hold the editor instance
 let ccRecipients = [];
+let specialParameters = [];
 
-const availableParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
+const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
 const EMAIL_TEMPLATES_KEY = "emailTemplates";
+const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
 const PAYLOAD_SCHEMA = {
     "type": "array",
@@ -33,6 +35,7 @@ Office.onReady((info) => {
         document.getElementById('show-example-button').onclick = showExample;
         document.getElementById('show-payload-button').onclick = showPayload;
         document.getElementById('templates-button').onclick = showTemplatesModal;
+        document.getElementById('create-special-param-button').onclick = showSpecialParamModal;
 
         // Dropdown listener
         document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
@@ -43,13 +46,17 @@ Office.onReady((info) => {
         document.getElementById('close-templates-modal-button').onclick = () => document.getElementById('templates-modal').classList.add('hidden');
         document.getElementById('cancel-save-template-button').onclick = () => document.getElementById('save-template-modal').classList.add('hidden');
         document.getElementById('cancel-send-button').onclick = () => document.getElementById('send-confirm-modal').classList.add('hidden');
-
+        document.getElementById('cancel-special-param-button').onclick = () => document.getElementById('special-param-modal').classList.add('hidden');
+        document.getElementById('close-manage-params-button').onclick = () => document.getElementById('manage-params-modal').classList.add('hidden');
         
         // Modal Action Buttons
         document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
         document.getElementById('save-current-template-button').onclick = showSaveTemplateModal;
         document.getElementById('confirm-save-template-button').onclick = saveTemplate;
         document.getElementById('confirm-send-button').onclick = executeSend;
+        document.getElementById('save-special-param-button').onclick = saveSpecialParameter;
+        document.getElementById('add-mapping-button').onclick = addMappingRow;
+        document.getElementById('manage-special-params-button').onclick = showManageParamsModal;
 
         // Initialize Quill Editor
         quill = new Quill('#editor-container', {
@@ -77,16 +84,18 @@ Office.onReady((info) => {
             }
         });
 
-        populateParameterButtons();
+        loadCustomParameters().then(populateParameterButtons);
         checkConnection();
         toggleCustomSheetInput(); // Set initial state
     }
 });
 
-function populateParameterButtons() {
+async function populateParameterButtons() {
     const container = document.getElementById('parameter-buttons');
     container.innerHTML = ''; // Clear existing
-    availableParameters.forEach(param => {
+    const allParameters = [...standardParameters, ...specialParameters.map(p => p.name)];
+
+    allParameters.forEach(param => {
         const button = document.createElement('button');
         button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
         button.textContent = `{${param}}`;
@@ -222,8 +231,11 @@ async function getStudentData() {
             await context.sync();
 
             const values = usedRange.values;
-            const headers = values[0].map(h => String(h || '').toLowerCase());
+            const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
+            // Re-fetch custom parameters in case they changed
+            await loadCustomParameters();
+
             const colIndices = {
                 StudentName: findColumnIndex(headers, ["studentname", "student name"]),
                 StudentEmail: findColumnIndex(headers, ["student email", "school email", "email"]),
@@ -232,6 +244,16 @@ async function getStudentData() {
                 DaysOut: findColumnIndex(headers, ["days out", "daysout"]),
                 Assigned: findColumnIndex(headers, ["assigned"])
             };
+
+            // Pre-calculate column indices for special parameters
+            const specialParamIndices = {};
+            specialParameters.forEach(param => {
+                const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                if (headerIndex !== -1) {
+                    specialParamIndices[param.name] = headerIndex;
+                }
+            });
+
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
@@ -248,6 +270,29 @@ async function getStudentData() {
                     DaysOut: row[colIndices.DaysOut] ?? '',
                     Assigned: row[colIndices.Assigned] ?? ''
                 };
+
+                // Add special parameter values to the student object
+                specialParameters.forEach(param => {
+                    const colIndex = specialParamIndices[param.name];
+                    let value = param.defaultValue ?? '';
+                    if (colIndex !== undefined) {
+                        const cellValue = row[colIndex];
+                        let mappingFound = false;
+                        if (param.mappings && cellValue != null) {
+                            for (const mapping of param.mappings) {
+                                if (String(cellValue).trim().toLowerCase() === String(mapping.if).trim().toLowerCase()) {
+                                    value = mapping.then;
+                                    mappingFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!mappingFound && cellValue != null) {
+                             value = param.defaultValue ?? cellValue ?? ''; // Fallback to cell value if no mapping, then default
+                        }
+                    }
+                    student[param.name] = value;
+                });
                 studentDataCache.push(student);
             }
             status.textContent = `Found ${studentDataCache.length} students.`;
@@ -268,7 +313,6 @@ async function getStudentData() {
 const renderTemplate = (template, data) => {
     if (!template) return '';
     return template.replace(/\{(\w+)\}/g, (match, key) => {
-        // Use ?? to handle cases where the value is 0
         return (data[key] ?? match);
     });
 };
@@ -293,7 +337,7 @@ async function showExample() {
         
         const fromTemplate = document.getElementById('email-from').value;
         const subjectTemplate = document.getElementById('email-subject').value;
-        const bodyTemplate = quill.root.innerHTML; // Get HTML content from Quill
+        const bodyTemplate = quill.root.innerHTML;
 
         document.getElementById('example-from').textContent = renderTemplate(fromTemplate, randomStudent) || '[Not Specified]';
         document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
@@ -334,7 +378,6 @@ async function showPayload() {
         document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
         document.getElementById('schema-content').textContent = JSON.stringify(PAYLOAD_SCHEMA, null, 2);
         
-        // Reset to payload view by default
         document.getElementById('payload-content').classList.remove('hidden');
         document.getElementById('schema-content').classList.add('hidden');
         document.getElementById('payload-modal-title').textContent = 'Request Payload';
@@ -354,13 +397,11 @@ function togglePayloadView() {
     const button = document.getElementById('toggle-payload-schema-button');
 
     if (!payloadContent.classList.contains('hidden')) {
-        // Switch to schema view
         payloadContent.classList.add('hidden');
         schemaContent.classList.remove('hidden');
         title.textContent = 'Request Body JSON Schema';
         button.textContent = 'Show Payload';
     } else {
-        // Switch to payload view
         payloadContent.classList.remove('hidden');
         schemaContent.classList.add('hidden');
         title.textContent = 'Request Payload';
@@ -405,7 +446,7 @@ async function executeSend() {
         cc: renderCCTemplate(ccRecipients, student),
         subject: renderTemplate(subjectTemplate, student),
         body: renderTemplate(bodyTemplate, student)
-    })).filter(email => email.to && email.from); // Filter out students with no email address or from address
+    })).filter(email => email.to && email.from);
 
     if(payload.length === 0) {
         status.textContent = 'No students with valid "To" and "From" email addresses found.';
@@ -447,7 +488,192 @@ function isValidHttpUrl(string) {
 }
 
 // --- Template Functions ---
+// ... (omitted for brevity, no changes)
 
+// --- Special Parameter Functions ---
+
+async function loadCustomParameters() {
+    specialParameters = await getCustomParameters();
+    return specialParameters;
+}
+
+async function getCustomParameters() {
+    return Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const paramsSetting = settings.getItemOrNullObject(CUSTOM_PARAMS_KEY);
+        paramsSetting.load("value");
+        await context.sync();
+        return paramsSetting.value ? JSON.parse(paramsSetting.value) : [];
+    });
+}
+
+async function saveCustomParameters(params) {
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        settings.add(CUSTOM_PARAMS_KEY, JSON.stringify(params));
+        await context.sync();
+    });
+}
+
+async function showSpecialParamModal() {
+    const status = document.getElementById('status');
+    const sourceColumnSelect = document.getElementById('param-source-column');
+    sourceColumnSelect.innerHTML = '<option>Loading columns...</option>';
+    document.getElementById('param-name').value = '';
+    document.getElementById('param-default-value').value = '';
+    document.getElementById('param-mapping-container').innerHTML = '';
+    document.getElementById('save-param-status').textContent = '';
+    
+    document.getElementById('special-param-modal').classList.remove('hidden');
+
+    try {
+        await Excel.run(async (context) => {
+            const recipientListValue = document.getElementById('recipient-list').value;
+            let sheetName = recipientListValue === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+            if (recipientListValue === 'custom') {
+                sheetName = document.getElementById('custom-sheet-name').value.trim() || 'Master List';
+            }
+            
+            const sheet = context.workbook.worksheets.getItem(sheetName);
+            const headerRange = sheet.getRange("A1").getEntireRow().load("values");
+            await context.sync();
+            
+            const headers = headerRange.values[0].filter(h => h); // Filter out empty headers
+            sourceColumnSelect.innerHTML = '';
+            headers.forEach(header => {
+                const option = document.createElement('option');
+                option.value = header;
+                option.textContent = header;
+                sourceColumnSelect.appendChild(option);
+            });
+        });
+    } catch (error) {
+        sourceColumnSelect.innerHTML = '<option>Could not load columns</option>';
+        status.textContent = 'Error loading sheet columns for parameter creation.';
+        status.style.color = 'red';
+    }
+}
+
+function addMappingRow() {
+    const container = document.getElementById('param-mapping-container');
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 mapping-row';
+    div.innerHTML = `
+        <span class="text-sm text-gray-500">If cell is</span>
+        <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob">
+        <span class="text-sm text-gray-500">then value is</span>
+        <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com">
+        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
+    `;
+    div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
+    container.appendChild(div);
+}
+
+async function saveSpecialParameter() {
+    const status = document.getElementById('save-param-status');
+    const nameInput = document.getElementById('param-name');
+    const name = nameInput.value.trim();
+
+    // Validation
+    if (!/^[a-zA-Z0-9]+$/.test(name)) {
+        status.textContent = 'Name must be alphanumeric with no spaces.';
+        status.style.color = 'red';
+        return;
+    }
+    if (standardParameters.includes(name) || specialParameters.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+        status.textContent = 'This parameter name is already in use.';
+        status.style.color = 'red';
+        return;
+    }
+
+    const sourceColumn = document.getElementById('param-source-column').value;
+    const defaultValue = document.getElementById('param-default-value').value.trim();
+    
+    const mappings = [];
+    document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
+        const ifValue = row.querySelector('.mapping-if').value.trim();
+        const thenValue = row.querySelector('.mapping-then').value.trim();
+        if (ifValue) { // Only save if there's a condition
+            mappings.push({ if: ifValue, then: thenValue });
+        }
+    });
+
+    const newParam = {
+        id: 'sparam_' + new Date().getTime(),
+        name,
+        sourceColumn,
+        defaultValue,
+        mappings
+    };
+
+    status.textContent = 'Saving...';
+    status.style.color = 'gray';
+
+    const currentParams = await getCustomParameters();
+    currentParams.push(newParam);
+    await saveCustomParameters(currentParams);
+    
+    await loadCustomParameters(); // Refresh the local cache
+    await populateParameterButtons(); // Refresh the UI buttons
+
+    status.textContent = 'Parameter saved successfully!';
+    status.style.color = 'green';
+    setTimeout(() => {
+        document.getElementById('special-param-modal').classList.add('hidden');
+    }, 1500);
+}
+
+async function showManageParamsModal() {
+    document.getElementById('special-param-modal').classList.add('hidden');
+    const listContainer = document.getElementById('manage-params-list');
+    listContainer.innerHTML = '<p class="text-gray-500">Loading...</p>';
+    document.getElementById('manage-params-modal').classList.remove('hidden');
+
+    const params = await getCustomParameters();
+    listContainer.innerHTML = '';
+    if (params.length === 0) {
+        listContainer.innerHTML = '<p class="text-gray-500 text-center">No special parameters created yet.</p>';
+        return;
+    }
+
+    params.forEach(param => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border-b';
+        let mappingsHtml = param.mappings.map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
+        if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">{${param.name}}</p>
+                    <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
+                    <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
+                </div>
+                <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+            </div>
+            <div class="mt-2 text-sm">${mappingsHtml}</div>
+        `;
+        listContainer.appendChild(div);
+    });
+
+    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => {
+        btn.onclick = () => deleteSpecialParameter(btn.dataset.id);
+    });
+}
+
+async function deleteSpecialParameter(paramId) {
+    let params = await getCustomParameters();
+    params = params.filter(p => p.id !== paramId);
+    await saveCustomParameters(params);
+    await loadCustomParameters(); // Refresh cache
+    await populateParameterButtons(); // Refresh UI
+    await showManageParamsModal(); // Refresh the management list
+}
+
+
+// --- CC Pillbox Functions ---
+// ... (omitted for brevity, no changes)
+// --- Template Functions --- (No changes here, so I'm omitting for brevity)
 async function getTemplates() {
     return Excel.run(async (context) => {
         const settings = context.workbook.settings;
@@ -568,8 +794,7 @@ async function deleteTemplate(templateId) {
     await showTemplatesModal(); // Refresh the list
 }
 
-// --- CC Pillbox Functions ---
-
+// --- CC Pillbox Functions --- (No changes here, so I'm omitting for brevity)
 function setupCcInput() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
