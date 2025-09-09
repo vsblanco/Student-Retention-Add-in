@@ -192,7 +192,9 @@ Office.onReady((info) => {
         setupPillboxInput('cc');
         
         quill.on('selection-change', (range) => {
-            if (range) lastFocusedInput = quill;
+            if (range) {
+                lastFocusedInput = quill;
+            }
         });
 
         document.addEventListener('click', (e) => {
@@ -242,12 +244,16 @@ async function populateParameterButtons() {
 
 }
 
-
 function insertParameter(param) {
     const paramName = param.replace(/[{}]/g, '');
-    const range = quill.getSelection(true);
 
-    if (lastFocusedInput instanceof Quill) {
+    // Check if the last focused element is one of our pillbox inputs
+    if (lastFocusedInput && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedInput.id)) {
+        const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
+        addPill(type, param);
+    } else {
+        // Default to Quill editor
+        const range = quill.getSelection(true); // Get current position, or end
         if (paramName === 'Randomize') {
             quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
         } else {
@@ -255,21 +261,9 @@ function insertParameter(param) {
             quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
         }
         quill.setSelection(range.index + 1, Quill.sources.USER);
-    } else if (lastFocusedInput) {
-        const type = lastFocusedInput.id.split('-')[1];
-        addPill(type, param, true);
-    } else {
-        quill.focus();
-        const length = quill.getLength();
-         if (paramName === 'Randomize') {
-            quill.insertEmbed(length, 'randomize', { options: [''] }, Quill.sources.USER);
-        } else {
-            const isCustom = customParameters.some(p => p.name === paramName);
-            quill.insertEmbed(length, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
-        }
-        quill.setSelection(length + 1, Quill.sources.USER);
     }
 }
+
 
 function toggleCustomSheetInput() {
     const recipientList = document.getElementById('recipient-list');
