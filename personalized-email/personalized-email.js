@@ -91,18 +91,35 @@ Office.onReady((info) => {
 });
 
 async function populateParameterButtons() {
-    const container = document.getElementById('parameter-buttons');
-    container.innerHTML = ''; // Clear existing
-    const allParameters = [...standardParameters, ...specialParameters.map(p => p.name)];
+    const standardContainer = document.getElementById('standard-parameter-buttons');
+    const specialContainer = document.getElementById('special-parameter-buttons');
+    const specialSection = document.getElementById('special-parameters-section');
 
-    allParameters.forEach(param => {
+    standardContainer.innerHTML = '';
+    specialContainer.innerHTML = '';
+
+    standardParameters.forEach(param => {
         const button = document.createElement('button');
         button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
         button.textContent = `{${param}}`;
         button.onclick = () => insertParameter(`{${param}}`);
-        container.appendChild(button);
+        standardContainer.appendChild(button);
     });
+
+    if (specialParameters.length > 0) {
+        specialSection.classList.remove('hidden');
+        specialParameters.forEach(param => {
+            const button = document.createElement('button');
+            button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
+            button.textContent = `{${param.name}}`;
+            button.onclick = () => insertParameter(`{${param.name}}`);
+            specialContainer.appendChild(button);
+        });
+    } else {
+        specialSection.classList.add('hidden');
+    }
 }
+
 
 function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
@@ -806,10 +823,10 @@ async function duplicateSpecialParameter(paramId) {
     const newParam = JSON.parse(JSON.stringify(paramToDuplicate)); // Deep copy
 
     // Find a unique name for the copy
-    let newName = `${newParam.name} - Copy`;
+    let newName = `${newParam.name}Copy`;
     const allParamNames = [...standardParameters, ...params.map(p => p.name)];
     while (allParamNames.includes(newName)) {
-        newName = `${newName} - Copy`;
+        newName = `${newName}Copy`;
     }
     
     newParam.name = newName;
