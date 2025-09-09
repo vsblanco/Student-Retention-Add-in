@@ -293,27 +293,45 @@ async function getStudentData() {
                     if (param.conditions && param.conditions.length > 0) {
                         for (const condition of param.conditions) {
                             let conditionMet = false;
-                            if (condition.type === 'value') {
-                                if (sourceValue != null && String(sourceValue).trim().toLowerCase() === String(condition.if).trim().toLowerCase()) {
-                                    conditionMet = true;
-                                }
-                            } else if (condition.type === 'parameter') {
-                                const compareParamValue = student[condition.compareParam];
-                                if (sourceValue != null && compareParamValue != null) {
+                            const sourceValueExists = sourceValue !== null && sourceValue !== undefined;
+                            
+                            if (sourceValueExists) {
+                                if (condition.type === 'value') {
+                                    const targetValue = condition.if;
                                     const numSource = parseFloat(sourceValue);
-                                    const numCompare = parseFloat(compareParamValue);
+                                    const numTarget = parseFloat(targetValue);
 
-                                    if (!isNaN(numSource) && !isNaN(numCompare)) {
-                                        // Numeric comparison
+                                    if (!isNaN(numSource) && !isNaN(numTarget)) {
                                         switch (condition.operator) {
-                                            case '==': conditionMet = numSource == numCompare; break;
-                                            case '>':  conditionMet = numSource > numCompare;  break;
-                                            case '<':  conditionMet = numSource < numCompare;  break;
+                                            case '==': conditionMet = numSource == numTarget; break;
+                                            case '>':  conditionMet = numSource > numTarget;  break;
+                                            case '<':  conditionMet = numSource < numTarget;  break;
+                                            case '>=': conditionMet = numSource >= numTarget; break;
+                                            case '<=': conditionMet = numSource <= numTarget; break;
                                         }
                                     } else {
-                                        // String comparison for equality only
                                         if (condition.operator === '==') {
-                                            conditionMet = String(sourceValue).trim().toLowerCase() === String(compareParamValue).trim().toLowerCase();
+                                            conditionMet = String(sourceValue).trim().toLowerCase() === String(targetValue).trim().toLowerCase();
+                                        }
+                                    }
+                                } else if (condition.type === 'parameter') {
+                                    const compareParamValue = student[condition.compareParam];
+                                    if (compareParamValue !== null && compareParamValue !== undefined) {
+                                        const numSource = parseFloat(sourceValue);
+                                        const numCompare = parseFloat(compareParamValue);
+
+                                        if (!isNaN(numSource) && !isNaN(numCompare)) {
+                                            switch (condition.operator) {
+                                                case '==': conditionMet = numSource == numCompare; break;
+                                                case '>':  conditionMet = numSource > numCompare;  break;
+                                                case '<':  conditionMet = numSource < numCompare;  break;
+                                                case '>=': conditionMet = numSource >= numCompare; break;
+                                                case '<=': conditionMet = numSource <= numCompare; break;
+                                            }
+                                        } else {
+                                            if (condition.operator === '==') {
+                                                conditionMet = String(sourceValue).trim().toLowerCase() === String(compareParamValue).trim().toLowerCase();
+                                            }
                                         }
                                     }
                                 }
@@ -321,11 +339,10 @@ async function getStudentData() {
 
                             if (conditionMet) {
                                 finalValue = condition.then;
-                                break; // Exit after first met condition
+                                break;
                             }
                         }
-                    } else if (sourceValue != null) {
-                        // If no conditions, use source value directly
+                    } else if (sourceValueExists) {
                         finalValue = sourceValue;
                     }
                     
@@ -351,10 +368,17 @@ async function getStudentData() {
 
 const renderTemplate = (template, data) => {
     if (!template) return '';
-    // First, resolve all special parameters within other parameters
     let resolvedTemplate = template;
-    for (let i = 0; i < 3; i++) { // Limit recursion to prevent infinite loops
-         resolvedTemplate = resolvedTemplate.replace(/\{(\w+)\}/g, (match, key) => (data[key] ?? match));
+    for (let i = 0; i < 5; i++) { 
+         let replaced = false;
+         resolvedTemplate = resolvedTemplate.replace(/\{(\w+)\}/g, (match, key) => {
+            if (data[key] !== match) {
+                replaced = true;
+                return (data[key] ?? match);
+            }
+            return match;
+         });
+         if (!replaced) break;
     }
     return resolvedTemplate;
 };
@@ -694,7 +718,9 @@ function showSpecialParamModal(paramToEdit = null) {
         sourceColumnInput.value = paramToEdit.sourceColumn;
         defaultValueInput.value = paramToEdit.defaultValue;
         
-        paramToEdit.conditions.forEach(c => addConditionRow(c));
+        if (paramToEdit.conditions) {
+            paramToEdit.conditions.forEach(c => addConditionRow(c));
+        }
 
     } else {
         modalTitle.textContent = 'Create Special Parameter';
@@ -738,20 +764,31 @@ function addConditionRow(condition = null) {
         logicContainer.innerHTML = ''; 
 
         if (selectedType === 'value') {
+            const currentOp = (condition && condition.type === 'value') ? condition.operator : '==';
             logicContainer.innerHTML = `
                 <span class="text-sm text-gray-500">cell is</span>
-                <input type="text" class="condition-if-value flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${(condition && condition.type === 'value') ? condition.if : ''}">
+                <select class="condition-operator text-sm p-1 border rounded-md">
+                    <option value="==" ${currentOp === '==' ? 'selected' : ''}>=</option>
+                    <option value=">" ${currentOp === '>' ? 'selected' : ''}>&gt;</option>
+                    <option value="<" ${currentOp === '<' ? 'selected' : ''}>&lt;</option>
+                    <option value=">=" ${currentOp === '>=' ? 'selected' : ''}>&ge;</option>
+                    <option value="<=" ${currentOp === '<=' ? 'selected' : ''}>&le;</option>
+                </select>
+                <input type="text" class="condition-if-value flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., 85 or Bob" value="${(condition && condition.type === 'value') ? condition.if : ''}">
             `;
         } else { // parameter
             const allParams = [...standardParameters, ...specialParameters.map(p => p.name)];
             const options = allParams.map(p => `<option value="${p}" ${ (condition && condition.type === 'parameter' && condition.compareParam === p) ? 'selected' : '' }>${p}</option>`).join('');
+            const currentOp = (condition && condition.type === 'parameter') ? condition.operator : '==';
             
             logicContainer.innerHTML = `
                 <span class="text-sm text-gray-500">cell is</span>
                 <select class="condition-operator text-sm p-1 border rounded-md">
-                    <option value="==" ${ (condition && condition.operator === '==') ? 'selected' : '' }>=</option>
-                    <option value=">" ${ (condition && condition.operator === '>') ? 'selected' : '' }>&gt;</option>
-                    <option value="<" ${ (condition && condition.operator === '<') ? 'selected' : '' }>&lt;</option>
+                    <option value="==" ${currentOp === '==' ? 'selected' : ''}>=</option>
+                    <option value=">" ${currentOp === '>' ? 'selected' : ''}>&gt;</option>
+                    <option value="<" ${currentOp === '<' ? 'selected' : ''}>&lt;</option>
+                    <option value=">=" ${currentOp === '>=' ? 'selected' : ''}>&ge;</option>
+                    <option value="<=" ${currentOp === '<=' ? 'selected' : ''}>&le;</option>
                 </select>
                 <select class="condition-compare-param text-sm p-1 border rounded-md bg-blue-50">${options}</select>
             `;
@@ -779,7 +816,7 @@ async function saveSpecialParameter() {
         return;
     }
     const existingParam = specialParameters.find(p => p.name.toLowerCase() === name.toLowerCase());
-    if (standardParameters.includes(name) || (existingParam && existingParam.id !== paramId)) {
+    if (standardParameters.map(p=>p.toLowerCase()).includes(name.toLowerCase()) || (existingParam && existingParam.id !== paramId)) {
         status.textContent = 'This parameter name is already in use.';
         status.style.color = 'red';
         return;
@@ -798,6 +835,7 @@ async function saveSpecialParameter() {
             const ifValue = row.querySelector('.condition-if-value').value.trim();
             if (ifValue) {
                 conditionData.if = ifValue;
+                conditionData.operator = row.querySelector('.condition-operator').value;
                 conditions.push(conditionData);
             }
         } else { // parameter
@@ -859,7 +897,7 @@ async function showManageParamsModal() {
         let conditionsHtml = param.conditions.map(c => {
             let logic = '';
             if (c.type === 'value') {
-                logic = `If cell is '<strong>${c.if}</strong>'`;
+                 logic = `If cell is <strong>${c.operator}</strong> '<strong>${c.if}</strong>'`;
             } else {
                 logic = `If cell is <strong>${c.operator}</strong> {<strong>${c.compareParam}</strong>}`;
             }
