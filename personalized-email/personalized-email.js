@@ -73,7 +73,9 @@ Office.onReady((info) => {
             }
         });
         
+        let Embed = Quill.import('blots/embed');
         let Inline = Quill.import('blots/inline');
+
         class ParameterBlot extends Inline {
             static create(value) {
                 let node = super.create();
@@ -91,6 +93,85 @@ Office.onReady((info) => {
         ParameterBlot.blotName = 'parameter';
         ParameterBlot.tagName = 'SPAN';
         Quill.register(ParameterBlot);
+
+        class RandomizeBlot extends Embed {
+            static create(value) {
+                const node = super.create(value);
+                node.setAttribute('contenteditable', 'false');
+                node.classList.add('randomize-tag');
+                
+                // Header
+                const header = document.createElement('div');
+                header.classList.add('randomize-header');
+                const text = document.createElement('span');
+                text.innerText = '{Randomize}';
+                const arrow = document.createElement('span');
+                arrow.innerText = '▼';
+                arrow.classList.add('randomize-arrow');
+                header.appendChild(text);
+                header.appendChild(arrow);
+                
+                // Panel
+                const panel = document.createElement('div');
+                panel.classList.add('randomize-panel');
+                panel.style.display = 'none'; // Initially hidden
+                
+                const inputsContainer = document.createElement('div');
+                (value.options || ['']).forEach(optionText => {
+                    this.addOptionInput(inputsContainer, optionText, node);
+                });
+                
+                const addButton = document.createElement('button');
+                addButton.innerText = '+ Add Option';
+                addButton.classList.add('add-random-option');
+                addButton.onclick = (e) => {
+                    e.stopPropagation();
+                    this.addOptionInput(inputsContainer, '', node);
+                };
+                
+                panel.appendChild(inputsContainer);
+                panel.appendChild(addButton);
+                
+                node.appendChild(header);
+                node.appendChild(panel);
+
+                header.onclick = () => {
+                    const isOpening = panel.style.display === 'none';
+                    panel.style.display = isOpening ? 'block' : 'none';
+                    arrow.classList.toggle('open', isOpening);
+                };
+
+                // Stop propagation for panel clicks
+                panel.addEventListener('click', e => e.stopPropagation());
+
+                this.updateOptions(node); // Set initial data attribute
+                return node;
+            }
+
+            static addOptionInput(container, value, blotNode) {
+                const input = document.createElement('input');
+                input.classList.add('randomize-input');
+                input.value = value;
+                input.placeholder = 'Enter a phrase...';
+                input.oninput = () => this.updateOptions(blotNode);
+                container.appendChild(input);
+            }
+
+            static updateOptions(blotNode) {
+                const inputs = blotNode.querySelectorAll('.randomize-input');
+                const options = Array.from(inputs).map(input => input.value);
+                blotNode.dataset.options = JSON.stringify(options.filter(o => o.trim()));
+            }
+
+            static value(domNode) {
+                return {
+                    options: JSON.parse(domNode.dataset.options || '[]')
+                };
+            }
+        }
+        RandomizeBlot.blotName = 'randomize';
+        RandomizeBlot.tagName = 'SPAN';
+        Quill.register(RandomizeBlot);
         
         setupPillboxInput('from');
         setupPillboxInput('subject');
@@ -135,28 +216,35 @@ async function populateParameterButtons() {
         customSection.classList.add('hidden');
     }
 
-    // Placeholder for Randomize button
     document.getElementById('randomize-parameter-button').onclick = () => insertParameter('{Randomize}');
 
 }
 
 
 function insertParameter(param) {
+    const paramName = param.replace(/[{}]/g, '');
+    const range = quill.getSelection(true);
+
     if (lastFocusedInput instanceof Quill) {
-        const paramName = param.replace(/[{}]/g, '');
-        const isCustom = customParameters.some(p => p.name === paramName);
-        const range = lastFocusedInput.getSelection(true);
-        lastFocusedInput.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
-        lastFocusedInput.setSelection(range.index + 1, Quill.sources.USER);
+        if (paramName === 'Randomize') {
+            quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
+        } else {
+            const isCustom = customParameters.some(p => p.name === paramName);
+            quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
+        }
+        quill.setSelection(range.index + 1, Quill.sources.USER);
     } else if (lastFocusedInput) {
-        const type = lastFocusedInput.id.split('-')[1]; // from, subject, or cc
+        const type = lastFocusedInput.id.split('-')[1];
         addPill(type, param, true);
     } else {
         quill.focus();
         const length = quill.getLength();
-        const paramName = param.replace(/[{}]/g, '');
-        const isCustom = customParameters.some(p => p.name === paramName);
-        quill.insertEmbed(length, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
+         if (paramName === 'Randomize') {
+            quill.insertEmbed(length, 'randomize', { options: [''] }, Quill.sources.USER);
+        } else {
+            const isCustom = customParameters.some(p => p.name === paramName);
+            quill.insertEmbed(length, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
+        }
         quill.setSelection(length + 1, Quill.sources.USER);
     }
 }
@@ -348,11 +436,19 @@ const renderBodyTemplate = (bodyHtml, data) => {
     if (!bodyHtml) return '';
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = bodyHtml;
+    
     tempDiv.querySelectorAll('.parameter-tag').forEach(tag => {
         const paramName = tag.getAttribute('data-param');
         const value = data[paramName] ?? tag.innerText;
         tag.replaceWith(document.createTextNode(value));
     });
+
+    tempDiv.querySelectorAll('.randomize-tag').forEach(tag => {
+        const options = JSON.parse(tag.dataset.options || '[]');
+        const choice = options.length > 0 ? options[Math.floor(Math.random() * options.length)] : '';
+        tag.replaceWith(document.createTextNode(choice));
+    });
+
     return tempDiv.innerHTML;
 };
 
@@ -401,7 +497,14 @@ async function showPayload() {
         const fromTemplate = reconstructPillboxString(fromParts);
         const subjectTemplate = reconstructPillboxString(subjectParts);
         const ccTemplate = reconstructPillboxString(ccRecipients, ';');
-        const bodyTemplate = quill.root.innerHTML;
+        
+        const tempEditorDiv = document.createElement('div');
+        tempEditorDiv.innerHTML = quill.root.innerHTML;
+        tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+             RandomizeBlot.updateOptions(tagNode);
+        });
+        const bodyTemplate = tempEditorDiv.innerHTML;
+
 
         const payload = studentDataCache.map(student => ({
             from: renderTemplate(fromTemplate, student),
@@ -475,7 +578,14 @@ async function executeSend() {
     const fromTemplate = reconstructPillboxString(fromParts);
     const subjectTemplate = reconstructPillboxString(subjectParts);
     const ccTemplate = reconstructPillboxString(ccRecipients, ';');
-    const bodyTemplate = quill.root.innerHTML;
+    
+    const tempEditorDiv = document.createElement('div');
+    tempEditorDiv.innerHTML = quill.root.innerHTML;
+    tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+         RandomizeBlot.updateOptions(tagNode);
+    });
+    const bodyTemplate = tempEditorDiv.innerHTML;
+
 
     const payload = studentDataCache.map(student => ({
         from: renderTemplate(fromTemplate, student),
@@ -603,6 +713,16 @@ async function saveTemplate() {
     status.textContent = 'Saving...';
     status.style.color = 'gray';
 
+    // Before getting innerHTML, update data-options on randomize tags
+    const tempEditorDiv = document.createElement('div');
+    tempEditorDiv.innerHTML = quill.root.innerHTML;
+    tempEditorDiv.querySelectorAll('.randomize-tag').forEach(tagNode => {
+         RandomizeBlot.updateOptions(tagNode);
+         // Clean the UI part for saving
+         const panel = tagNode.querySelector('.randomize-panel');
+         if(panel) panel.remove();
+    });
+
     const newTemplate = {
         id: 'template_' + new Date().getTime(),
         name: name,
@@ -611,7 +731,7 @@ async function saveTemplate() {
         from: reconstructPillboxString(fromParts),
         subject: reconstructPillboxString(subjectParts),
         cc: reconstructPillboxString(ccRecipients),
-        body: quill.root.innerHTML
+        body: tempEditorDiv.innerHTML
     };
 
     const templates = await getTemplates();
