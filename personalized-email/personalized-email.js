@@ -71,6 +71,34 @@ Office.onReady((info) => {
             }
         });
         
+        // --- START: Custom Blot for Parameters ---
+        let Inline = Quill.import('blots/inline');
+
+        class ParameterBlot extends Inline {
+            static create(value) {
+                let node = super.create();
+                node.setAttribute('contenteditable', 'false');
+                node.setAttribute('data-param', value.name);
+                node.classList.add('parameter-tag');
+                if (value.isSpecial) {
+                    node.classList.add('special');
+                }
+                node.innerText = `{${value.name}}`;
+                return node;
+            }
+
+            static formats(node) {
+                return {
+                    name: node.getAttribute('data-param'),
+                    isSpecial: node.classList.contains('special')
+                };
+            }
+        }
+        ParameterBlot.blotName = 'parameter';
+        ParameterBlot.tagName = 'SPAN';
+        Quill.register(ParameterBlot);
+        // --- END: Custom Blot for Parameters ---
+        
         setupCcInput();
         const subjectInput = document.getElementById('email-subject');
         const fromInput = document.getElementById('email-from');
@@ -122,9 +150,15 @@ async function populateParameterButtons() {
 
 
 function insertParameter(param) {
+    const paramName = param.replace(/[{}]/g, ''); // Get name without braces
+    const isSpecial = specialParameters.some(p => p.name === paramName);
+
     if (lastFocusedInput instanceof Quill) {
         const range = lastFocusedInput.getSelection(true);
-        lastFocusedInput.insertText(range.index, param, 'user');
+        // Insert the custom blot
+        lastFocusedInput.insertEmbed(range.index, 'parameter', { name: paramName, isSpecial: isSpecial }, Quill.sources.USER);
+        // Move cursor after the inserted blot
+        lastFocusedInput.setSelection(range.index + 1, Quill.sources.USER);
     } else if (lastFocusedInput && lastFocusedInput.id === 'email-cc-input') {
         addCcRecipient(param);
     } else if (lastFocusedInput) { // It's the subject or from input
@@ -138,7 +172,8 @@ function insertParameter(param) {
         // Default to editor if nothing is focused
         quill.focus();
         const length = quill.getLength();
-        quill.insertText(length, param, 'user');
+        quill.insertEmbed(length, 'parameter', { name: paramName, isSpecial: isSpecial }, Quill.sources.USER);
+        quill.setSelection(length + 1, Quill.sources.USER);
     }
 }
 
@@ -329,6 +364,23 @@ const renderTemplate = (template, data) => {
     });
 };
 
+const renderBodyTemplate = (bodyHtml, data) => {
+    if (!bodyHtml) return '';
+    // Create a temporary DOM element to parse the HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = bodyHtml;
+
+    // Find all parameter tags
+    tempDiv.querySelectorAll('.parameter-tag').forEach(tag => {
+        const paramName = tag.getAttribute('data-param');
+        const value = data[paramName] ?? tag.innerText; // Fallback to the tag text if data not found
+        // Replace the tag with a simple text node
+        tag.replaceWith(document.createTextNode(value));
+    });
+
+    return tempDiv.innerHTML;
+};
+
 const renderCCTemplate = (recipients, data) => {
     if (!recipients || recipients.length === 0) return '';
     return recipients.map(recipient => renderTemplate(recipient, data)).join(';');
@@ -355,7 +407,7 @@ async function showExample() {
         document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
         document.getElementById('example-cc').textContent = renderCCTemplate(ccRecipients, randomStudent) || '[Not Specified]';
         document.getElementById('example-subject').textContent = renderTemplate(subjectTemplate, randomStudent);
-        document.getElementById('example-body').innerHTML = renderTemplate(bodyTemplate, randomStudent);
+        document.getElementById('example-body').innerHTML = renderBodyTemplate(bodyTemplate, randomStudent);
 
         document.getElementById('example-modal').classList.remove('hidden');
 
@@ -384,7 +436,7 @@ async function showPayload() {
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccRecipients, student),
             subject: renderTemplate(subjectTemplate, student),
-            body: renderTemplate(bodyTemplate, student)
+            body: renderBodyTemplate(bodyTemplate, student)
         }));
 
         document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
@@ -457,7 +509,7 @@ async function executeSend() {
         to: student.StudentEmail || '',
         cc: renderCCTemplate(ccRecipients, student),
         subject: renderTemplate(subjectTemplate, student),
-        body: renderTemplate(bodyTemplate, student)
+        body: renderBodyTemplate(bodyTemplate, student)
     })).filter(email => email.to && email.from);
 
     if(payload.length === 0) {
