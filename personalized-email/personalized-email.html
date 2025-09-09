@@ -96,7 +96,7 @@
             <div class="space-y-4">
                  <div>
                     <label for="email-from" class="block text-sm font-medium text-gray-700">From</label>
-                    <input type="email" id="email-from" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="sender@example.com or {Assigned} parameter">
+                    <input type="email" id="email-from" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="sender@example.com or {YourParameter}">
                 </div>
                 <div>
                     <label for="recipient-list" class="block text-sm font-medium text-gray-700">To</label>
@@ -228,8 +228,9 @@
         
         <div id="special-param-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-100 overflow-y-auto p-4">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-8">
+                <input type="hidden" id="param-edit-id">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-800">Create Special Parameter</h3>
+                    <h3 id="special-param-modal-title" class="text-lg font-semibold text-gray-800">Create Special Parameter</h3>
                     <button id="manage-special-params-button" class="text-xs text-blue-600 hover:underline">Manage Parameters</button>
                 </div>
                 <div class="space-y-4">
@@ -240,7 +241,7 @@
                     </div>
                     <div>
                         <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column</label>
-                        <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Type the exact column name, e.g., Assigned Advisor">
+                        <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Type the exact column name, e.g., Assigned">
                          <p class="mt-1 text-xs text-gray-500">The column in your sheet that this parameter will read from.</p>
                     </div>
                     <div>
