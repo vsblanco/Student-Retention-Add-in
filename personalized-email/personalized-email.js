@@ -55,7 +55,7 @@ Office.onReady((info) => {
         document.getElementById('confirm-save-template-button').onclick = saveTemplate;
         document.getElementById('confirm-send-button').onclick = executeSend;
         document.getElementById('save-special-param-button').onclick = saveSpecialParameter;
-        document.getElementById('add-mapping-button').onclick = () => addMappingRow();
+        document.getElementById('add-condition-button').onclick = () => addConditionRow();
         document.getElementById('manage-special-params-button').onclick = showManageParamsModal;
 
         // Initialize Quill Editor
@@ -284,27 +284,54 @@ async function getStudentData() {
                     DaysOut: row[colIndices.DaysOut] ?? '',
                 };
 
+                // Evaluate special parameters
                 specialParameters.forEach(param => {
                     const colIndex = specialParamIndices[param.name];
-                    let value = param.defaultValue ?? '';
-                    if (colIndex !== undefined) {
-                        const cellValue = row[colIndex];
-                        let mappingFound = false;
-                        if (param.mappings && cellValue != null) {
-                            for (const mapping of param.mappings) {
-                                if (String(cellValue).trim().toLowerCase() === String(mapping.if).trim().toLowerCase()) {
-                                    value = mapping.then;
-                                    mappingFound = true;
-                                    break;
+                    let finalValue = param.defaultValue ?? '';
+                    const sourceValue = (colIndex !== undefined) ? row[colIndex] : null;
+
+                    if (param.conditions && param.conditions.length > 0) {
+                        for (const condition of param.conditions) {
+                            let conditionMet = false;
+                            if (condition.type === 'value') {
+                                if (sourceValue != null && String(sourceValue).trim().toLowerCase() === String(condition.if).trim().toLowerCase()) {
+                                    conditionMet = true;
+                                }
+                            } else if (condition.type === 'parameter') {
+                                const compareParamValue = student[condition.compareParam];
+                                if (sourceValue != null && compareParamValue != null) {
+                                    const numSource = parseFloat(sourceValue);
+                                    const numCompare = parseFloat(compareParamValue);
+
+                                    if (!isNaN(numSource) && !isNaN(numCompare)) {
+                                        // Numeric comparison
+                                        switch (condition.operator) {
+                                            case '==': conditionMet = numSource == numCompare; break;
+                                            case '>':  conditionMet = numSource > numCompare;  break;
+                                            case '<':  conditionMet = numSource < numCompare;  break;
+                                        }
+                                    } else {
+                                        // String comparison for equality only
+                                        if (condition.operator === '==') {
+                                            conditionMet = String(sourceValue).trim().toLowerCase() === String(compareParamValue).trim().toLowerCase();
+                                        }
+                                    }
                                 }
                             }
+
+                            if (conditionMet) {
+                                finalValue = condition.then;
+                                break; // Exit after first met condition
+                            }
                         }
-                        if (!mappingFound && cellValue != null) {
-                             value = cellValue ?? param.defaultValue ?? '';
-                        }
+                    } else if (sourceValue != null) {
+                        // If no conditions, use source value directly
+                        finalValue = sourceValue;
                     }
-                    student[param.name] = value;
+                    
+                    student[param.name] = finalValue;
                 });
+
                 studentDataCache.push(student);
             }
             status.textContent = `Found ${studentDataCache.length} students.`;
@@ -324,10 +351,14 @@ async function getStudentData() {
 
 const renderTemplate = (template, data) => {
     if (!template) return '';
-    return template.replace(/\{(\w+)\}/g, (match, key) => {
-        return (data[key] ?? match);
-    });
+    // First, resolve all special parameters within other parameters
+    let resolvedTemplate = template;
+    for (let i = 0; i < 3; i++) { // Limit recursion to prevent infinite loops
+         resolvedTemplate = resolvedTemplate.replace(/\{(\w+)\}/g, (match, key) => (data[key] ?? match));
+    }
+    return resolvedTemplate;
 };
+
 
 const renderCCTemplate = (recipients, data) => {
     if (!recipients || recipients.length === 0) return '';
@@ -650,10 +681,10 @@ function showSpecialParamModal(paramToEdit = null) {
     const nameInput = document.getElementById('param-name');
     const sourceColumnInput = document.getElementById('param-source-column');
     const defaultValueInput = document.getElementById('param-default-value');
-    const mappingContainer = document.getElementById('param-mapping-container');
+    const conditionsContainer = document.getElementById('param-conditions-container');
     const editIdInput = document.getElementById('param-edit-id');
 
-    mappingContainer.innerHTML = '';
+    conditionsContainer.innerHTML = '';
     document.getElementById('save-param-status').textContent = '';
 
     if (paramToEdit) {
@@ -663,7 +694,7 @@ function showSpecialParamModal(paramToEdit = null) {
         sourceColumnInput.value = paramToEdit.sourceColumn;
         defaultValueInput.value = paramToEdit.defaultValue;
         
-        paramToEdit.mappings.forEach(m => addMappingRow(m.if, m.then));
+        paramToEdit.conditions.forEach(c => addConditionRow(c));
 
     } else {
         modalTitle.textContent = 'Create Special Parameter';
@@ -676,20 +707,64 @@ function showSpecialParamModal(paramToEdit = null) {
     document.getElementById('special-param-modal').classList.remove('hidden');
 }
 
-function addMappingRow(ifValue = '', thenValue = '') {
-    const container = document.getElementById('param-mapping-container');
+function addConditionRow(condition = null) {
+    const container = document.getElementById('param-conditions-container');
     const div = document.createElement('div');
-    div.className = 'flex items-center gap-2 mapping-row';
+    div.className = 'p-3 border rounded-md bg-gray-50 condition-row';
+    
+    const type = condition ? condition.type : 'value';
+
     div.innerHTML = `
-        <span class="text-sm text-gray-500">If cell is</span>
-        <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${ifValue}">
-        <span class="text-sm text-gray-500">then value is</span>
-        <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com" value="${thenValue}">
-        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold text-gray-600">IF</span>
+            <select class="condition-type-select text-sm p-1 border rounded-md">
+                <option value="value" ${type === 'value' ? 'selected' : ''}>Value Mapping</option>
+                <option value="parameter" ${type === 'parameter' ? 'selected' : ''}>Parameter Mapping</option>
+            </select>
+            <div class="flex-grow condition-logic-container"></div>
+            <button class="remove-condition-btn text-red-500 hover:text-red-700 text-lg font-bold">&times;</button>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+           <span class="text-sm font-semibold text-gray-600 ml-1">THEN</span>
+           <input type="text" class="condition-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="set value to..." value="${condition ? condition.then : ''}">
+        </div>
     `;
-    div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
+
+    const typeSelect = div.querySelector('.condition-type-select');
+    const logicContainer = div.querySelector('.condition-logic-container');
+
+    const updateLogicContainer = () => {
+        const selectedType = typeSelect.value;
+        logicContainer.innerHTML = ''; 
+
+        if (selectedType === 'value') {
+            logicContainer.innerHTML = `
+                <span class="text-sm text-gray-500">cell is</span>
+                <input type="text" class="condition-if-value flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${(condition && condition.type === 'value') ? condition.if : ''}">
+            `;
+        } else { // parameter
+            const allParams = [...standardParameters, ...specialParameters.map(p => p.name)];
+            const options = allParams.map(p => `<option value="${p}" ${ (condition && condition.type === 'parameter' && condition.compareParam === p) ? 'selected' : '' }>${p}</option>`).join('');
+            
+            logicContainer.innerHTML = `
+                <span class="text-sm text-gray-500">cell is</span>
+                <select class="condition-operator text-sm p-1 border rounded-md">
+                    <option value="==" ${ (condition && condition.operator === '==') ? 'selected' : '' }>=</option>
+                    <option value=">" ${ (condition && condition.operator === '>') ? 'selected' : '' }>&gt;</option>
+                    <option value="<" ${ (condition && condition.operator === '<') ? 'selected' : '' }>&lt;</option>
+                </select>
+                <select class="condition-compare-param text-sm p-1 border rounded-md bg-blue-50">${options}</select>
+            `;
+        }
+    };
+
+    typeSelect.onchange = updateLogicContainer;
+    div.querySelector('.remove-condition-btn').onclick = () => div.remove();
+    
     container.appendChild(div);
+    updateLogicContainer(); // Initial render
 }
+
 
 async function saveSpecialParameter() {
     const status = document.getElementById('save-param-status');
@@ -713,12 +788,22 @@ async function saveSpecialParameter() {
     const sourceColumn = document.getElementById('param-source-column').value;
     const defaultValue = document.getElementById('param-default-value').value.trim();
     
-    const mappings = [];
-    document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
-        const ifValue = row.querySelector('.mapping-if').value.trim();
-        const thenValue = row.querySelector('.mapping-then').value.trim();
-        if (ifValue) {
-            mappings.push({ if: ifValue, then: thenValue });
+    const conditions = [];
+    document.querySelectorAll('#param-conditions-container .condition-row').forEach(row => {
+        const type = row.querySelector('.condition-type-select').value;
+        const thenValue = row.querySelector('.condition-then').value.trim();
+        let conditionData = { type, then: thenValue };
+
+        if (type === 'value') {
+            const ifValue = row.querySelector('.condition-if-value').value.trim();
+            if (ifValue) {
+                conditionData.if = ifValue;
+                conditions.push(conditionData);
+            }
+        } else { // parameter
+            conditionData.operator = row.querySelector('.condition-operator').value;
+            conditionData.compareParam = row.querySelector('.condition-compare-param').value;
+            conditions.push(conditionData);
         }
     });
 
@@ -726,7 +811,7 @@ async function saveSpecialParameter() {
         name,
         sourceColumn,
         defaultValue,
-        mappings
+        conditions
     };
 
     status.textContent = 'Saving...';
@@ -771,8 +856,17 @@ async function showManageParamsModal() {
     params.forEach(param => {
         const div = document.createElement('div');
         div.className = 'p-3 border-b';
-        let mappingsHtml = param.mappings.map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
-        if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+        let conditionsHtml = param.conditions.map(c => {
+            let logic = '';
+            if (c.type === 'value') {
+                logic = `If cell is '<strong>${c.if}</strong>'`;
+            } else {
+                logic = `If cell is <strong>${c.operator}</strong> {<strong>${c.compareParam}</strong>}`;
+            }
+            return `<div class="text-xs ml-4"><span class="text-gray-500">${logic} &rarr;</span> '${c.then}'</div>`;
+        }).join('');
+
+        if (!conditionsHtml) conditionsHtml = '<div class="text-xs ml-4 text-gray-400">No conditions</div>';
 
         div.innerHTML = `
             <div class="flex justify-between items-start">
@@ -787,7 +881,7 @@ async function showManageParamsModal() {
                     <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                 </div>
             </div>
-            <div class="mt-2 text-sm">${mappingsHtml}</div>
+            <div class="mt-2 text-sm">${conditionsHtml}</div>
         `;
         listContainer.appendChild(div);
     });
@@ -825,7 +919,7 @@ async function duplicateSpecialParameter(paramId) {
     // Find a unique name for the copy
     let newName = `${newParam.name}Copy`;
     const allParamNames = [...standardParameters, ...params.map(p => p.name)];
-    while (allParamNames.includes(newName)) {
+    while (allParamNames.some(p => p.toLowerCase() === newName.toLowerCase())) {
         newName = `${newName}Copy`;
     }
     
