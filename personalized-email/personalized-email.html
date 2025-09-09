@@ -84,37 +84,48 @@
         }
 
         /* Randomize Tag Styling */
-        .randomize-tag {
+        .randomize-tag-wrapper {
             display: inline-block;
+            position: relative;
+            vertical-align: middle;
+        }
+        .randomize-tag {
             background-color: #f3e8ff;
             color: #6b21a8;
-            border: 1px solid #d8b4fe;
-            border-radius: 6px;
-            padding: 2px 4px;
-            margin: 0 2px;
-            vertical-align: middle;
-            user-select: none;
-        }
-        .randomize-header {
-            display: flex;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: 500;
+            display: inline-flex;
             align-items: center;
             gap: 4px;
             cursor: pointer;
+            user-select: none;
         }
         .randomize-arrow {
             transition: transform 0.2s;
+            font-size: 0.7em;
         }
         .randomize-arrow.open {
             transform: rotate(180deg);
         }
         .randomize-panel {
-            margin-top: 5px;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 10;
+            margin-top: 4px;
             padding: 8px;
-            border-top: 1px solid #d8b4fe;
+            background-color: white;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 250px;
         }
         .randomize-input {
             display: block;
             width: 100%;
+            box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
             padding: 4px;
@@ -128,15 +139,6 @@
             font-size: 12px;
             cursor: pointer;
             text-decoration: underline;
-        }
-        .ql-editor .randomize-tag {
-            padding: 4px;
-        }
-        .ql-editor {
-            overflow-y: visible; /* Allows dropdown to show */
-        }
-        .ql-container.ql-snow {
-            overflow: visible;
         }
     </style>
 </head>
