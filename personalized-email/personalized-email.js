@@ -968,3 +968,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
