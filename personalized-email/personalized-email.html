@@ -82,6 +82,62 @@
              background-color: #dbeafe; /* light blue for custom params */
              color: #1e40af;
         }
+
+        /* Randomize Tag Styling */
+        .randomize-tag {
+            display: inline-block;
+            background-color: #f3e8ff;
+            color: #6b21a8;
+            border: 1px solid #d8b4fe;
+            border-radius: 6px;
+            padding: 2px 4px;
+            margin: 0 2px;
+            vertical-align: middle;
+            user-select: none;
+        }
+        .randomize-header {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .randomize-arrow {
+            transition: transform 0.2s;
+        }
+        .randomize-arrow.open {
+            transform: rotate(180deg);
+        }
+        .randomize-panel {
+            margin-top: 5px;
+            padding: 8px;
+            border-top: 1px solid #d8b4fe;
+        }
+        .randomize-input {
+            display: block;
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 4px;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        .add-random-option {
+            background: none;
+            border: none;
+            color: #6b21a8;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .ql-editor .randomize-tag {
+            padding: 4px;
+        }
+        .ql-editor {
+            overflow-y: visible; /* Allows dropdown to show */
+        }
+        .ql-container.ql-snow {
+            overflow: visible;
+        }
     </style>
 </head>
 <body class="bg-gray-50 p-4">
