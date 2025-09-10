@@ -2,6 +2,10 @@ import { DOM_IDS, SETTINGS_KEYS } from './constants.js';
 import { getState, updateState } from './state.js';
 import * as ui from './ui.js';
 import * as data from './data.js';
+import { Modal } from './modal.js';
+
+// --- Application Modals ---
+let exampleModal, payloadModal, sendConfirmModal;
 
 // --- Main Application Initialization ---
 
@@ -11,6 +15,9 @@ Office.onReady((info) => {
         ui.initializeQuill();
         ui.setupPillboxInputs();
         
+        // Instantiate all modals for the application
+        initializeModals();
+
         // Then, set up all event listeners
         setupEventListeners();
 
@@ -18,6 +25,22 @@ Office.onReady((info) => {
         loadInitialData();
     }
 });
+
+/**
+ * Creates instances of the Modal class for all modal dialogs.
+ */
+function initializeModals() {
+    exampleModal = new Modal(DOM_IDS.EXAMPLE_MODAL, {
+        closeButtonIds: [DOM_IDS.CLOSE_EXAMPLE_MODAL_BUTTON]
+    });
+    payloadModal = new Modal(DOM_IDS.PAYLOAD_MODAL, {
+        closeButtonIds: [DOM_IDS.CLOSE_PAYLOAD_MODAL_BUTTON]
+    });
+    sendConfirmModal = new Modal(DOM_IDS.SEND_CONFIRM_MODAL, {
+        closeButtonIds: [DOM_IDS.CANCEL_SEND_BUTTON]
+    });
+}
+
 
 /**
  * Loads initial data from workbook settings and determines the starting view.
@@ -54,14 +77,14 @@ function setupEventListeners() {
     document.getElementById(DOM_IDS.SEND_EMAIL_BUTTON).onclick = handleSendEmail;
     document.getElementById(DOM_IDS.SHOW_EXAMPLE_BUTTON).onclick = handleShowExample;
     document.getElementById(DOM_IDS.SHOW_PAYLOAD_BUTTON).onclick = handleShowPayload;
+    
+    // Send Confirmation
+    document.getElementById(DOM_IDS.CONFIRM_SEND_BUTTON).onclick = executeSend;
+
 
     // Dropdowns and Toggles
     document.getElementById(DOM_IDS.RECIPIENT_LIST).onchange = ui.toggleCustomSheetInput;
     
-    // Modal Close Buttons
-    document.getElementById(DOM_IDS.CLOSE_EXAMPLE_MODAL_BUTTON).onclick = () => ui.hideModal(DOM_IDS.EXAMPLE_MODAL);
-    document.getElementById(DOM_IDS.CLOSE_PAYLOAD_MODAL_BUTTON).onclick = () => ui.hideModal(DOM_IDS.PAYLOAD_MODAL);
-
     // Global click listener to close special parameter panels
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.randomize-tag-wrapper') && !e.target.closest('.condition-tag-wrapper')) {
@@ -114,7 +137,8 @@ async function handleShowPayload() {
         const template = ui.getEmailTemplateFromDOM();
         const payload = data.buildPayload(students, template);
 
-        ui.displayPayloadInModal(payload);
+        ui.populatePayloadModal(payload);
+        payloadModal.show();
         ui.updateStatus('');
 
     } catch (error) {
@@ -145,7 +169,8 @@ async function handleShowExample() {
         
         const examplePayload = data.buildPayload([randomStudent], template)[0];
 
-        ui.displayExampleInModal(examplePayload);
+        ui.populateExampleModal(examplePayload);
+        exampleModal.show();
         ui.updateStatus('');
 
     } catch(error) {
@@ -162,7 +187,7 @@ async function handleSendEmail() {
             ui.updateStatus('Please select a valid student list or enter a custom sheet name.', 'orange');
             return;
         }
-        const { customParameters, powerAutomateUrl } = getState();
+        const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
         updateState('students', students);
 
@@ -179,17 +204,28 @@ async function handleSendEmail() {
             return;
         }
 
-        const userConfirmed = await ui.showSendConfirmation(payload.length);
-        
-        if (userConfirmed) {
-            ui.updateStatus(`Sending ${payload.length} emails...`, 'gray');
-            await data.sendToPowerAutomate(powerAutomateUrl, payload);
-            ui.updateStatus(`Successfully sent ${payload.length} emails!`, 'green');
-        } else {
-            ui.updateStatus('Send cancelled.', 'gray');
-        }
+        ui.populateSendConfirmationModal(payload.length);
+        sendConfirmModal.show();
+
     } catch (error) {
         console.error("Error sending emails:", error);
         ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
     }
 }
+
+async function executeSend() {
+    sendConfirmModal.hide();
+    const { students, powerAutomateUrl } = getState();
+    const template = ui.getEmailTemplateFromDOM();
+    const payload = data.buildPayload(students, template);
+
+    ui.updateStatus(`Sending ${payload.length} emails...`, 'gray');
+    try {
+        await data.sendToPowerAutomate(powerAutomateUrl, payload);
+        ui.updateStatus(`Successfully sent ${payload.length} emails!`, 'green');
+    } catch(error) {
+        console.error("Error sending emails:", error);
+        ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
+    }
+}
+
