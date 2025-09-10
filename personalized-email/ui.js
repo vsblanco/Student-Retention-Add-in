@@ -1,5 +1,5 @@
 import { DOM_IDS } from './constants.js';
-import { updateState, getState } from './state.js';
+import { updateState, getState, setQuill, getQuill } from './state.js';
 
 let RandomizeBlot, ConditionBlot;
 
@@ -19,7 +19,7 @@ export function initializeQuill() {
             }
         });
         console.log("[LOG] Quill initialized successfully.");
-        updateState('quill', quill);
+        setQuill(quill); // FIX: Use the dedicated setter for the Quill instance.
         registerCustomBlots(Quill);
 
         quill.on('selection-change', (range) => {
@@ -362,7 +362,8 @@ export function populateParameterButtons() {
 }
 
 function insertParameter(paramName, isCustom) {
-    const { lastFocusedElement, quill } = getState();
+    const { lastFocusedElement } = getState();
+    const quill = getQuill(); // FIX: Use the dedicated getter.
     
     // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
     if (!quill) {
@@ -384,7 +385,7 @@ function insertParameter(paramName, isCustom) {
 }
 
 function insertSpecialParameter(type) {
-    const { quill } = getState();
+    const quill = getQuill(); // FIX: Use the dedicated getter.
 
     // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
     if (!quill) {
@@ -488,7 +489,8 @@ function reconstructPillboxString(parts, separator = '') {
 }
 
 export function getEmailTemplateFromDOM() {
-    const { emailParts, quill } = getState();
+    const { emailParts } = getState();
+    const quill = getQuill(); // FIX: Use the dedicated getter.
 
     if (!quill) {
         console.error("[ERROR] getEmailTemplateFromDOM called but Quill instance is not available.");
@@ -536,7 +538,7 @@ export function loadTemplateIntoForm(template) {
     renderPills('subject');
     renderPills('cc');
     
-    const { quill } = getState();
+    const quill = getQuill(); // FIX: Use the dedicated getter.
     if (quill) {
         quill.root.innerHTML = template.body || '<p></p>';
     }
@@ -734,4 +736,3 @@ export function populateManageCustomParamsModal(params, handlers) {
     listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
     listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
 }
-
