@@ -84,23 +84,23 @@
         }
 
         /* Randomize Tag Styling */
-        .randomize-tag-wrapper {
+        .randomize-tag {
             display: inline-block;
             position: relative;
             vertical-align: middle;
-        }
-        .randomize-tag {
             background-color: #f3e8ff;
             color: #6b21a8;
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 0.9em;
             font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+        }
+        .randomize-tag-inner {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            cursor: pointer;
-            user-select: none;
         }
         .randomize-arrow {
             transition: transform 0.2s;
@@ -167,23 +167,23 @@
         }
         
         /* Condition Tag Styling */
-        .condition-tag-wrapper {
+        .condition-tag {
             display: inline-block;
             position: relative;
             vertical-align: middle;
-        }
-        .condition-tag {
             background-color: #e0f2f1; /* light teal */
             color: #004d40; /* darker teal */
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 0.9em;
             font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+        }
+        .condition-tag-inner {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            cursor: pointer;
-            user-select: none;
         }
         .condition-arrow {
             transition: transform 0.2s;
