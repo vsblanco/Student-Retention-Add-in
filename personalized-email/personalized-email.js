@@ -113,7 +113,7 @@ function setupEventListeners() {
 
 // --- Event Handlers ---
 
-async function handleCreateConnection() {
+function handleCreateConnection() {
     const url = ui.getPowerAutomateUrl();
     if (!url.startsWith('http')) {
         ui.updateStatus("Please enter a valid HTTP URL.", 'red', true);
@@ -121,29 +121,29 @@ async function handleCreateConnection() {
     }
 
     ui.updateStatus("Creating connection...", 'gray', true);
-    try {
-        const newConnection = await data.createConnection(url);
+    data.createConnection(url).then(newConnection => {
         updateState('powerAutomateUrl', newConnection.url);
         ui.updateStatus("Connection created successfully!", 'green', true);
         setTimeout(() => ui.showView('composer'), 1500);
-    } catch (error) {
+    }).catch(error => {
         ui.updateStatus(`Error: ${error.message}`, 'red', true);
-    }
+    });
 }
 
-async function handleShowPayload() {
+function handleShowPayload() {
     console.log("[LOG] 'Show Payload' button clicked.");
     ui.updateStatus("Generating payload preview...");
-    try {
-        const template = ui.getEmailTemplateFromDOM();
-        if (!template.from) {
-            ui.updateStatus("Please enter a 'From' address before generating the payload.", 'orange');
-            return;
-        }
 
-        const sheetName = ui.getSelectedSheetName();
-        const { customParameters } = getState();
-        const students = await data.getStudentData(sheetName, customParameters);
+    const template = ui.getEmailTemplateFromDOM();
+    if (!template.from) {
+        ui.updateStatus("Please enter a 'From' address before generating the payload.", 'orange');
+        return;
+    }
+
+    const sheetName = ui.getSelectedSheetName();
+    const { customParameters } = getState();
+
+    data.getStudentData(sheetName, customParameters).then(students => {
         updateState('students', students);
 
         if (students.length === 0) {
@@ -154,29 +154,29 @@ async function handleShowPayload() {
         }
 
         const payload = data.buildPayload(students, template);
-
         ui.populatePayloadModal(payload);
         payloadModal.show();
         ui.updateStatus("");
-    } catch (error) {
+    }).catch(error => {
         ui.updateStatus(`Error: ${error.message}`, 'red');
         console.error("Error showing payload:", error);
-    }
+    });
 }
 
-async function handleShowExample() {
+function handleShowExample() {
     console.log("[LOG] 'Example' button clicked.");
     ui.updateStatus("Generating example...");
-    try {
-        const template = ui.getEmailTemplateFromDOM();
-        if (!template.from) {
-            ui.updateStatus("Please enter a 'From' address to generate an example.", 'orange');
-            return;
-        }
+    
+    const template = ui.getEmailTemplateFromDOM();
+    if (!template.from) {
+        ui.updateStatus("Please enter a 'From' address to generate an example.", 'orange');
+        return;
+    }
 
-        const sheetName = ui.getSelectedSheetName();
-        const { customParameters } = getState();
-        const students = await data.getStudentData(sheetName, customParameters);
+    const sheetName = ui.getSelectedSheetName();
+    const { customParameters } = getState();
+
+    data.getStudentData(sheetName, customParameters).then(students => {
         updateState('students', students);
 
         if (students.length === 0) {
@@ -191,7 +191,6 @@ async function handleShowExample() {
         }
         
         const randomStudent = validStudents[Math.floor(Math.random() * validStudents.length)];
-        
         const examplePayload = data.buildPayload([randomStudent], template);
 
         if (examplePayload.length === 0) {
@@ -202,25 +201,26 @@ async function handleShowExample() {
         ui.populateExampleModal(examplePayload[0]);
         exampleModal.show();
         ui.updateStatus("");
-    } catch (error) {
+    }).catch(error => {
         ui.updateStatus(`Error: ${error.message}`, 'red');
         console.error("Error showing example:", error);
-    }
+    });
 }
 
-async function handleSendEmail() {
+function handleSendEmail() {
     console.log("[LOG] 'Send Email' button clicked.");
     ui.updateStatus("Preparing to send...");
-    try {
-        const template = ui.getEmailTemplateFromDOM();
-        if (!template.from) {
-            ui.updateStatus("Please enter a 'From' address before sending.", 'orange');
-            return;
-        }
 
-        const sheetName = ui.getSelectedSheetName();
-        const { customParameters } = getState();
-        const students = await data.getStudentData(sheetName, customParameters);
+    const template = ui.getEmailTemplateFromDOM();
+    if (!template.from) {
+        ui.updateStatus("Please enter a 'From' address before sending.", 'orange');
+        return;
+    }
+
+    const sheetName = ui.getSelectedSheetName();
+    const { customParameters } = getState();
+
+    data.getStudentData(sheetName, customParameters).then(students => {
         updateState('students', students);
 
         if (students.length === 0) {
@@ -236,12 +236,12 @@ async function handleSendEmail() {
         
         ui.populateSendConfirmationModal(payload.length);
         sendConfirmModal.show();
-    } catch (error) {
+    }).catch(error => {
         ui.updateStatus(`Error: ${error.message}`, 'red');
-    }
+    });
 }
 
-async function handleExecuteSend() {
+function handleExecuteSend() {
     sendConfirmModal.hide();
     const { students, powerAutomateUrl } = getState();
     ui.updateStatus(`Sending ${students.length} emails...`);
@@ -255,8 +255,11 @@ async function handleExecuteSend() {
             return;
         }
 
-        await data.sendToPowerAutomate(powerAutomateUrl, payload);
-        ui.updateStatus(`Successfully sent ${payload.length} emails!`, 'green');
+        data.sendToPowerAutomate(powerAutomateUrl, payload).then(() => {
+            ui.updateStatus(`Successfully sent ${payload.length} emails!`, 'green');
+        }).catch(error => {
+            ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
+        });
     } catch (error) {
         ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
     }
@@ -264,14 +267,15 @@ async function handleExecuteSend() {
 
 // --- Template Handlers ---
 
-async function handleShowTemplates() {
+function handleShowTemplates() {
     templatesModal.show();
-    const templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
     const handlers = {
         onLoad: handleLoadTemplate,
         onDelete: handleDeleteTemplate
     };
-    ui.populateTemplatesModal(templates, handlers);
+    data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES).then(templates => {
+        ui.populateTemplatesModal(templates, handlers);
+    });
 }
 
 function handleSaveTemplate() {
@@ -280,7 +284,7 @@ function handleSaveTemplate() {
     saveTemplateModal.show();
 }
 
-async function handleConfirmSaveTemplate() {
+function handleConfirmSaveTemplate() {
     const formData = ui.getTemplateSaveForm();
     if (!formData.name || !formData.author) {
         ui.updateSaveTemplateStatus('Name and Author are required.', 'red');
@@ -297,108 +301,121 @@ async function handleConfirmSaveTemplate() {
         ...templateContent
     };
 
-    const templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
-    templates.push(newTemplate);
-    await data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, templates);
-
-    ui.updateSaveTemplateStatus('Template saved!', 'green');
-    setTimeout(() => saveTemplateModal.hide(), 1500);
+    data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES).then(templates => {
+        templates.push(newTemplate);
+        return data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, templates);
+    }).then(() => {
+        ui.updateSaveTemplateStatus('Template saved!', 'green');
+        setTimeout(() => saveTemplateModal.hide(), 1500);
+    });
 }
 
-async function handleLoadTemplate(templateId) {
-    const templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
-    const template = templates.find(t => t.id === templateId);
-    if (template) {
-        ui.loadTemplateIntoForm(template);
-        templatesModal.hide();
-    }
+function handleLoadTemplate(templateId) {
+    data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES).then(templates => {
+        const template = templates.find(t => t.id === templateId);
+        if (template) {
+            ui.loadTemplateIntoForm(template);
+            templatesModal.hide();
+        }
+    });
 }
 
-async function handleDeleteTemplate(templateId) {
-    let templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
-    templates = templates.filter(t => t.id !== templateId);
-    await data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, templates);
-    await handleShowTemplates(); // Refresh the modal content
+function handleDeleteTemplate(templateId) {
+    data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES).then(templates => {
+        const updatedTemplates = templates.filter(t => t.id !== templateId);
+        return data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, updatedTemplates);
+    }).then(() => {
+        handleShowTemplates(); // Refresh the modal content
+    });
 }
 
 // --- Custom Parameter Handlers ---
 
-async function handleManageCustomParams() {
+function handleManageCustomParams() {
     customParamModal.hide();
     manageCustomParamsModal.show();
-    const params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
     const handlers = {
         onEdit: handleEditCustomParameter,
         onDelete: handleDeleteCustomParameter,
         onDuplicate: handleDuplicateCustomParameter
     };
-    ui.populateManageCustomParamsModal(params, handlers);
+    data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(params => {
+        ui.populateManageCustomParamsModal(params, handlers);
+    });
 }
 
-async function handleSaveCustomParameter() {
+function handleSaveCustomParameter() {
     const formData = ui.getCustomParamForm();
     if (!/^[a-zA-Z0-9]+$/.test(formData.name)) {
         ui.updateCustomParamStatus('Name must be alphanumeric with no spaces.', 'red');
         return;
     }
     
-    let currentParams = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-    const existingParam = currentParams.find(p => p.name.toLowerCase() === formData.name.toLowerCase());
-
-    if (existingParam && existingParam.id !== formData.id) {
-        ui.updateCustomParamStatus('This parameter name is already in use.', 'red');
-        return;
-    }
-
     ui.updateCustomParamStatus('Saving...');
-    
-    if (formData.id) { // Editing existing
-        const index = currentParams.findIndex(p => p.id === formData.id);
-        if (index > -1) currentParams[index] = { ...currentParams[index], ...formData };
-    } else { // Creating new
-        formData.id = 'sparam_' + new Date().getTime();
-        currentParams.push(formData);
-    }
-    
-    await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, currentParams);
-    updateState('customParameters', currentParams);
-    ui.populateParameterButtons();
-    
-    ui.updateCustomParamStatus('Parameter saved successfully!', 'green');
-    setTimeout(() => customParamModal.hide(), 1500);
+
+    data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(currentParams => {
+        const existingParam = currentParams.find(p => p.name.toLowerCase() === formData.name.toLowerCase());
+        if (existingParam && existingParam.id !== formData.id) {
+            ui.updateCustomParamStatus('This parameter name is already in use.', 'red');
+            return Promise.reject('Parameter name in use'); 
+        }
+
+        if (formData.id) { // Editing existing
+            const index = currentParams.findIndex(p => p.id === formData.id);
+            if (index > -1) currentParams[index] = { ...currentParams[index], ...formData };
+        } else { // Creating new
+            formData.id = 'sparam_' + new Date().getTime();
+            currentParams.push(formData);
+        }
+        
+        return data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, currentParams);
+    }).then((savedParams) => {
+        updateState('customParameters', savedParams);
+        ui.populateParameterButtons();
+        ui.updateCustomParamStatus('Parameter saved successfully!', 'green');
+        setTimeout(() => customParamModal.hide(), 1500);
+    }).catch(error => {
+        if (error !== 'Parameter name in use') {
+            ui.updateCustomParamStatus(`Error: ${error.message}`, 'red');
+        }
+    });
 }
 
-async function handleEditCustomParameter(paramId) {
-    const params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-    const param = params.find(p => p.id === paramId);
-    if (param) {
-        manageCustomParamsModal.hide();
-        ui.showCustomParamModal(param);
-    }
+function handleEditCustomParameter(paramId) {
+    data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(params => {
+        const param = params.find(p => p.id === paramId);
+        if (param) {
+            manageCustomParamsModal.hide();
+            ui.showCustomParamModal(param);
+        }
+    });
 }
 
-async function handleDeleteCustomParameter(paramId) {
-    let params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-    params = params.filter(p => p.id !== paramId);
-    await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
-    updateState('customParameters', params);
-    ui.populateParameterButtons();
-    await handleManageCustomParams(); // Refresh list
+function handleDeleteCustomParameter(paramId) {
+    data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(params => {
+        const updatedParams = params.filter(p => p.id !== paramId);
+        return data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, updatedParams);
+    }).then((savedParams) => {
+        updateState('customParameters', savedParams);
+        ui.populateParameterButtons();
+        handleManageCustomParams(); // Refresh list
+    });
 }
 
-async function handleDuplicateCustomParameter(paramId) {
-    let params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-    const paramToDuplicate = params.find(p => p.id === paramId);
-    if (!paramToDuplicate) return;
+function handleDuplicateCustomParameter(paramId) {
+    data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(params => {
+        const paramToDuplicate = params.find(p => p.id === paramId);
+        if (!paramToDuplicate) return;
 
-    const newParam = JSON.parse(JSON.stringify(paramToDuplicate));
-    newParam.name = `${newParam.name}Copy`;
-    newParam.id = 'sparam_' + new Date().getTime();
-    params.push(newParam);
+        const newParam = JSON.parse(JSON.stringify(paramToDuplicate));
+        newParam.name = `${newParam.name}Copy`;
+        newParam.id = 'sparam_' + new Date().getTime();
+        params.push(newParam);
 
-    await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
-    updateState('customParameters', params);
-    ui.populateParameterButtons();
-    await handleManageCustomParams(); // Refresh list
+        return data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
+    }).then((savedParams) => {
+        updateState('customParameters', savedParams);
+        ui.populateParameterButtons();
+        handleManageCustomParams(); // Refresh list
+    });
 }
-
