@@ -1,41 +1,35 @@
 export const DOM_IDS = {
-    // Views
+    // Setup
     SETUP_WIZARD: 'setup-wizard',
-    EMAIL_COMPOSER: 'email-composer',
-
-    // Setup Wizard
     POWER_AUTOMATE_URL: 'power-automate-url',
     CREATE_CONNECTION_BUTTON: 'create-connection-button',
     SETUP_STATUS: 'setup-status',
-
-    // Email Composer
+    
+    // Composer
+    EMAIL_COMPOSER: 'email-composer',
     RECIPIENT_LIST: 'recipient-list',
     CUSTOM_SHEET_CONTAINER: 'custom-sheet-container',
     CUSTOM_SHEET_NAME: 'custom-sheet-name',
+    EDITOR_CONTAINER: 'editor-container',
+    STANDARD_PARAMETER_BUTTONS: 'standard-parameter-buttons',
+    CUSTOM_PARAMETERS_SECTION: 'custom-parameters-section',
+    CUSTOM_PARAMETER_BUTTONS: 'custom-parameter-buttons',
+    RANDOMIZE_PARAMETER_BUTTON: 'randomize-parameter-button',
+    CONDITION_PARAMETER_BUTTON: 'condition-parameter-button',
+    CREATE_CUSTOM_PARAM_BUTTON: 'create-custom-param-button',
+    SEND_EMAIL_BUTTON: 'send-email-button',
+    SHOW_EXAMPLE_BUTTON: 'show-example-button',
+    SHOW_PAYLOAD_BUTTON: 'show-payload-button',
     TEMPLATES_BUTTON: 'templates-button',
     STATUS: 'status',
 
-    // Email Fields
+    // Pillbox Inputs
     FROM_CONTAINER: 'email-from-container',
     FROM_INPUT: 'email-from-input',
     SUBJECT_CONTAINER: 'email-subject-container',
     SUBJECT_INPUT: 'email-subject-input',
     CC_CONTAINER: 'email-cc-container',
     CC_INPUT: 'email-cc-input',
-    EDITOR_CONTAINER: 'editor-container',
-
-    // Parameters
-    STANDARD_PARAMETER_BUTTONS: 'standard-parameter-buttons',
-    CUSTOM_PARAMETERS_SECTION: 'custom-parameters-section',
-    CUSTOM_PARAMETER_BUTTONS: 'custom-parameter-buttons',
-    CREATE_CUSTOM_PARAM_BUTTON: 'create-custom-param-button',
-    RANDOMIZE_PARAMETER_BUTTON: 'randomize-parameter-button',
-    CONDITION_PARAMETER_BUTTON: 'condition-parameter-button',
-
-    // Action Buttons
-    SEND_EMAIL_BUTTON: 'send-email-button',
-    SHOW_EXAMPLE_BUTTON: 'show-example-button',
-    SHOW_PAYLOAD_BUTTON: 'show-payload-button',
 
     // Modals
     EXAMPLE_MODAL: 'example-modal',
@@ -47,11 +41,13 @@ export const DOM_IDS = {
     CLOSE_EXAMPLE_MODAL_BUTTON: 'close-example-modal-button',
 
     PAYLOAD_MODAL: 'payload-modal',
-    PAYLOAD_MODAL_TITLE: 'payload-modal-title',
     PAYLOAD_CONTENT: 'payload-content',
-    SCHEMA_CONTENT: 'schema-content',
-    TOGGLE_PAYLOAD_SCHEMA_BUTTON: 'toggle-payload-schema-button',
     CLOSE_PAYLOAD_MODAL_BUTTON: 'close-payload-modal-button',
+    
+    SEND_CONFIRM_MODAL: 'send-confirm-modal',
+    SEND_CONFIRM_MESSAGE: 'send-confirm-message',
+    CANCEL_SEND_BUTTON: 'cancel-send-button',
+    CONFIRM_SEND_BUTTON: 'confirm-send-button',
 
     TEMPLATES_MODAL: 'templates-modal',
     TEMPLATES_LIST_CONTAINER: 'templates-list-container',
@@ -77,36 +73,29 @@ export const DOM_IDS = {
     CANCEL_CUSTOM_PARAM_BUTTON: 'cancel-custom-param-button',
     SAVE_CUSTOM_PARAM_BUTTON: 'save-custom-param-button',
     MANAGE_CUSTOM_PARAMS_BUTTON: 'manage-custom-params-button',
-
+    
     MANAGE_CUSTOM_PARAMS_MODAL: 'manage-custom-params-modal',
     MANAGE_PARAMS_LIST: 'manage-params-list',
-    CLOSE_MANAGE_PARAMS_BUTTON: 'close-manage-params-button',
-
-    SEND_CONFIRM_MODAL: 'send-confirm-modal',
-    SEND_CONFIRM_MESSAGE: 'send-confirm-message',
-    CANCEL_SEND_BUTTON: 'cancel-send-button',
-    CONFIRM_SEND_BUTTON: 'confirm-send-button',
+    CLOSE_MANAGE_PARAMS_BUTTON: 'close-manage-params-button'
 };
 
 export const SETTINGS_KEYS = {
-    CONNECTIONS: "connections",
-    EMAIL_TEMPLATES: "emailTemplates",
-    CUSTOM_PARAMS: "customEmailParameters",
+    CONNECTIONS: 'connections',
+    EMAIL_TEMPLATES: 'emailTemplates',
+    CUSTOM_PARAMS: 'customEmailParameters'
 };
 
 export const STANDARD_PARAMETERS = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
 
-export const PAYLOAD_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "from": { "type": "string" },
-            "to": { "type": "string" },
-            "cc": { "type": "string" },
-            "subject": { "type": "string" },
-            "body": { "type": "string" }
-        },
-        "required": ["from", "to", "subject", "body"]
-    }
+/**
+ * A map of standard parameter names to possible column headers in the Excel sheet.
+ * All headers are checked in lowercase.
+ */
+export const COLUMN_MAPPINGS = {
+    StudentName: ["studentname", "student name", "student"],
+    StudentEmail: ["student email", "school email", "email"],
+    PersonalEmail: ["personal email", "otheremail"],
+    Grade: ["grade", "course grade"],
+    DaysOut: ["days out", "daysout"]
 };
+
