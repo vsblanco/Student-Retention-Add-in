@@ -41,7 +41,10 @@ export const DOM_IDS = {
     CLOSE_EXAMPLE_MODAL_BUTTON: 'close-example-modal-button',
 
     PAYLOAD_MODAL: 'payload-modal',
+    PAYLOAD_MODAL_TITLE: 'payload-modal-title',
     PAYLOAD_CONTENT: 'payload-content',
+    SCHEMA_CONTENT: 'schema-content',
+    TOGGLE_PAYLOAD_SCHEMA_BUTTON: 'toggle-payload-schema-button',
     CLOSE_PAYLOAD_MODAL_BUTTON: 'close-payload-modal-button',
     
     SEND_CONFIRM_MODAL: 'send-confirm-modal',
