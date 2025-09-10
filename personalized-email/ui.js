@@ -61,14 +61,12 @@ function registerCustomBlots(Quill) {
     // --- RandomizeBlot ---
     RandomizeBlot = class extends Inline {
         static create(value) {
-            // FIX: The wrapper must be an inline element (SPAN) for an Inline blot.
-            const wrapper = document.createElement('span');
-            wrapper.classList.add('randomize-tag-wrapper');
-            wrapper.style.display = 'inline-block';
-            wrapper.setAttribute('contenteditable', 'false');
-
-            const node = document.createElement('span');
+            const node = super.create();
             node.classList.add('randomize-tag');
+            node.setAttribute('contenteditable', 'false');
+
+            const inner = document.createElement('span');
+            inner.classList.add('randomize-tag-inner');
             
             const text = document.createElement('span');
             text.innerText = '{Randomize}';
@@ -77,8 +75,8 @@ function registerCustomBlots(Quill) {
             arrow.innerHTML = '&#9660;';
             arrow.classList.add('randomize-arrow');
             
-            node.appendChild(text);
-            node.appendChild(arrow);
+            inner.appendChild(text);
+            inner.appendChild(arrow);
             
             const panel = document.createElement('div');
             panel.classList.add('randomize-panel');
@@ -86,7 +84,7 @@ function registerCustomBlots(Quill) {
             
             const inputsContainer = document.createElement('div');
             (value.options || ['']).forEach(optionText => {
-                this.addOptionInput(inputsContainer, optionText, wrapper);
+                this.addOptionInput(inputsContainer, optionText, node);
             });
             
             const addButton = document.createElement('button');
@@ -94,16 +92,16 @@ function registerCustomBlots(Quill) {
             addButton.classList.add('add-random-option');
             addButton.onclick = (e) => {
                 e.stopPropagation();
-                this.addOptionInput(inputsContainer, '', wrapper);
+                this.addOptionInput(inputsContainer, '', node);
             };
             
             panel.appendChild(inputsContainer);
             panel.appendChild(addButton);
             
-            wrapper.appendChild(node);
-            wrapper.appendChild(panel);
+            node.appendChild(inner);
+            node.appendChild(panel);
 
-            node.onclick = (e) => {
+            inner.onclick = (e) => {
                 e.stopPropagation();
                 const isOpening = panel.style.display === 'none';
                 document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
@@ -115,8 +113,8 @@ function registerCustomBlots(Quill) {
 
             panel.addEventListener('click', e => e.stopPropagation());
 
-            this.updateOptions(wrapper);
-            return wrapper;
+            this.updateOptions(node);
+            return node;
         }
 
         static addOptionInput(container, value, blotNode) {
@@ -166,28 +164,25 @@ function registerCustomBlots(Quill) {
         }
     }
     RandomizeBlot.blotName = 'randomize';
-    // FIX: The tagName must match the created element.
     RandomizeBlot.tagName = 'SPAN';
     Quill.register(RandomizeBlot);
 
     // --- ConditionBlot ---
     ConditionBlot = class extends Inline {
         static create(value) {
-            // FIX: The wrapper must be an inline element (SPAN) for an Inline blot.
-            const wrapper = document.createElement('span');
-            wrapper.classList.add('condition-tag-wrapper');
-            wrapper.style.display = 'inline-block';
-            wrapper.setAttribute('contenteditable', 'false');
-
-            const node = document.createElement('span');
+            const node = super.create();
             node.classList.add('condition-tag');
+            node.setAttribute('contenteditable', 'false');
+
+            const inner = document.createElement('span');
+            inner.classList.add('condition-tag-inner');
             const text = document.createElement('span');
             text.innerText = '{Condition}';
             const arrow = document.createElement('span');
             arrow.innerHTML = '&#9660;';
             arrow.classList.add('condition-arrow');
-            node.appendChild(text);
-            node.appendChild(arrow);
+            inner.appendChild(text);
+            inner.appendChild(arrow);
 
             const panel = document.createElement('div');
             panel.classList.add('condition-panel');
@@ -235,13 +230,13 @@ function registerCustomBlots(Quill) {
 
             panel.appendChild(ifClause);
             panel.appendChild(thenClause);
-            wrapper.appendChild(node);
-            wrapper.appendChild(panel);
+            node.appendChild(inner);
+            node.appendChild(panel);
             
-            const update = () => this.updateOptions(wrapper);
+            const update = () => this.updateOptions(node);
             panel.querySelectorAll('input, select, textarea').forEach(el => el.addEventListener('input', update));
 
-            node.onclick = (e) => {
+            inner.onclick = (e) => {
                 e.stopPropagation();
                 const isOpening = panel.style.display === 'none';
                 document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
@@ -252,8 +247,8 @@ function registerCustomBlots(Quill) {
             };
             
             panel.addEventListener('click', e => e.stopPropagation());
-            this.updateOptions(wrapper);
-            return wrapper;
+            this.updateOptions(node);
+            return node;
         }
         
         static updateOptions(blotNode) {
@@ -277,7 +272,6 @@ function registerCustomBlots(Quill) {
         }
     }
     ConditionBlot.blotName = 'condition';
-    // FIX: The tagName must match the created element.
     ConditionBlot.tagName = 'SPAN';
     Quill.register(ConditionBlot);
 }
@@ -506,7 +500,7 @@ export function getEmailTemplateFromDOM() {
 
     const editor = quill.root;
 
-    editor.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
+    editor.querySelectorAll('.randomize-tag, .condition-tag').forEach(tagNode => {
         const blot = Quill.find(tagNode, true);
         if (blot && blot.statics.blotName === 'randomize') {
             RandomizeBlot.updateOptions(tagNode);
@@ -738,3 +732,4 @@ export function populateManageCustomParamsModal(params, handlers) {
     listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
     listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
 }
+
