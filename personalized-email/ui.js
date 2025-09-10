@@ -460,42 +460,21 @@ export function toggleCustomSheetInput() {
     customSheetContainer.classList.toggle('hidden', recipientList.value !== 'custom');
 }
 
-// --- Modal Management ---
+// --- Modal Content Management ---
 
-export function showModal(modalId) {
-    document.getElementById(modalId).classList.remove('hidden');
-}
-
-export function hideModal(modalId) {
-    document.getElementById(modalId).classList.add('hidden');
-}
-
-export function displayPayloadInModal(payload) {
+export function populatePayloadModal(payload) {
     document.getElementById(DOM_IDS.PAYLOAD_CONTENT).textContent = JSON.stringify(payload, null, 2);
-    showModal(DOM_IDS.PAYLOAD_MODAL);
 }
 
-export function displayExampleInModal(example) {
+export function populateExampleModal(example) {
     document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = example.from || '[Not Specified]';
     document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = example.to || '[No Email Found]';
     document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = example.cc || '[Not Specified]';
     document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = example.subject;
     document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = example.body;
-    showModal(DOM_IDS.EXAMPLE_MODAL);
 }
 
-export async function showSendConfirmation(count) {
+export function populateSendConfirmationModal(count) {
     document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE).textContent = `You are about to send emails to ${count} student(s). Do you want to proceed?`;
-    showModal(DOM_IDS.SEND_CONFIRM_MODAL);
-
-    return new Promise((resolve) => {
-        document.getElementById(DOM_IDS.CONFIRM_SEND_BUTTON).onclick = () => {
-            hideModal(DOM_IDS.SEND_CONFIRM_MODAL);
-            resolve(true);
-        };
-        document.getElementById(DOM_IDS.CANCEL_SEND_BUTTON).onclick = () => {
-            hideModal(DOM_IDS.SEND_CONFIRM_MODAL);
-            resolve(false);
-        };
-    });
 }
+
