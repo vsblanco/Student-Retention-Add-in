@@ -1,100 +1,24 @@
 import { DOM_IDS } from './constants.js';
-import { updateState, getState, setQuill, getQuill } from './state.js';
+import { getState } from './state.js';
 
-let RandomizeBlot, ConditionBlot;
+let quill; // To hold the Quill editor instance
 
 // --- Initialization ---
 
 export function initializeQuill() {
-    try {
-        const quill = new Quill(`#${DOM_IDS.EDITOR_CONTAINER}`, {
-            theme: 'snow',
-            modules: {
-                toolbar: [
-                    ['bold', 'italic', 'underline'],
-                    [{'list': 'ordered'}, {'list': 'bullet'}],
-                    [{'color': []}, {'background': []}],
-                    ['link']
-                ]
-            }
-        });
-        console.log("[LOG] Quill initialized successfully.");
-        setQuill(quill); // Use the dedicated setter for the Quill instance.
-        registerCustomBlots(Quill);
-
-        quill.on('selection-change', (range) => {
-            if (range) {
-                updateState('lastFocusedElement', quill);
-            }
-        });
-    } catch (error) {
-        console.error("[ERROR] Quill initialization failed:", error);
-    }
+    quill = new Quill('#' + DOM_IDS.EDITOR_CONTAINER, {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                ['bold', 'italic', 'underline'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['link']
+            ]
+        }
+    });
 }
 
-/**
- * Registers the custom Blot formats with Quill.
- * @param {object} Quill The Quill instance.
- */
-function registerCustomBlots(Quill) {
-    const Inline = Quill.import('blots/inline');
-
-    // --- ParameterBlot ---
-    class ParameterBlot extends Inline {
-        static create(value) {
-            let node = super.create();
-            node.setAttribute('contenteditable', 'false');
-            node.setAttribute('data-param', value.name);
-            node.classList.add('parameter-tag');
-            if (value.isCustom) node.classList.add('custom');
-            node.innerText = `{${value.name}}`;
-            return node;
-        }
-        static formats(node) {
-            return { name: node.getAttribute('data-param'), isCustom: node.classList.contains('custom') };
-        }
-    }
-    ParameterBlot.blotName = 'parameter';
-    ParameterBlot.tagName = 'SPAN';
-    Quill.register(ParameterBlot);
-    
-    // --- RandomizeBlot (Simplified) ---
-    RandomizeBlot = class extends Inline {
-        static create(value) {
-            const node = super.create(value);
-            node.setAttribute('contenteditable', 'false');
-            node.classList.add('randomize-tag');
-            node.innerText = `{Randomize}`;
-            return node;
-        }
-        static value(node) {
-            return true;
-        }
-    }
-    RandomizeBlot.blotName = 'randomize';
-    RandomizeBlot.tagName = 'SPAN';
-    Quill.register(RandomizeBlot);
-
-    // --- ConditionBlot (Simplified) ---
-    ConditionBlot = class extends Inline {
-        static create(value) {
-            const node = super.create(value);
-            node.setAttribute('contenteditable', 'false');
-            node.classList.add('condition-tag');
-            node.innerText = `{Condition}`;
-            return node;
-        }
-        static value(node) {
-            return true;
-        }
-    }
-    ConditionBlot.blotName = 'condition';
-    ConditionBlot.tagName = 'SPAN';
-    Quill.register(ConditionBlot);
-}
-
-
-// --- DOM Manipulation & UI Logic ---
+// --- View Management ---
 
 export function showView(viewName) {
     const setupWizard = document.getElementById(DOM_IDS.SETUP_WIZARD);
@@ -103,44 +27,35 @@ export function showView(viewName) {
     if (viewName === 'composer') {
         setupWizard.classList.add('hidden');
         emailComposer.classList.remove('hidden');
-    } else { // 'setup'
+    } else {
         setupWizard.classList.remove('hidden');
         emailComposer.classList.add('hidden');
     }
 }
 
+// --- UI Updates & Getters ---
+
 export function updateStatus(message, color = 'gray', isSetupStatus = false) {
-    const statusEl = document.getElementById(isSetupStatus ? DOM_IDS.SETUP_STATUS : DOM_IDS.STATUS);
-    if (!statusEl) return;
-    statusEl.textContent = message;
-    statusEl.style.color = color;
+    const statusElement = document.getElementById(isSetupStatus ? DOM_IDS.SETUP_STATUS : DOM_IDS.STATUS);
+    statusElement.textContent = message;
+    statusElement.style.color = color;
 }
 
 export function getPowerAutomateUrl() {
     return document.getElementById(DOM_IDS.POWER_AUTOMATE_URL).value.trim();
 }
 
-export function getSelectedSheetName() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    if (recipientList.value === 'custom') {
-        return document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim();
-    }
-    return recipientList.value === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+export function getEmailTemplateFromDOM() {
+    return {
+        from: getPillboxValue(DOM_IDS.EMAIL_FROM_CONTAINER),
+        recipientList: document.getElementById(DOM_IDS.RECIPIENT_LIST).value,
+        customSheetName: document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim(),
+        subject: getPillboxValue(DOM_IDS.EMAIL_SUBJECT_CONTAINER),
+        cc: getPillboxValue(DOM_IDS.EMAIL_CC_CONTAINER),
+        body: quill.root.innerHTML
+    };
 }
 
-function getTodaysLdaSheetName() {
-    const now = new Date();
-    return `LDA ${now.getMonth() + 1}-${now.getDate()}-${now.getFullYear()}`;
-}
-
-export function toggleCustomSheetInput() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    const customSheetContainer = document.getElementById(DOM_IDS.CUSTOM_SHEET_CONTAINER);
-    customSheetContainer.classList.toggle('hidden', recipientList.value !== 'custom');
-}
-
-
-// --- Parameter Button & Insertion Logic ---
 
 export function populateParameterButtons() {
     const { customParameters } = getState();
@@ -148,294 +63,142 @@ export function populateParameterButtons() {
     const customContainer = document.getElementById(DOM_IDS.CUSTOM_PARAMETER_BUTTONS);
     const customSection = document.getElementById(DOM_IDS.CUSTOM_PARAMETERS_SECTION);
 
-    standardContainer.innerHTML = '';
-    customContainer.innerHTML = '';
+    // Standard parameters (hardcoded for now)
+    const standardParams = ['StudentName', 'StudentEmail', 'Grade', 'LastLDA', 'DaysOut'];
+    standardContainer.innerHTML = standardParams.map(p => 
+        `<button class="parameter-button px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded hover:bg-indigo-200" data-param="${p}">{${p}}</button>`
+    ).join('');
 
-    const createButton = (param, container, isCustom = false) => {
-        const button = document.createElement('button');
-        button.className = isCustom ? 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200' : 'px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded hover:bg-gray-300';
-        button.textContent = `{${param}}`;
-        button.onmousedown = (e) => {
-            e.preventDefault(); 
-            insertParameter(param, isCustom);
-        };
-        container.appendChild(button);
-    };
-
-    const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
-    standardParameters.forEach(param => createButton(param, standardContainer, false));
-
-    if (customParameters.length > 0) {
+    // Custom parameters from state
+    if (customParameters && customParameters.length > 0) {
+        customContainer.innerHTML = customParameters.map(p =>
+            `<button class="parameter-button px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200" data-param="${p.name}">{${p.name}}</button>`
+        ).join('');
         customSection.classList.remove('hidden');
-        customParameters.forEach(param => createButton(param.name, customContainer, true));
     } else {
         customSection.classList.add('hidden');
     }
 
-    document.getElementById(DOM_IDS.RANDOMIZE_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertSpecialParameter('randomize'); };
-    document.getElementById(DOM_IDS.CONDITION_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertSpecialParameter('condition'); };
+    // Add event listeners to all parameter buttons
+    document.querySelectorAll('.parameter-button').forEach(button => {
+        button.onclick = () => insertTextInQuill(`{${button.dataset.param}}`);
+    });
 }
 
-function insertParameter(paramName, isCustom) {
-    const { lastFocusedElement } = getState();
-    const quill = getQuill();
-    
-    if (!quill) {
-        console.error("[ERROR] insertParameter called but Quill instance is not available.");
-        return;
-    }
 
-    if (lastFocusedElement && lastFocusedElement.classList && lastFocusedElement.classList.contains('param-input')) {
-        lastFocusedElement.value = `{${paramName}}`;
-        lastFocusedElement.dispatchEvent(new Event('input', { bubbles: true }));
-    } else if (lastFocusedElement && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedElement.id)) {
-        const type = lastFocusedElement.id.replace('email-', '').replace('-input', '');
-        addPill(type, `{${paramName}}`);
-    } else {
-        const range = quill.getSelection(true);
-        quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
-        // FIX: Use a timeout to ensure the cursor is placed correctly after the browser has rendered the blot.
-        setTimeout(() => {
-            quill.setSelection(range.index + 1, Quill.sources.SILENT);
-        }, 0);
-    }
-}
-
-function insertSpecialParameter(type) {
-    const quill = getQuill();
-
-    if (!quill) {
-        console.error("[ERROR] insertSpecialParameter called but Quill instance is not available.");
-        return;
-    }
-
+export function insertTextInQuill(text) {
     const range = quill.getSelection(true);
-    // Pass a simple `true` value, as the blot is no longer complex.
-    quill.insertEmbed(range.index, type, true, Quill.sources.USER);
-    // FIX: Use a timeout to ensure the cursor is placed correctly after the browser has rendered the blot.
-    setTimeout(() => {
-        quill.setSelection(range.index + 1, Quill.sources.SILENT);
-    }, 0);
+    quill.insertText(range.index, text, 'user');
+    quill.setSelection(range.index + text.length, 0);
 }
 
 
-// --- Pillbox Input UI ---
-
-export function setupPillboxInputs() {
-    ['from', 'subject', 'cc'].forEach(type => {
-        const container = document.getElementById(`email-${type}-container`);
-        const input = document.getElementById(`email-${type}-input`);
-
-        container.addEventListener('click', () => {
-            updateState('lastFocusedElement', input);
-            input.focus();
-        });
-
-        input.addEventListener('focus', () => updateState('lastFocusedElement', input));
-
-        input.addEventListener('keydown', (e) => {
-            if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
-                e.preventDefault();
-                addPill(type, input.value.trim());
-                input.value = '';
-            } else if (e.key === 'Backspace' && input.value === '') {
-                removeLastPill(type);
-            }
-        });
-
-        input.addEventListener('blur', () => {
-            addPill(type, input.value.trim());
-            input.value = '';
-        });
-    });
-}
-
-function addPill(type, text) {
-    if (!text) return;
-    const { emailParts } = getState();
-    emailParts[type].push(text);
-    updateState('emailParts', emailParts);
-    renderPills(type);
-}
-
-function removeLastPill(type) {
-    const { emailParts } = getState();
-    if (emailParts[type].length > 0) {
-        emailParts[type].pop();
-        updateState('emailParts', emailParts);
-        renderPills(type);
+export function toggleCustomSheetInput() {
+    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
+    const customSheetContainer = document.getElementById(DOM_IDS.CUSTOM_SHEET_CONTAINER);
+    if (recipientList.value === 'custom') {
+        customSheetContainer.classList.remove('hidden');
+    } else {
+        customSheetContainer.classList.add('hidden');
     }
 }
 
-function removePill(type, index) {
-    const { emailParts } = getState();
-    emailParts[type].splice(index, 1);
-    updateState('emailParts', emailParts);
-    renderPills(type);
-}
-
-function renderPills(type) {
-    const { emailParts } = getState();
-    const container = document.getElementById(`email-${type}-container`);
-    const input = document.getElementById(`email-${type}-input`);
-    
-    container.querySelectorAll('.pill-tag').forEach(pill => pill.remove());
-
-    emailParts[type].forEach((part, index) => {
-        const isParam = part.startsWith('{') && part.endsWith('}');
-        const pill = document.createElement('span');
-        pill.className = isParam ? 'pill-tag param' : 'pill-tag';
-        pill.textContent = part;
-        
-        const removeBtn = document.createElement('span');
-        removeBtn.textContent = '×';
-        removeBtn.className = 'pill-remove';
-        removeBtn.onclick = (e) => {
-            e.stopPropagation();
-            removePill(type, index);
-        };
-        
-        pill.appendChild(removeBtn);
-        container.insertBefore(pill, input);
-    });
-}
-
-function reconstructPillboxString(parts, separator = '') {
-    return parts.join(separator);
-}
-
-export function getEmailTemplateFromDOM() {
-    const { emailParts } = getState();
-    const quill = getQuill();
-
-    if (!quill) {
-        console.error("[ERROR] getEmailTemplateFromDOM called but Quill instance is not available.");
-        return {
-            from: reconstructPillboxString(emailParts.from),
-            subject: reconstructPillboxString(emailParts.subject),
-            cc: reconstructPillboxString(emailParts.cc, ';'),
-            body: '<p></p>'
-        };
+export function getSelectedSheetName() {
+    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
+    if (recipientList.value === 'custom') {
+        return document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim() || 'Master List';
     }
-
-    const editor = quill.root;
-    
-    // This logic is no longer needed with the simplified blots.
-    // editor.querySelectorAll('.randomize-tag, .condition-tag').forEach(tagNode => {
-    //     const blot = Quill.find(tagNode, true);
-    //     if (blot && blot.statics.blotName === 'randomize') {
-    //         RandomizeBlot.updateOptions(tagNode);
-    //     } else if (blot && blot.statics.blotName === 'condition') {
-    //         ConditionBlot.updateOptions(tagNode);
-    //     }
-    // });
-
-    return {
-        from: reconstructPillboxString(emailParts.from),
-        subject: reconstructPillboxString(emailParts.subject),
-        cc: reconstructPillboxString(emailParts.cc, ';'),
-        body: editor.innerHTML
-    };
-}
-
-export function loadTemplateIntoForm(template) {
-    const parsePills = (str) => {
-        if (!str) return [];
-        return str.split(/({[^}]+})/g).filter(part => part);
-    };
-    
-    const newEmailParts = {
-        from: parsePills(template.from || ''),
-        subject: parsePills(template.subject || ''),
-        cc: parsePills(template.cc || '')
-    };
-    updateState('emailParts', newEmailParts);
-
-    renderPills('from');
-    renderPills('subject');
-    renderPills('cc');
-    
-    const quill = getQuill();
-    if (quill) {
-        quill.root.innerHTML = template.body || '<p></p>';
+    if (recipientList.value === 'lda') {
+        const today = new Date();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const year = today.getFullYear();
+        return `${month}-${day}-${year}`;
     }
+    return 'Master List';
 }
 
 
-// --- Modal Content Management ---
+// --- Modal UI ---
 
-export function populateExampleModal(examplePayload) {
-    document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = examplePayload.from || '[Not Specified]';
-    document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = examplePayload.to || '[No Email Found]';
-    document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = examplePayload.cc || '[Not Specified]';
-    document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = examplePayload.subject;
-    document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = examplePayload.body;
+export function populateExampleModal(example) {
+    document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = example.from || '';
+    document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = example.to || '';
+    document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = example.cc || '';
+    document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = example.subject || '';
+    document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = example.body || '';
 }
 
 export function populatePayloadModal(payload) {
-    document.getElementById(DOM_IDS.PAYLOAD_CONTENT).textContent = JSON.stringify(payload, null, 2);
-    document.getElementById(DOM_IDS.PAYLOAD_CONTENT).classList.remove('hidden');
-    document.getElementById(DOM_IDS.SCHEMA_CONTENT).classList.add('hidden');
-    document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE).textContent = 'Request Payload';
-    document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON).textContent = 'Show Schema';
+    const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
+    const schemaContent = document.getElementById(DOM_IDS.SCHEMA_CONTENT);
+    payloadContent.textContent = JSON.stringify(payload, null, 2);
+    // You might want to generate a more formal JSON schema based on your data structure
+    const schema = {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "to": { "type": "string", "format": "email" },
+          "from": { "type": "string", "format": "email" },
+          "cc": { "type": "string", "format": "email" },
+          "subject": { "type": "string" },
+          "body": { "type": "string", "contentMediaType": "text/html" }
+        },
+        "required": ["to", "from", "subject", "body"]
+      }
+    };
+    schemaContent.textContent = JSON.stringify(schema, null, 2);
 }
 
 export function togglePayloadSchemaView() {
     const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
     const schemaContent = document.getElementById(DOM_IDS.SCHEMA_CONTENT);
-    const title = document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE);
     const button = document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON);
+    const title = document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE);
 
     if (payloadContent.classList.contains('hidden')) {
         payloadContent.classList.remove('hidden');
         schemaContent.classList.add('hidden');
-        title.textContent = 'Request Payload';
         button.textContent = 'Show Schema';
+        title.textContent = 'Request Payload';
     } else {
         payloadContent.classList.add('hidden');
         schemaContent.classList.remove('hidden');
-        title.textContent = 'Request Body JSON Schema';
         button.textContent = 'Show Payload';
+        title.textContent = 'Expected JSON Schema';
     }
 }
 
 export function populateSendConfirmationModal(count) {
-    document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE).textContent = `You are about to send emails to ${count} student(s). Do you want to proceed?`;
+    const message = document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE);
+    message.textContent = `You are about to send ${count} email(s). Do you want to proceed?`;
 }
+
+
+// --- Template UI ---
 
 export function populateTemplatesModal(templates, handlers) {
     const container = document.getElementById(DOM_IDS.TEMPLATES_LIST_CONTAINER);
-    container.innerHTML = '';
-    if (templates.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-center">No saved templates found.</p>';
+    if (!templates || templates.length === 0) {
+        container.innerHTML = '<p class="text-center text-sm text-gray-500">No saved templates found.</p>';
         return;
     }
+    container.innerHTML = templates.map(t => `
+        <div class="border p-3 rounded-lg bg-gray-50 flex justify-between items-center">
+            <div>
+                <p class="font-semibold text-gray-800">${t.name}</p>
+                <p class="text-xs text-gray-500">by ${t.author} on ${new Date(t.timestamp).toLocaleDateString()}</p>
+            </div>
+            <div class="space-x-2">
+                <button class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200" data-id="${t.id}">Load</button>
+                <button class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200" data-id="${t.id}">Delete</button>
+            </div>
+        </div>
+    `).join('');
 
-    templates.forEach(template => {
-        const div = document.createElement('div');
-        div.className = 'p-3 border rounded-md bg-gray-50';
-        div.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="font-semibold text-gray-800">${template.name}</p>
-                    <p class="text-xs text-gray-500">by ${template.author} on ${new Date(template.timestamp).toLocaleDateString()}</p>
-                </div>
-                <div class="flex gap-2">
-                    <button data-id="${template.id}" class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
-                    <button data-id="${template.id}" class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
-                </div>
-            </div>`;
-        container.appendChild(div);
-    });
-    
     container.querySelectorAll('.load-template-btn').forEach(btn => btn.onclick = () => handlers.onLoad(btn.dataset.id));
     container.querySelectorAll('.delete-template-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
-}
-
-export function clearSaveTemplateForm() {
-    document.getElementById(DOM_IDS.TEMPLATE_NAME).value = '';
-    document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value = '';
-    updateSaveTemplateStatus('');
 }
 
 export function getTemplateSaveForm() {
@@ -445,47 +208,83 @@ export function getTemplateSaveForm() {
     };
 }
 
-export function updateSaveTemplateStatus(message, color = 'gray') {
-    const statusEl = document.getElementById(DOM_IDS.SAVE_TEMPLATE_STATUS);
-    statusEl.textContent = message;
-    statusEl.style.color = color;
+export function clearSaveTemplateForm() {
+    document.getElementById(DOM_IDS.TEMPLATE_NAME).value = '';
+    document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value = '';
+    updateSaveTemplateStatus('');
 }
 
-export function showCustomParamModal(paramToEdit = null) {
-    const modalTitle = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL_TITLE);
-    const nameInput = document.getElementById(DOM_IDS.PARAM_NAME);
-    const sourceColumnInput = document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN);
-    const defaultValueInput = document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE);
-    const mappingContainer = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
-    const editIdInput = document.getElementById(DOM_IDS.PARAM_EDIT_ID);
+export function updateSaveTemplateStatus(message, color = 'gray') {
+    const status = document.getElementById(DOM_IDS.SAVE_TEMPLATE_STATUS);
+    status.textContent = message;
+    status.style.color = color;
+}
 
-    mappingContainer.innerHTML = '';
+export function loadTemplateIntoForm(template) {
+    // This is a simplified version. A real implementation would parse the pillbox values.
+    setPillboxValue(DOM_IDS.EMAIL_FROM_CONTAINER, template.from || '');
+    setPillboxValue(DOM_IDS.EMAIL_SUBJECT_CONTAINER, template.subject || '');
+    setPillboxValue(DOM_IDS.EMAIL_CC_CONTAINER, template.cc || '');
+    
+    document.getElementById(DOM_IDS.RECIPIENT_LIST).value = template.recipientList || 'lda';
+    document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value = template.customSheetName || '';
+    quill.root.innerHTML = template.body || '';
+    toggleCustomSheetInput();
+}
+
+
+// --- Custom Parameter UI ---
+export function showCustomParamModal(param = null) {
+    const modal = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL);
+    const title = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL_TITLE);
+    
+    // Clear form
+    document.getElementById(DOM_IDS.PARAM_EDIT_ID).value = '';
+    document.getElementById(DOM_IDS.PARAM_NAME).value = '';
+    document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value = '';
+    document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value = '';
+    document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER).innerHTML = '';
     updateCustomParamStatus('');
-
-    if (paramToEdit) {
-        modalTitle.textContent = 'Edit Custom Parameter';
-        editIdInput.value = paramToEdit.id;
-        nameInput.value = paramToEdit.name;
-        sourceColumnInput.value = paramToEdit.sourceColumn;
-        defaultValueInput.value = paramToEdit.defaultValue;
-        (paramToEdit.mappings || []).forEach(m => addMappingRow(m.if, m.then));
+    
+    if (param) {
+        title.textContent = 'Edit Custom Parameter';
+        document.getElementById(DOM_IDS.PARAM_EDIT_ID).value = param.id;
+        document.getElementById(DOM_IDS.PARAM_NAME).value = param.name;
+        document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value = param.sourceColumn;
+        document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value = param.defaultValue;
+        if (param.valueMap) {
+            param.valueMap.forEach(mapping => addMappingRow(mapping.if, mapping.then));
+        }
     } else {
-        modalTitle.textContent = 'Create Custom Parameter';
-        editIdInput.value = '';
-        nameInput.value = '';
-        sourceColumnInput.value = '';
-        defaultValueInput.value = '';
+        title.textContent = 'Create Custom Parameter';
+        addMappingRow(); // Start with one empty mapping row
     }
-    document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL).classList.remove('hidden');
+    
+    modal.classList.remove('hidden');
+}
+
+export function addMappingRow(ifValue = '', thenValue = '') {
+    const container = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 text-sm';
+    row.innerHTML = `
+        <span class="font-semibold text-gray-500">If value is</span>
+        <input type="text" class="mapping-if-input w-full px-2 py-1 border rounded-md" placeholder="e.g., Blanco, Victor" value="${ifValue}">
+        <span class="font-semibold text-gray-500">then use</span>
+        <input type="text" class="mapping-then-input w-full px-2 py-1 border rounded-md" placeholder="e.g., vblanco@school.edu" value="${thenValue}">
+        <button type="button" class="remove-mapping-btn text-red-500 hover:text-red-700 font-bold text-lg">&times;</button>
+    `;
+    row.querySelector('.remove-mapping-btn').onclick = () => row.remove();
+    container.appendChild(row);
 }
 
 export function getCustomParamForm() {
-    const mappings = [];
-    document.querySelectorAll(`#${DOM_IDS.PARAM_MAPPING_CONTAINER} .mapping-row`).forEach(row => {
-        const ifValue = row.querySelector('.mapping-if').value.trim();
-        const thenValue = row.querySelector('.mapping-then').value.trim();
-        if (ifValue) {
-            mappings.push({ if: ifValue, then: thenValue });
+    const valueMap = [];
+    document.querySelectorAll('#' + DOM_IDS.PARAM_MAPPING_CONTAINER + ' .flex').forEach(row => {
+        const ifVal = row.querySelector('.mapping-if-input').value.trim();
+        const thenVal = row.querySelector('.mapping-then-input').value.trim();
+        if (ifVal && thenVal) {
+            valueMap.push({ if: ifVal, then: thenVal });
         }
     });
 
@@ -494,63 +293,155 @@ export function getCustomParamForm() {
         name: document.getElementById(DOM_IDS.PARAM_NAME).value.trim(),
         sourceColumn: document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value.trim(),
         defaultValue: document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value.trim(),
-        mappings: mappings
+        valueMap: valueMap
     };
 }
 
-export function addMappingRow(ifValue = '', thenValue = '') {
-    const container = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
-    const div = document.createElement('div');
-    div.className = 'flex items-center gap-2 mapping-row';
-    div.innerHTML = `
-        <span class="text-sm text-gray-500">If cell is</span>
-        <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${ifValue}">
-        <span class="text-sm text-gray-500">then value is</span>
-        <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com" value="${thenValue}">
-        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>`;
-    div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
-    container.appendChild(div);
-}
-
 export function updateCustomParamStatus(message, color = 'gray') {
-    const statusEl = document.getElementById(DOM_IDS.SAVE_PARAM_STATUS);
-    statusEl.textContent = message;
-    statusEl.style.color = color;
+     const status = document.getElementById(DOM_IDS.SAVE_PARAM_STATUS);
+     status.textContent = message;
+     status.style.color = color;
 }
 
 export function populateManageCustomParamsModal(params, handlers) {
-    const listContainer = document.getElementById(DOM_IDS.MANAGE_PARAMS_LIST);
-    listContainer.innerHTML = '';
-    if (params.length === 0) {
-        listContainer.innerHTML = '<p class="text-gray-500 text-center">No custom parameters created yet.</p>';
+    const container = document.getElementById(DOM_IDS.MANAGE_PARAMS_LIST);
+    if (!params || params.length === 0) {
+        container.innerHTML = '<p class="text-sm text-gray-500 text-center">No custom parameters created yet.</p>';
         return;
     }
-
-    params.forEach(param => {
-        const div = document.createElement('div');
-        div.className = 'p-3 border-b';
-        let mappingsHtml = (param.mappings || []).map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
-        if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
-
-        div.innerHTML = `
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="font-semibold text-gray-800">{${param.name}}</p>
-                    <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
-                    <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
-                </div>
-                <div class="flex gap-2">
-                    <button data-id="${param.id}" class="duplicate-param-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Duplicate</button>
-                    <button data-id="${param.id}" class="edit-param-btn px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-md hover:bg-yellow-200">Edit</button>
-                    <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
-                </div>
+    container.innerHTML = params.map(p => `
+        <div class="border p-3 rounded-lg bg-gray-50 flex justify-between items-start">
+            <div>
+                <p class="font-semibold text-gray-800">{${p.name}}</p>
+                <p class="text-xs text-gray-500 mt-1">Source: <span class="font-medium">${p.sourceColumn}</span></p>
+                ${p.defaultValue ? `<p class="text-xs text-gray-500">Default: <span class="font-medium">${p.defaultValue}</span></p>` : ''}
+                ${p.valueMap && p.valueMap.length > 0 ? `<p class="text-xs text-gray-500">${p.valueMap.length} mapping rule(s)</p>` : ''}
             </div>
-            <div class="mt-2 text-sm">${mappingsHtml}</div>`;
-        listContainer.appendChild(div);
-    });
-
-    listContainer.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => handlers.onDuplicate(btn.dataset.id));
-    listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
-    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
+            <div class="flex-shrink-0 space-x-2">
+                <button class="edit-param-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200" data-id="${p.id}">Edit</button>
+                <button class="duplicate-param-btn px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-md hover:bg-yellow-200" data-id="${p.id}">Duplicate</button>
+                <button class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200" data-id="${p.id}">Delete</button>
+            </div>
+        </div>
+    `).join('');
+    
+    container.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
+    container.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
+    container.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => handlers.onDuplicate(btn.dataset.id));
 }
 
+// --- Pillbox Input UI ---
+
+export function setupPillboxInputs() {
+    document.querySelectorAll('.pill-container').forEach(container => {
+        const input = container.querySelector('.pill-input');
+        
+        container.addEventListener('click', () => input.focus());
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                const value = input.value.trim();
+                if (value) {
+                    addPill(value, container);
+                    input.value = '';
+                }
+            } else if (e.key === 'Backspace' && input.value === '') {
+                const lastPill = container.querySelector('.pill-tag:last-of-type');
+                if (lastPill) {
+                    input.value = lastPill.textContent.slice(0, -1); // Put text back in input, remove 'x'
+                    lastPill.remove();
+                }
+            }
+        });
+
+        input.addEventListener('blur', () => {
+             const value = input.value.trim();
+             if (value) {
+                 addPill(value, container);
+                 input.value = '';
+             }
+        });
+    });
+}
+
+function addPill(text, container) {
+    const pill = document.createElement('span');
+    pill.className = 'pill-tag';
+    
+    // Check if it's a parameter
+    if (text.startsWith('{') && text.endsWith('}')) {
+        pill.classList.add('param');
+    }
+
+    const textNode = document.createTextNode(text);
+    const removeBtn = document.createElement('span');
+    removeBtn.className = 'pill-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.onclick = (e) => {
+        e.stopPropagation(); // prevent container click from firing
+        pill.remove();
+    };
+    
+    pill.appendChild(textNode);
+    pill.appendChild(removeBtn);
+    
+    const input = container.querySelector('.pill-input');
+    container.insertBefore(pill, input);
+}
+
+function getPillboxValue(containerId) {
+    const container = document.getElementById(containerId);
+    const pills = Array.from(container.querySelectorAll('.pill-tag'));
+    return pills.map(p => p.textContent.slice(0, -1)).join(', '); // remove the 'x'
+}
+
+function setPillboxValue(containerId, valueString) {
+    const container = document.getElementById(containerId);
+    // Clear existing pills
+    container.querySelectorAll('.pill-tag').forEach(p => p.remove());
+    if (valueString) {
+        valueString.split(',').forEach(val => {
+            const trimmedVal = val.trim();
+            if (trimmedVal) {
+                addPill(trimmedVal, container);
+            }
+        });
+    }
+}
+
+
+// --- Randomize Modal UI ---
+
+export function clearRandomizeModal() {
+    const container = document.getElementById(DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER);
+    container.innerHTML = '';
+    // Add two empty options to start
+    addRandomizeOption();
+    addRandomizeOption();
+}
+
+export function addRandomizeOption(value = '') {
+    const container = document.getElementById(DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER);
+    const optionDiv = document.createElement('div');
+    optionDiv.className = 'flex items-center gap-2';
+    
+    optionDiv.innerHTML = `
+        <input type="text" class="randomize-option-input w-full px-2 py-1 border rounded-md" placeholder="Enter a text variation..." value="${value}">
+        <button type="button" class="remove-randomize-option-btn text-red-500 hover:text-red-700 font-bold text-lg">&times;</button>
+    `;
+    
+    optionDiv.querySelector('.remove-randomize-option-btn').onclick = () => {
+        // Prevent removing the last two options
+        if (container.childElementCount > 2) {
+            optionDiv.remove();
+        }
+    };
+    
+    container.appendChild(optionDiv);
+}
+
+export function getRandomizeOptions() {
+    const inputs = document.querySelectorAll('#' + DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER + ' .randomize-option-input');
+    return Array.from(inputs).map(input => input.value.trim()).filter(val => val);
+}
