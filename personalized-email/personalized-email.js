@@ -88,7 +88,16 @@ Office.onReady((info) => {
                 node.setAttribute('data-param', value.name);
                 node.classList.add('parameter-tag');
                 if (value.isCustom) node.classList.add('custom');
-                node.innerText = `{${value.name}}`;
+                
+                // Use innerHTML to structure it
+                node.innerHTML = `<span>{${value.name}}</span><span class="parameter-remove-btn" contenteditable="false">×</span>`;
+
+                node.querySelector('.parameter-remove-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const blot = Quill.find(node);
+                    if (blot) blot.remove();
+                });
+
                 return node;
             }
             static formats(node) {
@@ -109,15 +118,11 @@ Office.onReady((info) => {
                 const node = document.createElement('span');
                 node.classList.add('randomize-tag');
                 
-                const text = document.createElement('span');
-                text.innerText = '{Randomize}';
-                
-                const arrow = document.createElement('span');
-                arrow.innerHTML = '&#9660;';
-                arrow.classList.add('randomize-arrow');
-                
-                node.appendChild(text);
-                node.appendChild(arrow);
+                node.innerHTML = `
+                    <span>{Randomize}</span>
+                    <span class="parameter-remove-btn" contenteditable="false">×</span>
+                    <span class="randomize-arrow">&#9660;</span>
+                `;
                 
                 const panel = document.createElement('div');
                 panel.classList.add('randomize-panel');
@@ -141,9 +146,17 @@ Office.onReady((info) => {
                 
                 wrapper.appendChild(node);
                 wrapper.appendChild(panel);
+                
+                node.querySelector('.parameter-remove-btn').onclick = (e) => {
+                    e.stopPropagation();
+                    const blot = Quill.find(wrapper);
+                    if (blot) blot.remove();
+                };
 
                 node.onclick = (e) => {
+                    if (e.target.classList.contains('parameter-remove-btn')) return;
                     e.stopPropagation();
+                    const arrow = node.querySelector('.randomize-arrow');
                     const isOpening = panel.style.display === 'none';
                     document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
                     document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
@@ -216,13 +229,11 @@ Office.onReady((info) => {
 
                 const node = document.createElement('span');
                 node.classList.add('condition-tag');
-                const text = document.createElement('span');
-                text.innerText = '{Condition}';
-                const arrow = document.createElement('span');
-                arrow.innerHTML = '&#9660;';
-                arrow.classList.add('condition-arrow');
-                node.appendChild(text);
-                node.appendChild(arrow);
+                node.innerHTML = `
+                    <span>{Condition}</span>
+                    <span class="parameter-remove-btn" contenteditable="false">×</span>
+                    <span class="condition-arrow">&#9660;</span>
+                `;
 
                 const panel = document.createElement('div');
                 panel.classList.add('condition-panel');
@@ -262,9 +273,17 @@ Office.onReady((info) => {
                 
                 const update = () => this.updateOptions(wrapper);
                 panel.querySelectorAll('input, select, textarea').forEach(el => el.oninput = update);
+                
+                node.querySelector('.parameter-remove-btn').onclick = (e) => {
+                    e.stopPropagation();
+                    const blot = Quill.find(wrapper);
+                    if (blot) blot.remove();
+                };
 
                 node.onclick = (e) => {
+                    if (e.target.classList.contains('parameter-remove-btn')) return;
                     e.stopPropagation();
+                    const arrow = node.querySelector('.condition-arrow');
                     const isOpening = panel.style.display === 'none';
                     document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
                     document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
@@ -1221,4 +1240,3 @@ function parseStringToPills(str) {
     const regex = /({[^}]+})/g;
     return str.split(regex).filter(part => part); // filter out empty strings
 }
-
