@@ -1,24 +1,43 @@
-import { DOM_IDS, STANDARD_PARAMETERS } from './constants.js';
-import { getState, updateState, getQuill, setQuill } from './state.js';
-import { getTodaysLdaSheetName } from './utils.js';
+import { DOM_IDS } from './constants.js';
+import { updateState, getState } from './state.js';
 
+let RandomizeBlot, ConditionBlot;
 
-// A mutable variable to hold the Quill editor instance.
-// It's kept separate from appState because it's a complex object, not simple data.
-let quillInstance = null;
-
-// Define Blot classes in a scope accessible by all functions
-let RandomizeBlot;
-let ConditionBlot;
+// --- Initialization ---
 
 export function initializeQuill() {
-    // Define custom formats (Blots) for Quill
-    const Embed = Quill.import('blots/embed');
+    const quill = new Quill(`#${DOM_IDS.EDITOR_CONTAINER}`, {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                ['bold', 'italic', 'underline'],
+                [{'list': 'ordered'}, {'list': 'bullet'}],
+                [{'color': []}, {'background': []}],
+                ['link']
+            ]
+        }
+    });
+    updateState('quill', quill);
+    registerCustomBlots(Quill);
+
+    quill.on('selection-change', (range) => {
+        if (range) {
+            updateState('lastFocusedElement', quill);
+        }
+    });
+}
+
+/**
+ * Registers the custom Blot formats with Quill.
+ * @param {object} Quill The Quill instance.
+ */
+function registerCustomBlots(Quill) {
     const Inline = Quill.import('blots/inline');
 
+    // --- ParameterBlot ---
     class ParameterBlot extends Inline {
         static create(value) {
-            const node = super.create();
+            let node = super.create();
             node.setAttribute('contenteditable', 'false');
             node.setAttribute('data-param', value.name);
             node.classList.add('parameter-tag');
@@ -33,11 +52,14 @@ export function initializeQuill() {
     ParameterBlot.blotName = 'parameter';
     ParameterBlot.tagName = 'SPAN';
     Quill.register(ParameterBlot);
-
-    RandomizeBlot = class extends Embed {
+    
+    // --- RandomizeBlot ---
+    // FIX: Inherit from Inline and use a DIV as the wrapper to create valid HTML.
+    RandomizeBlot = class extends Inline {
         static create(value) {
-            const wrapper = document.createElement('span');
+            const wrapper = document.createElement('div');
             wrapper.classList.add('randomize-tag-wrapper');
+            wrapper.style.display = 'inline-block'; // Ensure it behaves like an inline element
             wrapper.setAttribute('contenteditable', 'false');
 
             const node = document.createElement('span');
@@ -137,15 +159,18 @@ export function initializeQuill() {
                 options: JSON.parse(domNode.dataset.options || '[]')
             };
         }
-    };
+    }
     RandomizeBlot.blotName = 'randomize';
-    RandomizeBlot.tagName = 'SPAN';
+    RandomizeBlot.tagName = 'DIV';
     Quill.register(RandomizeBlot);
 
-    ConditionBlot = class extends Embed {
+    // --- ConditionBlot ---
+    // FIX: Inherit from Inline and use a DIV as the wrapper to create valid HTML.
+    ConditionBlot = class extends Inline {
         static create(value) {
-            const wrapper = document.createElement('span');
+            const wrapper = document.createElement('div');
             wrapper.classList.add('condition-tag-wrapper');
+            wrapper.style.display = 'inline-block'; // Ensure it behaves like an inline element
             wrapper.setAttribute('contenteditable', 'false');
 
             const node = document.createElement('span');
@@ -176,17 +201,11 @@ export function initializeQuill() {
             ifClause.appendChild(ifKeyword);
             ifClause.appendChild(ifParamInput);
 
-            const select = document.createElement('select');
-            select.className = 'condition-operator';
-            ['=', '>', '>=', '<', '<='].forEach(op => {
-                const option = document.createElement('option');
-                option.value = op;
-                option.text = op;
-                if (op === value.operator) option.selected = true;
-                select.appendChild(option);
-            });
-            ifClause.appendChild(select);
-
+            const operatorSelect = document.createElement('select');
+            operatorSelect.className = 'condition-operator';
+            operatorSelect.innerHTML = ['=', '>', '>=', '<', '<='].map(op => `<option ${op === value.operator ? 'selected' : ''}>${op}</option>`).join('');
+            ifClause.appendChild(operatorSelect);
+            
             const valueInput = document.createElement('input');
             valueInput.className = 'condition-input value-input';
             valueInput.placeholder = 'Value';
@@ -214,7 +233,7 @@ export function initializeQuill() {
             wrapper.appendChild(panel);
             
             const update = () => this.updateOptions(wrapper);
-            panel.querySelectorAll('input, select, textarea').forEach(el => el.oninput = update);
+            panel.querySelectorAll('input, select, textarea').forEach(el => el.addEventListener('input', update));
 
             node.onclick = (e) => {
                 e.stopPropagation();
@@ -232,11 +251,17 @@ export function initializeQuill() {
         }
         
         static updateOptions(blotNode) {
+            if (!blotNode) return;
+            const paramInput = blotNode.querySelector('.param-input');
+            const operator = blotNode.querySelector('.condition-operator');
+            const valueInput = blotNode.querySelector('.value-input');
+            const thenInput = blotNode.querySelector('.condition-then-input');
+
             const data = {
-                if_param: blotNode.querySelector('.param-input')?.value.replace(/[{}]/g, '') || '',
-                operator: blotNode.querySelector('.condition-operator')?.value || '=',
-                if_value: blotNode.querySelector('.value-input')?.value || '',
-                then_text: blotNode.querySelector('.condition-then-input')?.value || ''
+                if_param: paramInput ? paramInput.value.replace(/[{}]/g, '') : '',
+                operator: operator ? operator.value : '=',
+                if_value: valueInput ? valueInput.value : '',
+                then_text: thenInput ? thenInput.value : ''
             };
             blotNode.dataset.condition = JSON.stringify(data);
         }
@@ -244,48 +269,60 @@ export function initializeQuill() {
         static value(domNode) {
             return JSON.parse(domNode.dataset.condition || '{}');
         }
-    };
+    }
     ConditionBlot.blotName = 'condition';
-    ConditionBlot.tagName = 'SPAN';
+    ConditionBlot.tagName = 'DIV';
     Quill.register(ConditionBlot);
-
-    // Initialize Quill
-    const quill = new Quill(`#${DOM_IDS.EDITOR_CONTAINER}`, {
-        theme: 'snow',
-        modules: {
-            toolbar: [
-                ['bold', 'italic', 'underline'],
-                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                [{ 'color': [] }, { 'background': [] }],
-                ['link']
-            ]
-        }
-    });
-
-    setQuill(quill); // Save the instance to the state module
-
-    quill.on('selection-change', (range) => {
-        if (range) {
-            updateState('lastFocusedElement', quill);
-        }
-    });
 }
 
-// --- View Management ---
 
-export function showView(view) {
+// --- DOM Manipulation & UI Logic ---
+
+export function showView(viewName) {
     const setupWizard = document.getElementById(DOM_IDS.SETUP_WIZARD);
     const emailComposer = document.getElementById(DOM_IDS.EMAIL_COMPOSER);
-    if (view === 'composer') {
+
+    if (viewName === 'composer') {
         setupWizard.classList.add('hidden');
         emailComposer.classList.remove('hidden');
-    } else {
+    } else { // 'setup'
         setupWizard.classList.remove('hidden');
         emailComposer.classList.add('hidden');
     }
 }
 
-// --- Parameter UI ---
+export function updateStatus(message, color = 'gray', isSetupStatus = false) {
+    const statusEl = document.getElementById(isSetupStatus ? DOM_IDS.SETUP_STATUS : DOM_IDS.STATUS);
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.style.color = color;
+}
+
+export function getPowerAutomateUrl() {
+    return document.getElementById(DOM_IDS.POWER_AUTOMATE_URL).value.trim();
+}
+
+export function getSelectedSheetName() {
+    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
+    if (recipientList.value === 'custom') {
+        return document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim();
+    }
+    return recipientList.value === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+}
+
+function getTodaysLdaSheetName() {
+    const now = new Date();
+    return `LDA ${now.getMonth() + 1}-${now.getDate()}-${now.getFullYear()}`;
+}
+
+export function toggleCustomSheetInput() {
+    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
+    const customSheetContainer = document.getElementById(DOM_IDS.CUSTOM_SHEET_CONTAINER);
+    customSheetContainer.classList.toggle('hidden', recipientList.value !== 'custom');
+}
+
+
+// --- Parameter Button & Insertion Logic ---
 
 export function populateParameterButtons() {
     const { customParameters } = getState();
@@ -298,18 +335,17 @@ export function populateParameterButtons() {
 
     const createButton = (param, container, isCustom = false) => {
         const button = document.createElement('button');
-        button.className = isCustom
-            ? 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200'
-            : 'px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded hover:bg-gray-300';
+        button.className = isCustom ? 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200' : 'px-2 py-1 bg-gray-200 text-gray-800 text-xs rounded hover:bg-gray-300';
         button.textContent = `{${param}}`;
         button.onmousedown = (e) => {
-            e.preventDefault();
-            insertParameter(`{${param}}`);
+            e.preventDefault(); 
+            insertParameter(param, isCustom);
         };
         container.appendChild(button);
     };
 
-    STANDARD_PARAMETERS.forEach(param => createButton(param, standardContainer, false));
+    const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
+    standardParameters.forEach(param => createButton(param, standardContainer, false));
 
     if (customParameters.length > 0) {
         customSection.classList.remove('hidden');
@@ -318,48 +354,51 @@ export function populateParameterButtons() {
         customSection.classList.add('hidden');
     }
 
-    document.getElementById(DOM_IDS.RANDOMIZE_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertParameter('{Randomize}'); };
-    document.getElementById(DOM_IDS.CONDITION_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertParameter('{Condition}'); };
+    document.getElementById(DOM_IDS.RANDOMIZE_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertSpecialParameter('randomize'); };
+    document.getElementById(DOM_IDS.CONDITION_PARAMETER_BUTTON).onmousedown = (e) => { e.preventDefault(); insertSpecialParameter('condition'); };
 }
 
-function insertParameter(param) {
-    const { lastFocusedElement } = getState();
-    const quill = getQuill();
-    const paramName = param.replace(/[{}]/g, '');
-
+function insertParameter(paramName, isCustom) {
+    const { lastFocusedElement, quill } = getState();
     if (lastFocusedElement && lastFocusedElement.classList && lastFocusedElement.classList.contains('param-input')) {
-        lastFocusedElement.value = param;
+        lastFocusedElement.value = `{${paramName}}`;
         lastFocusedElement.dispatchEvent(new Event('input', { bubbles: true }));
     } else if (lastFocusedElement && ['email-from-input', 'email-subject-input', 'email-cc-input'].includes(lastFocusedElement.id)) {
         const type = lastFocusedElement.id.replace('email-', '').replace('-input', '');
-        addPill(type, param);
+        addPill(type, `{${paramName}}`);
     } else {
         const range = quill.getSelection(true);
-        if (paramName === 'Randomize') {
-            quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
-        } else if (paramName === 'Condition') {
-            quill.insertEmbed(range.index, 'condition', {}, Quill.sources.USER);
-        } else {
-            const isCustom = getState().customParameters.some(p => p.name === paramName);
-            quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
-        }
+        quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
         quill.setSelection(range.index + 1, Quill.sources.USER);
     }
 }
 
+function insertSpecialParameter(type) {
+    const { quill } = getState();
+    const range = quill.getSelection(true);
+    if (type === 'randomize') {
+        quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
+    } else if (type === 'condition') {
+        quill.insertEmbed(range.index, 'condition', {}, Quill.sources.USER);
+    }
+    quill.setSelection(range.index + 1, Quill.sources.USER);
+}
 
-// --- Pillbox UI ---
+
+// --- Pillbox Input UI ---
 
 export function setupPillboxInputs() {
     ['from', 'subject', 'cc'].forEach(type => {
-        const container = document.getElementById(DOM_IDS[`${type.toUpperCase()}_CONTAINER`]);
-        const input = document.getElementById(DOM_IDS[`${type.toUpperCase()}_INPUT`]);
+        const container = document.getElementById(`email-${type}-container`);
+        const input = document.getElementById(`email-${type}-input`);
 
         container.addEventListener('click', () => {
             updateState('lastFocusedElement', input);
             input.focus();
         });
+
         input.addEventListener('focus', () => updateState('lastFocusedElement', input));
+
         input.addEventListener('keydown', (e) => {
             if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
                 e.preventDefault();
@@ -369,6 +408,7 @@ export function setupPillboxInputs() {
                 removeLastPill(type);
             }
         });
+
         input.addEventListener('blur', () => {
             addPill(type, input.value.trim());
             input.value = '';
@@ -380,6 +420,7 @@ function addPill(type, text) {
     if (!text) return;
     const { emailParts } = getState();
     emailParts[type].push(text);
+    updateState('emailParts', emailParts);
     renderPills(type);
 }
 
@@ -387,6 +428,7 @@ function removeLastPill(type) {
     const { emailParts } = getState();
     if (emailParts[type].length > 0) {
         emailParts[type].pop();
+        updateState('emailParts', emailParts);
         renderPills(type);
     }
 }
@@ -394,23 +436,23 @@ function removeLastPill(type) {
 function removePill(type, index) {
     const { emailParts } = getState();
     emailParts[type].splice(index, 1);
+    updateState('emailParts', emailParts);
     renderPills(type);
 }
 
 function renderPills(type) {
     const { emailParts } = getState();
-    const container = document.getElementById(DOM_IDS[`${type.toUpperCase()}_CONTAINER`]);
-    const input = document.getElementById(DOM_IDS[`${type.toUpperCase()}_INPUT`]);
-    const parts = emailParts[type];
-
+    const container = document.getElementById(`email-${type}-container`);
+    const input = document.getElementById(`email-${type}-input`);
+    
     container.querySelectorAll('.pill-tag').forEach(pill => pill.remove());
 
-    parts.forEach((part, index) => {
+    emailParts[type].forEach((part, index) => {
         const isParam = part.startsWith('{') && part.endsWith('}');
         const pill = document.createElement('span');
         pill.className = isParam ? 'pill-tag param' : 'pill-tag';
         pill.textContent = part;
-
+        
         const removeBtn = document.createElement('span');
         removeBtn.textContent = '×';
         removeBtn.className = 'pill-remove';
@@ -418,84 +460,77 @@ function renderPills(type) {
             e.stopPropagation();
             removePill(type, index);
         };
-
+        
         pill.appendChild(removeBtn);
         container.insertBefore(pill, input);
     });
-}
-
-// --- General UI Getters ---
-
-export function getPowerAutomateUrl() {
-    return document.getElementById(DOM_IDS.POWER_AUTOMATE_URL).value.trim();
-}
-
-export function getSelectedSheetName() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    const customSheetInput = document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME);
-    if (recipientList.value === 'custom') {
-        return customSheetInput.value.trim();
-    }
-    return recipientList.value === 'lda' ? getTodaysLdaSheetName() : 'Master List';
-}
-
-export function getEmailTemplateFromDOM() {
-    const { emailParts } = getState();
-    const quill = getQuill();
-
-    // Ensure special blots have their data up-to-date by iterating over the LIVE DOM
-    if (quill && quill.root) {
-        quill.root.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => RandomizeBlot.updateOptions(tagNode));
-        quill.root.querySelectorAll('.condition-tag-wrapper').forEach(tagNode => ConditionBlot.updateOptions(tagNode));
-    }
-
-    return {
-        from: reconstructPillboxString(emailParts.from),
-        subject: reconstructPillboxString(emailParts.subject),
-        cc: reconstructPillboxString(emailParts.cc, ';'),
-        body: quill ? quill.root.innerHTML : ''
-    };
 }
 
 function reconstructPillboxString(parts, separator = '') {
     return parts.join(separator);
 }
 
-// --- UI Updaters and Status ---
+export function getEmailTemplateFromDOM() {
+    const { emailParts, quill } = getState();
+    const editor = quill.root;
 
-export function updateStatus(message, color = 'gray', isSetupStatus = false) {
-    const statusEl = document.getElementById(isSetupStatus ? DOM_IDS.SETUP_STATUS : DOM_IDS.STATUS);
-    statusEl.textContent = message;
-    statusEl.style.color = color;
+    // Update the dataset on any special blots before getting the HTML
+    editor.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
+        const blot = Quill.find(tagNode, true);
+        if (blot && blot.statics.blotName === 'randomize') {
+            RandomizeBlot.updateOptions(tagNode);
+        } else if (blot && blot.statics.blotName === 'condition') {
+            ConditionBlot.updateOptions(tagNode);
+        }
+    });
+
+    return {
+        from: reconstructPillboxString(emailParts.from),
+        subject: reconstructPillboxString(emailParts.subject),
+        cc: reconstructPillboxString(emailParts.cc, ';'),
+        body: editor.innerHTML
+    };
 }
 
+export function loadTemplateIntoForm(template) {
+    const parsePills = (str) => {
+        if (!str) return [];
+        return str.split(/({[^}]+})/g).filter(part => part);
+    };
+    
+    const newEmailParts = {
+        from: parsePills(template.from || ''),
+        subject: parsePills(template.subject || ''),
+        cc: parsePills(template.cc || '')
+    };
+    updateState('emailParts', newEmailParts);
 
-export function toggleCustomSheetInput() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    const customSheetContainer = document.getElementById(DOM_IDS.CUSTOM_SHEET_CONTAINER);
-    customSheetContainer.classList.toggle('hidden', recipientList.value !== 'custom');
+    renderPills('from');
+    renderPills('subject');
+    renderPills('cc');
+    
+    const { quill } = getState();
+    quill.root.innerHTML = template.body || '<p></p>';
 }
+
 
 // --- Modal Content Management ---
 
+export function populateExampleModal(examplePayload) {
+    document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = examplePayload.from || '[Not Specified]';
+    document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = examplePayload.to || '[No Email Found]';
+    document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = examplePayload.cc || '[Not Specified]';
+    document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = examplePayload.subject;
+    document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = examplePayload.body;
+}
+
 export function populatePayloadModal(payload) {
     document.getElementById(DOM_IDS.PAYLOAD_CONTENT).textContent = JSON.stringify(payload, null, 2);
-    // Also populate the schema content here
-    const schemaContent = {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "from": { "type": "string" },
-                "to": { "type": "string" },
-                "cc": { "type": "string" },
-                "subject": { "type": "string" },
-                "body": { "type": "string" }
-            },
-            "required": ["from", "to", "subject", "body"]
-        }
-    };
-    document.getElementById(DOM_IDS.SCHEMA_CONTENT).textContent = JSON.stringify(schemaContent, null, 2);
+    // Reset to payload view by default
+    document.getElementById(DOM_IDS.PAYLOAD_CONTENT).classList.remove('hidden');
+    document.getElementById(DOM_IDS.SCHEMA_CONTENT).classList.add('hidden');
+    document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE).textContent = 'Request Payload';
+    document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON).textContent = 'Show Schema';
 }
 
 export function togglePayloadSchemaView() {
@@ -504,34 +539,22 @@ export function togglePayloadSchemaView() {
     const title = document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE);
     const button = document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON);
 
-    const isPayloadVisible = !payloadContent.classList.contains('hidden');
-
-    payloadContent.classList.toggle('hidden', isPayloadVisible);
-    schemaContent.classList.toggle('hidden', !isPayloadVisible);
-
-    if (isPayloadVisible) {
-        title.textContent = 'Request Body JSON Schema';
-        button.textContent = 'Show Payload';
-    } else {
+    if (payloadContent.classList.contains('hidden')) {
+        payloadContent.classList.remove('hidden');
+        schemaContent.classList.add('hidden');
         title.textContent = 'Request Payload';
         button.textContent = 'Show Schema';
+    } else {
+        payloadContent.classList.add('hidden');
+        schemaContent.classList.remove('hidden');
+        title.textContent = 'Request Body JSON Schema';
+        button.textContent = 'Show Payload';
     }
-}
-
-
-export function populateExampleModal(example) {
-    document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = example.from || '[Not Specified]';
-    document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = example.to || '[No Email Found]';
-    document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = example.cc || '[Not Specified]';
-    document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = example.subject;
-    document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = example.body;
 }
 
 export function populateSendConfirmationModal(count) {
     document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE).textContent = `You are about to send emails to ${count} student(s). Do you want to proceed?`;
 }
-
-// --- Templates UI ---
 
 export function populateTemplatesModal(templates, handlers) {
     const container = document.getElementById(DOM_IDS.TEMPLATES_LIST_CONTAINER);
@@ -554,17 +577,12 @@ export function populateTemplatesModal(templates, handlers) {
                     <button data-id="${template.id}" class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
                     <button data-id="${template.id}" class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                 </div>
-            </div>
-        `;
+            </div>`;
         container.appendChild(div);
     });
     
-    container.querySelectorAll('.load-template-btn').forEach(btn => {
-        btn.onclick = () => handlers.onLoad(btn.dataset.id);
-    });
-    container.querySelectorAll('.delete-template-btn').forEach(btn => {
-        btn.onclick = () => handlers.onDelete(btn.dataset.id);
-    });
+    container.querySelectorAll('.load-template-btn').forEach(btn => btn.onclick = () => handlers.onLoad(btn.dataset.id));
+    container.querySelectorAll('.delete-template-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
 }
 
 export function clearSaveTemplateForm() {
@@ -585,25 +603,6 @@ export function updateSaveTemplateStatus(message, color = 'gray') {
     statusEl.textContent = message;
     statusEl.style.color = color;
 }
-
-export function loadTemplateIntoForm(template) {
-    const { emailParts } = getState();
-    const quill = getQuill();
-
-    const parsePills = (str) => str ? str.split(/({[^}]+})/g).filter(part => part) : [];
-
-    emailParts.from = parsePills(template.from);
-    emailParts.subject = parsePills(template.subject);
-    emailParts.cc = parsePills(template.cc);
-    
-    renderPills('from');
-    renderPills('subject');
-    renderPills('cc');
-
-    quill.root.innerHTML = template.body;
-}
-
-// --- Custom Parameter UI ---
 
 export function showCustomParamModal(paramToEdit = null) {
     const modalTitle = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL_TITLE);
@@ -633,6 +632,25 @@ export function showCustomParamModal(paramToEdit = null) {
     document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL).classList.remove('hidden');
 }
 
+export function getCustomParamForm() {
+    const mappings = [];
+    document.querySelectorAll(`#${DOM_IDS.PARAM_MAPPING_CONTAINER} .mapping-row`).forEach(row => {
+        const ifValue = row.querySelector('.mapping-if').value.trim();
+        const thenValue = row.querySelector('.mapping-then').value.trim();
+        if (ifValue) {
+            mappings.push({ if: ifValue, then: thenValue });
+        }
+    });
+
+    return {
+        id: document.getElementById(DOM_IDS.PARAM_EDIT_ID).value,
+        name: document.getElementById(DOM_IDS.PARAM_NAME).value.trim(),
+        sourceColumn: document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value.trim(),
+        defaultValue: document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value.trim(),
+        mappings: mappings
+    };
+}
+
 export function addMappingRow(ifValue = '', thenValue = '') {
     const container = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
     const div = document.createElement('div');
@@ -642,27 +660,9 @@ export function addMappingRow(ifValue = '', thenValue = '') {
         <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${ifValue}">
         <span class="text-sm text-gray-500">then value is</span>
         <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com" value="${thenValue}">
-        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
-    `;
+        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>`;
     div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
     container.appendChild(div);
-}
-
-export function getCustomParamForm() {
-    const mappings = [];
-    document.querySelectorAll(`#${DOM_IDS.PARAM_MAPPING_CONTAINER} .mapping-row`).forEach(row => {
-        const ifValue = row.querySelector('.mapping-if').value.trim();
-        const thenValue = row.querySelector('.mapping-then').value.trim();
-        if (ifValue) mappings.push({ if: ifValue, then: thenValue });
-    });
-
-    return {
-        id: document.getElementById(DOM_IDS.PARAM_EDIT_ID).value,
-        name: document.getElementById(DOM_IDS.PARAM_NAME).value.trim(),
-        sourceColumn: document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value.trim(),
-        defaultValue: document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value.trim(),
-        mappings
-    };
 }
 
 export function updateCustomParamStatus(message, color = 'gray') {
@@ -698,8 +698,7 @@ export function populateManageCustomParamsModal(params, handlers) {
                     <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                 </div>
             </div>
-            <div class="mt-2 text-sm">${mappingsHtml}</div>
-        `;
+            <div class="mt-2 text-sm">${mappingsHtml}</div>`;
         listContainer.appendChild(div);
     });
 
