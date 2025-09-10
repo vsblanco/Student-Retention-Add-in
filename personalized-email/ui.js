@@ -172,12 +172,25 @@ export function initializeQuill() {
             
             ifClause.innerHTML = `<span class="condition-keyword">IF</span>`;
             ifClause.appendChild(ifParamInput);
-            ifClause.innerHTML += `
-                <select class="condition-operator">
-                    ${['=', '>', '>=', '<', '<='].map(op => `<option ${op === value.operator ? 'selected' : ''}>${op}</option>`).join('')}
-                </select>
-                <input class="condition-input value-input" placeholder="Value" value="${value.if_value || ''}">
-            `;
+
+            // Create remaining elements programmatically to avoid innerHTML issues
+            const select = document.createElement('select');
+            select.className = 'condition-operator';
+            ['=', '>', '>=', '<', '<='].forEach(op => {
+                const option = document.createElement('option');
+                option.value = op;
+                option.text = op;
+                if (op === value.operator) option.selected = true;
+                select.appendChild(option);
+            });
+            ifClause.appendChild(select);
+
+            const valueInput = document.createElement('input');
+            valueInput.className = 'condition-input value-input';
+            valueInput.placeholder = 'Value';
+            valueInput.value = value.if_value || '';
+            ifClause.appendChild(valueInput);
+
 
             const thenClause = document.createElement('div');
             thenClause.classList.add('condition-clause');
@@ -214,10 +227,10 @@ export function initializeQuill() {
         
         static updateOptions(blotNode) {
             const data = {
-                if_param: blotNode.querySelector('.param-input').value.replace(/[{}]/g, ''),
-                operator: blotNode.querySelector('.condition-operator').value,
-                if_value: blotNode.querySelector('.value-input').value,
-                then_text: blotNode.querySelector('.condition-then-input').value
+                if_param: blotNode.querySelector('.param-input')?.value.replace(/[{}]/g, '') || '',
+                operator: blotNode.querySelector('.condition-operator')?.value || '=',
+                if_value: blotNode.querySelector('.value-input')?.value || '',
+                then_text: blotNode.querySelector('.condition-then-input')?.value || ''
             };
             blotNode.dataset.condition = JSON.stringify(data);
         }
@@ -424,20 +437,17 @@ export function getEmailTemplateFromDOM() {
     const { emailParts } = getState();
     const quill = getQuill();
 
-    // Ensure special blots have their data up-to-date
-    const tempEditorDiv = document.createElement('div');
+    // Ensure special blots have their data up-to-date by iterating over the LIVE DOM
     if (quill && quill.root) {
-        tempEditorDiv.innerHTML = quill.root.innerHTML;
-        tempEditorDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => RandomizeBlot.updateOptions(tagNode));
-        tempEditorDiv.querySelectorAll('.condition-tag-wrapper').forEach(tagNode => ConditionBlot.updateOptions(tagNode));
+        quill.root.querySelectorAll('.randomize-tag-wrapper').forEach(tagNode => RandomizeBlot.updateOptions(tagNode));
+        quill.root.querySelectorAll('.condition-tag-wrapper').forEach(tagNode => ConditionBlot.updateOptions(tagNode));
     }
-
 
     return {
         from: reconstructPillboxString(emailParts.from),
         subject: reconstructPillboxString(emailParts.subject),
         cc: reconstructPillboxString(emailParts.cc, ';'),
-        body: tempEditorDiv.innerHTML
+        body: quill ? quill.root.innerHTML : ''
     };
 }
 
@@ -464,7 +474,44 @@ export function toggleCustomSheetInput() {
 
 export function populatePayloadModal(payload) {
     document.getElementById(DOM_IDS.PAYLOAD_CONTENT).textContent = JSON.stringify(payload, null, 2);
+    // Also populate the schema content here
+    const schemaContent = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "from": { "type": "string" },
+                "to": { "type": "string" },
+                "cc": { "type": "string" },
+                "subject": { "type": "string" },
+                "body": { "type": "string" }
+            },
+            "required": ["from", "to", "subject", "body"]
+        }
+    };
+    document.getElementById('schema-content').textContent = JSON.stringify(schemaContent, null, 2);
 }
+
+export function togglePayloadSchemaView() {
+    const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
+    const schemaContent = document.getElementById('schema-content');
+    const title = document.getElementById('payload-modal-title');
+    const button = document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON);
+
+    const isPayloadVisible = !payloadContent.classList.contains('hidden');
+
+    payloadContent.classList.toggle('hidden', isPayloadVisible);
+    schemaContent.classList.toggle('hidden', !isPayloadVisible);
+
+    if (isPayloadVisible) {
+        title.textContent = 'Request Body JSON Schema';
+        button.textContent = 'Show Payload';
+    } else {
+        title.textContent = 'Request Payload';
+        button.textContent = 'Show Schema';
+    }
+}
+
 
 export function populateExampleModal(example) {
     document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = example.from || '[Not Specified]';
