@@ -78,11 +78,12 @@ function registerCustomBlots(Quill) {
             inner.appendChild(text);
             inner.appendChild(arrow);
             
-            const panel = document.createElement('div');
+            // FIX: Use SPAN for panels inside an inline blot to maintain valid HTML structure.
+            const panel = document.createElement('span');
             panel.classList.add('randomize-panel');
             panel.style.display = 'none';
             
-            const inputsContainer = document.createElement('div');
+            const inputsContainer = document.createElement('span');
             (value.options || ['']).forEach(optionText => {
                 this.addOptionInput(inputsContainer, optionText, node);
             });
@@ -118,7 +119,8 @@ function registerCustomBlots(Quill) {
         }
 
         static addOptionInput(container, value, blotNode) {
-            const optionWrapper = document.createElement('div');
+            // FIX: Use SPAN for wrappers inside an inline blot.
+            const optionWrapper = document.createElement('span');
             optionWrapper.classList.add('randomize-option-wrapper');
 
             const textarea = document.createElement('textarea');
@@ -183,12 +185,13 @@ function registerCustomBlots(Quill) {
             arrow.classList.add('condition-arrow');
             inner.appendChild(text);
             inner.appendChild(arrow);
-
-            const panel = document.createElement('div');
+            
+            // FIX: Use SPAN for panels inside an inline blot.
+            const panel = document.createElement('span');
             panel.classList.add('condition-panel');
             panel.style.display = 'none';
 
-            const ifClause = document.createElement('div');
+            const ifClause = document.createElement('span');
             ifClause.classList.add('condition-clause');
             const ifParamInput = document.createElement('input');
             ifParamInput.className = 'condition-input param-input';
@@ -213,8 +216,7 @@ function registerCustomBlots(Quill) {
             valueInput.value = value.if_value || '';
             ifClause.appendChild(valueInput);
 
-
-            const thenClause = document.createElement('div');
+            const thenClause = document.createElement('span');
             thenClause.classList.add('condition-clause');
             const thenKeyword = document.createElement('span');
             thenKeyword.className = 'condition-keyword then';
