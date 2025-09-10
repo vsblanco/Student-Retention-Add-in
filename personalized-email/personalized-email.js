@@ -9,28 +9,48 @@ let exampleModal, payloadModal, sendConfirmModal, templatesModal, saveTemplateMo
 
 // --- Initialization ---
 
-Office.onReady((info) => {
-    if (info.host === Office.HostType.Excel) {
-        initializeApplication();
-    }
-});
-
-async function initializeApplication() {
+/**
+ * This is the main entry point for the application.
+ * It's wrapped in a DOM readiness check to ensure all HTML elements are available.
+ */
+function startApp() {
+    console.log("[LOG] DOM is ready. Initializing application.");
     ui.initializeQuill();
     initializeModals();
     setupEventListeners();
 
-    const connection = await data.checkConnection();
-    if (connection) {
-        updateState('powerAutomateUrl', connection.url);
-        ui.showView('composer');
-        const customParams = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-        updateState('customParameters', customParams);
-        ui.populateParameterButtons();
-    } else {
-        ui.showView('setup');
-    }
+    // Check for an existing connection and set the initial view.
+    data.checkConnection().then(connection => {
+        if (connection) {
+            updateState('powerAutomateUrl', connection.url);
+            ui.showView('composer');
+            // Load custom parameters and populate the UI
+            data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS).then(customParams => {
+                updateState('customParameters', customParams);
+                ui.populateParameterButtons();
+            });
+        } else {
+            ui.showView('setup');
+        }
+    }).catch(error => {
+        console.error("Initialization check failed:", error);
+        ui.updateStatus("Could not check connection.", "red");
+    });
 }
+
+// FIX: Implement a robust, two-stage initialization.
+// Stage 1: Wait for the Office host to be ready.
+Office.onReady((info) => {
+    if (info.host === Office.HostType.Excel) {
+        console.log("[LOG] Office is ready. Waiting for DOM.");
+        // Stage 2: Wait for the DOM to be fully loaded and parsed.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startApp);
+        } else {
+            startApp();
+        }
+    }
+});
 
 function initializeModals() {
     exampleModal = new Modal(DOM_IDS.EXAMPLE_MODAL, { closeButtonId: DOM_IDS.CLOSE_EXAMPLE_MODAL_BUTTON });
@@ -115,7 +135,6 @@ async function handleShowPayload() {
     console.log("[LOG] 'Show Payload' button clicked.");
     ui.updateStatus("Generating payload preview...");
     try {
-        // FIX: Add validation to ensure 'From' field is not empty.
         const template = ui.getEmailTemplateFromDOM();
         if (!template.from) {
             ui.updateStatus("Please enter a 'From' address before generating the payload.", 'orange');
@@ -129,7 +148,6 @@ async function handleShowPayload() {
 
         if (students.length === 0) {
             ui.updateStatus('No students found to generate a payload.', 'orange');
-            // Still show the modal with an empty payload for debugging.
             ui.populatePayloadModal([]);
             payloadModal.show();
             return;
@@ -150,7 +168,6 @@ async function handleShowExample() {
     console.log("[LOG] 'Example' button clicked.");
     ui.updateStatus("Generating example...");
     try {
-        // FIX: Add validation to ensure 'From' field is not empty.
         const template = ui.getEmailTemplateFromDOM();
         if (!template.from) {
             ui.updateStatus("Please enter a 'From' address to generate an example.", 'orange');
@@ -167,7 +184,6 @@ async function handleShowExample() {
             return;
         }
         
-        // Find a random student that has a valid email address
         const validStudents = students.filter(s => s.StudentEmail);
         if (validStudents.length === 0) {
             ui.updateStatus('No students with a valid email address were found in the list.', 'orange');
@@ -176,7 +192,6 @@ async function handleShowExample() {
         
         const randomStudent = validStudents[Math.floor(Math.random() * validStudents.length)];
         
-        // Build a single-item payload to get the rendered example
         const examplePayload = data.buildPayload([randomStudent], template);
 
         if (examplePayload.length === 0) {
@@ -197,7 +212,6 @@ async function handleSendEmail() {
     console.log("[LOG] 'Send Email' button clicked.");
     ui.updateStatus("Preparing to send...");
     try {
-        // FIX: Add validation to ensure 'From' field is not empty.
         const template = ui.getEmailTemplateFromDOM();
         if (!template.from) {
             ui.updateStatus("Please enter a 'From' address before sending.", 'orange');
