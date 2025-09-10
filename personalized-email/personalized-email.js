@@ -5,7 +5,7 @@ import { updateState, getState } from './state.js';
 import { Modal } from './modal.js';
 
 // --- Modal Instances ---
-let exampleModal, payloadModal, sendConfirmModal, templatesModal, saveTemplateModal, customParamModal, manageCustomParamsModal;
+let exampleModal, payloadModal, sendConfirmModal, templatesModal, saveTemplateModal, customParamModal, manageCustomParamsModal, randomizeModal;
 
 // --- Initialization ---
 
@@ -60,6 +60,7 @@ function initializeModals() {
     saveTemplateModal = new Modal(DOM_IDS.SAVE_TEMPLATE_MODAL, { closeButtonId: DOM_IDS.CANCEL_SAVE_TEMPLATE_BUTTON });
     customParamModal = new Modal(DOM_IDS.CUSTOM_PARAM_MODAL, { closeButtonId: DOM_IDS.CANCEL_CUSTOM_PARAM_BUTTON });
     manageCustomParamsModal = new Modal(DOM_IDS.MANAGE_CUSTOM_PARAMS_MODAL, { closeButtonId: DOM_IDS.CLOSE_MANAGE_PARAMS_BUTTON });
+    randomizeModal = new Modal(DOM_IDS.RANDOMIZE_MODAL, { closeButtonId: DOM_IDS.CANCEL_RANDOMIZE_BUTTON });
 }
 
 
@@ -77,6 +78,7 @@ function setupEventListeners() {
         [DOM_IDS.TEMPLATES_BUTTON]: handleShowTemplates,
         [DOM_IDS.CREATE_CUSTOM_PARAM_BUTTON]: () => ui.showCustomParamModal(),
         [DOM_IDS.MANAGE_CUSTOM_PARAMS_BUTTON]: handleManageCustomParams,
+        [DOM_IDS.RANDOMIZE_PARAMETER_BUTTON]: handleShowRandomizeModal,
 
         // Modal Actions
         [DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON]: ui.togglePayloadSchemaView,
@@ -85,6 +87,9 @@ function setupEventListeners() {
         [DOM_IDS.CONFIRM_SAVE_TEMPLATE_BUTTON]: handleConfirmSaveTemplate,
         [DOM_IDS.SAVE_CUSTOM_PARAM_BUTTON]: handleSaveCustomParameter,
         [DOM_IDS.ADD_MAPPING_BUTTON]: () => ui.addMappingRow(),
+        [DOM_IDS.ADD_RANDOMIZE_OPTION_BUTTON]: () => ui.addRandomizeOption(),
+        [DOM_IDS.CONFIRM_RANDOMIZE_BUTTON]: handleConfirmRandomize,
+
 
         // Other UI
         [DOM_IDS.RECIPIENT_LIST]: ui.toggleCustomSheetInput
@@ -418,4 +423,24 @@ function handleDuplicateCustomParameter(paramId) {
         ui.populateParameterButtons();
         handleManageCustomParams(); // Refresh list
     });
+}
+
+
+// --- Special Parameter Handlers ---
+
+function handleShowRandomizeModal() {
+    ui.clearRandomizeModal();
+    randomizeModal.show();
+}
+
+function handleConfirmRandomize() {
+    const options = ui.getRandomizeOptions();
+    if (options.length < 2) {
+        // You might want to show an error to the user here
+        console.warn("At least two options are required for randomization.");
+        return;
+    }
+    const tag = `{Randomize|${options.join('|')}}`;
+    ui.insertTextInQuill(tag);
+    randomizeModal.hide();
 }
