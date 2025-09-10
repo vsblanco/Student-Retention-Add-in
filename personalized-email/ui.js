@@ -58,219 +58,34 @@ function registerCustomBlots(Quill) {
     ParameterBlot.tagName = 'SPAN';
     Quill.register(ParameterBlot);
     
-    // --- RandomizeBlot ---
+    // --- RandomizeBlot (Simplified) ---
     RandomizeBlot = class extends Inline {
         static create(value) {
-            const node = super.create();
-            node.classList.add('randomize-tag');
+            const node = super.create(value);
             node.setAttribute('contenteditable', 'false');
-
-            const inner = document.createElement('span');
-            inner.classList.add('randomize-tag-inner');
-            
-            const text = document.createElement('span');
-            text.innerText = '{Randomize}';
-            
-            const arrow = document.createElement('span');
-            arrow.innerHTML = '&#9660;';
-            arrow.classList.add('randomize-arrow');
-            
-            inner.appendChild(text);
-            inner.appendChild(arrow);
-            
-            // FIX: Use SPAN for panels inside an inline blot to maintain valid HTML structure.
-            const panel = document.createElement('span');
-            panel.classList.add('randomize-panel');
-            panel.style.display = 'none';
-            
-            const inputsContainer = document.createElement('span');
-            (value.options || ['']).forEach(optionText => {
-                this.addOptionInput(inputsContainer, optionText, node);
-            });
-            
-            const addButton = document.createElement('button');
-            addButton.innerText = '+ Add Option';
-            addButton.classList.add('add-random-option');
-            addButton.onclick = (e) => {
-                e.stopPropagation();
-                this.addOptionInput(inputsContainer, '', node);
-            };
-            
-            panel.appendChild(inputsContainer);
-            panel.appendChild(addButton);
-            
-            node.appendChild(inner);
-            node.appendChild(panel);
-
-            inner.onclick = (e) => {
-                e.stopPropagation();
-                const isOpening = panel.style.display === 'none';
-                document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
-                document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
-
-                panel.style.display = isOpening ? 'block' : 'none';
-                arrow.classList.toggle('open', isOpening);
-            };
-
-            panel.addEventListener('click', e => e.stopPropagation());
-
-            this.updateOptions(node);
+            node.classList.add('randomize-tag');
+            node.innerText = `{Randomize}`;
             return node;
         }
-
-        static addOptionInput(container, value, blotNode) {
-            // FIX: Use SPAN for wrappers inside an inline blot.
-            const optionWrapper = document.createElement('span');
-            optionWrapper.classList.add('randomize-option-wrapper');
-
-            const textarea = document.createElement('textarea');
-            textarea.classList.add('randomize-input');
-            textarea.value = value;
-            textarea.placeholder = 'Enter a phrase...';
-            textarea.rows = 1;
-
-            const autoResize = () => {
-                textarea.style.height = 'auto';
-                textarea.style.height = textarea.scrollHeight + 'px';
-                this.updateOptions(blotNode);
-            };
-            
-            textarea.oninput = autoResize;
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.innerHTML = '&times;';
-            deleteBtn.classList.add('randomize-option-delete');
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                optionWrapper.remove();
-                this.updateOptions(blotNode);
-            };
-
-            optionWrapper.appendChild(textarea);
-            optionWrapper.appendChild(deleteBtn);
-            container.appendChild(optionWrapper);
-
-            setTimeout(autoResize, 0);
-        }
-
-        static updateOptions(blotNode) {
-            const inputs = blotNode.querySelectorAll('.randomize-input');
-            const options = Array.from(inputs).map(input => input.value);
-            blotNode.dataset.options = JSON.stringify(options.filter(o => o.trim()));
-        }
-
-        static value(domNode) {
-            return {
-                options: JSON.parse(domNode.dataset.options || '[]')
-            };
+        static value(node) {
+            return true;
         }
     }
     RandomizeBlot.blotName = 'randomize';
     RandomizeBlot.tagName = 'SPAN';
     Quill.register(RandomizeBlot);
 
-    // --- ConditionBlot ---
+    // --- ConditionBlot (Simplified) ---
     ConditionBlot = class extends Inline {
         static create(value) {
-            const node = super.create();
-            node.classList.add('condition-tag');
+            const node = super.create(value);
             node.setAttribute('contenteditable', 'false');
-
-            const inner = document.createElement('span');
-            inner.classList.add('condition-tag-inner');
-            const text = document.createElement('span');
-            text.innerText = '{Condition}';
-            const arrow = document.createElement('span');
-            arrow.innerHTML = '&#9660;';
-            arrow.classList.add('condition-arrow');
-            inner.appendChild(text);
-            inner.appendChild(arrow);
-            
-            // FIX: Use SPAN for panels inside an inline blot.
-            const panel = document.createElement('span');
-            panel.classList.add('condition-panel');
-            panel.style.display = 'none';
-
-            const ifClause = document.createElement('span');
-            ifClause.classList.add('condition-clause');
-            const ifParamInput = document.createElement('input');
-            ifParamInput.className = 'condition-input param-input';
-            ifParamInput.placeholder = '{Parameter}';
-            ifParamInput.value = value.if_param ? `{${value.if_param}}` : '';
-            ifParamInput.onfocus = () => { updateState('lastFocusedElement', ifParamInput); };
-            
-            const ifKeyword = document.createElement('span');
-            ifKeyword.className = 'condition-keyword';
-            ifKeyword.textContent = 'IF';
-            ifClause.appendChild(ifKeyword);
-            ifClause.appendChild(ifParamInput);
-
-            const operatorSelect = document.createElement('select');
-            operatorSelect.className = 'condition-operator';
-            operatorSelect.innerHTML = ['=', '>', '>=', '<', '<='].map(op => `<option ${op === value.operator ? 'selected' : ''}>${op}</option>`).join('');
-            ifClause.appendChild(operatorSelect);
-            
-            const valueInput = document.createElement('input');
-            valueInput.className = 'condition-input value-input';
-            valueInput.placeholder = 'Value';
-            valueInput.value = value.if_value || '';
-            ifClause.appendChild(valueInput);
-
-            const thenClause = document.createElement('span');
-            thenClause.classList.add('condition-clause');
-            const thenKeyword = document.createElement('span');
-            thenKeyword.className = 'condition-keyword then';
-            thenKeyword.textContent = 'THEN';
-            thenClause.appendChild(thenKeyword);
-
-            const thenTextarea = document.createElement('textarea');
-            thenTextarea.classList.add('condition-then-input');
-            thenTextarea.placeholder = 'Enter text to show if true... You can use {Parameters} here.';
-            thenTextarea.rows = 2;
-            thenTextarea.value = value.then_text || '';
-            thenClause.appendChild(thenTextarea);
-
-            panel.appendChild(ifClause);
-            panel.appendChild(thenClause);
-            node.appendChild(inner);
-            node.appendChild(panel);
-            
-            const update = () => this.updateOptions(node);
-            panel.querySelectorAll('input, select, textarea').forEach(el => el.addEventListener('input', update));
-
-            inner.onclick = (e) => {
-                e.stopPropagation();
-                const isOpening = panel.style.display === 'none';
-                document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => { if (p !== panel) p.style.display = 'none'; });
-                document.querySelectorAll('.randomize-arrow, .condition-arrow').forEach(a => { if (a !== arrow) a.classList.remove('open'); });
-
-                panel.style.display = isOpening ? 'block' : 'none';
-                arrow.classList.toggle('open', isOpening);
-            };
-            
-            panel.addEventListener('click', e => e.stopPropagation());
-            this.updateOptions(node);
+            node.classList.add('condition-tag');
+            node.innerText = `{Condition}`;
             return node;
         }
-        
-        static updateOptions(blotNode) {
-            if (!blotNode) return;
-            const paramInput = blotNode.querySelector('.param-input');
-            const operator = blotNode.querySelector('.condition-operator');
-            const valueInput = blotNode.querySelector('.value-input');
-            const thenInput = blotNode.querySelector('.condition-then-input');
-
-            const data = {
-                if_param: paramInput ? paramInput.value.replace(/[{}]/g, '') : '',
-                operator: operator ? operator.value : '=',
-                if_value: valueInput ? valueInput.value : '',
-                then_text: thenInput ? thenInput.value : ''
-            };
-            blotNode.dataset.condition = JSON.stringify(data);
-        }
-
-        static value(domNode) {
-            return JSON.parse(domNode.dataset.condition || '{}');
+        static value(node) {
+            return true;
         }
     }
     ConditionBlot.blotName = 'condition';
@@ -392,11 +207,8 @@ function insertSpecialParameter(type) {
     }
 
     const range = quill.getSelection(true);
-    if (type === 'randomize') {
-        quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
-    } else if (type === 'condition') {
-        quill.insertEmbed(range.index, 'condition', {}, Quill.sources.USER);
-    }
+    // Pass a simple `true` value, as the blot is no longer complex.
+    quill.insertEmbed(range.index, type, true, Quill.sources.USER);
     quill.setSelection(range.index + 1, Quill.sources.USER);
 }
 
@@ -501,15 +313,16 @@ export function getEmailTemplateFromDOM() {
     }
 
     const editor = quill.root;
-
-    editor.querySelectorAll('.randomize-tag, .condition-tag').forEach(tagNode => {
-        const blot = Quill.find(tagNode, true);
-        if (blot && blot.statics.blotName === 'randomize') {
-            RandomizeBlot.updateOptions(tagNode);
-        } else if (blot && blot.statics.blotName === 'condition') {
-            ConditionBlot.updateOptions(tagNode);
-        }
-    });
+    
+    // This logic is no longer needed with the simplified blots.
+    // editor.querySelectorAll('.randomize-tag, .condition-tag').forEach(tagNode => {
+    //     const blot = Quill.find(tagNode, true);
+    //     if (blot && blot.statics.blotName === 'randomize') {
+    //         RandomizeBlot.updateOptions(tagNode);
+    //     } else if (blot && blot.statics.blotName === 'condition') {
+    //         ConditionBlot.updateOptions(tagNode);
+    //     }
+    // });
 
     return {
         from: reconstructPillboxString(emailParts.from),
