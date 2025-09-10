@@ -115,6 +115,13 @@ async function handleShowPayload() {
     console.log("[LOG] 'Show Payload' button clicked.");
     ui.updateStatus("Generating payload preview...");
     try {
+        // FIX: Add validation to ensure 'From' field is not empty.
+        const template = ui.getEmailTemplateFromDOM();
+        if (!template.from) {
+            ui.updateStatus("Please enter a 'From' address before generating the payload.", 'orange');
+            return;
+        }
+
         const sheetName = ui.getSelectedSheetName();
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
@@ -128,7 +135,6 @@ async function handleShowPayload() {
             return;
         }
 
-        const template = ui.getEmailTemplateFromDOM();
         const payload = data.buildPayload(students, template);
 
         ui.populatePayloadModal(payload);
@@ -144,6 +150,13 @@ async function handleShowExample() {
     console.log("[LOG] 'Example' button clicked.");
     ui.updateStatus("Generating example...");
     try {
+        // FIX: Add validation to ensure 'From' field is not empty.
+        const template = ui.getEmailTemplateFromDOM();
+        if (!template.from) {
+            ui.updateStatus("Please enter a 'From' address to generate an example.", 'orange');
+            return;
+        }
+
         const sheetName = ui.getSelectedSheetName();
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
@@ -154,14 +167,20 @@ async function handleShowExample() {
             return;
         }
         
-        const randomStudent = students[Math.floor(Math.random() * students.length)];
-        const template = ui.getEmailTemplateFromDOM();
+        // Find a random student that has a valid email address
+        const validStudents = students.filter(s => s.StudentEmail);
+        if (validStudents.length === 0) {
+            ui.updateStatus('No students with a valid email address were found in the list.', 'orange');
+            return;
+        }
+        
+        const randomStudent = validStudents[Math.floor(Math.random() * validStudents.length)];
         
         // Build a single-item payload to get the rendered example
         const examplePayload = data.buildPayload([randomStudent], template);
 
         if (examplePayload.length === 0) {
-             ui.updateStatus('Selected random student has no email. Try again.', 'orange');
+             ui.updateStatus('Could not generate a valid example for the selected student. Try again.', 'orange');
              return;
         }
         
@@ -178,6 +197,13 @@ async function handleSendEmail() {
     console.log("[LOG] 'Send Email' button clicked.");
     ui.updateStatus("Preparing to send...");
     try {
+        // FIX: Add validation to ensure 'From' field is not empty.
+        const template = ui.getEmailTemplateFromDOM();
+        if (!template.from) {
+            ui.updateStatus("Please enter a 'From' address before sending.", 'orange');
+            return;
+        }
+
         const sheetName = ui.getSelectedSheetName();
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
@@ -188,7 +214,13 @@ async function handleSendEmail() {
             return;
         }
         
-        ui.populateSendConfirmationModal(students.length);
+        const payload = data.buildPayload(students, template);
+        if (payload.length === 0) {
+            ui.updateStatus('No students with valid email addresses were found to send to.', 'orange');
+            return;
+        }
+        
+        ui.populateSendConfirmationModal(payload.length);
         sendConfirmModal.show();
     } catch (error) {
         ui.updateStatus(`Error: ${error.message}`, 'red');
