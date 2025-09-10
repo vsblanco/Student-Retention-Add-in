@@ -6,25 +6,30 @@ let RandomizeBlot, ConditionBlot;
 // --- Initialization ---
 
 export function initializeQuill() {
-    const quill = new Quill(`#${DOM_IDS.EDITOR_CONTAINER}`, {
-        theme: 'snow',
-        modules: {
-            toolbar: [
-                ['bold', 'italic', 'underline'],
-                [{'list': 'ordered'}, {'list': 'bullet'}],
-                [{'color': []}, {'background': []}],
-                ['link']
-            ]
-        }
-    });
-    updateState('quill', quill);
-    registerCustomBlots(Quill);
+    try {
+        const quill = new Quill(`#${DOM_IDS.EDITOR_CONTAINER}`, {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    [{'list': 'ordered'}, {'list': 'bullet'}],
+                    [{'color': []}, {'background': []}],
+                    ['link']
+                ]
+            }
+        });
+        console.log("[LOG] Quill initialized successfully.");
+        updateState('quill', quill);
+        registerCustomBlots(Quill);
 
-    quill.on('selection-change', (range) => {
-        if (range) {
-            updateState('lastFocusedElement', quill);
-        }
-    });
+        quill.on('selection-change', (range) => {
+            if (range) {
+                updateState('lastFocusedElement', quill);
+            }
+        });
+    } catch (error) {
+        console.error("[ERROR] Quill initialization failed:", error);
+    }
 }
 
 /**
@@ -54,12 +59,11 @@ function registerCustomBlots(Quill) {
     Quill.register(ParameterBlot);
     
     // --- RandomizeBlot ---
-    // FIX: Inherit from Inline and use a DIV as the wrapper to create valid HTML.
     RandomizeBlot = class extends Inline {
         static create(value) {
             const wrapper = document.createElement('div');
             wrapper.classList.add('randomize-tag-wrapper');
-            wrapper.style.display = 'inline-block'; // Ensure it behaves like an inline element
+            wrapper.style.display = 'inline-block';
             wrapper.setAttribute('contenteditable', 'false');
 
             const node = document.createElement('span');
@@ -165,12 +169,11 @@ function registerCustomBlots(Quill) {
     Quill.register(RandomizeBlot);
 
     // --- ConditionBlot ---
-    // FIX: Inherit from Inline and use a DIV as the wrapper to create valid HTML.
     ConditionBlot = class extends Inline {
         static create(value) {
             const wrapper = document.createElement('div');
             wrapper.classList.add('condition-tag-wrapper');
-            wrapper.style.display = 'inline-block'; // Ensure it behaves like an inline element
+            wrapper.style.display = 'inline-block';
             wrapper.setAttribute('contenteditable', 'false');
 
             const node = document.createElement('span');
@@ -472,6 +475,19 @@ function reconstructPillboxString(parts, separator = '') {
 
 export function getEmailTemplateFromDOM() {
     const { emailParts, quill } = getState();
+
+    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
+    if (!quill) {
+        console.error("[ERROR] getEmailTemplateFromDOM called but Quill instance is not available.");
+        // Return a default empty template to prevent a crash
+        return {
+            from: reconstructPillboxString(emailParts.from),
+            subject: reconstructPillboxString(emailParts.subject),
+            cc: reconstructPillboxString(emailParts.cc, ';'),
+            body: '<p></p>' // Default empty body
+        };
+    }
+
     const editor = quill.root;
 
     // Update the dataset on any special blots before getting the HTML
