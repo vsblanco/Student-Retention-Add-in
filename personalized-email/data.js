@@ -24,6 +24,7 @@ function findColumnIndex(headers, possibleNames) {
  * @returns {Promise<object[]>} A promise that resolves to an array of student objects.
  */
 export async function getStudentData(sheetName, customParameters) {
+    console.log(`--- [LOG] Starting getStudentData for sheet: "${sheetName}" ---`);
     try {
         // Step 1: Use Excel.run ONLY to fetch the raw data from the sheet.
         const values = await Excel.run(async (context) => {
@@ -36,18 +37,23 @@ export async function getStudentData(sheetName, customParameters) {
 
         // Step 2: Process the raw data outside the Excel.run block.
         if (!values || values.length < 2) {
-            // No data rows found besides the header.
+            console.warn("[LOG] No data rows found (sheet might be empty or header-only).");
             return [];
         }
 
+        console.log("[LOG] Successfully fetched raw data from sheet.", { rows: values.length });
+
         const studentData = [];
-        const headers = (values[0] || []).map(h => String(h || '').toLowerCase());
+        // FIX: Trim whitespace from headers to make matching more robust.
+        const headers = (values[0] || []).map(h => String(h || '').trim().toLowerCase());
+        console.log("[LOG] Detected Headers:", headers);
 
         // Map standard column headers to their indices
         const colIndices = {};
         for (const key in COLUMN_MAPPINGS) {
             colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
         }
+        console.log("[LOG] Column Indices Found:", colIndices);
         
         // Map custom parameter source columns to their indices
         const customParamIndices = {};
@@ -61,10 +67,11 @@ export async function getStudentData(sheetName, customParameters) {
         // Loop through data rows (starting at 1 to skip header)
         for (let i = 1; i < values.length; i++) {
             const row = values[i];
-            const nameParts = getNameParts(row[colIndices.StudentName] ?? '');
+            const studentName = row[colIndices.StudentName] ?? '';
+            const nameParts = getNameParts(studentName);
 
             const student = {
-                StudentName: row[colIndices.StudentName] ?? '',
+                StudentName: studentName,
                 FirstName: nameParts.first,
                 LastName: nameParts.last,
                 StudentEmail: row[colIndices.StudentEmail] ?? '',
@@ -99,6 +106,8 @@ export async function getStudentData(sheetName, customParameters) {
             studentData.push(student);
         }
 
+        console.log(`[LOG] Finished processing. Found ${studentData.length} students.`);
+        console.log(`--- [LOG] getStudentData complete ---`);
         return studentData;
 
     } catch (error) {
@@ -122,8 +131,10 @@ export function buildPayload(students, template) {
         return [];
     }
     
+    console.log("[LOG] Building payload for", students.length, "students.");
+
     // Filter out students who don't have a "To" email address before mapping
-    return students
+    const payload = students
         .map(student => ({
             from: renderTemplate(template.from, student),
             to: student.StudentEmail || '',
@@ -132,6 +143,9 @@ export function buildPayload(students, template) {
             body: renderBodyTemplate(template.body, student)
         }))
         .filter(email => email.to && email.from);
+
+    console.log("[LOG] Final payload contains", payload.length, "valid emails.");
+    return payload;
 }
 
 
