@@ -478,3 +478,180 @@ export function populateSendConfirmationModal(count) {
     document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE).textContent = `You are about to send emails to ${count} student(s). Do you want to proceed?`;
 }
 
+// --- Templates UI ---
+
+export function populateTemplatesModal(templates, handlers) {
+    const container = document.getElementById(DOM_IDS.TEMPLATES_LIST_CONTAINER);
+    container.innerHTML = '';
+    if (templates.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center">No saved templates found.</p>';
+        return;
+    }
+
+    templates.forEach(template => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border rounded-md bg-gray-50';
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">${template.name}</p>
+                    <p class="text-xs text-gray-500">by ${template.author} on ${new Date(template.timestamp).toLocaleDateString()}</p>
+                </div>
+                <div class="flex gap-2">
+                    <button data-id="${template.id}" class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
+                    <button data-id="${template.id}" class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+    
+    container.querySelectorAll('.load-template-btn').forEach(btn => {
+        btn.onclick = () => handlers.onLoad(btn.dataset.id);
+    });
+    container.querySelectorAll('.delete-template-btn').forEach(btn => {
+        btn.onclick = () => handlers.onDelete(btn.dataset.id);
+    });
+}
+
+export function clearSaveTemplateForm() {
+    document.getElementById(DOM_IDS.TEMPLATE_NAME).value = '';
+    document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value = '';
+    updateSaveTemplateStatus('');
+}
+
+export function getTemplateSaveForm() {
+    return {
+        name: document.getElementById(DOM_IDS.TEMPLATE_NAME).value.trim(),
+        author: document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value.trim()
+    };
+}
+
+export function updateSaveTemplateStatus(message, color = 'gray') {
+    const statusEl = document.getElementById(DOM_IDS.SAVE_TEMPLATE_STATUS);
+    statusEl.textContent = message;
+    statusEl.style.color = color;
+}
+
+export function loadTemplateIntoForm(template) {
+    const { emailParts } = getState();
+    const quill = getQuill();
+
+    const parsePills = (str) => str ? str.split(/({[^}]+})/g).filter(part => part) : [];
+
+    emailParts.from = parsePills(template.from);
+    emailParts.subject = parsePills(template.subject);
+    emailParts.cc = parsePills(template.cc);
+    
+    renderPills('from');
+    renderPills('subject');
+    renderPills('cc');
+
+    quill.root.innerHTML = template.body;
+}
+
+// --- Custom Parameter UI ---
+
+export function showCustomParamModal(paramToEdit = null) {
+    const modalTitle = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL_TITLE);
+    const nameInput = document.getElementById(DOM_IDS.PARAM_NAME);
+    const sourceColumnInput = document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN);
+    const defaultValueInput = document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE);
+    const mappingContainer = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
+    const editIdInput = document.getElementById(DOM_IDS.PARAM_EDIT_ID);
+
+    mappingContainer.innerHTML = '';
+    updateCustomParamStatus('');
+
+    if (paramToEdit) {
+        modalTitle.textContent = 'Edit Custom Parameter';
+        editIdInput.value = paramToEdit.id;
+        nameInput.value = paramToEdit.name;
+        sourceColumnInput.value = paramToEdit.sourceColumn;
+        defaultValueInput.value = paramToEdit.defaultValue;
+        (paramToEdit.mappings || []).forEach(m => addMappingRow(m.if, m.then));
+    } else {
+        modalTitle.textContent = 'Create Custom Parameter';
+        editIdInput.value = '';
+        nameInput.value = '';
+        sourceColumnInput.value = '';
+        defaultValueInput.value = '';
+    }
+    document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL).classList.remove('hidden');
+}
+
+export function addMappingRow(ifValue = '', thenValue = '') {
+    const container = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 mapping-row';
+    div.innerHTML = `
+        <span class="text-sm text-gray-500">If cell is</span>
+        <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob" value="${ifValue}">
+        <span class="text-sm text-gray-500">then value is</span>
+        <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com" value="${thenValue}">
+        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
+    `;
+    div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
+    container.appendChild(div);
+}
+
+export function getCustomParamForm() {
+    const mappings = [];
+    document.querySelectorAll(`#${DOM_IDS.PARAM_MAPPING_CONTAINER} .mapping-row`).forEach(row => {
+        const ifValue = row.querySelector('.mapping-if').value.trim();
+        const thenValue = row.querySelector('.mapping-then').value.trim();
+        if (ifValue) mappings.push({ if: ifValue, then: thenValue });
+    });
+
+    return {
+        id: document.getElementById(DOM_IDS.PARAM_EDIT_ID).value,
+        name: document.getElementById(DOM_IDS.PARAM_NAME).value.trim(),
+        sourceColumn: document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value.trim(),
+        defaultValue: document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value.trim(),
+        mappings
+    };
+}
+
+export function updateCustomParamStatus(message, color = 'gray') {
+    const statusEl = document.getElementById(DOM_IDS.SAVE_PARAM_STATUS);
+    statusEl.textContent = message;
+    statusEl.style.color = color;
+}
+
+export function populateManageCustomParamsModal(params, handlers) {
+    const listContainer = document.getElementById(DOM_IDS.MANAGE_PARAMS_LIST);
+    listContainer.innerHTML = '';
+    if (params.length === 0) {
+        listContainer.innerHTML = '<p class="text-gray-500 text-center">No custom parameters created yet.</p>';
+        return;
+    }
+
+    params.forEach(param => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border-b';
+        let mappingsHtml = (param.mappings || []).map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
+        if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">{${param.name}}</p>
+                    <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
+                    <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
+                </div>
+                <div class="flex gap-2">
+                    <button data-id="${param.id}" class="duplicate-param-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Duplicate</button>
+                    <button data-id="${param.id}" class="edit-param-btn px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-md hover:bg-yellow-200">Edit</button>
+                    <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            </div>
+            <div class="mt-2 text-sm">${mappingsHtml}</div>
+        `;
+        listContainer.appendChild(div);
+    });
+
+    listContainer.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => handlers.onDuplicate(btn.dataset.id));
+    listContainer.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
+    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
+}
+
