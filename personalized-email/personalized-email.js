@@ -1,4 +1,4 @@
-import { DOM_IDS, SETTINGS_KEYS } from './constants.js';
+import { DOM_IDS, SETTINGS_KEYS, STANDARD_PARAMETERS } from './constants.js';
 import { getState, updateState } from './state.js';
 import * as ui from './ui.js';
 import * as data from './data.js';
@@ -108,6 +108,7 @@ function setupEventListeners() {
 
     // Dropdowns and Toggles
     document.getElementById(DOM_IDS.RECIPIENT_LIST).onchange = ui.toggleCustomSheetInput;
+    document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON).onclick = ui.togglePayloadSchemaView;
     
     // Global click listener to close special parameter panels
     document.addEventListener('click', (e) => {
