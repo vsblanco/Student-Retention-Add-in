@@ -1,4 +1,4 @@
-import { COLUMN_MAPPINGS } from './constants.js';
+import { COLUMN_MAPPINGS, SETTINGS_KEYS } from './constants.js';
 import { getNameParts } from './utils.js';
 
 /**
@@ -26,16 +26,14 @@ function findColumnIndex(headers, possibleNames) {
 export async function getStudentData(sheetName, customParameters) {
     console.log(`--- [LOG] Starting getStudentData for sheet: "${sheetName}" ---`);
     try {
-        // Step 1: Use Excel.run ONLY to fetch the raw data from the sheet.
         const values = await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
             await context.sync();
-            return usedRange.values; // Return the raw values.
+            return usedRange.values;
         });
 
-        // Step 2: Process the raw data outside the Excel.run block.
         if (!values || values.length < 2) {
             console.warn("[LOG] No data rows found (sheet might be empty or header-only).");
             return [];
@@ -44,18 +42,15 @@ export async function getStudentData(sheetName, customParameters) {
         console.log("[LOG] Successfully fetched raw data from sheet.", { rows: values.length });
 
         const studentData = [];
-        // FIX: Trim whitespace from headers to make matching more robust.
         const headers = (values[0] || []).map(h => String(h || '').trim().toLowerCase());
         console.log("[LOG] Detected Headers:", headers);
 
-        // Map standard column headers to their indices
         const colIndices = {};
         for (const key in COLUMN_MAPPINGS) {
             colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
         }
         console.log("[LOG] Column Indices Found:", colIndices);
         
-        // Map custom parameter source columns to their indices
         const customParamIndices = {};
         customParameters.forEach(param => {
             const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
@@ -64,7 +59,6 @@ export async function getStudentData(sheetName, customParameters) {
             }
         });
 
-        // Loop through data rows (starting at 1 to skip header)
         for (let i = 1; i < values.length; i++) {
             const row = values[i];
             const studentName = row[colIndices.StudentName] ?? '';
@@ -80,7 +74,6 @@ export async function getStudentData(sheetName, customParameters) {
                 DaysOut: row[colIndices.DaysOut] ?? '',
             };
 
-            // Process custom parameters for the student
             customParameters.forEach(param => {
                 const colIndex = customParamIndices[param.name];
                 let value = param.defaultValue ?? '';
@@ -133,7 +126,6 @@ export function buildPayload(students, template) {
     
     console.log("[LOG] Building payload for", students.length, "students.");
 
-    // Filter out students who don't have a "To" email address before mapping
     const payload = students
         .map(student => ({
             from: renderTemplate(template.from, student),
@@ -173,21 +165,18 @@ function renderBodyTemplate(bodyHtml, data) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = bodyHtml;
     
-    // Replace standard and custom {Parameter} tags
     tempDiv.querySelectorAll('.parameter-tag').forEach(tag => {
         const paramName = tag.getAttribute('data-param');
         const value = data[paramName] ?? tag.innerText;
         tag.replaceWith(document.createTextNode(value));
     });
 
-    // Process {Randomize} tags
     tempDiv.querySelectorAll('.randomize-tag-wrapper').forEach(tagWrapper => {
         const options = JSON.parse(tagWrapper.dataset.options || '[]');
         const choice = options.length > 0 ? options[Math.floor(Math.random() * options.length)] : '';
         tagWrapper.replaceWith(document.createTextNode(choice));
     });
 
-    // Process {Condition} tags
     tempDiv.querySelectorAll('.condition-tag-wrapper').forEach(tagWrapper => {
         const condition = JSON.parse(tagWrapper.dataset.condition || '{}');
         const studentValue = data[condition.if_param];
@@ -235,7 +224,7 @@ export async function sendToPowerAutomate(url, payload) {
 /**
  * Retrieves a settings object from the workbook.
  * @param {string} key The key for the setting.
- * @returns {Promise<any>} The parsed setting value, or an empty array.
+ * @returns {Promise<any>} The parsed setting value, or an empty array/object.
  */
 export async function getSettings(key) {
     return Excel.run(async (context) => {
@@ -243,7 +232,8 @@ export async function getSettings(key) {
         const settingItem = settings.getItemOrNullObject(key);
         settingItem.load("value");
         await context.sync();
-        return settingItem.value ? JSON.parse(settingItem.value) : [];
+        const defaultValue = (key === SETTINGS_KEYS.CUSTOM_PARAMS || key === SETTINGS_KEYS.EMAIL_TEMPLATES) ? [] : {};
+        return settingItem.value ? JSON.parse(settingItem.value) : defaultValue;
     });
 }
 
@@ -251,6 +241,7 @@ export async function getSettings(key) {
  * Saves a settings object to the workbook.
  * @param {string} key The key for the setting.
  * @param {any} value The value to save (will be stringified).
+ * @returns {Promise<any>} A promise that resolves with the saved value.
  */
 export async function saveSettings(key, value) {
     await Excel.run(async (context) => {
@@ -258,6 +249,7 @@ export async function saveSettings(key, value) {
         settings.add(key, JSON.stringify(value));
         await context.sync();
     });
+    return value;
 }
 
 /**
@@ -265,25 +257,35 @@ export async function saveSettings(key, value) {
  * @returns {Promise<object|null>} The connection object or null.
  */
 export async function checkConnection() {
-    const connections = await getSettings('connections');
-    return connections.find(c => c.type === 'power-automate' && c.name === 'Send Personalized Email') || null;
+    const connections = await getSettings(SETTINGS_KEYS.CONNECTIONS);
+    return (connections.length && connections.find(c => c.type === 'power-automate' && c.name === 'Send Personalized Email')) || null;
 }
 
 /**
- * Creates and saves a new Power Automate connection.
+ * Creates and saves a new Power Automate connection in a single Excel.run call.
  * @param {string} url The Power Automate URL.
  * @returns {Promise<object>} The new connection object.
  */
 export async function createConnection(url) {
-    const connections = await getSettings('connections');
-    const newConnection = {
-        id: 'pa-' + Math.random().toString(36).substr(2, 9),
-        name: 'Send Personalized Email',
-        type: 'power-automate',
-        url: url
-    };
-    connections.push(newConnection);
-    await saveSettings('connections', connections);
-    return newConnection;
-}
+    return Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const settingItem = settings.getItemOrNullObject(SETTINGS_KEYS.CONNECTIONS);
+        settingItem.load("value");
+        await context.sync();
 
+        const connections = settingItem.value ? JSON.parse(settingItem.value) : [];
+        
+        const newConnection = {
+            id: 'pa-' + Math.random().toString(36).substr(2, 9),
+            name: 'Send Personalized Email',
+            type: 'power-automate',
+            url: url
+        };
+        connections.push(newConnection);
+        
+        settings.add(SETTINGS_KEYS.CONNECTIONS, JSON.stringify(connections));
+        await context.sync();
+        
+        return newConnection;
+    });
+}
