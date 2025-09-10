@@ -17,12 +17,14 @@
  * - students: An array of student data objects fetched from the current sheet.
  * - customParameters: An array of custom parameter configurations.
  * - quill: The instance of the Quill editor.
+ * - lastFocusedElement: A reference to the last focused input or editor.
  */
 const appState = {
     powerAutomateUrl: null,
     students: [],
     customParameters: [],
-    quill: null // FIX: Added the quill property to the initial state.
+    quill: null,
+    lastFocusedElement: null // FIX: Added the lastFocusedElement property.
 };
 
 /**
@@ -50,3 +52,4 @@ export function updateState(key, value) {
         console.error(`Attempted to update a non-existent state key: ${key}`);
     }
 }
+
