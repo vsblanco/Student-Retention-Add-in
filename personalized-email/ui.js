@@ -194,7 +194,10 @@ function insertParameter(paramName, isCustom) {
     } else {
         const range = quill.getSelection(true);
         quill.insertEmbed(range.index, 'parameter', { name: paramName, isCustom }, Quill.sources.USER);
-        quill.setSelection(range.index + 1, Quill.sources.USER);
+        // FIX: Use a timeout to ensure the cursor is placed correctly after the browser has rendered the blot.
+        setTimeout(() => {
+            quill.setSelection(range.index + 1, Quill.sources.SILENT);
+        }, 0);
     }
 }
 
@@ -209,7 +212,10 @@ function insertSpecialParameter(type) {
     const range = quill.getSelection(true);
     // Pass a simple `true` value, as the blot is no longer complex.
     quill.insertEmbed(range.index, type, true, Quill.sources.USER);
-    quill.setSelection(range.index + 1, Quill.sources.USER);
+    // FIX: Use a timeout to ensure the cursor is placed correctly after the browser has rendered the blot.
+    setTimeout(() => {
+        quill.setSelection(range.index + 1, Quill.sources.SILENT);
+    }, 0);
 }
 
 
