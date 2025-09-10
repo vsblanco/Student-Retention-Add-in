@@ -170,10 +170,12 @@ export function initializeQuill() {
             ifParamInput.value = value.if_param ? `{${value.if_param}}` : '';
             ifParamInput.onfocus = () => { updateState('lastFocusedElement', ifParamInput); };
             
-            ifClause.innerHTML = `<span class="condition-keyword">IF</span>`;
+            const ifKeyword = document.createElement('span');
+            ifKeyword.className = 'condition-keyword';
+            ifKeyword.textContent = 'IF';
+            ifClause.appendChild(ifKeyword);
             ifClause.appendChild(ifParamInput);
 
-            // Create remaining elements programmatically to avoid innerHTML issues
             const select = document.createElement('select');
             select.className = 'condition-operator';
             ['=', '>', '>=', '<', '<='].forEach(op => {
@@ -194,7 +196,11 @@ export function initializeQuill() {
 
             const thenClause = document.createElement('div');
             thenClause.classList.add('condition-clause');
-            thenClause.innerHTML = `<span class="condition-keyword then">THEN</span>`;
+            const thenKeyword = document.createElement('span');
+            thenKeyword.className = 'condition-keyword then';
+            thenKeyword.textContent = 'THEN';
+            thenClause.appendChild(thenKeyword);
+
             const thenTextarea = document.createElement('textarea');
             thenTextarea.classList.add('condition-then-input');
             thenTextarea.placeholder = 'Enter text to show if true... You can use {Parameters} here.';
