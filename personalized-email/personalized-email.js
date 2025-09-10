@@ -1,129 +1,87 @@
-import { DOM_IDS, SETTINGS_KEYS, STANDARD_PARAMETERS } from './constants.js';
-import { getState, updateState } from './state.js';
+import { DOM_IDS, SETTINGS_KEYS } from './constants.js';
 import * as ui from './ui.js';
 import * as data from './data.js';
+import { updateState, getState } from './state.js';
 import { Modal } from './modal.js';
 
-// --- Application Modals ---
+// --- Modal Instances ---
 let exampleModal, payloadModal, sendConfirmModal, templatesModal, saveTemplateModal, customParamModal, manageCustomParamsModal;
 
-// --- Main Application Initialization ---
+// --- Initialization ---
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
-        // Initialize UI components first
-        ui.initializeQuill();
-        ui.setupPillboxInputs();
-        
-        // Instantiate all modals for the application
-        initializeModals();
-
-        // Then, set up all event listeners
-        setupEventListeners();
-
-        // Finally, load initial data and set the view
-        loadInitialData();
+        initializeApplication();
     }
 });
 
-/**
- * Creates instances of the Modal class for all modal dialogs.
- */
-function initializeModals() {
-    exampleModal = new Modal(DOM_IDS.EXAMPLE_MODAL, {
-        closeButtonIds: [DOM_IDS.CLOSE_EXAMPLE_MODAL_BUTTON]
-    });
-    payloadModal = new Modal(DOM_IDS.PAYLOAD_MODAL, {
-        closeButtonIds: [DOM_IDS.CLOSE_PAYLOAD_MODAL_BUTTON]
-    });
-    sendConfirmModal = new Modal(DOM_IDS.SEND_CONFIRM_MODAL, {
-        closeButtonIds: [DOM_IDS.CANCEL_SEND_BUTTON]
-    });
-    templatesModal = new Modal(DOM_IDS.TEMPLATES_MODAL, {
-        closeButtonIds: [DOM_IDS.CLOSE_TEMPLATES_MODAL_BUTTON]
-    });
-    saveTemplateModal = new Modal(DOM_IDS.SAVE_TEMPLATE_MODAL, {
-        closeButtonIds: [DOM_IDS.CANCEL_SAVE_TEMPLATE_BUTTON]
-    });
-    customParamModal = new Modal(DOM_IDS.CUSTOM_PARAM_MODAL, {
-        closeButtonIds: [DOM_IDS.CANCEL_CUSTOM_PARAM_BUTTON]
-    });
-    manageCustomParamsModal = new Modal(DOM_IDS.MANAGE_CUSTOM_PARAMS_MODAL, {
-        closeButtonIds: [DOM_IDS.CLOSE_MANAGE_PARAMS_BUTTON]
-    });
-}
+async function initializeApplication() {
+    ui.initializeQuill();
+    initializeModals();
+    setupEventListeners();
 
-
-/**
- * Loads initial data from workbook settings and determines the starting view.
- */
-async function loadInitialData() {
-    try {
-        const connection = await data.checkConnection();
-        updateState('powerAutomateUrl', connection ? connection.url : null);
-        
+    const connection = await data.checkConnection();
+    if (connection) {
+        updateState('powerAutomateUrl', connection.url);
+        ui.showView('composer');
         const customParams = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
         updateState('customParameters', customParams);
-        
         ui.populateParameterButtons();
-
-        if (getState().powerAutomateUrl) {
-            ui.showView('composer');
-        } else {
-            ui.showView('setup');
-        }
-    } catch (error) {
-        console.error("Failed to load initial data:", error);
-        ui.updateStatus("Error loading initial settings.", "red");
-    }
-}
-
-/**
- * A helper function to safely attach an event listener.
- * @param {string} id The ID of the element.
- * @param {string} event The event to listen for (e.g., 'onclick').
- * @param {function} handler The function to execute.
- */
-function safeAttachEventListener(id, event, handler) {
-    const element = document.getElementById(id);
-    if (element) {
-        element[event] = handler;
     } else {
-        console.warn(`Element with ID "${id}" not found.`);
+        ui.showView('setup');
     }
 }
 
-/**
- * Attaches all event listeners to the DOM elements.
- */
+function initializeModals() {
+    exampleModal = new Modal(DOM_IDS.EXAMPLE_MODAL, { closeButtonId: DOM_IDS.CLOSE_EXAMPLE_MODAL_BUTTON });
+    payloadModal = new Modal(DOM_IDS.PAYLOAD_MODAL, { closeButtonId: DOM_IDS.CLOSE_PAYLOAD_MODAL_BUTTON });
+    sendConfirmModal = new Modal(DOM_IDS.SEND_CONFIRM_MODAL, { closeButtonId: DOM_IDS.CANCEL_SEND_BUTTON });
+    templatesModal = new Modal(DOM_IDS.TEMPLATES_MODAL, { closeButtonId: DOM_IDS.CLOSE_TEMPLATES_MODAL_BUTTON });
+    saveTemplateModal = new Modal(DOM_IDS.SAVE_TEMPLATE_MODAL, { closeButtonId: DOM_IDS.CANCEL_SAVE_TEMPLATE_BUTTON });
+    customParamModal = new Modal(DOM_IDS.CUSTOM_PARAM_MODAL, { closeButtonId: DOM_IDS.CANCEL_CUSTOM_PARAM_BUTTON });
+    manageCustomParamsModal = new Modal(DOM_IDS.MANAGE_CUSTOM_PARAMS_MODAL, { closeButtonId: DOM_IDS.CLOSE_MANAGE_PARAMS_BUTTON });
+}
+
+
+// --- Event Listeners Setup ---
+
 function setupEventListeners() {
-    // Setup Wizard
-    safeAttachEventListener(DOM_IDS.CREATE_CONNECTION_BUTTON, 'onclick', handleCreateConnection);
+    const listeners = {
+        // Main Actions
+        [DOM_IDS.CREATE_CONNECTION_BUTTON]: handleCreateConnection,
+        [DOM_IDS.SEND_EMAIL_BUTTON]: handleSendEmail,
+        [DOM_IDS.SHOW_EXAMPLE_BUTTON]: handleShowExample,
+        [DOM_IDS.SHOW_PAYLOAD_BUTTON]: handleShowPayload,
 
-    // Main Actions
-    safeAttachEventListener(DOM_IDS.SEND_EMAIL_BUTTON, 'onclick', handleSendEmail);
-    safeAttachEventListener(DOM_IDS.SHOW_EXAMPLE_BUTTON, 'onclick', handleShowExample);
-    safeAttachEventListener(DOM_IDS.SHOW_PAYLOAD_BUTTON, 'onclick', handleShowPayload);
-    
-    // Templates
-    safeAttachEventListener(DOM_IDS.TEMPLATES_BUTTON, 'onclick', handleShowTemplates);
-    safeAttachEventListener(DOM_IDS.SAVE_CURRENT_TEMPLATE_BUTTON, 'onclick', handleShowSaveTemplateModal);
-    safeAttachEventListener(DOM_IDS.CONFIRM_SAVE_TEMPLATE_BUTTON, 'onclick', handleSaveTemplate);
+        // Modal Triggers
+        [DOM_IDS.TEMPLATES_BUTTON]: handleShowTemplates,
+        [DOM_IDS.CREATE_CUSTOM_PARAM_BUTTON]: () => ui.showCustomParamModal(),
+        [DOM_IDS.MANAGE_CUSTOM_PARAMS_BUTTON]: handleManageCustomParams,
 
-    // Custom Parameters
-    safeAttachEventListener(DOM_IDS.CREATE_CUSTOM_PARAM_BUTTON, 'onclick', () => ui.showCustomParamModal());
-    safeAttachEventListener(DOM_IDS.SAVE_CUSTOM_PARAM_BUTTON, 'onclick', handleSaveCustomParameter);
-    safeAttachEventListener(DOM_IDS.ADD_MAPPING_BUTTON, 'onclick', () => ui.addMappingRow());
-    safeAttachEventListener(DOM_IDS.MANAGE_CUSTOM_PARAMS_BUTTON, 'onclick', handleShowManageCustomParams);
+        // Modal Actions
+        [DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON]: ui.togglePayloadSchemaView,
+        [DOM_IDS.CONFIRM_SEND_BUTTON]: handleExecuteSend,
+        [DOM_IDS.SAVE_CURRENT_TEMPLATE_BUTTON]: handleSaveTemplate,
+        [DOM_IDS.CONFIRM_SAVE_TEMPLATE_BUTTON]: handleConfirmSaveTemplate,
+        [DOM_IDS.SAVE_CUSTOM_PARAM_BUTTON]: handleSaveCustomParameter,
+        [DOM_IDS.ADD_MAPPING_BUTTON]: () => ui.addMappingRow(),
 
-    // Send Confirmation
-    safeAttachEventListener(DOM_IDS.CONFIRM_SEND_BUTTON, 'onclick', executeSend);
+        // Other UI
+        [DOM_IDS.RECIPIENT_LIST]: ui.toggleCustomSheetInput
+    };
 
-    // Dropdowns and Toggles
-    safeAttachEventListener(DOM_IDS.RECIPIENT_LIST, 'onchange', ui.toggleCustomSheetInput);
-    safeAttachEventListener(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON, 'onclick', ui.togglePayloadSchemaView);
-    
-    // Global click listener to close special parameter panels
+    for (const id in listeners) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.onclick = listeners[id];
+        } else {
+            console.warn(`Element with ID "${id}" not found. Cannot attach event listener.`);
+        }
+    }
+
+    ui.setupPillboxInputs();
+
+    // Close dropdowns when clicking outside
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.randomize-tag-wrapper') && !e.target.closest('.condition-tag-wrapper')) {
            document.querySelectorAll('.randomize-panel, .condition-panel').forEach(p => p.style.display = 'none');
@@ -132,43 +90,41 @@ function setupEventListeners() {
    });
 }
 
-// --- Event Handlers (Coordinators) ---
+
+// --- Event Handlers ---
 
 async function handleCreateConnection() {
-    ui.updateStatus('Creating connection...', 'gray', true);
     const url = ui.getPowerAutomateUrl();
-
     if (!url.startsWith('http')) {
-        ui.updateStatus('Please enter a valid HTTP URL.', 'red', true);
+        ui.updateStatus("Please enter a valid HTTP URL.", 'red', true);
         return;
     }
 
+    ui.updateStatus("Creating connection...", 'gray', true);
     try {
         const newConnection = await data.createConnection(url);
         updateState('powerAutomateUrl', newConnection.url);
-        ui.updateStatus('Connection created successfully!', 'green', true);
+        ui.updateStatus("Connection created successfully!", 'green', true);
         setTimeout(() => ui.showView('composer'), 1500);
     } catch (error) {
-        console.error("Failed to create connection:", error);
-        ui.updateStatus('Failed to save the connection.', 'red', true);
+        ui.updateStatus(`Error: ${error.message}`, 'red', true);
     }
 }
 
 async function handleShowPayload() {
-    ui.updateStatus('Generating payload preview...', 'gray');
+    console.log("[LOG] 'Show Payload' button clicked.");
+    ui.updateStatus("Generating payload preview...");
     try {
         const sheetName = ui.getSelectedSheetName();
-        if (!sheetName) {
-            ui.updateStatus('Please select a valid student list or enter a custom sheet name.', 'orange');
-            return;
-        }
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
         updateState('students', students);
 
         if (students.length === 0) {
             ui.updateStatus('No students found to generate a payload.', 'orange');
-            setTimeout(() => ui.updateStatus(''), 3000);
+            // Still show the modal with an empty payload for debugging.
+            ui.populatePayloadModal([]);
+            payloadModal.show();
             return;
         }
 
@@ -177,60 +133,52 @@ async function handleShowPayload() {
 
         ui.populatePayloadModal(payload);
         payloadModal.show();
-        ui.updateStatus('');
-
+        ui.updateStatus("");
     } catch (error) {
+        ui.updateStatus(`Error: ${error.message}`, 'red');
         console.error("Error showing payload:", error);
-        ui.updateStatus(error.message, 'red');
     }
 }
 
 async function handleShowExample() {
-    ui.updateStatus('Generating example...', 'gray');
+    console.log("[LOG] 'Example' button clicked.");
+    ui.updateStatus("Generating example...");
     try {
         const sheetName = ui.getSelectedSheetName();
-        if (!sheetName) {
-            ui.updateStatus('Please select a valid student list or enter a custom sheet name.', 'orange');
-            return;
-        }
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
-        
+        updateState('students', students);
+
         if (students.length === 0) {
             ui.updateStatus('No students found to generate an example.', 'orange');
-            setTimeout(() => ui.updateStatus(''), 3000);
             return;
         }
-
+        
         const randomStudent = students[Math.floor(Math.random() * students.length)];
         const template = ui.getEmailTemplateFromDOM();
         
-        const examplePayload = data.buildPayload([randomStudent], template)[0];
+        // Build a single-item payload to get the rendered example
+        const examplePayload = data.buildPayload([randomStudent], template);
 
-        // FIX: Check if the payload is valid before trying to show the modal
-        if (examplePayload) {
-            ui.populateExampleModal(examplePayload);
-            exampleModal.show();
-            ui.updateStatus('');
-        } else {
-            ui.updateStatus('Selected example student has no email. Try again.', 'orange');
-            setTimeout(() => ui.updateStatus(''), 3000);
+        if (examplePayload.length === 0) {
+             ui.updateStatus('Selected random student has no email. Try again.', 'orange');
+             return;
         }
-
-    } catch(error) {
+        
+        ui.populateExampleModal(examplePayload[0]);
+        exampleModal.show();
+        ui.updateStatus("");
+    } catch (error) {
+        ui.updateStatus(`Error: ${error.message}`, 'red');
         console.error("Error showing example:", error);
-        ui.updateStatus(error.message, 'red');
     }
 }
 
 async function handleSendEmail() {
-    ui.updateStatus('Preparing to send emails...', 'gray');
+    console.log("[LOG] 'Send Email' button clicked.");
+    ui.updateStatus("Preparing to send...");
     try {
         const sheetName = ui.getSelectedSheetName();
-        if (!sheetName) {
-            ui.updateStatus('Please select a valid student list or enter a custom sheet name.', 'orange');
-            return;
-        }
         const { customParameters } = getState();
         const students = await data.getStudentData(sheetName, customParameters);
         updateState('students', students);
@@ -240,35 +188,30 @@ async function handleSendEmail() {
             return;
         }
         
-        const template = ui.getEmailTemplateFromDOM();
-        const payload = data.buildPayload(students, template);
-        
-        if (payload.length === 0) {
-            ui.updateStatus('No students with valid "To" and "From" emails found.', 'orange');
-            return;
-        }
-
-        ui.populateSendConfirmationModal(payload.length);
+        ui.populateSendConfirmationModal(students.length);
         sendConfirmModal.show();
-
     } catch (error) {
-        console.error("Error sending emails:", error);
-        ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
+        ui.updateStatus(`Error: ${error.message}`, 'red');
     }
 }
 
-async function executeSend() {
+async function handleExecuteSend() {
     sendConfirmModal.hide();
     const { students, powerAutomateUrl } = getState();
-    const template = ui.getEmailTemplateFromDOM();
-    const payload = data.buildPayload(students, template);
+    ui.updateStatus(`Sending ${students.length} emails...`);
 
-    ui.updateStatus(`Sending ${payload.length} emails...`, 'gray');
     try {
+        const template = ui.getEmailTemplateFromDOM();
+        const payload = data.buildPayload(students, template);
+
+        if (payload.length === 0) {
+            ui.updateStatus('No valid students with "To" and "From" addresses found.', 'orange');
+            return;
+        }
+
         await data.sendToPowerAutomate(powerAutomateUrl, payload);
         ui.updateStatus(`Successfully sent ${payload.length} emails!`, 'green');
-    } catch(error) {
-        console.error("Error sending emails:", error);
+    } catch (error) {
         ui.updateStatus(`Failed to send emails: ${error.message}`, 'red');
     }
 }
@@ -276,36 +219,38 @@ async function executeSend() {
 // --- Template Handlers ---
 
 async function handleShowTemplates() {
+    templatesModal.show();
     const templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
-    ui.populateTemplatesModal(templates, {
+    const handlers = {
         onLoad: handleLoadTemplate,
         onDelete: handleDeleteTemplate
-    });
-    templatesModal.show();
+    };
+    ui.populateTemplatesModal(templates, handlers);
 }
 
-function handleShowSaveTemplateModal() {
+function handleSaveTemplate() {
     templatesModal.hide();
     ui.clearSaveTemplateForm();
     saveTemplateModal.show();
 }
 
-async function handleSaveTemplate() {
-    const { name, author } = ui.getTemplateSaveForm();
-    if (!name || !author) {
+async function handleConfirmSaveTemplate() {
+    const formData = ui.getTemplateSaveForm();
+    if (!formData.name || !formData.author) {
         ui.updateSaveTemplateStatus('Name and Author are required.', 'red');
         return;
     }
-    ui.updateSaveTemplateStatus('Saving...', 'gray');
+    ui.updateSaveTemplateStatus('Saving...');
 
+    const templateContent = ui.getEmailTemplateFromDOM();
     const newTemplate = {
         id: 'template_' + new Date().getTime(),
-        name,
-        author,
+        name: formData.name,
+        author: formData.author,
         timestamp: new Date().toISOString(),
-        ...ui.getEmailTemplateFromDOM()
+        ...templateContent
     };
-    
+
     const templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
     templates.push(newTemplate);
     await data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, templates);
@@ -327,81 +272,87 @@ async function handleDeleteTemplate(templateId) {
     let templates = await data.getSettings(SETTINGS_KEYS.EMAIL_TEMPLATES);
     templates = templates.filter(t => t.id !== templateId);
     await data.saveSettings(SETTINGS_KEYS.EMAIL_TEMPLATES, templates);
-    await handleShowTemplates(); // Refresh the list
+    await handleShowTemplates(); // Refresh the modal content
 }
 
 // --- Custom Parameter Handlers ---
 
+async function handleManageCustomParams() {
+    customParamModal.hide();
+    manageCustomParamsModal.show();
+    const params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
+    const handlers = {
+        onEdit: handleEditCustomParameter,
+        onDelete: handleDeleteCustomParameter,
+        onDuplicate: handleDuplicateCustomParameter
+    };
+    ui.populateManageCustomParamsModal(params, handlers);
+}
+
 async function handleSaveCustomParameter() {
-    const { name, sourceColumn, defaultValue, mappings, id } = ui.getCustomParamForm();
-    
-    if (!/^[a-zA-Z0-9]+$/.test(name)) {
+    const formData = ui.getCustomParamForm();
+    if (!/^[a-zA-Z0-9]+$/.test(formData.name)) {
         ui.updateCustomParamStatus('Name must be alphanumeric with no spaces.', 'red');
         return;
     }
-    const { customParameters } = getState();
-    const existingParam = customParameters.find(p => p.name.toLowerCase() === name.toLowerCase());
-    if (STANDARD_PARAMETERS.includes(name) || (existingParam && existingParam.id !== id)) {
+    
+    let currentParams = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
+    const existingParam = currentParams.find(p => p.name.toLowerCase() === formData.name.toLowerCase());
+
+    if (existingParam && existingParam.id !== formData.id) {
         ui.updateCustomParamStatus('This parameter name is already in use.', 'red');
         return;
     }
+
+    ui.updateCustomParamStatus('Saving...');
     
-    ui.updateCustomParamStatus('Saving...', 'gray');
-
-    const paramData = { name, sourceColumn, defaultValue, mappings };
-    let currentParams = [...customParameters];
-
-    if (id) {
-        const index = currentParams.findIndex(p => p.id === id);
-        if (index > -1) currentParams[index] = { ...currentParams[index], ...paramData };
-    } else {
-        paramData.id = 'sparam_' + new Date().getTime();
-        currentParams.push(paramData);
+    if (formData.id) { // Editing existing
+        const index = currentParams.findIndex(p => p.id === formData.id);
+        if (index > -1) currentParams[index] = { ...currentParams[index], ...formData };
+    } else { // Creating new
+        formData.id = 'sparam_' + new Date().getTime();
+        currentParams.push(formData);
     }
     
     await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, currentParams);
     updateState('customParameters', currentParams);
     ui.populateParameterButtons();
-
-    ui.updateCustomParamStatus('Parameter saved!', 'green');
+    
+    ui.updateCustomParamStatus('Parameter saved successfully!', 'green');
     setTimeout(() => customParamModal.hide(), 1500);
 }
 
-async function handleShowManageCustomParams() {
-    customParamModal.hide();
+async function handleEditCustomParameter(paramId) {
     const params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-    ui.populateManageCustomParamsModal(params, {
-        onEdit: (paramId) => {
-            manageCustomParamsModal.hide();
-            const param = params.find(p => p.id === paramId);
-            ui.showCustomParamModal(param);
-        },
-        onDelete: async (paramId) => {
-            let currentParams = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-            currentParams = currentParams.filter(p => p.id !== paramId);
-            await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, currentParams);
-            updateState('customParameters', currentParams);
-            ui.populateParameterButtons();
-            handleShowManageCustomParams(); // Refresh
-        },
-        onDuplicate: async (paramId) => {
-            let params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
-            const paramToDuplicate = params.find(p => p.id === paramId);
-            if (!paramToDuplicate) return;
+    const param = params.find(p => p.id === paramId);
+    if (param) {
+        manageCustomParamsModal.hide();
+        ui.showCustomParamModal(param);
+    }
+}
 
-            const newParam = JSON.parse(JSON.stringify(paramToDuplicate));
-            let newName = `${newParam.name}Copy`;
-            const allParamNames = [...STANDARD_PARAMETERS, ...params.map(p => p.name)];
-            while (allParamNames.includes(newName)) newName = `${newName}Copy`;
-            newParam.name = newName;
-            newParam.id = 'sparam_' + new Date().getTime();
-            params.push(newParam);
-            await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
-            updateState('customParameters', params);
-            ui.populateParameterButtons();
-            handleShowManageCustomParams(); // Refresh
-        }
-    });
-    manageCustomParamsModal.show();
+async function handleDeleteCustomParameter(paramId) {
+    let params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
+    params = params.filter(p => p.id !== paramId);
+    await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
+    updateState('customParameters', params);
+    ui.populateParameterButtons();
+    await handleManageCustomParams(); // Refresh list
+}
+
+async function handleDuplicateCustomParameter(paramId) {
+    let params = await data.getSettings(SETTINGS_KEYS.CUSTOM_PARAMS);
+    const paramToDuplicate = params.find(p => p.id === paramId);
+    if (!paramToDuplicate) return;
+
+    const newParam = JSON.parse(JSON.stringify(paramToDuplicate));
+    newParam.name = `${newParam.name}Copy`;
+    newParam.id = 'sparam_' + new Date().getTime();
+    params.push(newParam);
+
+    await data.saveSettings(SETTINGS_KEYS.CUSTOM_PARAMS, params);
+    updateState('customParameters', params);
+    ui.populateParameterButtons();
+    await handleManageCustomParams(); // Refresh list
 }
 
