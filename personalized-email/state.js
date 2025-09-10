@@ -1,58 +1,52 @@
-// Holds the global state for the application.
-// This single object makes it easier to manage and pass state between modules.
+/**
+ * state.js
+ * * A simple, centralized state management module for the Personalized Email task pane.
+ * This module helps to avoid prop-drilling and provides a single source of truth
+ * for application-wide data.
+ * * The state is intentionally not persistent (it resets on page reload). For persistent
+ * data like the Power Automate URL or templates, the data.js module handles storage
+ * in Office settings.
+ */
 
-// The state object with initial values.
+/**
+ * The initial shape of the application's state.
+ * All properties that will be used throughout the app's lifecycle should be
+ * defined here with a default value. This prevents accidental creation of
+ * state properties and makes the state's structure predictable.
+ * * - powerAutomateUrl: The URL for the Power Automate flow.
+ * - students: An array of student data objects fetched from the current sheet.
+ * - customParameters: An array of custom parameter configurations.
+ * - quill: The instance of the Quill editor.
+ */
 const appState = {
     powerAutomateUrl: null,
     students: [],
     customParameters: [],
-    templates: [],
-    lastFocusedElement: null,
-    // The parts for the pillbox inputs are stored here
-    emailParts: {
-        from: [],
-        subject: [],
-        cc: []
-    }
+    quill: null // FIX: Added the quill property to the initial state.
 };
 
-// A mutable variable to hold the Quill editor instance.
-// It's kept separate from appState because it's a complex object, not simple data.
-let quillInstance = null;
-
 /**
- * Provides controlled access to the application state.
- * @returns {object} The current application state.
+ * Retrieves a value from the state.
+ * For simplicity, this returns the entire state object.
+ * * @returns {object} The current state object.
  */
 export function getState() {
-    return appState;
+    return { ...appState };
 }
 
 /**
- * Updates a specific part of the application state.
- * @param {string} key - The top-level key in the state object to update.
- * @param {*} value - The new value for the key.
+ * Updates a value in the state.
+ * This function enforces that only pre-defined keys in the initial appState
+ * can be updated, preventing accidental state pollution.
+ * * @param {string} key The key of the state property to update.
+ * @param {*} value The new value for the property.
  */
 export function updateState(key, value) {
-    if (appState.hasOwnProperty(key)) {
+    if (key in appState) {
         appState[key] = value;
     } else {
+        // This strict check helps catch bugs where a component tries to set
+        // a state property that hasn't been formally defined.
         console.error(`Attempted to update a non-existent state key: ${key}`);
     }
-}
-
-/**
- * Stores the Quill editor instance.
- * @param {object} quill - The initialized Quill editor object.
- */
-export function setQuill(quill) {
-    quillInstance = quill;
-}
-
-/**
- * Retrieves the Quill editor instance.
- * @returns {object} The Quill editor object.
- */
-export function getQuill() {
-    return quillInstance;
 }
