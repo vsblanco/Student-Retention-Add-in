@@ -19,7 +19,7 @@ export function initializeQuill() {
             }
         });
         console.log("[LOG] Quill initialized successfully.");
-        setQuill(quill); // FIX: Use the dedicated setter for the Quill instance.
+        setQuill(quill); // Use the dedicated setter for the Quill instance.
         registerCustomBlots(Quill);
 
         quill.on('selection-change', (range) => {
@@ -61,7 +61,8 @@ function registerCustomBlots(Quill) {
     // --- RandomizeBlot ---
     RandomizeBlot = class extends Inline {
         static create(value) {
-            const wrapper = document.createElement('div');
+            // FIX: The wrapper must be an inline element (SPAN) for an Inline blot.
+            const wrapper = document.createElement('span');
             wrapper.classList.add('randomize-tag-wrapper');
             wrapper.style.display = 'inline-block';
             wrapper.setAttribute('contenteditable', 'false');
@@ -165,13 +166,15 @@ function registerCustomBlots(Quill) {
         }
     }
     RandomizeBlot.blotName = 'randomize';
-    RandomizeBlot.tagName = 'DIV';
+    // FIX: The tagName must match the created element.
+    RandomizeBlot.tagName = 'SPAN';
     Quill.register(RandomizeBlot);
 
     // --- ConditionBlot ---
     ConditionBlot = class extends Inline {
         static create(value) {
-            const wrapper = document.createElement('div');
+            // FIX: The wrapper must be an inline element (SPAN) for an Inline blot.
+            const wrapper = document.createElement('span');
             wrapper.classList.add('condition-tag-wrapper');
             wrapper.style.display = 'inline-block';
             wrapper.setAttribute('contenteditable', 'false');
@@ -274,7 +277,8 @@ function registerCustomBlots(Quill) {
         }
     }
     ConditionBlot.blotName = 'condition';
-    ConditionBlot.tagName = 'DIV';
+    // FIX: The tagName must match the created element.
+    ConditionBlot.tagName = 'SPAN';
     Quill.register(ConditionBlot);
 }
 
@@ -363,9 +367,8 @@ export function populateParameterButtons() {
 
 function insertParameter(paramName, isCustom) {
     const { lastFocusedElement } = getState();
-    const quill = getQuill(); // FIX: Use the dedicated getter.
+    const quill = getQuill();
     
-    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
     if (!quill) {
         console.error("[ERROR] insertParameter called but Quill instance is not available.");
         return;
@@ -385,9 +388,8 @@ function insertParameter(paramName, isCustom) {
 }
 
 function insertSpecialParameter(type) {
-    const quill = getQuill(); // FIX: Use the dedicated getter.
+    const quill = getQuill();
 
-    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
     if (!quill) {
         console.error("[ERROR] insertSpecialParameter called but Quill instance is not available.");
         return;
@@ -490,7 +492,7 @@ function reconstructPillboxString(parts, separator = '') {
 
 export function getEmailTemplateFromDOM() {
     const { emailParts } = getState();
-    const quill = getQuill(); // FIX: Use the dedicated getter.
+    const quill = getQuill();
 
     if (!quill) {
         console.error("[ERROR] getEmailTemplateFromDOM called but Quill instance is not available.");
@@ -538,7 +540,7 @@ export function loadTemplateIntoForm(template) {
     renderPills('subject');
     renderPills('cc');
     
-    const quill = getQuill(); // FIX: Use the dedicated getter.
+    const quill = getQuill();
     if (quill) {
         quill.root.innerHTML = template.body || '<p></p>';
     }
