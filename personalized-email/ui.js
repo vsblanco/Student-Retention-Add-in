@@ -363,6 +363,13 @@ export function populateParameterButtons() {
 
 function insertParameter(paramName, isCustom) {
     const { lastFocusedElement, quill } = getState();
+    
+    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
+    if (!quill) {
+        console.error("[ERROR] insertParameter called but Quill instance is not available.");
+        return;
+    }
+
     if (lastFocusedElement && lastFocusedElement.classList && lastFocusedElement.classList.contains('param-input')) {
         lastFocusedElement.value = `{${paramName}}`;
         lastFocusedElement.dispatchEvent(new Event('input', { bubbles: true }));
@@ -378,6 +385,13 @@ function insertParameter(paramName, isCustom) {
 
 function insertSpecialParameter(type) {
     const { quill } = getState();
+
+    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
+    if (!quill) {
+        console.error("[ERROR] insertSpecialParameter called but Quill instance is not available.");
+        return;
+    }
+
     const range = quill.getSelection(true);
     if (type === 'randomize') {
         quill.insertEmbed(range.index, 'randomize', { options: [''] }, Quill.sources.USER);
@@ -476,21 +490,18 @@ function reconstructPillboxString(parts, separator = '') {
 export function getEmailTemplateFromDOM() {
     const { emailParts, quill } = getState();
 
-    // FIX: Add a guard clause to prevent crash if Quill fails to initialize.
     if (!quill) {
         console.error("[ERROR] getEmailTemplateFromDOM called but Quill instance is not available.");
-        // Return a default empty template to prevent a crash
         return {
             from: reconstructPillboxString(emailParts.from),
             subject: reconstructPillboxString(emailParts.subject),
             cc: reconstructPillboxString(emailParts.cc, ';'),
-            body: '<p></p>' // Default empty body
+            body: '<p></p>'
         };
     }
 
     const editor = quill.root;
 
-    // Update the dataset on any special blots before getting the HTML
     editor.querySelectorAll('.randomize-tag-wrapper, .condition-tag-wrapper').forEach(tagNode => {
         const blot = Quill.find(tagNode, true);
         if (blot && blot.statics.blotName === 'randomize') {
@@ -526,7 +537,9 @@ export function loadTemplateIntoForm(template) {
     renderPills('cc');
     
     const { quill } = getState();
-    quill.root.innerHTML = template.body || '<p></p>';
+    if (quill) {
+        quill.root.innerHTML = template.body || '<p></p>';
+    }
 }
 
 
@@ -542,7 +555,6 @@ export function populateExampleModal(examplePayload) {
 
 export function populatePayloadModal(payload) {
     document.getElementById(DOM_IDS.PAYLOAD_CONTENT).textContent = JSON.stringify(payload, null, 2);
-    // Reset to payload view by default
     document.getElementById(DOM_IDS.PAYLOAD_CONTENT).classList.remove('hidden');
     document.getElementById(DOM_IDS.SCHEMA_CONTENT).classList.add('hidden');
     document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE).textContent = 'Request Payload';
