@@ -79,36 +79,49 @@ async function loadInitialData() {
 }
 
 /**
+ * A helper function to safely attach an event listener.
+ * @param {string} id The ID of the element.
+ * @param {string} event The event to listen for (e.g., 'onclick').
+ * @param {function} handler The function to execute.
+ */
+function safeAttachEventListener(id, event, handler) {
+    const element = document.getElementById(id);
+    if (element) {
+        element[event] = handler;
+    } else {
+        console.warn(`Element with ID "${id}" not found.`);
+    }
+}
+
+/**
  * Attaches all event listeners to the DOM elements.
  */
 function setupEventListeners() {
     // Setup Wizard
-    document.getElementById(DOM_IDS.CREATE_CONNECTION_BUTTON).onclick = handleCreateConnection;
+    safeAttachEventListener(DOM_IDS.CREATE_CONNECTION_BUTTON, 'onclick', handleCreateConnection);
 
     // Main Actions
-    document.getElementById(DOM_IDS.SEND_EMAIL_BUTTON).onclick = handleSendEmail;
-    document.getElementById(DOM_IDS.SHOW_EXAMPLE_BUTTON).onclick = handleShowExample;
-    document.getElementById(DOM_IDS.SHOW_PAYLOAD_BUTTON).onclick = handleShowPayload;
+    safeAttachEventListener(DOM_IDS.SEND_EMAIL_BUTTON, 'onclick', handleSendEmail);
+    safeAttachEventListener(DOM_IDS.SHOW_EXAMPLE_BUTTON, 'onclick', handleShowExample);
+    safeAttachEventListener(DOM_IDS.SHOW_PAYLOAD_BUTTON, 'onclick', handleShowPayload);
     
     // Templates
-    document.getElementById(DOM_IDS.TEMPLATES_BUTTON).onclick = handleShowTemplates;
-    document.getElementById(DOM_IDS.SAVE_CURRENT_TEMPLATE_BUTTON).onclick = handleShowSaveTemplateModal;
-    document.getElementById(DOM_IDS.CONFIRM_SAVE_TEMPLATE_BUTTON).onclick = handleSaveTemplate;
+    safeAttachEventListener(DOM_IDS.TEMPLATES_BUTTON, 'onclick', handleShowTemplates);
+    safeAttachEventListener(DOM_IDS.SAVE_CURRENT_TEMPLATE_BUTTON, 'onclick', handleShowSaveTemplateModal);
+    safeAttachEventListener(DOM_IDS.CONFIRM_SAVE_TEMPLATE_BUTTON, 'onclick', handleSaveTemplate);
 
     // Custom Parameters
-    document.getElementById(DOM_IDS.CREATE_CUSTOM_PARAM_BUTTON).onclick = () => ui.showCustomParamModal();
-    document.getElementById(DOM_IDS.SAVE_CUSTOM_PARAM_BUTTON).onclick = handleSaveCustomParameter;
-    document.getElementById(DOM_IDS.ADD_MAPPING_BUTTON).onclick = () => ui.addMappingRow();
-    document.getElementById(DOM_IDS.MANAGE_CUSTOM_PARAMS_BUTTON).onclick = handleShowManageCustomParams;
-
+    safeAttachEventListener(DOM_IDS.CREATE_CUSTOM_PARAM_BUTTON, 'onclick', () => ui.showCustomParamModal());
+    safeAttachEventListener(DOM_IDS.SAVE_CUSTOM_PARAM_BUTTON, 'onclick', handleSaveCustomParameter);
+    safeAttachEventListener(DOM_IDS.ADD_MAPPING_BUTTON, 'onclick', () => ui.addMappingRow());
+    safeAttachEventListener(DOM_IDS.MANAGE_CUSTOM_PARAMS_BUTTON, 'onclick', handleShowManageCustomParams);
 
     // Send Confirmation
-    document.getElementById(DOM_IDS.CONFIRM_SEND_BUTTON).onclick = executeSend;
-
+    safeAttachEventListener(DOM_IDS.CONFIRM_SEND_BUTTON, 'onclick', executeSend);
 
     // Dropdowns and Toggles
-    document.getElementById(DOM_IDS.RECIPIENT_LIST).onchange = ui.toggleCustomSheetInput;
-    document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON).onclick = ui.togglePayloadSchemaView;
+    safeAttachEventListener(DOM_IDS.RECIPIENT_LIST, 'onchange', ui.toggleCustomSheetInput);
+    safeAttachEventListener(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON, 'onclick', ui.togglePayloadSchemaView);
     
     // Global click listener to close special parameter panels
     document.addEventListener('click', (e) => {
