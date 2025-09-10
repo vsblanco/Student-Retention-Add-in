@@ -495,13 +495,13 @@ export function populatePayloadModal(payload) {
             "required": ["from", "to", "subject", "body"]
         }
     };
-    document.getElementById('schema-content').textContent = JSON.stringify(schemaContent, null, 2);
+    document.getElementById(DOM_IDS.SCHEMA_CONTENT).textContent = JSON.stringify(schemaContent, null, 2);
 }
 
 export function togglePayloadSchemaView() {
     const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
-    const schemaContent = document.getElementById('schema-content');
-    const title = document.getElementById('payload-modal-title');
+    const schemaContent = document.getElementById(DOM_IDS.SCHEMA_CONTENT);
+    const title = document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE);
     const button = document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON);
 
     const isPayloadVisible = !payloadContent.classList.contains('hidden');
