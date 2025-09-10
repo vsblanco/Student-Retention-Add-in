@@ -169,9 +169,15 @@ async function handleShowExample() {
         
         const examplePayload = data.buildPayload([randomStudent], template)[0];
 
-        ui.populateExampleModal(examplePayload);
-        exampleModal.show();
-        ui.updateStatus('');
+        // FIX: Check if the payload is valid before trying to show the modal
+        if (examplePayload) {
+            ui.populateExampleModal(examplePayload);
+            exampleModal.show();
+            ui.updateStatus('');
+        } else {
+            ui.updateStatus('Selected example student has no email. Try again.', 'orange');
+            setTimeout(() => ui.updateStatus(''), 3000);
+        }
 
     } catch(error) {
         console.error("Error showing example:", error);
