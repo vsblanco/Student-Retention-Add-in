@@ -1,4 +1,4 @@
-// V-2.5 - 2025-09-11 - 4:46 PM EDT
+// V-2.6 - 2025-09-11 - 4:50 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -75,33 +75,42 @@ async function populateParameterButtons() {
     standardContainer.innerHTML = ''; 
     customContainer.innerHTML = '';
 
-    const createButton = (paramName, isCustom = false, hasMappings = false) => {
+    const createButton = (param) => {
         const button = document.createElement('button');
+        const isCustom = typeof param === 'object';
+        const paramName = isCustom ? param.name : param;
+        
         if (isCustom) {
-            if (hasMappings) {
+            const hasMappings = param.mappings && param.mappings.length > 0;
+            const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
+            
+            if (hasNested) {
+                // Rose pink for custom params with nested mappings
+                button.className = 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200';
+            } else if (hasMappings) {
                 // Purple for custom params with mappings
                 button.className = 'px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded hover:bg-purple-200';
             } else {
-                // Light blue for custom params without mappings
+                // Light blue for simple custom params
                 button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
             }
         } else {
             // Gray for standard params
             button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
         }
+
         button.textContent = `{${paramName}}`;
         button.onclick = () => insertParameter(`{${paramName}}`);
         return button;
     };
 
     standardParameters.forEach(param => {
-        standardContainer.appendChild(createButton(param, false, false));
+        standardContainer.appendChild(createButton(param));
     });
 
     if (customParameters.length > 0) {
         customParameters.forEach(param => {
-            const hasMappings = param.mappings && param.mappings.length > 0;
-            customContainer.appendChild(createButton(param.name, true, hasMappings));
+            customContainer.appendChild(createButton(param));
         });
         customSection.classList.remove('hidden');
     } else {
