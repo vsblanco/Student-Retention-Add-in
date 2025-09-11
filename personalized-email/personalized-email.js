@@ -1,6 +1,6 @@
-// V-2.6 - 2025-09-11 - 4:50 PM EDT
+// V-2.7 - 2025-09-11 - 7:50 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
-import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
+import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
 
 let powerAutomateConnection = null;
@@ -85,18 +85,14 @@ async function populateParameterButtons() {
             const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
             
             if (hasNested) {
-                // Rose pink for custom params with nested mappings
-                button.className = 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200';
+                button.className = PARAMETER_BUTTON_STYLES.nested;
             } else if (hasMappings) {
-                // Purple for custom params with mappings
-                button.className = 'px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded hover:bg-purple-200';
+                button.className = PARAMETER_BUTTON_STYLES.mapped;
             } else {
-                // Light blue for simple custom params
-                button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
+                button.className = PARAMETER_BUTTON_STYLES.custom;
             }
         } else {
-            // Gray for standard params
-            button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
+            button.className = PARAMETER_BUTTON_STYLES.standard;
         }
 
         button.textContent = `{${paramName}}`;
