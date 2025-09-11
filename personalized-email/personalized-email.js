@@ -1,4 +1,4 @@
-// V-1.4 - 2025-09-11 - 11:49 AM EDT
+// V-1.7 - 2025-09-11 - 12:29 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -196,6 +196,23 @@ async function createConnection() {
     });
 }
 
+
+function evaluateMapping(cellValue, mapping) {
+    const cell = String(cellValue).trim().toLowerCase();
+    const condition = String(mapping.if).trim().toLowerCase();
+
+    switch (mapping.operator) {
+        case 'eq': return cell === condition;
+        case 'neq': return cell !== condition;
+        case 'contains': return cell.includes(condition);
+        case 'does_not_contain': return !cell.includes(condition);
+        case 'starts_with': return cell.startsWith(condition);
+        case 'ends_with': return cell.endsWith(condition);
+        default: return false;
+    }
+}
+
+
 async function getStudentData() {
     const recipientListValue = document.getElementById('recipient-list').value;
     const status = document.getElementById('status');
@@ -268,7 +285,7 @@ async function getStudentData() {
                         let mappingFound = false;
                         if (param.mappings && cellValue != null) {
                             for (const mapping of param.mappings) {
-                                if (String(cellValue).trim().toLowerCase() === String(mapping.if).trim().toLowerCase()) {
+                                if (evaluateMapping(cellValue, mapping)) {
                                     value = mapping.then;
                                     mappingFound = true;
                                     break;
