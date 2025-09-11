@@ -1,6 +1,6 @@
-// V-1.2 - 2025-09-11 - 11:31 AM EDT
+// V-1.3 - 2025-09-11 - 11:37 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
-import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, PAYLOAD_SCHEMA } from './constants.js';
+import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, PAYLOAD_SCHEMA, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 
 let powerAutomateConnection = null;
 let studentDataCache = [];
@@ -41,17 +41,7 @@ Office.onReady((info) => {
         document.getElementById('manage-custom-params-button').onclick = showManageCustomParamsModal;
 
         // Initialize Quill Editor
-        quill = new Quill('#editor-container', {
-            theme: 'snow',
-            modules: {
-                toolbar: [
-                    ['bold', 'italic', 'underline'],
-                    [{'list': 'ordered'}, {'list': 'bullet'}],
-                    [{'color': []}, {'background': []}],
-                    ['link']
-                ]
-            }
-        });
+        quill = new Quill('#editor-container', QUILL_EDITOR_CONFIG);
         
         setupCcInput();
         const subjectInput = document.getElementById('email-subject');
@@ -232,19 +222,13 @@ async function getStudentData() {
             const values = usedRange.values;
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
-            // Re-fetch custom parameters in case they changed
             await loadCustomParameters();
 
-            const colIndices = {
-                StudentName: findColumnIndex(headers, ["studentname", "student name"]),
-                StudentEmail: findColumnIndex(headers, ["student email", "school email", "email"]),
-                PersonalEmail: findColumnIndex(headers, ["personal email", "otheremail"]),
-                Grade: findColumnIndex(headers, ["grade", "course grade"]),
-                DaysOut: findColumnIndex(headers, ["days out", "daysout"]),
-                Assigned: findColumnIndex(headers, ["assigned"])
-            };
+            const colIndices = {};
+            for (const key in COLUMN_MAPPINGS) {
+                colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
+            }
 
-            // Pre-calculate column indices for custom parameters
             const customParamIndices = {};
             customParameters.forEach(param => {
                 const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
