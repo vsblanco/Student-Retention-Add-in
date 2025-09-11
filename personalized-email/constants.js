@@ -1,4 +1,4 @@
-// V-1.7 - 2025-09-11 - 12:29 PM EDT
+// V-1.8 - 2025-09-11 - 12:35 PM EDT
 /**
  * @fileoverview This file contains all the constant configurations used in the Personalized Email add-in.
  * It is organized from most important/frequently accessed at the top to least at the bottom.
@@ -60,11 +60,17 @@ export const PAYLOAD_SCHEMA = {
 // --- Custom Parameter Mapping Operators ---
 // Defines the available operators for value mapping in custom parameters.
 export const MAPPING_OPERATORS = [
+    // Text-based operators
     { value: 'eq', text: 'is equal to' },
     { value: 'neq', text: 'is not equal to' },
     { value: 'contains', text: 'contains' },
     { value: 'does_not_contain', text: 'does not contain' },
     { value: 'starts_with', text: 'starts with' },
     { value: 'ends_with', text: 'ends with' },
+    // Numerical operators
+    { value: 'gt', text: 'is greater than' },
+    { value: 'lt', text: 'is less than' },
+    { value: 'gte', text: 'is greater than or equal to' },
+    { value: 'lte', text: 'is less than or equal to' },
 ];
 
