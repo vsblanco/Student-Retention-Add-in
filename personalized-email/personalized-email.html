@@ -1,4 +1,4 @@
-<!-- V-1.7 - 2025-09-11 - 12:29 PM EDT -->
+<!-- V-1.9 - 2025-09-11 - 12:48 PM EDT -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -246,17 +246,15 @@
                         <p class="mt-1 text-xs text-gray-500">No spaces or special characters. It will be used like `{YourName}`.</p>
                     </div>
 
-                    <div class="space-y-3 pt-3 border-t">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-sm font-medium text-gray-700">IF column</span>
-                            <input type="text" id="param-source-column" class="flex-grow min-w-[150px] px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Source Column Name">
-                            <span class="text-sm font-medium text-gray-700">is empty, THEN use</span>
-                            <input type="text" id="param-default-value" class="flex-grow min-w-[150px] px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Default Value">
+                    <div class="space-y-4 border-t pt-4">
+                        <div>
+                            <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column</label>
+                            <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Status">
+                            <p class="mt-1 text-xs text-gray-500">The column in your sheet that this parameter will read from.</p>
                         </div>
-                        <div class="text-xs text-gray-500 pl-1">This default is also used if no mappings below match a non-empty cell.</div>
-                
-                        <div class="pt-2">
+                        <div>
                             <h4 class="text-sm font-medium text-gray-700 mb-2">Value Mappings (Optional)</h4>
+                            <p class="mt-1 text-xs text-gray-500 mb-2">If a cell's value matches a condition, the parameter will be replaced by the corresponding 'then' value. If no conditions match, the original cell value will be used.</p>
                             <div id="param-mapping-container" class="space-y-2">
                                 <!-- Mapping rows will be inserted here -->
                             </div>
