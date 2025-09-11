@@ -1,101 +1,133 @@
-import { DOM_IDS } from './constants.js';
-import { getState } from './state.js';
+import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 
-let quill; // To hold the Quill editor instance
+let powerAutomateConnection = null;
+let studentDataCache = [];
+let lastFocusedInput = null;
+let quill; // To hold the editor instance
+let ccRecipients = [];
+let specialParameters = [];
 
-// --- Initialization ---
+const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
+const EMAIL_TEMPLATES_KEY = "emailTemplates";
+const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
-export function initializeQuill() {
-    quill = new Quill('#' + DOM_IDS.EDITOR_CONTAINER, {
-        theme: 'snow',
-        modules: {
-            toolbar: [
-                ['bold', 'italic', 'underline'],
-                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                ['link']
-            ]
-        }
+const PAYLOAD_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "from": { "type": "string" },
+            "to": { "type": "string" },
+            "cc": { "type": "string" },
+            "subject": { "type": "string" },
+            "body": { "type": "string" }
+        },
+        "required": ["from", "to", "subject", "body"]
+    }
+};
+
+
+Office.onReady((info) => {
+    if (info.host === Office.HostType.Excel) {
+        // Main Buttons
+        document.getElementById("send-email-button").onclick = sendEmail;
+        document.getElementById("create-connection-button").onclick = createConnection;
+        document.getElementById('show-example-button').onclick = showExample;
+        document.getElementById('show-payload-button').onclick = showPayload;
+        document.getElementById('templates-button').onclick = showTemplatesModal;
+        document.getElementById('create-special-param-button').onclick = showSpecialParamModal;
+
+        // Dropdown listener
+        document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
+
+        // Modal Close Buttons
+        document.getElementById('close-example-modal-button').onclick = () => document.getElementById('example-modal').classList.add('hidden');
+        document.getElementById('close-payload-modal-button').onclick = () => document.getElementById('payload-modal').classList.add('hidden');
+        document.getElementById('close-templates-modal-button').onclick = () => document.getElementById('templates-modal').classList.add('hidden');
+        document.getElementById('cancel-save-template-button').onclick = () => document.getElementById('save-template-modal').classList.add('hidden');
+        document.getElementById('cancel-send-button').onclick = () => document.getElementById('send-confirm-modal').classList.add('hidden');
+        document.getElementById('cancel-special-param-button').onclick = () => document.getElementById('special-param-modal').classList.add('hidden');
+        document.getElementById('close-manage-params-button').onclick = () => document.getElementById('manage-params-modal').classList.add('hidden');
+        
+        // Modal Action Buttons
+        document.getElementById('toggle-payload-schema-button').onclick = togglePayloadView;
+        document.getElementById('save-current-template-button').onclick = showSaveTemplateModal;
+        document.getElementById('confirm-save-template-button').onclick = saveTemplate;
+        document.getElementById('confirm-send-button').onclick = executeSend;
+        document.getElementById('save-special-param-button').onclick = saveSpecialParameter;
+        document.getElementById('add-mapping-button').onclick = addMappingRow;
+        document.getElementById('manage-special-params-button').onclick = showManageParamsModal;
+
+        // Initialize Quill Editor
+        quill = new Quill('#editor-container', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline'],
+                    [{'list': 'ordered'}, {'list': 'bullet'}],
+                    [{'color': []}, {'background': []}],
+                    ['link']
+                ]
+            }
+        });
+        
+        setupCcInput();
+        const subjectInput = document.getElementById('email-subject');
+        const fromInput = document.getElementById('email-from');
+        
+        // Track last focused element to insert parameters correctly
+        subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
+        fromInput.addEventListener('focus', () => lastFocusedInput = fromInput);
+        quill.on('selection-change', (range) => {
+            if (range) {
+                lastFocusedInput = quill;
+            }
+        });
+
+        loadCustomParameters().then(populateParameterButtons);
+        checkConnection();
+        toggleCustomSheetInput(); // Set initial state
+    }
+});
+
+async function populateParameterButtons() {
+    const container = document.getElementById('parameter-buttons');
+    container.innerHTML = ''; // Clear existing
+    const allParameters = [...standardParameters, ...specialParameters.map(p => p.name)];
+
+    allParameters.forEach(param => {
+        const button = document.createElement('button');
+        button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
+        button.textContent = `{${param}}`;
+        button.onclick = () => insertParameter(`{${param}}`);
+        container.appendChild(button);
     });
 }
 
-// --- View Management ---
-
-export function showView(viewName) {
-    const setupWizard = document.getElementById(DOM_IDS.SETUP_WIZARD);
-    const emailComposer = document.getElementById(DOM_IDS.EMAIL_COMPOSER);
-
-    if (viewName === 'composer') {
-        setupWizard.classList.add('hidden');
-        emailComposer.classList.remove('hidden');
+function insertParameter(param) {
+    if (lastFocusedInput instanceof Quill) {
+        const range = lastFocusedInput.getSelection(true);
+        lastFocusedInput.insertText(range.index, param, 'user');
+    } else if (lastFocusedInput && lastFocusedInput.id === 'email-cc-input') {
+        addCcRecipient(param);
+    } else if (lastFocusedInput) { // It's the subject or from input
+        const start = lastFocusedInput.selectionStart;
+        const end = lastFocusedInput.selectionEnd;
+        const text = lastFocusedInput.value;
+        lastFocusedInput.value = text.substring(0, start) + param + text.substring(end);
+        lastFocusedInput.focus();
+        lastFocusedInput.selectionStart = lastFocusedInput.selectionEnd = start + param.length;
     } else {
-        setupWizard.classList.remove('hidden');
-        emailComposer.classList.add('hidden');
+        // Default to editor if nothing is focused
+        quill.focus();
+        const length = quill.getLength();
+        quill.insertText(length, param, 'user');
     }
 }
 
-// --- UI Updates & Getters ---
-
-export function updateStatus(message, color = 'gray', isSetupStatus = false) {
-    const statusElement = document.getElementById(isSetupStatus ? DOM_IDS.SETUP_STATUS : DOM_IDS.STATUS);
-    statusElement.textContent = message;
-    statusElement.style.color = color;
-}
-
-export function getPowerAutomateUrl() {
-    return document.getElementById(DOM_IDS.POWER_AUTOMATE_URL).value.trim();
-}
-
-export function getEmailTemplateFromDOM() {
-    return {
-        from: getPillboxValue(DOM_IDS.EMAIL_FROM_CONTAINER),
-        recipientList: document.getElementById(DOM_IDS.RECIPIENT_LIST).value,
-        customSheetName: document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim(),
-        subject: getPillboxValue(DOM_IDS.EMAIL_SUBJECT_CONTAINER),
-        cc: getPillboxValue(DOM_IDS.EMAIL_CC_CONTAINER),
-        body: quill.root.innerHTML
-    };
-}
-
-
-export function populateParameterButtons() {
-    const { customParameters } = getState();
-    const standardContainer = document.getElementById(DOM_IDS.STANDARD_PARAMETER_BUTTONS);
-    const customContainer = document.getElementById(DOM_IDS.CUSTOM_PARAMETER_BUTTONS);
-    const customSection = document.getElementById(DOM_IDS.CUSTOM_PARAMETERS_SECTION);
-
-    // Standard parameters (hardcoded for now)
-    const standardParams = ['StudentName', 'StudentEmail', 'Grade', 'LastLDA', 'DaysOut'];
-    standardContainer.innerHTML = standardParams.map(p => 
-        `<button class="parameter-button px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded hover:bg-indigo-200" data-param="${p}">{${p}}</button>`
-    ).join('');
-
-    // Custom parameters from state
-    if (customParameters && customParameters.length > 0) {
-        customContainer.innerHTML = customParameters.map(p =>
-            `<button class="parameter-button px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200" data-param="${p.name}">{${p.name}}</button>`
-        ).join('');
-        customSection.classList.remove('hidden');
-    } else {
-        customSection.classList.add('hidden');
-    }
-
-    // Add event listeners to all parameter buttons
-    document.querySelectorAll('.parameter-button').forEach(button => {
-        button.onclick = () => insertTextInQuill(`{${button.dataset.param}}`);
-    });
-}
-
-
-export function insertTextInQuill(text) {
-    const range = quill.getSelection(true);
-    quill.insertText(range.index, text, 'user');
-    quill.setSelection(range.index + text.length, 0);
-}
-
-
-export function toggleCustomSheetInput() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    const customSheetContainer = document.getElementById(DOM_IDS.CUSTOM_SHEET_CONTAINER);
+function toggleCustomSheetInput() {
+    const recipientList = document.getElementById('recipient-list');
+    const customSheetContainer = document.getElementById('custom-sheet-container');
     if (recipientList.value === 'custom') {
         customSheetContainer.classList.remove('hidden');
     } else {
@@ -103,345 +135,701 @@ export function toggleCustomSheetInput() {
     }
 }
 
-export function getSelectedSheetName() {
-    const recipientList = document.getElementById(DOM_IDS.RECIPIENT_LIST);
-    if (recipientList.value === 'custom') {
-        return document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value.trim() || 'Master List';
+
+async function checkConnection() {
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const connectionsSetting = settings.getItemOrNullObject("connections");
+        
+        connectionsSetting.load("value");
+        await context.sync();
+
+        const connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
+        
+        powerAutomateConnection = connections.find(c => c.type === 'power-automate' && c.name === 'Send Personalized Email');
+
+        if (powerAutomateConnection) {
+            document.getElementById('setup-wizard').classList.add('hidden');
+            document.getElementById('email-composer').classList.remove('hidden');
+        } else {
+            document.getElementById('setup-wizard').classList.remove('hidden');
+            document.getElementById('email-composer').classList.add('hidden');
+        }
+    });
+}
+
+async function createConnection() {
+    const urlInput = document.getElementById('power-automate-url');
+    const status = document.getElementById('setup-status');
+    const url = urlInput.value.trim();
+
+    if (!isValidHttpUrl(url)) {
+        status.textContent = "Please enter a valid HTTP URL.";
+        status.style.color = 'red';
+        return;
     }
-    if (recipientList.value === 'lda') {
-        const today = new Date();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
-        const year = today.getFullYear();
-        return `${month}-${day}-${year}`;
-    }
-    return 'Master List';
+    
+    status.textContent = "Creating connection...";
+    status.style.color = 'gray';
+
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const connectionsSetting = settings.getItemOrNullObject("connections");
+
+        connectionsSetting.load("value");
+        await context.sync();
+
+        let connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
+
+        const newConnection = {
+            id: 'pa-' + Math.random().toString(36).substr(2, 9),
+            name: 'Send Personalized Email',
+            type: 'power-automate',
+            url: url,
+            actions: [],
+            history: []
+        };
+        
+        connections.push(newConnection);
+        
+        settings.add("connections", JSON.stringify(connections));
+        await context.sync();
+
+        status.textContent = "Connection created successfully!";
+        status.style.color = 'green';
+
+        setTimeout(checkConnection, 1500);
+    });
 }
 
+async function getStudentData() {
+    const recipientListValue = document.getElementById('recipient-list').value;
+    const status = document.getElementById('status');
+    let sheetName;
 
-// --- Modal UI ---
-
-export function populateExampleModal(example) {
-    document.getElementById(DOM_IDS.EXAMPLE_FROM).textContent = example.from || '';
-    document.getElementById(DOM_IDS.EXAMPLE_TO).textContent = example.to || '';
-    document.getElementById(DOM_IDS.EXAMPLE_CC).textContent = example.cc || '';
-    document.getElementById(DOM_IDS.EXAMPLE_SUBJECT).textContent = example.subject || '';
-    document.getElementById(DOM_IDS.EXAMPLE_BODY).innerHTML = example.body || '';
-}
-
-export function populatePayloadModal(payload) {
-    const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
-    const schemaContent = document.getElementById(DOM_IDS.SCHEMA_CONTENT);
-    payloadContent.textContent = JSON.stringify(payload, null, 2);
-    // You might want to generate a more formal JSON schema based on your data structure
-    const schema = {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "to": { "type": "string", "format": "email" },
-          "from": { "type": "string", "format": "email" },
-          "cc": { "type": "string", "format": "email" },
-          "subject": { "type": "string" },
-          "body": { "type": "string", "contentMediaType": "text/html" }
-        },
-        "required": ["to", "from", "subject", "body"]
-      }
-    };
-    schemaContent.textContent = JSON.stringify(schema, null, 2);
-}
-
-export function togglePayloadSchemaView() {
-    const payloadContent = document.getElementById(DOM_IDS.PAYLOAD_CONTENT);
-    const schemaContent = document.getElementById(DOM_IDS.SCHEMA_CONTENT);
-    const button = document.getElementById(DOM_IDS.TOGGLE_PAYLOAD_SCHEMA_BUTTON);
-    const title = document.getElementById(DOM_IDS.PAYLOAD_MODAL_TITLE);
-
-    if (payloadContent.classList.contains('hidden')) {
-        payloadContent.classList.remove('hidden');
-        schemaContent.classList.add('hidden');
-        button.textContent = 'Show Schema';
-        title.textContent = 'Request Payload';
+    if (recipientListValue === 'custom') {
+        sheetName = document.getElementById('custom-sheet-name').value.trim();
+        if (!sheetName) {
+            status.textContent = 'Please enter a custom sheet name.';
+            status.style.color = 'red';
+            throw new Error('Custom sheet name is required.');
+        }
     } else {
+        sheetName = recipientListValue === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+    }
+    
+    status.textContent = `Fetching students from "${sheetName}"...`;
+    status.style.color = 'gray';
+    
+    studentDataCache = []; // Clear cache before fetching
+
+    await Excel.run(async (context) => {
+        try {
+            const sheet = context.workbook.worksheets.getItem(sheetName);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values");
+            await context.sync();
+
+            const values = usedRange.values;
+            const headers = values[0].map(h => String(h ?? '').toLowerCase());
+            
+            // Re-fetch custom parameters in case they changed
+            await loadCustomParameters();
+
+            const colIndices = {
+                StudentName: findColumnIndex(headers, ["studentname", "student name"]),
+                StudentEmail: findColumnIndex(headers, ["student email", "school email", "email"]),
+                PersonalEmail: findColumnIndex(headers, ["personal email", "otheremail"]),
+                Grade: findColumnIndex(headers, ["grade", "course grade"]),
+                DaysOut: findColumnIndex(headers, ["days out", "daysout"]),
+                Assigned: findColumnIndex(headers, ["assigned"])
+            };
+
+            // Pre-calculate column indices for special parameters
+            const specialParamIndices = {};
+            specialParameters.forEach(param => {
+                const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                if (headerIndex !== -1) {
+                    specialParamIndices[param.name] = headerIndex;
+                }
+            });
+
+
+            for (let i = 1; i < values.length; i++) {
+                const row = values[i];
+                const studentName = row[colIndices.StudentName] ?? '';
+                const nameParts = getNameParts(studentName);
+
+                const student = {
+                    StudentName: studentName,
+                    FirstName: nameParts.first,
+                    LastName: nameParts.last,
+                    StudentEmail: row[colIndices.StudentEmail] ?? '',
+                    PersonalEmail: row[colIndices.PersonalEmail] ?? '',
+                    Grade: row[colIndices.Grade] ?? '',
+                    DaysOut: row[colIndices.DaysOut] ?? '',
+                    Assigned: row[colIndices.Assigned] ?? ''
+                };
+
+                // Add special parameter values to the student object
+                specialParameters.forEach(param => {
+                    const colIndex = specialParamIndices[param.name];
+                    let value = param.defaultValue ?? '';
+                    if (colIndex !== undefined) {
+                        const cellValue = row[colIndex];
+                        let mappingFound = false;
+                        if (param.mappings && cellValue != null) {
+                            for (const mapping of param.mappings) {
+                                if (String(cellValue).trim().toLowerCase() === String(mapping.if).trim().toLowerCase()) {
+                                    value = mapping.then;
+                                    mappingFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!mappingFound && cellValue != null) {
+                             value = param.defaultValue ?? cellValue ?? ''; // Fallback to cell value if no mapping, then default
+                        }
+                    }
+                    student[param.name] = value;
+                });
+                studentDataCache.push(student);
+            }
+            status.textContent = `Found ${studentDataCache.length} students.`;
+            setTimeout(() => status.textContent = '', 3000);
+        } catch (error) {
+            if (error.code === 'ItemNotFound') {
+                status.textContent = `Error: Sheet "${sheetName}" not found.`;
+            } else {
+                status.textContent = 'An error occurred while fetching data.';
+            }
+            status.style.color = 'red';
+            console.error(error);
+            throw error;
+        }
+    });
+}
+
+const renderTemplate = (template, data) => {
+    if (!template) return '';
+    return template.replace(/\{(\w+)\}/g, (match, key) => {
+        return (data[key] ?? match);
+    });
+};
+
+const renderCCTemplate = (recipients, data) => {
+    if (!recipients || recipients.length === 0) return '';
+    return recipients.map(recipient => renderTemplate(recipient, data)).join(';');
+}
+
+async function showExample() {
+    const status = document.getElementById('status');
+    try {
+        await getStudentData();
+
+        if (studentDataCache.length === 0) {
+            status.textContent = 'No students found to generate an example.';
+            status.style.color = 'orange';
+            return;
+        }
+
+        const randomStudent = studentDataCache[Math.floor(Math.random() * studentDataCache.length)];
+        
+        const fromTemplate = document.getElementById('email-from').value;
+        const subjectTemplate = document.getElementById('email-subject').value;
+        const bodyTemplate = quill.root.innerHTML;
+
+        document.getElementById('example-from').textContent = renderTemplate(fromTemplate, randomStudent) || '[Not Specified]';
+        document.getElementById('example-to').textContent = randomStudent.StudentEmail || '[No Email Found]';
+        document.getElementById('example-cc').textContent = renderCCTemplate(ccRecipients, randomStudent) || '[Not Specified]';
+        document.getElementById('example-subject').textContent = renderTemplate(subjectTemplate, randomStudent);
+        document.getElementById('example-body').innerHTML = renderTemplate(bodyTemplate, randomStudent);
+
+        document.getElementById('example-modal').classList.remove('hidden');
+
+    } catch (error) {
+        // Error message is already set by getStudentData
+    }
+}
+
+async function showPayload() {
+    const status = document.getElementById('status');
+    try {
+        await getStudentData();
+
+        if (studentDataCache.length === 0) {
+            status.textContent = 'No students found to generate a payload.';
+            status.style.color = 'orange';
+            return;
+        }
+
+        const fromTemplate = document.getElementById('email-from').value;
+        const subjectTemplate = document.getElementById('email-subject').value;
+        const bodyTemplate = quill.root.innerHTML;
+
+        const payload = studentDataCache.map(student => ({
+            from: renderTemplate(fromTemplate, student),
+            to: student.StudentEmail || '',
+            cc: renderCCTemplate(ccRecipients, student),
+            subject: renderTemplate(subjectTemplate, student),
+            body: renderTemplate(bodyTemplate, student)
+        }));
+
+        document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
+        document.getElementById('schema-content').textContent = JSON.stringify(PAYLOAD_SCHEMA, null, 2);
+        
+        document.getElementById('payload-content').classList.remove('hidden');
+        document.getElementById('schema-content').classList.add('hidden');
+        document.getElementById('payload-modal-title').textContent = 'Request Payload';
+        document.getElementById('toggle-payload-schema-button').textContent = 'Show Schema';
+
+        document.getElementById('payload-modal').classList.remove('hidden');
+
+    } catch (error) {
+        // Error message is already set by getStudentData
+    }
+}
+
+function togglePayloadView() {
+    const payloadContent = document.getElementById('payload-content');
+    const schemaContent = document.getElementById('schema-content');
+    const title = document.getElementById('payload-modal-title');
+    const button = document.getElementById('toggle-payload-schema-button');
+
+    if (!payloadContent.classList.contains('hidden')) {
         payloadContent.classList.add('hidden');
         schemaContent.classList.remove('hidden');
+        title.textContent = 'Request Body JSON Schema';
         button.textContent = 'Show Payload';
-        title.textContent = 'Expected JSON Schema';
-    }
-}
-
-export function populateSendConfirmationModal(count) {
-    const message = document.getElementById(DOM_IDS.SEND_CONFIRM_MESSAGE);
-    message.textContent = `You are about to send ${count} email(s). Do you want to proceed?`;
-}
-
-
-// --- Template UI ---
-
-export function populateTemplatesModal(templates, handlers) {
-    const container = document.getElementById(DOM_IDS.TEMPLATES_LIST_CONTAINER);
-    if (!templates || templates.length === 0) {
-        container.innerHTML = '<p class="text-center text-sm text-gray-500">No saved templates found.</p>';
-        return;
-    }
-    container.innerHTML = templates.map(t => `
-        <div class="border p-3 rounded-lg bg-gray-50 flex justify-between items-center">
-            <div>
-                <p class="font-semibold text-gray-800">${t.name}</p>
-                <p class="text-xs text-gray-500">by ${t.author} on ${new Date(t.timestamp).toLocaleDateString()}</p>
-            </div>
-            <div class="space-x-2">
-                <button class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200" data-id="${t.id}">Load</button>
-                <button class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200" data-id="${t.id}">Delete</button>
-            </div>
-        </div>
-    `).join('');
-
-    container.querySelectorAll('.load-template-btn').forEach(btn => btn.onclick = () => handlers.onLoad(btn.dataset.id));
-    container.querySelectorAll('.delete-template-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
-}
-
-export function getTemplateSaveForm() {
-    return {
-        name: document.getElementById(DOM_IDS.TEMPLATE_NAME).value.trim(),
-        author: document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value.trim()
-    };
-}
-
-export function clearSaveTemplateForm() {
-    document.getElementById(DOM_IDS.TEMPLATE_NAME).value = '';
-    document.getElementById(DOM_IDS.TEMPLATE_AUTHOR).value = '';
-    updateSaveTemplateStatus('');
-}
-
-export function updateSaveTemplateStatus(message, color = 'gray') {
-    const status = document.getElementById(DOM_IDS.SAVE_TEMPLATE_STATUS);
-    status.textContent = message;
-    status.style.color = color;
-}
-
-export function loadTemplateIntoForm(template) {
-    // This is a simplified version. A real implementation would parse the pillbox values.
-    setPillboxValue(DOM_IDS.EMAIL_FROM_CONTAINER, template.from || '');
-    setPillboxValue(DOM_IDS.EMAIL_SUBJECT_CONTAINER, template.subject || '');
-    setPillboxValue(DOM_IDS.EMAIL_CC_CONTAINER, template.cc || '');
-    
-    document.getElementById(DOM_IDS.RECIPIENT_LIST).value = template.recipientList || 'lda';
-    document.getElementById(DOM_IDS.CUSTOM_SHEET_NAME).value = template.customSheetName || '';
-    quill.root.innerHTML = template.body || '';
-    toggleCustomSheetInput();
-}
-
-
-// --- Custom Parameter UI ---
-export function showCustomParamModal(param = null) {
-    const modal = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL);
-    const title = document.getElementById(DOM_IDS.CUSTOM_PARAM_MODAL_TITLE);
-    
-    // Clear form
-    document.getElementById(DOM_IDS.PARAM_EDIT_ID).value = '';
-    document.getElementById(DOM_IDS.PARAM_NAME).value = '';
-    document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value = '';
-    document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value = '';
-    document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER).innerHTML = '';
-    updateCustomParamStatus('');
-    
-    if (param) {
-        title.textContent = 'Edit Custom Parameter';
-        document.getElementById(DOM_IDS.PARAM_EDIT_ID).value = param.id;
-        document.getElementById(DOM_IDS.PARAM_NAME).value = param.name;
-        document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value = param.sourceColumn;
-        document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value = param.defaultValue;
-        if (param.valueMap) {
-            param.valueMap.forEach(mapping => addMappingRow(mapping.if, mapping.then));
-        }
     } else {
-        title.textContent = 'Create Custom Parameter';
-        addMappingRow(); // Start with one empty mapping row
+        payloadContent.classList.remove('hidden');
+        schemaContent.classList.add('hidden');
+        title.textContent = 'Request Payload';
+        button.textContent = 'Show Schema';
     }
-    
-    modal.classList.remove('hidden');
 }
 
-export function addMappingRow(ifValue = '', thenValue = '') {
-    const container = document.getElementById(DOM_IDS.PARAM_MAPPING_CONTAINER);
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-2 text-sm';
-    row.innerHTML = `
-        <span class="font-semibold text-gray-500">If value is</span>
-        <input type="text" class="mapping-if-input w-full px-2 py-1 border rounded-md" placeholder="e.g., Blanco, Victor" value="${ifValue}">
-        <span class="font-semibold text-gray-500">then use</span>
-        <input type="text" class="mapping-then-input w-full px-2 py-1 border rounded-md" placeholder="e.g., vblanco@school.edu" value="${thenValue}">
-        <button type="button" class="remove-mapping-btn text-red-500 hover:text-red-700 font-bold text-lg">&times;</button>
-    `;
-    row.querySelector('.remove-mapping-btn').onclick = () => row.remove();
-    container.appendChild(row);
-}
+async function sendEmail() {
+    const status = document.getElementById('status');
+    try {
+        await getStudentData();
 
-export function getCustomParamForm() {
-    const valueMap = [];
-    document.querySelectorAll('#' + DOM_IDS.PARAM_MAPPING_CONTAINER + ' .flex').forEach(row => {
-        const ifVal = row.querySelector('.mapping-if-input').value.trim();
-        const thenVal = row.querySelector('.mapping-then-input').value.trim();
-        if (ifVal && thenVal) {
-            valueMap.push({ if: ifVal, then: thenVal });
+        if (studentDataCache.length === 0) {
+            status.textContent = 'No students to send emails to.';
+            status.style.color = 'orange';
+            return;
         }
-    });
+        
+        const confirmMessage = document.getElementById('send-confirm-message');
+        confirmMessage.textContent = `You are about to send emails to ${studentDataCache.length} student(s). Do you want to proceed?`;
+        document.getElementById('send-confirm-modal').classList.remove('hidden');
 
-    return {
-        id: document.getElementById(DOM_IDS.PARAM_EDIT_ID).value,
-        name: document.getElementById(DOM_IDS.PARAM_NAME).value.trim(),
-        sourceColumn: document.getElementById(DOM_IDS.PARAM_SOURCE_COLUMN).value.trim(),
-        defaultValue: document.getElementById(DOM_IDS.PARAM_DEFAULT_VALUE).value.trim(),
-        valueMap: valueMap
-    };
+    } catch (error) {
+        // Error message is already set by getStudentData
+    }
 }
 
-export function updateCustomParamStatus(message, color = 'gray') {
-     const status = document.getElementById(DOM_IDS.SAVE_PARAM_STATUS);
-     status.textContent = message;
-     status.style.color = color;
-}
 
-export function populateManageCustomParamsModal(params, handlers) {
-    const container = document.getElementById(DOM_IDS.MANAGE_PARAMS_LIST);
-    if (!params || params.length === 0) {
-        container.innerHTML = '<p class="text-sm text-gray-500 text-center">No custom parameters created yet.</p>';
+async function executeSend() {
+    document.getElementById('send-confirm-modal').classList.add('hidden');
+    const status = document.getElementById('status');
+    status.textContent = `Sending ${studentDataCache.length} emails...`;
+    status.style.color = 'gray';
+
+    const fromTemplate = document.getElementById('email-from').value;
+    const subjectTemplate = document.getElementById('email-subject').value;
+    const bodyTemplate = quill.root.innerHTML;
+
+    const payload = studentDataCache.map(student => ({
+        from: renderTemplate(fromTemplate, student),
+        to: student.StudentEmail || '',
+        cc: renderCCTemplate(ccRecipients, student),
+        subject: renderTemplate(subjectTemplate, student),
+        body: renderTemplate(bodyTemplate, student)
+    })).filter(email => email.to && email.from);
+
+    if(payload.length === 0) {
+        status.textContent = 'No students with valid "To" and "From" email addresses found.';
+        status.style.color = 'orange';
         return;
     }
-    container.innerHTML = params.map(p => `
-        <div class="border p-3 rounded-lg bg-gray-50 flex justify-between items-start">
-            <div>
-                <p class="font-semibold text-gray-800">{${p.name}}</p>
-                <p class="text-xs text-gray-500 mt-1">Source: <span class="font-medium">${p.sourceColumn}</span></p>
-                ${p.defaultValue ? `<p class="text-xs text-gray-500">Default: <span class="font-medium">${p.defaultValue}</span></p>` : ''}
-                ${p.valueMap && p.valueMap.length > 0 ? `<p class="text-xs text-gray-500">${p.valueMap.length} mapping rule(s)</p>` : ''}
-            </div>
-            <div class="flex-shrink-0 space-x-2">
-                <button class="edit-param-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200" data-id="${p.id}">Edit</button>
-                <button class="duplicate-param-btn px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-md hover:bg-yellow-200" data-id="${p.id}">Duplicate</button>
-                <button class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200" data-id="${p.id}">Delete</button>
-            </div>
-        </div>
-    `).join('');
-    
-    container.querySelectorAll('.edit-param-btn').forEach(btn => btn.onclick = () => handlers.onEdit(btn.dataset.id));
-    container.querySelectorAll('.delete-param-btn').forEach(btn => btn.onclick = () => handlers.onDelete(btn.dataset.id));
-    container.querySelectorAll('.duplicate-param-btn').forEach(btn => btn.onclick = () => handlers.onDuplicate(btn.dataset.id));
+
+    try {
+        const response = await fetch(powerAutomateConnection.url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        status.textContent = `Successfully sent ${payload.length} emails!`;
+        status.style.color = 'green';
+    } catch (error) {
+        status.textContent = `Failed to send emails: ${error.message}`;
+        status.style.color = 'red';
+        console.error("Error sending emails:", error);
+    }
 }
 
-// --- Pillbox Input UI ---
 
-export function setupPillboxInputs() {
-    document.querySelectorAll('.pill-container').forEach(container => {
-        const input = container.querySelector('.pill-input');
-        
-        container.addEventListener('click', () => input.focus());
+function isValidHttpUrl(string) {
+    let url;
+    try {
+        url = new URL(string);
+    } catch (_) {
+        return false;
+    }
+    return url.protocol === "http:" || url.protocol === "https:";
+}
 
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                const value = input.value.trim();
-                if (value) {
-                    addPill(value, container);
-                    input.value = '';
-                }
-            } else if (e.key === 'Backspace' && input.value === '') {
-                const lastPill = container.querySelector('.pill-tag:last-of-type');
-                if (lastPill) {
-                    input.value = lastPill.textContent.slice(0, -1); // Put text back in input, remove 'x'
-                    lastPill.remove();
-                }
-            }
-        });
+// --- Template Functions ---
+// ... (omitted for brevity, no changes)
 
-        input.addEventListener('blur', () => {
-             const value = input.value.trim();
-             if (value) {
-                 addPill(value, container);
-                 input.value = '';
-             }
-        });
+// --- Special Parameter Functions ---
+
+async function loadCustomParameters() {
+    specialParameters = await getCustomParameters();
+    return specialParameters;
+}
+
+async function getCustomParameters() {
+    return Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const paramsSetting = settings.getItemOrNullObject(CUSTOM_PARAMS_KEY);
+        paramsSetting.load("value");
+        await context.sync();
+        return paramsSetting.value ? JSON.parse(paramsSetting.value) : [];
     });
 }
 
-function addPill(text, container) {
-    const pill = document.createElement('span');
-    pill.className = 'pill-tag';
-    
-    // Check if it's a parameter
-    if (text.startsWith('{') && text.endsWith('}')) {
-        pill.classList.add('param');
-    }
-
-    const textNode = document.createTextNode(text);
-    const removeBtn = document.createElement('span');
-    removeBtn.className = 'pill-remove';
-    removeBtn.innerHTML = '&times;';
-    removeBtn.onclick = (e) => {
-        e.stopPropagation(); // prevent container click from firing
-        pill.remove();
-    };
-    
-    pill.appendChild(textNode);
-    pill.appendChild(removeBtn);
-    
-    const input = container.querySelector('.pill-input');
-    container.insertBefore(pill, input);
+async function saveCustomParameters(params) {
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        settings.add(CUSTOM_PARAMS_KEY, JSON.stringify(params));
+        await context.sync();
+    });
 }
 
-function getPillboxValue(containerId) {
-    const container = document.getElementById(containerId);
-    const pills = Array.from(container.querySelectorAll('.pill-tag'));
-    return pills.map(p => p.textContent.slice(0, -1)).join(', '); // remove the 'x'
-}
-
-function setPillboxValue(containerId, valueString) {
-    const container = document.getElementById(containerId);
-    // Clear existing pills
-    container.querySelectorAll('.pill-tag').forEach(p => p.remove());
-    if (valueString) {
-        valueString.split(',').forEach(val => {
-            const trimmedVal = val.trim();
-            if (trimmedVal) {
-                addPill(trimmedVal, container);
-            }
-        });
-    }
-}
-
-
-// --- Randomize Modal UI ---
-
-export function clearRandomizeModal() {
-    const container = document.getElementById(DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER);
-    container.innerHTML = '';
-    // Add two empty options to start
-    addRandomizeOption();
-    addRandomizeOption();
-}
-
-export function addRandomizeOption(value = '') {
-    const container = document.getElementById(DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER);
-    const optionDiv = document.createElement('div');
-    optionDiv.className = 'flex items-center gap-2';
+async function showSpecialParamModal() {
+    const sourceColumnInput = document.getElementById('param-source-column');
+    sourceColumnInput.value = '';
+    document.getElementById('param-name').value = '';
+    document.getElementById('param-default-value').value = '';
+    document.getElementById('param-mapping-container').innerHTML = '';
+    document.getElementById('save-param-status').textContent = '';
     
-    optionDiv.innerHTML = `
-        <input type="text" class="randomize-option-input w-full px-2 py-1 border rounded-md" placeholder="Enter a text variation..." value="${value}">
-        <button type="button" class="remove-randomize-option-btn text-red-500 hover:text-red-700 font-bold text-lg">&times;</button>
+    document.getElementById('special-param-modal').classList.remove('hidden');
+}
+
+function addMappingRow() {
+    const container = document.getElementById('param-mapping-container');
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 mapping-row';
+    div.innerHTML = `
+        <span class="text-sm text-gray-500">If cell is</span>
+        <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob">
+        <span class="text-sm text-gray-500">then value is</span>
+        <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com">
+        <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
     `;
-    
-    optionDiv.querySelector('.remove-randomize-option-btn').onclick = () => {
-        // Prevent removing the last two options
-        if (container.childElementCount > 2) {
-            optionDiv.remove();
-        }
-    };
-    
-    container.appendChild(optionDiv);
+    div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
+    container.appendChild(div);
 }
 
-export function getRandomizeOptions() {
-    const inputs = document.querySelectorAll('#' + DOM_IDS.RANDOMIZE_OPTIONS_CONTAINER + ' .randomize-option-input');
-    return Array.from(inputs).map(input => input.value.trim()).filter(val => val);
+async function saveSpecialParameter() {
+    const status = document.getElementById('save-param-status');
+    const nameInput = document.getElementById('param-name');
+    const name = nameInput.value.trim();
+
+    // Validation
+    if (!/^[a-zA-Z0-9]+$/.test(name)) {
+        status.textContent = 'Name must be alphanumeric with no spaces.';
+        status.style.color = 'red';
+        return;
+    }
+    if (standardParameters.includes(name) || specialParameters.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+        status.textContent = 'This parameter name is already in use.';
+        status.style.color = 'red';
+        return;
+    }
+
+    const sourceColumn = document.getElementById('param-source-column').value;
+    const defaultValue = document.getElementById('param-default-value').value.trim();
+    
+    const mappings = [];
+    document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
+        const ifValue = row.querySelector('.mapping-if').value.trim();
+        const thenValue = row.querySelector('.mapping-then').value.trim();
+        if (ifValue) { // Only save if there's a condition
+            mappings.push({ if: ifValue, then: thenValue });
+        }
+    });
+
+    const newParam = {
+        id: 'sparam_' + new Date().getTime(),
+        name,
+        sourceColumn,
+        defaultValue,
+        mappings
+    };
+
+    status.textContent = 'Saving...';
+    status.style.color = 'gray';
+
+    const currentParams = await getCustomParameters();
+    currentParams.push(newParam);
+    await saveCustomParameters(currentParams);
+    
+    await loadCustomParameters(); // Refresh the local cache
+    await populateParameterButtons(); // Refresh the UI buttons
+
+    status.textContent = 'Parameter saved successfully!';
+    status.style.color = 'green';
+    setTimeout(() => {
+        document.getElementById('special-param-modal').classList.add('hidden');
+    }, 1500);
+}
+
+async function showManageParamsModal() {
+    document.getElementById('special-param-modal').classList.add('hidden');
+    const listContainer = document.getElementById('manage-params-list');
+    listContainer.innerHTML = '<p class="text-gray-500">Loading...</p>';
+    document.getElementById('manage-params-modal').classList.remove('hidden');
+
+    const params = await getCustomParameters();
+    listContainer.innerHTML = '';
+    if (params.length === 0) {
+        listContainer.innerHTML = '<p class="text-gray-500 text-center">No special parameters created yet.</p>';
+        return;
+    }
+
+    params.forEach(param => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border-b';
+        let mappingsHtml = param.mappings.map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
+        if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">{${param.name}}</p>
+                    <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
+                    <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
+                </div>
+                <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+            </div>
+            <div class="mt-2 text-sm">${mappingsHtml}</div>
+        `;
+        listContainer.appendChild(div);
+    });
+
+    listContainer.querySelectorAll('.delete-param-btn').forEach(btn => {
+        btn.onclick = () => deleteSpecialParameter(btn.dataset.id);
+    });
+}
+
+async function deleteSpecialParameter(paramId) {
+    let params = await getCustomParameters();
+    params = params.filter(p => p.id !== paramId);
+    await saveCustomParameters(params);
+    await loadCustomParameters(); // Refresh cache
+    await populateParameterButtons(); // Refresh UI
+    await showManageParamsModal(); // Refresh the management list
+}
+
+
+// --- CC Pillbox Functions ---
+// ... (omitted for brevity, no changes)
+// --- Template Functions --- (No changes here, so I'm omitting for brevity)
+async function getTemplates() {
+    return Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
+        templatesSetting.load("value");
+        await context.sync();
+        return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
+    });
+}
+
+async function saveTemplates(templates) {
+    await Excel.run(async (context) => {
+        const settings = context.workbook.settings;
+        settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templates));
+        await context.sync();
+    });
+}
+
+async function showTemplatesModal() {
+    const container = document.getElementById('templates-list-container');
+    container.innerHTML = '<p class="text-gray-500">Loading templates...</p>';
+    document.getElementById('templates-modal').classList.remove('hidden');
+
+    const templates = await getTemplates();
+    container.innerHTML = '';
+    if (templates.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center">No saved templates found.</p>';
+        return;
+    }
+
+    templates.forEach(template => {
+        const div = document.createElement('div');
+        div.className = 'p-3 border rounded-md bg-gray-50';
+        div.innerHTML = `
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="font-semibold text-gray-800">${template.name}</p>
+                    <p class="text-xs text-gray-500">by ${template.author} on ${new Date(template.timestamp).toLocaleDateString()}</p>
+                </div>
+                <div class="flex gap-2">
+                    <button data-id="${template.id}" class="load-template-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
+                    <button data-id="${template.id}" class="delete-template-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+    
+    container.querySelectorAll('.load-template-btn').forEach(btn => {
+        btn.onclick = () => loadTemplate(btn.dataset.id);
+    });
+    container.querySelectorAll('.delete-template-btn').forEach(btn => {
+        btn.onclick = () => deleteTemplate(btn.dataset.id);
+    });
+}
+
+function showSaveTemplateModal() {
+    document.getElementById('templates-modal').classList.add('hidden');
+    document.getElementById('template-name').value = '';
+    document.getElementById('template-author').value = ''; // You might want to pre-fill this later
+    document.getElementById('save-template-status').textContent = '';
+    document.getElementById('save-template-modal').classList.remove('hidden');
+}
+
+async function saveTemplate() {
+    const name = document.getElementById('template-name').value.trim();
+    const author = document.getElementById('template-author').value.trim();
+    const status = document.getElementById('save-template-status');
+
+    if (!name || !author) {
+        status.textContent = 'Name and Author are required.';
+        status.style.color = 'red';
+        return;
+    }
+
+    status.textContent = 'Saving...';
+    status.style.color = 'gray';
+
+    const newTemplate = {
+        id: 'template_' + new Date().getTime(),
+        name: name,
+        author: author,
+        timestamp: new Date().toISOString(),
+        from: document.getElementById('email-from').value,
+        subject: document.getElementById('email-subject').value,
+        cc: ccRecipients,
+        body: quill.root.innerHTML
+    };
+
+    const templates = await getTemplates();
+    templates.push(newTemplate);
+    await saveTemplates(templates);
+
+    status.textContent = 'Template saved!';
+    status.style.color = 'green';
+    setTimeout(() => {
+        document.getElementById('save-template-modal').classList.add('hidden');
+    }, 1500);
+}
+
+async function loadTemplate(templateId) {
+    const templates = await getTemplates();
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+        document.getElementById('email-from').value = template.from || '';
+        document.getElementById('email-subject').value = template.subject;
+        ccRecipients = template.cc || [];
+        renderCCPills();
+        quill.root.innerHTML = template.body;
+        document.getElementById('templates-modal').classList.add('hidden');
+    }
+}
+
+async function deleteTemplate(templateId) {
+    let templates = await getTemplates();
+    templates = templates.filter(t => t.id !== templateId);
+    await saveTemplates(templates);
+    await showTemplatesModal(); // Refresh the list
+}
+
+// --- CC Pillbox Functions --- (No changes here, so I'm omitting for brevity)
+function setupCcInput() {
+    const container = document.getElementById('email-cc-container');
+    const input = document.getElementById('email-cc-input');
+
+    container.addEventListener('click', () => {
+        input.focus();
+        lastFocusedInput = input;
+    });
+
+    input.addEventListener('focus', () => lastFocusedInput = input);
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
+            e.preventDefault();
+            addCcRecipient(input.value.trim());
+            input.value = '';
+        } else if (e.key === 'Backspace' && input.value === '') {
+            if (ccRecipients.length > 0) {
+                removeCcRecipient(ccRecipients.length - 1);
+            }
+        }
+    });
+
+    input.addEventListener('blur', () => {
+        addCcRecipient(input.value.trim());
+        input.value = '';
+    });
+}
+
+function addCcRecipient(text) {
+    if (text) {
+        ccRecipients.push(text);
+        renderCCPills();
+    }
+}
+
+function removeCcRecipient(index) {
+    ccRecipients.splice(index, 1);
+    renderCCPills();
+}
+
+function renderCCPills() {
+    const container = document.getElementById('email-cc-container');
+    const input = document.getElementById('email-cc-input');
+    
+    // Remove only pills, not the input
+    container.querySelectorAll('.cc-pill').forEach(pill => pill.remove());
+
+    ccRecipients.forEach((recipient, index) => {
+        const pill = document.createElement('span');
+        const isParam = recipient.startsWith('{') && recipient.endsWith('}');
+        pill.className = isParam ? 'cc-pill param' : 'cc-pill';
+        pill.textContent = recipient;
+        
+        const removeBtn = document.createElement('span');
+        removeBtn.textContent = '×';
+        removeBtn.className = 'cc-pill-remove';
+        removeBtn.onclick = (e) => {
+            e.stopPropagation();
+            removeCcRecipient(index);
+        };
+        
+        pill.appendChild(removeBtn);
+        container.insertBefore(pill, input);
+    });
 }
