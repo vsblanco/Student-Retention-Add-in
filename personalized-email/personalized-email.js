@@ -1,4 +1,4 @@
-// V-2.2 - 2025-09-11 - 1:41 PM EDT
+// V-2.3 - 2025-09-11 - 2:18 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -342,9 +342,21 @@ const renderTemplate = (template, data) => {
     // Keep replacing while the regex finds a match and we are under the iteration limit
     while (result.match(regex) && iterations < maxIterations) {
         result = result.replace(regex, (match, key) => {
-            // If the key exists in the student's data object, replace it.
-            // Otherwise, keep the original placeholder for the next pass or the final result.
-            return data.hasOwnProperty(key) ? data[key] : match;
+            let valueToInsert = data.hasOwnProperty(key) ? data[key] : match;
+
+            // Check if the value is a string and looks like a single Quill paragraph
+            if (typeof valueToInsert === 'string') {
+                const trimmedValue = valueToInsert.trim();
+                if (trimmedValue.startsWith('<p>') && trimmedValue.endsWith('</p>')) {
+                    // This is a simplistic check. It assumes the content is a single paragraph.
+                    const innerHtml = trimmedValue.substring(3, trimmedValue.length - 4);
+                    // Only strip if it doesn't contain another block-level element.
+                    if (!innerHtml.includes('<p>') && !innerHtml.includes('<div>')) {
+                         valueToInsert = innerHtml;
+                    }
+                }
+            }
+            return valueToInsert;
         });
         iterations++;
     }
