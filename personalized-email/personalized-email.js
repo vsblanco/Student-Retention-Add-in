@@ -1,4 +1,4 @@
-// V-2.3 - 2025-09-11 - 2:18 PM EDT
+// V-2.4 - 2025-09-11 - 4:42 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -75,21 +75,25 @@ async function populateParameterButtons() {
     standardContainer.innerHTML = ''; 
     customContainer.innerHTML = '';
 
-    const createButton = (param) => {
+    const createButton = (param, isCustom = false) => {
         const button = document.createElement('button');
-        button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
+        if (isCustom) {
+            button.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200';
+        } else {
+            button.className = 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300';
+        }
         button.textContent = `{${param}}`;
         button.onclick = () => insertParameter(`{${param}}`);
         return button;
     };
 
     standardParameters.forEach(param => {
-        standardContainer.appendChild(createButton(param));
+        standardContainer.appendChild(createButton(param, false));
     });
 
     if (customParameters.length > 0) {
         customParameters.forEach(param => {
-            customContainer.appendChild(createButton(param.name));
+            customContainer.appendChild(createButton(param.name, true));
         });
         customSection.classList.remove('hidden');
     } else {
