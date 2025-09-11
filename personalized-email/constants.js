@@ -1,4 +1,4 @@
-// V-1.8 - 2025-09-11 - 12:35 PM EDT
+// V-2.1 - 2025-09-11 - 1:31 PM EDT
 /**
  * @fileoverview This file contains all the constant configurations used in the Personalized Email add-in.
  * It is organized from most important/frequently accessed at the top to least at the bottom.
@@ -38,6 +38,18 @@ export const QUILL_EDITOR_CONFIG = {
         ]
     }
 };
+
+// --- Mini Quill Editor Configuration for Modals ---
+// A simplified Quill configuration for the rich text editors used within the custom parameter modal.
+export const MINI_QUILL_EDITOR_CONFIG = {
+    theme: 'snow',
+    modules: {
+        toolbar: [
+            ['bold', 'italic', 'underline', 'link']
+        ]
+    }
+};
+
 
 // --- Power Automate Payload Schema ---
 // The JSON schema for the data that will be sent to the Power Automate flow.
