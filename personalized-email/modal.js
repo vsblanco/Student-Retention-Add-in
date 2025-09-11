@@ -1,4 +1,4 @@
-// V-1.9 - 2025-09-11 - 12:48 PM EDT
+// V-2.0 - 2025-09-11 - 1:01 PM EDT
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
@@ -8,22 +8,10 @@ import { PAYLOAD_SCHEMA, MAPPING_OPERATORS } from './constants.js';
 export default class ModalManager {
     /**
      * @param {object} app - The main application context.
-     * @param {Quill} app.quill - The Quill editor instance.
-     * @param {Function} app.getStudentData - Function to fetch student data.
-     * @param {Function} app.renderTemplate - Function to render a template string.
-     * @param {Function} app.renderCCTemplate - Function to render the CC template string.
-     * @param {Function} app.getTemplates - Function to get saved templates.
-     * @param {Function} app.saveTemplates - Function to save templates.
-     * @param {Function} app.loadCustomParameters - Function to load custom parameters.
-     * @param {Function} app.getCustomParameters - Function to get custom parameters.
-     * @param {Function} app.saveCustomParameters - Function to save custom parameters.
-     * @param {Function} app.populateParameterButtons - Function to update the parameter buttons UI.
-     * @param {Function} app.executeSend - Function to execute the email sending process.
-     * @param {Array} app.ccRecipients - A reference to the ccRecipients array.
-     * @param {Function} app.renderCCPills - Function to re-render the CC pills UI.
      */
     constructor(app) {
         this.app = app;
+        this.editingParamId = null; // Used to track if we are editing an existing parameter
         this.bindModalEventListeners();
     }
 
@@ -263,30 +251,38 @@ export default class ModalManager {
         await this.showTemplatesModal(); // Refresh the list
     }
 
-    async showCustomParamModal() {
-        document.getElementById('param-source-column').value = '';
+    // --- Custom Parameter Modals ---
+
+    showCustomParamModal() {
+        this.editingParamId = null; // Ensure we're in "create" mode
+        document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
+        document.getElementById('save-custom-param-button').textContent = 'Save Parameter';
+
         document.getElementById('param-name').value = '';
+        document.getElementById('param-source-column').value = '';
         document.getElementById('param-mapping-container').innerHTML = '';
         document.getElementById('save-param-status').textContent = '';
         
         document.getElementById('custom-param-modal').classList.remove('hidden');
     }
     
-    addMappingRow() {
+    addMappingRow(mapping = {}) {
         const container = document.getElementById('param-mapping-container');
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 mapping-row';
         
-        const operatorOptions = MAPPING_OPERATORS.map(op => `<option value="${op.value}">${op.text}</option>`).join('');
+        const operatorOptions = MAPPING_OPERATORS.map(op => 
+            `<option value="${op.value}" ${mapping.operator === op.value ? 'selected' : ''}>${op.text}</option>`
+        ).join('');
 
         div.innerHTML = `
             <span class="text-sm text-gray-500">If cell</span>
             <select class="mapping-operator w-32 px-2 py-1 border border-gray-300 rounded-md text-sm bg-white">
                 ${operatorOptions}
             </select>
-            <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob">
+            <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Active" value="${mapping.if || ''}">
             <span class="text-sm text-gray-500">then value is</span>
-            <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com">
+            <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., active.student@school.edu" value="${mapping.then || ''}">
             <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
         `;
         div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
@@ -304,14 +300,16 @@ export default class ModalManager {
             status.style.color = 'red';
             return;
         }
-        if (this.app.standardParameters.includes(name) || this.app.customParameters.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+
+        // Check for name uniqueness, excluding the parameter being edited
+        const otherParams = this.app.customParameters.filter(p => p.id !== this.editingParamId);
+        if (this.app.standardParameters.includes(name) || otherParams.find(p => p.name.toLowerCase() === name.toLowerCase())) {
             status.textContent = 'This parameter name is already in use.';
             status.style.color = 'red';
             return;
         }
     
         const sourceColumn = document.getElementById('param-source-column').value;
-        
         const mappings = [];
         document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
             const ifValue = row.querySelector('.mapping-if').value.trim();
@@ -322,25 +320,30 @@ export default class ModalManager {
             }
         });
     
-        const newParam = {
-            id: 'cparam_' + new Date().getTime(),
-            name,
-            sourceColumn,
-            mappings
-        };
+        const paramData = { name, sourceColumn, mappings };
     
         status.textContent = 'Saving...';
         status.style.color = 'gray';
     
         const currentParams = await this.app.getCustomParameters();
-        currentParams.push(newParam);
-        await this.app.saveCustomParameters(currentParams);
+        if (this.editingParamId) {
+            const index = currentParams.findIndex(p => p.id === this.editingParamId);
+            if (index > -1) {
+                currentParams[index] = { ...currentParams[index], ...paramData };
+            }
+        } else {
+            paramData.id = 'cparam_' + new Date().getTime();
+            currentParams.push(paramData);
+        }
         
+        await this.app.saveCustomParameters(currentParams);
         await this.app.loadCustomParameters(); 
         await this.app.populateParameterButtons();
     
-        status.textContent = 'Parameter saved successfully!';
+        status.textContent = `Parameter ${this.editingParamId ? 'updated' : 'saved'} successfully!`;
         status.style.color = 'green';
+        this.editingParamId = null;
+
         setTimeout(() => {
             document.getElementById('custom-param-modal').classList.add('hidden');
         }, 1500);
@@ -374,16 +377,48 @@ export default class ModalManager {
                         <p class="font-semibold text-gray-800">{${param.name}}</p>
                         <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
                     </div>
-                    <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                    <div class="flex gap-2">
+                         <button data-id="${param.id}" class="edit-param-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Edit</button>
+                         <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                    </div>
                 </div>
                 <div class="mt-2 text-sm">${mappingsHtml}</div>
             `;
             listContainer.appendChild(div);
         });
-    
+
+        listContainer.querySelectorAll('.edit-param-btn').forEach(btn => {
+            btn.onclick = () => this.editCustomParameter(btn.dataset.id);
+        });
         listContainer.querySelectorAll('.delete-param-btn').forEach(btn => {
             btn.onclick = () => this.deleteCustomParameter(btn.dataset.id);
         });
+    }
+
+    async editCustomParameter(paramId) {
+        const param = this.app.customParameters.find(p => p.id === paramId);
+        if (!param) return;
+    
+        this.editingParamId = paramId;
+    
+        // Hide management modal and show the creation/edit modal
+        document.getElementById('manage-custom-params-modal').classList.add('hidden');
+        document.getElementById('custom-param-modal').classList.remove('hidden');
+    
+        // Update modal title and button text for editing context
+        document.getElementById('custom-param-modal-title').textContent = 'Edit Custom Parameter';
+        document.getElementById('save-custom-param-button').textContent = 'Update Parameter';
+    
+        // Populate the form with the parameter's data
+        document.getElementById('param-name').value = param.name;
+        document.getElementById('param-source-column').value = param.sourceColumn;
+    
+        // Clear existing mapping rows and add new ones based on the parameter's mappings
+        const mappingContainer = document.getElementById('param-mapping-container');
+        mappingContainer.innerHTML = '';
+        if (param.mappings) {
+            param.mappings.forEach(mapping => this.addMappingRow(mapping));
+        }
     }
     
     async deleteCustomParameter(paramId) {
