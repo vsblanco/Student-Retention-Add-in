@@ -1,4 +1,4 @@
-// V-1.8 - 2025-09-11 - 12:35 PM EDT
+// V-1.9 - 2025-09-11 - 12:48 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -295,11 +295,11 @@ async function getStudentData() {
                 // Add custom parameter values to the student object
                 customParameters.forEach(param => {
                     const colIndex = customParamIndices[param.name];
-                    let value = param.defaultValue ?? '';
+                    let value = ''; // Default to empty string
                     if (colIndex !== undefined) {
-                        const cellValue = row[colIndex];
+                        const cellValue = row[colIndex] ?? ''; // Default cell value to empty string if null/undefined
                         let mappingFound = false;
-                        if (param.mappings && cellValue != null) {
+                        if (param.mappings && cellValue !== '') { // Only check mappings if there's a cell value
                             for (const mapping of param.mappings) {
                                 if (evaluateMapping(cellValue, mapping)) {
                                     value = mapping.then;
@@ -308,8 +308,8 @@ async function getStudentData() {
                                 }
                             }
                         }
-                        if (!mappingFound && cellValue != null) {
-                             value = param.defaultValue ?? cellValue ?? ''; // Fallback to cell value if no mapping, then default
+                        if (!mappingFound) {
+                            value = cellValue; // If no mapping found, use the original cell value
                         }
                     }
                     student[param.name] = value;
