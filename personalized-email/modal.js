@@ -1,9 +1,9 @@
-// V-1.4 - 2025-09-11 - 11:49 AM EDT
+// V-1.7 - 2025-09-11 - 12:29 PM EDT
 
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
-import { PAYLOAD_SCHEMA } from './constants.js';
+import { PAYLOAD_SCHEMA, MAPPING_OPERATORS } from './constants.js';
 
 // This class encapsulates the logic for showing, hiding, and handling actions within modals.
 export default class ModalManager {
@@ -278,8 +278,14 @@ export default class ModalManager {
         const container = document.getElementById('param-mapping-container');
         const div = document.createElement('div');
         div.className = 'flex items-center gap-2 mapping-row';
+        
+        const operatorOptions = MAPPING_OPERATORS.map(op => `<option value="${op.value}">${op.text}</option>`).join('');
+
         div.innerHTML = `
-            <span class="text-sm text-gray-500">If cell is</span>
+            <span class="text-sm text-gray-500">If cell</span>
+            <select class="mapping-operator w-32 px-2 py-1 border border-gray-300 rounded-md text-sm bg-white">
+                ${operatorOptions}
+            </select>
             <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Bob">
             <span class="text-sm text-gray-500">then value is</span>
             <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., bobjones@gmail.com">
@@ -312,9 +318,10 @@ export default class ModalManager {
         const mappings = [];
         document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
             const ifValue = row.querySelector('.mapping-if').value.trim();
+            const operator = row.querySelector('.mapping-operator').value;
             const thenValue = row.querySelector('.mapping-then').value.trim();
             if (ifValue) { 
-                mappings.push({ if: ifValue, then: thenValue });
+                mappings.push({ if: ifValue, operator, then: thenValue });
             }
         });
     
@@ -359,7 +366,10 @@ export default class ModalManager {
         params.forEach(param => {
             const div = document.createElement('div');
             div.className = 'p-3 border-b';
-            let mappingsHtml = param.mappings.map(m => `<div class="text-xs ml-4"><span class="text-gray-500">If '${m.if}' &rarr;</span> '${m.then}'</div>`).join('');
+            let mappingsHtml = param.mappings.map(m => {
+                const operatorText = (MAPPING_OPERATORS.find(op => op.value === m.operator) || {}).text || 'is';
+                return `<div class="text-xs ml-4"><span class="text-gray-500">If cell ${operatorText} '${m.if}' &rarr;</span> '${m.then}'</div>`
+            }).join('');
             if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
     
             div.innerHTML = `
@@ -390,3 +400,4 @@ export default class ModalManager {
         await this.showManageCustomParamsModal();
     }
 }
+
