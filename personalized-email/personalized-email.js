@@ -1,5 +1,6 @@
-// V-1.1 - 2025-09-11 - 11:26 AM EDT
+// V-1.2 - 2025-09-11 - 11:31 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
+import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, PAYLOAD_SCHEMA } from './constants.js';
 
 let powerAutomateConnection = null;
 let studentDataCache = [];
@@ -7,26 +8,6 @@ let lastFocusedInput = null;
 let quill; // To hold the editor instance
 let ccRecipients = [];
 let customParameters = [];
-
-const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
-const EMAIL_TEMPLATES_KEY = "emailTemplates";
-const CUSTOM_PARAMS_KEY = "customEmailParameters";
-
-const PAYLOAD_SCHEMA = {
-    "type": "array",
-    "items": {
-        "type": "object",
-        "properties": {
-            "from": { "type": "string" },
-            "to": { "type": "string" },
-            "cc": { "type": "string" },
-            "subject": { "type": "string" },
-            "body": { "type": "string" }
-        },
-        "required": ["from", "to", "subject", "body"]
-    }
-};
-
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -846,3 +827,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
