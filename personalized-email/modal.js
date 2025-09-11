@@ -1,5 +1,4 @@
-// V-1.7 - 2025-09-11 - 12:29 PM EDT
-
+// V-1.9 - 2025-09-11 - 12:48 PM EDT
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
@@ -267,7 +266,6 @@ export default class ModalManager {
     async showCustomParamModal() {
         document.getElementById('param-source-column').value = '';
         document.getElementById('param-name').value = '';
-        document.getElementById('param-default-value').value = '';
         document.getElementById('param-mapping-container').innerHTML = '';
         document.getElementById('save-param-status').textContent = '';
         
@@ -313,7 +311,6 @@ export default class ModalManager {
         }
     
         const sourceColumn = document.getElementById('param-source-column').value;
-        const defaultValue = document.getElementById('param-default-value').value.trim();
         
         const mappings = [];
         document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
@@ -329,7 +326,6 @@ export default class ModalManager {
             id: 'cparam_' + new Date().getTime(),
             name,
             sourceColumn,
-            defaultValue,
             mappings
         };
     
@@ -377,7 +373,6 @@ export default class ModalManager {
                     <div>
                         <p class="font-semibold text-gray-800">{${param.name}}</p>
                         <p class="text-xs text-gray-500">Reads from column: <strong>${param.sourceColumn}</strong></p>
-                        <p class="text-xs text-gray-500">Default: <strong>${param.defaultValue || '<em>(none)</em>'}</strong></p>
                     </div>
                     <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                 </div>
