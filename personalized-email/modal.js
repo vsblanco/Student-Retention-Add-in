@@ -1,8 +1,8 @@
-// V-2.0 - 2025-09-11 - 1:01 PM EDT
+// V-2.1 - 2025-09-11 - 1:31 PM EDT
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
-import { PAYLOAD_SCHEMA, MAPPING_OPERATORS } from './constants.js';
+import { PAYLOAD_SCHEMA, MAPPING_OPERATORS, MINI_QUILL_EDITOR_CONFIG } from './constants.js';
 
 // This class encapsulates the logic for showing, hiding, and handling actions within modals.
 export default class ModalManager {
@@ -12,6 +12,7 @@ export default class ModalManager {
     constructor(app) {
         this.app = app;
         this.editingParamId = null; // Used to track if we are editing an existing parameter
+        this.mappingQuillInstances = {}; // To store Quill instances for dynamic editors
         this.bindModalEventListeners();
     }
 
@@ -37,7 +38,7 @@ export default class ModalManager {
         document.getElementById('confirm-save-template-button').onclick = this.saveTemplate.bind(this);
         document.getElementById('confirm-send-button').onclick = this.app.executeSend;
         document.getElementById('save-custom-param-button').onclick = this.saveCustomParameter.bind(this);
-        document.getElementById('add-mapping-button').onclick = this.addMappingRow.bind(this);
+        document.getElementById('add-mapping-button').onclick = () => this.addMappingRow();
         document.getElementById('manage-custom-params-button').onclick = this.showManageCustomParamsModal.bind(this);
     }
 
@@ -255,6 +256,7 @@ export default class ModalManager {
 
     showCustomParamModal() {
         this.editingParamId = null; // Ensure we're in "create" mode
+        this.mappingQuillInstances = {}; // Clear any old instances
         document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
         document.getElementById('save-custom-param-button').textContent = 'Save Parameter';
 
@@ -269,24 +271,43 @@ export default class ModalManager {
     addMappingRow(mapping = {}) {
         const container = document.getElementById('param-mapping-container');
         const div = document.createElement('div');
-        div.className = 'flex items-center gap-2 mapping-row';
+        const editorId = 'quill-editor-' + new Date().getTime() + Math.random().toString(36).substr(2, 9);
+        div.className = 'flex items-start gap-2 mapping-row p-2 border-t';
+        div.dataset.editorId = editorId;
         
         const operatorOptions = MAPPING_OPERATORS.map(op => 
             `<option value="${op.value}" ${mapping.operator === op.value ? 'selected' : ''}>${op.text}</option>`
         ).join('');
 
         div.innerHTML = `
-            <span class="text-sm text-gray-500">If cell</span>
-            <select class="mapping-operator w-32 px-2 py-1 border border-gray-300 rounded-md text-sm bg-white">
-                ${operatorOptions}
-            </select>
-            <input type="text" class="mapping-if flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Active" value="${mapping.if || ''}">
-            <span class="text-sm text-gray-500">then value is</span>
-            <input type="text" class="mapping-then flex-1 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., active.student@school.edu" value="${mapping.then || ''}">
-            <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg">&times;</button>
+            <div class="flex-shrink-0 space-y-1" style="flex-basis: 40%;">
+                <span class="text-sm text-gray-500">If cell value</span>
+                <div class="flex items-center gap-1">
+                     <select class="mapping-operator w-full px-2 py-1 border border-gray-300 rounded-md text-sm bg-white">
+                        ${operatorOptions}
+                     </select>
+                     <input type="text" class="mapping-if w-full px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="e.g., Active" value="${mapping.if || ''}">
+                </div>
+            </div>
+            <div class="flex-1 space-y-1">
+                <span class="text-sm text-gray-500">then the parameter value is</span>
+                <div id="${editorId}" class="mini-quill-editor bg-white rounded-md border border-gray-300"></div>
+            </div>
+            <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-lg flex-shrink-0 mt-6">&times;</button>
         `;
-        div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
+
         container.appendChild(div);
+
+        const quill = new Quill(`#${editorId}`, MINI_QUILL_EDITOR_CONFIG);
+        if (mapping.then) {
+            quill.root.innerHTML = mapping.then;
+        }
+        this.mappingQuillInstances[editorId] = quill;
+
+        div.querySelector('.remove-mapping-btn').onclick = () => {
+            delete this.mappingQuillInstances[editorId];
+            div.remove();
+        };
     }
     
     async saveCustomParameter() {
@@ -301,7 +322,6 @@ export default class ModalManager {
             return;
         }
 
-        // Check for name uniqueness, excluding the parameter being edited
         const otherParams = this.app.customParameters.filter(p => p.id !== this.editingParamId);
         if (this.app.standardParameters.includes(name) || otherParams.find(p => p.name.toLowerCase() === name.toLowerCase())) {
             status.textContent = 'This parameter name is already in use.';
@@ -312,9 +332,12 @@ export default class ModalManager {
         const sourceColumn = document.getElementById('param-source-column').value;
         const mappings = [];
         document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
+            const editorId = row.dataset.editorId;
+            const quill = this.mappingQuillInstances[editorId];
             const ifValue = row.querySelector('.mapping-if').value.trim();
             const operator = row.querySelector('.mapping-operator').value;
-            const thenValue = row.querySelector('.mapping-then').value.trim();
+            const thenValue = quill && quill.getText().trim().length > 0 ? quill.root.innerHTML : '';
+
             if (ifValue) { 
                 mappings.push({ if: ifValue, operator, then: thenValue });
             }
@@ -367,7 +390,8 @@ export default class ModalManager {
             div.className = 'p-3 border-b';
             let mappingsHtml = param.mappings.map(m => {
                 const operatorText = (MAPPING_OPERATORS.find(op => op.value === m.operator) || {}).text || 'is';
-                return `<div class="text-xs ml-4"><span class="text-gray-500">If cell ${operatorText} '${m.if}' &rarr;</span> '${m.then}'</div>`
+                const thenContent = m.then.replace(/<p><br><\/p>/g, '').replace(/<p>/g, '&lt;p&gt;').replace(/<\/p>/g, '&lt;/p&gt;');
+                return `<div class="text-xs ml-4"><span class="text-gray-500">If cell ${operatorText} '${m.if}' &rarr;</span> ${thenContent}</div>`
             }).join('');
             if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
     
@@ -400,20 +424,18 @@ export default class ModalManager {
         if (!param) return;
     
         this.editingParamId = paramId;
+        this.mappingQuillInstances = {}; // Clear old instances
     
         // Hide management modal and show the creation/edit modal
         document.getElementById('manage-custom-params-modal').classList.add('hidden');
         document.getElementById('custom-param-modal').classList.remove('hidden');
     
-        // Update modal title and button text for editing context
         document.getElementById('custom-param-modal-title').textContent = 'Edit Custom Parameter';
         document.getElementById('save-custom-param-button').textContent = 'Update Parameter';
     
-        // Populate the form with the parameter's data
         document.getElementById('param-name').value = param.name;
         document.getElementById('param-source-column').value = param.sourceColumn;
     
-        // Clear existing mapping rows and add new ones based on the parameter's mappings
         const mappingContainer = document.getElementById('param-mapping-container');
         mappingContainer.innerHTML = '';
         if (param.mappings) {
