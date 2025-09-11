@@ -1,4 +1,4 @@
-// V-1.2 - 2025-09-11 - 11:31 AM EDT
+// V-1.3 - 2025-09-11 - 11:37 AM EDT
 
 /**
  * @fileoverview This file contains constants and configurations for the Personalized Email add-in.
@@ -30,6 +30,34 @@ export const standardParameters = [
     'Assigned'
 ];
 
+// --- QUILL EDITOR CONFIGURATION ---
+// Settings for the Quill rich text editor.
+export const QUILL_EDITOR_CONFIG = {
+    theme: 'snow',
+    modules: {
+        toolbar: [
+            ['bold', 'italic', 'underline'],
+            [{'list': 'ordered'}, {'list': 'bullet'}],
+            [{'color': []}, {'background': []}],
+            ['link']
+        ]
+    }
+};
+
+// --- DATA MAPPING ---
+// Defines how to map spreadsheet columns to data fields.
+
+// Maps standard parameter names to possible column headers in the Excel sheet.
+// The names are case-insensitive.
+export const COLUMN_MAPPINGS = {
+    StudentName: ["studentname", "student name"],
+    StudentEmail: ["student email", "school email", "email"],
+    PersonalEmail: ["personal email", "otheremail"],
+    Grade: ["grade", "course grade"],
+    DaysOut: ["days out", "daysout"],
+    Assigned: ["assigned"]
+};
+
 
 // --- POWER AUTOMATE CONFIGURATION ---
 // Defines the structure of the data sent to the Power Automate flow.
@@ -50,3 +78,4 @@ export const PAYLOAD_SCHEMA = {
         "required": ["from", "to", "subject", "body"]
     }
 };
+
