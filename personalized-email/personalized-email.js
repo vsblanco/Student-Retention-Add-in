@@ -1,4 +1,4 @@
-// V-1.7 - 2025-09-11 - 12:29 PM EDT
+// V-1.8 - 2025-09-11 - 12:35 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -198,16 +198,32 @@ async function createConnection() {
 
 
 function evaluateMapping(cellValue, mapping) {
-    const cell = String(cellValue).trim().toLowerCase();
-    const condition = String(mapping.if).trim().toLowerCase();
+    const cellStr = String(cellValue).trim().toLowerCase();
+    const conditionStr = String(mapping.if).trim().toLowerCase();
+
+    // Attempt to convert to numbers for numerical comparisons
+    const cellNum = parseFloat(cellValue);
+    const conditionNum = parseFloat(mapping.if);
 
     switch (mapping.operator) {
-        case 'eq': return cell === condition;
-        case 'neq': return cell !== condition;
-        case 'contains': return cell.includes(condition);
-        case 'does_not_contain': return !cell.includes(condition);
-        case 'starts_with': return cell.startsWith(condition);
-        case 'ends_with': return cell.endsWith(condition);
+        // Text operators
+        case 'eq': return cellStr === conditionStr;
+        case 'neq': return cellStr !== conditionStr;
+        case 'contains': return cellStr.includes(conditionStr);
+        case 'does_not_contain': return !cellStr.includes(conditionStr);
+        case 'starts_with': return cellStr.startsWith(conditionStr);
+        case 'ends_with': return cellStr.endsWith(conditionStr);
+        
+        // Numerical operators
+        case 'gt':
+            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum > conditionNum;
+        case 'lt':
+            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum < conditionNum;
+        case 'gte':
+            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum >= conditionNum;
+        case 'lte':
+            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum <= conditionNum;
+            
         default: return false;
     }
 }
