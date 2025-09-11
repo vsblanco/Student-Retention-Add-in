@@ -1,4 +1,4 @@
-// V-1.9 - 2025-09-11 - 12:48 PM EDT
+// V-2.2 - 2025-09-11 - 1:41 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS } from './constants.js';
 import ModalManager from './modal.js';
@@ -333,10 +333,25 @@ async function getStudentData() {
 
 const renderTemplate = (template, data) => {
     if (!template) return '';
-    return template.replace(/\{(\w+)\}/g, (match, key) => {
-        return (data[key] ?? match);
-    });
+    let result = template;
+    let iterations = 0;
+    const maxIterations = 10; // Safeguard against infinite loops
+
+    const regex = /\{(\w+)\}/g;
+    
+    // Keep replacing while the regex finds a match and we are under the iteration limit
+    while (result.match(regex) && iterations < maxIterations) {
+        result = result.replace(regex, (match, key) => {
+            // If the key exists in the student's data object, replace it.
+            // Otherwise, keep the original placeholder for the next pass or the final result.
+            return data.hasOwnProperty(key) ? data[key] : match;
+        });
+        iterations++;
+    }
+
+    return result;
 };
+
 
 const renderCCTemplate = (recipients, data) => {
     if (!recipients || recipients.length === 0) return '';
