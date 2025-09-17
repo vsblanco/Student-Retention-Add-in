@@ -1,4 +1,4 @@
-// 2025-09-17 - 1:02 PM EDT - V-2.8
+// 2025-09-17 - 1:33 PM EDT - V-2.9
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
@@ -40,9 +40,12 @@ export default class ModalManager {
         document.getElementById('save-custom-param-button').onclick = this.saveCustomParameter.bind(this);
         document.getElementById('add-mapping-button').onclick = () => this.addMappingRow();
         document.getElementById('manage-custom-params-button').onclick = this.showManageCustomParamsModal.bind(this);
-
-        // NEW: Listener for Logic Type dropdown
         document.getElementById('logic-type-dropdown').onchange = this.handleLogicTypeChange.bind(this);
+
+        // Custom Script Buttons
+        document.getElementById('import-script-button').onclick = () => document.getElementById('script-file-input').click();
+        document.getElementById('script-file-input').onchange = this.handleScriptImport.bind(this);
+        document.getElementById('scan-script-button').onclick = this.scanScriptForInputs.bind(this);
     }
 
     async showExample() {
@@ -266,12 +269,16 @@ export default class ModalManager {
         document.getElementById('param-name').value = '';
         document.getElementById('param-source-column').value = '';
         
-        // Reset logic type dropdown and hide both logic containers
+        // Reset logic type dropdown and hide all logic containers
         document.getElementById('logic-type-dropdown').value = ''; 
         document.getElementById('value-mapping-logic-container').classList.add('hidden');
         document.getElementById('custom-script-logic-container').classList.add('hidden');
         
         document.getElementById('param-mapping-container').innerHTML = '';
+        document.getElementById('custom-script-editor').value = '';
+        document.getElementById('script-variable-inputs-container').classList.add('hidden');
+        document.getElementById('script-inputs-list').innerHTML = '';
+
         document.getElementById('save-param-status').textContent = '';
         
         document.getElementById('custom-param-modal').classList.remove('hidden');
@@ -282,11 +289,9 @@ export default class ModalManager {
         const mappingContainer = document.getElementById('value-mapping-logic-container');
         const scriptContainer = document.getElementById('custom-script-logic-container');
 
-        // Hide both containers initially
         mappingContainer.classList.add('hidden');
         scriptContainer.classList.add('hidden');
 
-        // Show the selected one
         if (selectedType === 'value-mapping') {
             mappingContainer.classList.remove('hidden');
         } else if (selectedType === 'custom-script') {
@@ -357,6 +362,8 @@ export default class ModalManager {
         const sourceColumn = document.getElementById('param-source-column').value;
         const logicType = document.getElementById('logic-type-dropdown').value;
         const mappings = [];
+        let script = null;
+        let scriptInputs = null;
         
         if (logicType === 'value-mapping') {
             document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
@@ -370,9 +377,15 @@ export default class ModalManager {
                     mappings.push({ if: ifValue, operator, then: thenValue });
                 }
             });
+        } else if (logicType === 'custom-script') {
+            script = document.getElementById('custom-script-editor').value;
+            scriptInputs = {};
+            document.querySelectorAll('.script-input-field').forEach(input => {
+                scriptInputs[input.dataset.variableName] = input.value;
+            });
         }
     
-        const paramData = { name, sourceColumn, logicType: logicType || null, mappings };
+        const paramData = { name, sourceColumn, logicType: logicType || null, mappings, script, scriptInputs };
     
         status.textContent = 'Saving...';
         status.style.color = 'gray';
@@ -469,15 +482,31 @@ export default class ModalManager {
         document.getElementById('param-name').value = param.name;
         document.getElementById('param-source-column').value = param.sourceColumn;
     
-        // Set logic type dropdown and show correct UI
         const logicDropdown = document.getElementById('logic-type-dropdown');
         logicDropdown.value = param.logicType || '';
         this.handleLogicTypeChange(); 
 
         const mappingContainer = document.getElementById('param-mapping-container');
         mappingContainer.innerHTML = '';
+        const scriptEditor = document.getElementById('custom-script-editor');
+        scriptEditor.value = '';
+        document.getElementById('script-variable-inputs-container').classList.add('hidden');
+        document.getElementById('script-inputs-list').innerHTML = '';
+
         if (param.logicType === 'value-mapping' && param.mappings) {
             param.mappings.forEach(mapping => this.addMappingRow(mapping));
+        } else if (param.logicType === 'custom-script') {
+            scriptEditor.value = param.script || '';
+            if (param.scriptInputs) {
+                const variables = Object.keys(param.scriptInputs);
+                this.generateScriptInputUI(variables);
+                variables.forEach(varName => {
+                    const input = document.getElementById(`script-input-${varName}`);
+                    if (input) {
+                        input.value = param.scriptInputs[varName] || '';
+                    }
+                });
+            }
         }
     }
     
@@ -489,4 +518,70 @@ export default class ModalManager {
         await this.app.populateParameterButtons();
         await this.showManageCustomParamsModal();
     }
+
+    // --- Custom Script Methods ---
+
+    handleScriptImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const scriptText = e.target.result;
+            document.getElementById('custom-script-editor').value = scriptText;
+            this.scanScriptForInputs(); // Automatically scan after import
+        };
+        reader.readAsText(file);
+
+        event.target.value = null; // Reset file input
+    }
+
+    scanScriptForInputs() {
+        const scriptText = document.getElementById('custom-script-editor').value;
+        const variables = this.parseScriptForUninitializedLets(scriptText);
+        this.generateScriptInputUI(variables);
+    }
+
+    parseScriptForUninitializedLets(scriptText) {
+        const letStatementRegex = /\blet\s+([^;]+);/g;
+        const uninitializedVars = new Set();
+        let match;
+
+        while ((match = letStatementRegex.exec(scriptText)) !== null) {
+            const declarations = match[1].split(',');
+            declarations.forEach(decl => {
+                if (!decl.includes('=')) {
+                    const varName = decl.trim();
+                    if (varName) {
+                        uninitializedVars.add(varName);
+                    }
+                }
+            });
+        }
+        return Array.from(uninitializedVars);
+    }
+
+    generateScriptInputUI(variables) {
+        const container = document.getElementById('script-variable-inputs-container');
+        const list = document.getElementById('script-inputs-list');
+        list.innerHTML = '';
+
+        if (variables.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        variables.forEach(varName => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-2';
+            div.innerHTML = `
+                <label for="script-input-${varName}" class="text-sm font-medium text-gray-700 w-1/3 text-right">${varName}</label>
+                <input type="text" id="script-input-${varName}" data-variable-name="${varName}" class="script-input-field mt-1 block w-2/3 px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="Source Column Name">
+            `;
+            list.appendChild(div);
+        });
+
+        container.classList.remove('hidden');
+    }
 }
+

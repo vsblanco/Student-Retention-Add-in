@@ -1,4 +1,4 @@
-<!-- 2025-09-17 - 1:02 PM EDT - V-2.8 -->
+<!-- 2025-09-17 - 1:33 PM EDT - V-2.9 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -285,9 +285,25 @@
                         <!-- CUSTOM SCRIPT CONTAINER -->
                         <div id="custom-script-logic-container" class="hidden">
                              <h4 class="text-sm font-medium text-gray-700 mb-2">Custom Script</h4>
-                             <div class="p-4 border rounded-md bg-gray-100 text-gray-500 text-sm">
-                                Work in progress. This feature will allow you to write a small script to transform the cell value.
-                             </div>
+                             <div class="space-y-3">
+                                <div>
+                                    <button id="import-script-button" class="text-xs text-blue-600 hover:underline">+ Import Script from File</button>
+                                    <input type="file" id="script-file-input" class="hidden" accept=".js,.txt">
+                                </div>
+                                <textarea id="custom-script-editor" class="w-full h-32 p-2 border rounded-md font-mono text-xs bg-gray-50 focus:bg-white transition-colors" placeholder="Paste your script here or import from a file..."></textarea>
+                                
+                                <div class="flex justify-end">
+                                    <button id="scan-script-button" class="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300">Scan for Inputs</button>
+                                </div>
+                                
+                                <div id="script-variable-inputs-container" class="hidden space-y-2 border-t pt-3 mt-3">
+                                    <h5 class="text-xs font-medium text-gray-600">Script Inputs</h5>
+                                    <p class="text-xs text-gray-500">Provide a source column name for each required script input.</p>
+                                    <div id="script-inputs-list" class="space-y-2">
+                                        <!-- Dynamic inputs will be generated here -->
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -326,3 +342,4 @@
     </div>
 </body>
 </html>
+
