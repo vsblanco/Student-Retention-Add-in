@@ -1,4 +1,4 @@
-// V-2.1 - 2025-09-11 - 1:31 PM EDT
+// 2025-09-17 - 1:02 PM EDT - V-2.8
 /**
  * @fileoverview Manages all modal dialog interactions for the Personalized Email add-in.
  */
@@ -40,6 +40,9 @@ export default class ModalManager {
         document.getElementById('save-custom-param-button').onclick = this.saveCustomParameter.bind(this);
         document.getElementById('add-mapping-button').onclick = () => this.addMappingRow();
         document.getElementById('manage-custom-params-button').onclick = this.showManageCustomParamsModal.bind(this);
+
+        // NEW: Listener for Logic Type dropdown
+        document.getElementById('logic-type-dropdown').onchange = this.handleLogicTypeChange.bind(this);
     }
 
     async showExample() {
@@ -262,10 +265,33 @@ export default class ModalManager {
 
         document.getElementById('param-name').value = '';
         document.getElementById('param-source-column').value = '';
+        
+        // Reset logic type dropdown and hide both logic containers
+        document.getElementById('logic-type-dropdown').value = ''; 
+        document.getElementById('value-mapping-logic-container').classList.add('hidden');
+        document.getElementById('custom-script-logic-container').classList.add('hidden');
+        
         document.getElementById('param-mapping-container').innerHTML = '';
         document.getElementById('save-param-status').textContent = '';
         
         document.getElementById('custom-param-modal').classList.remove('hidden');
+    }
+
+    handleLogicTypeChange() {
+        const selectedType = document.getElementById('logic-type-dropdown').value;
+        const mappingContainer = document.getElementById('value-mapping-logic-container');
+        const scriptContainer = document.getElementById('custom-script-logic-container');
+
+        // Hide both containers initially
+        mappingContainer.classList.add('hidden');
+        scriptContainer.classList.add('hidden');
+
+        // Show the selected one
+        if (selectedType === 'value-mapping') {
+            mappingContainer.classList.remove('hidden');
+        } else if (selectedType === 'custom-script') {
+            scriptContainer.classList.remove('hidden');
+        }
     }
     
     addMappingRow(mapping = {}) {
@@ -315,7 +341,6 @@ export default class ModalManager {
         const nameInput = document.getElementById('param-name');
         const name = nameInput.value.trim();
     
-        // Validation
         if (!/^[a-zA-Z0-9]+$/.test(name)) {
             status.textContent = 'Name must be alphanumeric with no spaces.';
             status.style.color = 'red';
@@ -330,20 +355,24 @@ export default class ModalManager {
         }
     
         const sourceColumn = document.getElementById('param-source-column').value;
+        const logicType = document.getElementById('logic-type-dropdown').value;
         const mappings = [];
-        document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
-            const editorId = row.dataset.editorId;
-            const quill = this.mappingQuillInstances[editorId];
-            const ifValue = row.querySelector('.mapping-if').value.trim();
-            const operator = row.querySelector('.mapping-operator').value;
-            const thenValue = quill && quill.getText().trim().length > 0 ? quill.root.innerHTML : '';
+        
+        if (logicType === 'value-mapping') {
+            document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
+                const editorId = row.dataset.editorId;
+                const quill = this.mappingQuillInstances[editorId];
+                const ifValue = row.querySelector('.mapping-if').value.trim();
+                const operator = row.querySelector('.mapping-operator').value;
+                const thenValue = quill && quill.getText().trim().length > 0 ? quill.root.innerHTML : '';
 
-            if (ifValue) { 
-                mappings.push({ if: ifValue, operator, then: thenValue });
-            }
-        });
+                if (ifValue) { 
+                    mappings.push({ if: ifValue, operator, then: thenValue });
+                }
+            });
+        }
     
-        const paramData = { name, sourceColumn, mappings };
+        const paramData = { name, sourceColumn, logicType: logicType || null, mappings };
     
         status.textContent = 'Saving...';
         status.style.color = 'gray';
@@ -388,12 +417,17 @@ export default class ModalManager {
         params.forEach(param => {
             const div = document.createElement('div');
             div.className = 'p-3 border-b';
-            let mappingsHtml = param.mappings.map(m => {
-                const operatorText = (MAPPING_OPERATORS.find(op => op.value === m.operator) || {}).text || 'is';
-                const thenContent = m.then.replace(/<p><br><\/p>/g, '').replace(/<p>/g, '&lt;p&gt;').replace(/<\/p>/g, '&lt;/p&gt;');
-                return `<div class="text-xs ml-4"><span class="text-gray-500">If cell ${operatorText} '${m.if}' &rarr;</span> ${thenContent}</div>`
-            }).join('');
-            if (!mappingsHtml) mappingsHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+            let logicHtml = '';
+            if (param.logicType === 'value-mapping') {
+                logicHtml = param.mappings.map(m => {
+                    const operatorText = (MAPPING_OPERATORS.find(op => op.value === m.operator) || {}).text || 'is';
+                    const thenContent = m.then.replace(/<p><br><\/p>/g, '').replace(/<p>/g, '&lt;p&gt;').replace(/<\/p>/g, '&lt;/p&gt;');
+                    return `<div class="text-xs ml-4"><span class="text-gray-500">If cell ${operatorText} '${m.if}' &rarr;</span> ${thenContent}</div>`
+                }).join('');
+                if (!logicHtml) logicHtml = '<div class="text-xs ml-4 text-gray-400">No mappings</div>';
+            } else if (param.logicType === 'custom-script') {
+                logicHtml = '<div class="text-xs ml-4 text-gray-400">Uses a Custom Script.</div>'
+            }
     
             div.innerHTML = `
                 <div class="flex justify-between items-start">
@@ -406,7 +440,7 @@ export default class ModalManager {
                          <button data-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
                     </div>
                 </div>
-                <div class="mt-2 text-sm">${mappingsHtml}</div>
+                <div class="mt-2 text-sm">${logicHtml}</div>
             `;
             listContainer.appendChild(div);
         });
@@ -424,9 +458,8 @@ export default class ModalManager {
         if (!param) return;
     
         this.editingParamId = paramId;
-        this.mappingQuillInstances = {}; // Clear old instances
+        this.mappingQuillInstances = {};
     
-        // Hide management modal and show the creation/edit modal
         document.getElementById('manage-custom-params-modal').classList.add('hidden');
         document.getElementById('custom-param-modal').classList.remove('hidden');
     
@@ -436,9 +469,14 @@ export default class ModalManager {
         document.getElementById('param-name').value = param.name;
         document.getElementById('param-source-column').value = param.sourceColumn;
     
+        // Set logic type dropdown and show correct UI
+        const logicDropdown = document.getElementById('logic-type-dropdown');
+        logicDropdown.value = param.logicType || '';
+        this.handleLogicTypeChange(); 
+
         const mappingContainer = document.getElementById('param-mapping-container');
         mappingContainer.innerHTML = '';
-        if (param.mappings) {
+        if (param.logicType === 'value-mapping' && param.mappings) {
             param.mappings.forEach(mapping => this.addMappingRow(mapping));
         }
     }
