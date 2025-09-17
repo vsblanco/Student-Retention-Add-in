@@ -1,4 +1,4 @@
-// V-1.1 - 2025-09-17 - 11:57 AM EDT
+// V-1.3 - 2025-09-17 - 12:27 PM EDT
 
 // A mapping of modal IDs to their corresponding wrapper elements.
 const MODAL_ELEMENTS = {
@@ -45,13 +45,15 @@ export default class ModalManager {
             addMappingButton: document.getElementById('add-mapping-button'),
             saveParamStatus: document.getElementById('save-param-status'),
 
-            // New elements for Office Script parameters
+            // New elements for Custom Script parameters
             paramTypeMappingRadio: document.getElementById('param-type-mapping'),
             paramTypeScriptRadio: document.getElementById('param-type-script'),
             mappingSection: document.getElementById('param-logic-mapping-section'),
             scriptSection: document.getElementById('param-logic-script-section'),
             sourceColumnDesc: document.getElementById('param-source-column-desc'),
-            officeScriptSelect: document.getElementById('param-office-script')
+            paramCustomScriptCode: document.getElementById('param-custom-script-code'),
+            testCustomScriptButton: document.getElementById('test-custom-script-button'),
+            customScriptTestOutput: document.getElementById('custom-script-test-output')
         };
     }
 
@@ -69,11 +71,12 @@ export default class ModalManager {
         // Custom Param Modal listeners
         document.getElementById('save-custom-param-button').onclick = () => this._saveCustomParameter();
         this.elements.addMappingButton.onclick = () => this._addMappingRow();
+        this.elements.testCustomScriptButton.onclick = () => this._testCustomScript();
+
 
         // New listeners for parameter type selection
         this.elements.paramTypeMappingRadio.addEventListener('change', this._toggleParamLogicType.bind(this));
         this.elements.paramTypeScriptRadio.addEventListener('change', this._toggleParamLogicType.bind(this));
-
 
         // General Modal Close Buttons
         this._bindCloseAction('close-example-modal-button', 'example');
@@ -127,7 +130,7 @@ export default class ModalManager {
     showSendConfirmModal = async () => {
         try {
             await this.appContext.getStudentData(); // Ensure student data is loaded
-            const studentCount = this.appContext.getStudentData.length;
+            const studentCount = this.appContext.studentDataCache.length;
             document.getElementById('send-confirm-message').textContent = `You are about to send personalized emails to ${studentCount} student(s). Do you want to proceed?`;
             this.show('send-confirm');
         } catch (error) {
@@ -137,10 +140,12 @@ export default class ModalManager {
 
     showExampleModal = async () => {
         try {
-            const studentData = await this.appContext.getStudentData();
+            await this.appContext.getStudentData();
+            const studentData = this.appContext.studentDataCache;
+
             if (studentData.length === 0) {
-                this.appContext.status.textContent = 'No student data available to generate an example.';
-                this.appContext.status.style.color = 'orange';
+                document.getElementById('status').textContent = 'No student data available to generate an example.';
+                document.getElementById('status').style.color = 'orange';
                 return;
             }
             const firstStudent = studentData[0];
@@ -175,9 +180,6 @@ export default class ModalManager {
         // Reset the UI to the default state (Value Mapping selected)
         this.elements.paramTypeMappingRadio.checked = true;
         this._toggleParamLogicType();
-
-        // Fetch the available Office Scripts and populate the dropdown
-        this._fetchAndPopulateOfficeScripts();
         
         if (paramToEdit) {
             this.elements.customParamModalTitle.textContent = "Edit Custom Parameter";
@@ -211,6 +213,8 @@ export default class ModalManager {
         this.elements.paramNameInput.value = '';
         this.elements.paramSourceColumnInput.value = '';
         this.elements.paramMappingContainer.innerHTML = '';
+        this.elements.paramCustomScriptCode.value = "return inputValue;";
+        this.elements.customScriptTestOutput.textContent = '';
         this.setSaveParamStatus('');
     }
 
@@ -220,10 +224,7 @@ export default class ModalManager {
         
         if (param.type === 'script') {
             this.elements.paramTypeScriptRadio.checked = true;
-            // We need to wait for scripts to be fetched before setting the value
-            this._fetchAndPopulateOfficeScripts().then(() => {
-                this.elements.officeScriptSelect.value = param.scriptId;
-            });
+            this.elements.paramCustomScriptCode.value = param.scriptCode || "return inputValue;";
         } else { // Default to 'mapping' for older params or explicitly set
             this.elements.paramTypeMappingRadio.checked = true;
             if (param.mappings) {
@@ -240,41 +241,11 @@ export default class ModalManager {
         if (this.elements.paramTypeScriptRadio.checked) {
             this.elements.mappingSection.classList.add('hidden');
             this.elements.scriptSection.classList.remove('hidden');
-            this.elements.sourceColumnDesc.textContent = "This column's value for a student will be passed as an argument to the selected script.";
+            this.elements.sourceColumnDesc.textContent = "This column's value for a student will be passed as 'inputValue' to your script.";
         } else { // Mapping is checked
             this.elements.mappingSection.classList.remove('hidden');
             this.elements.scriptSection.classList.add('hidden');
             this.elements.sourceColumnDesc.textContent = "The column in your sheet that this parameter will read from.";
-        }
-    }
-
-    /**
-     * Fetches Office Scripts from the workbook and populates the dropdown.
-     */
-    async _fetchAndPopulateOfficeScripts() {
-        this.elements.officeScriptSelect.innerHTML = '<option value="">Loading scripts...</option>';
-        this.elements.officeScriptSelect.disabled = true;
-        try {
-            await Excel.run(async (context) => {
-                const scripts = context.workbook.scripts.load("items");
-                await context.sync();
-                
-                this.elements.officeScriptSelect.innerHTML = '<option value="">-- Select a script --</option>';
-                if (scripts.items.length === 0) {
-                    this.elements.officeScriptSelect.innerHTML = '<option value="">No scripts found in workbook</option>';
-                } else {
-                    scripts.items.forEach(script => {
-                        const option = document.createElement('option');
-                        option.value = script.id;
-                        option.textContent = script.name;
-                        this.elements.officeScriptSelect.appendChild(option);
-                    });
-                    this.elements.officeScriptSelect.disabled = false;
-                }
-            });
-        } catch (error) {
-            console.error("Error fetching Office Scripts:", error);
-            this.elements.officeScriptSelect.innerHTML = '<option value="">Error loading scripts</option>';
         }
     }
     
@@ -286,6 +257,32 @@ export default class ModalManager {
         // Implementation to read mapping data from the UI
         return [];
     }
+
+    _testCustomScript() {
+        const code = this.elements.paramCustomScriptCode.value;
+        const outputElement = this.elements.customScriptTestOutput;
+
+        const mockInputValue = "Test Value";
+        const mockRowData = {
+            FirstName: "John",
+            LastName: "Doe",
+            Grade: 85,
+            DaysOut: 3,
+            StudentEmail: "john.doe@example.com"
+        };
+        
+        try {
+            // Using new Function() is safer than eval()
+            const scriptFunction = new Function('inputValue', 'rowData', code);
+            const result = scriptFunction(mockInputValue, mockRowData);
+            outputElement.textContent = `Output:\n${JSON.stringify(result, null, 2)}`;
+            outputElement.style.color = 'black';
+        } catch (error) {
+            outputElement.textContent = `Error:\n${error.message}`;
+            outputElement.style.color = 'red';
+        }
+    }
+
 
     async _saveCustomParameter() {
         const paramName = this.elements.paramNameInput.value.trim().replace(/\s+/g, '');
@@ -303,14 +300,13 @@ export default class ModalManager {
         };
         
         if (this.elements.paramTypeScriptRadio.checked) {
-            const scriptSelect = this.elements.officeScriptSelect;
-            if (!scriptSelect.value) {
-                this.setSaveParamStatus('Please select a script.', true);
+            const scriptCode = this.elements.paramCustomScriptCode.value;
+            if (!scriptCode) {
+                 this.setSaveParamStatus('Script code cannot be empty.', true);
                 return;
             }
             newParam.type = 'script';
-            newParam.scriptId = scriptSelect.value;
-            newParam.scriptName = scriptSelect.options[scriptSelect.selectedIndex].text;
+            newParam.scriptCode = scriptCode;
             newParam.mappings = []; // Ensure mappings array is empty for script type
         } else {
             newParam.type = 'mapping';
@@ -346,3 +342,4 @@ export default class ModalManager {
         this.elements.saveParamStatus.style.color = isError ? 'red' : 'green';
     }
 }
+
