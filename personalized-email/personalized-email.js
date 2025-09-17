@@ -1,4 +1,4 @@
-// V-3.5 - 2025-09-17 - 3:41 PM EDT
+// V-3.6 - 2025-09-17 - 4:00 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -342,48 +342,45 @@ async function getStudentData() {
                     let value = '';
                     if (param.logicType === 'custom-script' && param.script) {
                         try {
-                            const scriptArgs = {};
+                            const argNames = ['getWorksheet', 'sourceColumnValue'];
+                            const argValues = [getWorksheetData, '']; // Placeholder for sourceColumnValue
+
                             let userScript = param.script;
+                            const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                            if (mainSourceColIndex !== -1) {
+                                argValues[1] = row[mainSourceColIndex];
+                            }
 
                             if (param.scriptInputs) {
                                 for (const varName in param.scriptInputs) {
                                     const sourceColName = param.scriptInputs[varName];
                                     const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
-                                    scriptArgs[varName] = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
+                                    const varValue = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
                                     
+                                    argNames.push(varName);
+                                    argValues.push(varValue);
+
                                     const declarationRegex = new RegExp(`\\blet\\s+${varName}\\s*;`, 'g');
                                     userScript = userScript.replace(declarationRegex, '');
                                 }
                             }
                 
-                            const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
-                            const sourceColumnValue = (mainSourceColIndex !== -1) ? row[mainSourceColIndex] : '';
-                            
-                            let scriptBodyToInject;
+                            let finalScriptBody;
                             const isAsync = /\bawait\b/.test(userScript);
                             const hasReturn = /\breturn\b/.test(userScript);
 
                             if (isAsync) {
-                                // Asynchronous scripts MUST have an explicit return.
-                                scriptBodyToInject = userScript;
+                                finalScriptBody = hasReturn ? userScript : `return (async () => { ${userScript} })();`;
+                                if (!hasReturn) console.warn(`Warning: Async script for parameter "${param.name}" is missing an explicit 'return' statement.`);
                             } else {
-                                // Synchronous scripts can have an implicit return.
-                                scriptBodyToInject = hasReturn ? userScript : `return (() => { ${userScript} })();`;
+                                finalScriptBody = hasReturn ? userScript : `return (() => { "use strict"; ${userScript} })();`;
                             }
 
-                            const scriptToExecute = `
-                                (async () => {
-                                    "use strict";
-                                    const getWorksheet = async (name) => getWorksheetData(name);
-                                    const sourceColumnValue = ${JSON.stringify(sourceColumnValue)};
-                                    ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
-                                    
-                                    // --- User Script ---
-                                    ${scriptBodyToInject}
-                                })()
-                            `;
+                            const executor = isAsync 
+                                ? new Function(...argNames, `return (async () => { "use strict"; ${finalScriptBody} })();`)
+                                : new Function(...argNames, finalScriptBody);
                             
-                            value = await new Function(`return ${scriptToExecute}`)();
+                            value = await executor(...argValues);
 
                         } catch (e) {
                             console.error(`Error executing script for parameter "${param.name}":`, e);
