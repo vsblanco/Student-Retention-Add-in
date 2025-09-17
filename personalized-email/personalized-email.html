@@ -1,4 +1,4 @@
-<!-- V-2.3 - 2025-09-17 - 12:27 PM EDT -->
+<!-- V-2.1 - 2025-09-11 - 1:31 PM EDT -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -255,46 +255,18 @@
                     </div>
 
                     <div class="space-y-4 border-t pt-4">
-                         <div>
-                            <label class="block text-sm font-medium text-gray-700">Parameter Logic Type</label>
-                            <div class="mt-2 flex items-center space-x-4">
-                                <div class="flex items-center">
-                                    <input id="param-type-mapping" name="param-type" type="radio" checked class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
-                                    <label for="param-type-mapping" class="ml-2 block text-sm text-gray-900">Value Mapping</label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input id="param-type-script" name="param-type" type="radio" class="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300">
-                                    <label for="param-type-script" class="ml-2 block text-sm text-gray-900">Custom Script</label>
-                                </div>
-                            </div>
-                        </div>
-
                         <div>
-                            <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column (for Input)</label>
+                            <label for="param-source-column" class="block text-sm font-medium text-gray-700">Source Column</label>
                             <input type="text" id="param-source-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Status">
-                            <p id="param-source-column-desc" class="mt-1 text-xs text-gray-500">The column in your sheet that this parameter will read from.</p>
+                            <p class="mt-1 text-xs text-gray-500">The column in your sheet that this parameter will read from.</p>
                         </div>
-                        
-                        <div id="param-logic-mapping-section">
+                        <div>
                             <h4 class="text-sm font-medium text-gray-700 mb-2">Value Mappings (Optional)</h4>
                             <p class="mt-1 text-xs text-gray-500 mb-2">If a cell's value matches a condition, the parameter will be replaced by the corresponding 'then' value. If no conditions match, the original cell value will be used.</p>
                             <div id="param-mapping-container" class="space-y-2">
                                 <!-- Mapping rows will be inserted here -->
                             </div>
                             <button id="add-mapping-button" class="mt-2 text-xs text-blue-600 hover:underline">+ Add Mapping</button>
-                        </div>
-
-                        <div id="param-logic-script-section" class="hidden">
-                             <h4 class="text-sm font-medium text-gray-700 mb-2">Custom JavaScript</h4>
-                             <div>
-                                <label for="param-custom-script-code" class="block text-sm font-medium text-gray-700">Script Code</label>
-                                <textarea id="param-custom-script-code" rows="6" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm font-mono text-xs focus:ring-blue-500 focus:border-blue-500"></textarea>
-                                <p class="mt-1 text-xs text-gray-500">Your script will receive `inputValue` (from the Source Column) and `rowData` (the entire student's data object). It must `return` a value.</p>
-                             </div>
-                             <div class="mt-2">
-                                <button id="test-custom-script-button" class="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300">Test Script</button>
-                                <pre id="custom-script-test-output" class="mt-2 text-xs bg-gray-100 p-2 rounded-md h-12 overflow-y-auto"></pre>
-                             </div>
                         </div>
                     </div>
                 </div>
@@ -333,4 +305,3 @@
     </div>
 </body>
 </html>
-
