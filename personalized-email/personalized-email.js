@@ -1,4 +1,4 @@
-// V-3.6 - 2025-09-17 - 4:36 PM EDT
+// V-3.6 - 2025-09-17 - 4:00 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -10,7 +10,7 @@ let quill; // To hold the editor instance
 let ccRecipients = [];
 let customParameters = [];
 let modalManager;
-let worksheetCache = {}; // Cache for worksheet data
+let worksheetDataCache = {}; // Cache for worksheet data
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -47,10 +47,7 @@ Office.onReady((info) => {
         document.getElementById("create-connection-button").onclick = createConnection;
 
         // Dropdown listener
-        document.getElementById('recipient-list').onchange = () => {
-            toggleCustomSheetInput();
-            worksheetCache = {}; // Clear cache when recipient list changes
-        };
+        document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
         
         setupCcInput();
         const subjectInput = document.getElementById('email-subject');
@@ -88,9 +85,7 @@ async function populateParameterButtons() {
             const hasMappings = param.mappings && param.mappings.length > 0;
             const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
             
-            if (param.logicType === 'custom-script') {
-                button.className = PARAMETER_BUTTON_STYLES.script;
-            } else if (hasNested) {
+            if (hasNested) {
                 button.className = PARAMETER_BUTTON_STYLES.nested;
             } else if (hasMappings) {
                 button.className = PARAMETER_BUTTON_STYLES.mapped;
@@ -224,59 +219,58 @@ function evaluateMapping(cellValue, mapping) {
     const cellStr = String(cellValue).trim().toLowerCase();
     const conditionStr = String(mapping.if).trim().toLowerCase();
 
-    // Attempt to convert to numbers for numerical comparisons
     const cellNum = parseFloat(cellValue);
     const conditionNum = parseFloat(mapping.if);
 
     switch (mapping.operator) {
-        // Text operators
         case 'eq': return cellStr === conditionStr;
         case 'neq': return cellStr !== conditionStr;
         case 'contains': return cellStr.includes(conditionStr);
         case 'does_not_contain': return !cellStr.includes(conditionStr);
         case 'starts_with': return cellStr.startsWith(conditionStr);
         case 'ends_with': return cellStr.endsWith(conditionStr);
-        
-        // Numerical operators
-        case 'gt':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum > conditionNum;
-        case 'lt':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum < conditionNum;
-        case 'gte':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum >= conditionNum;
-        case 'lte':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum <= conditionNum;
-            
+        case 'gt': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum > conditionNum;
+        case 'lt': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum < conditionNum;
+        case 'gte': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum >= conditionNum;
+        case 'lte': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum <= conditionNum;
         default: return false;
     }
 }
 
-async function getWorksheetData(sheetName, context) {
-    if (worksheetCache[sheetName]) {
-        return worksheetCache[sheetName];
+/**
+ * Fetches data for a given worksheet and caches it.
+ * @param {string} sheetNameToFetch The name of the worksheet to get data from.
+ * @returns {Promise<object|null>} The cached data object or null if not found.
+ */
+async function getWorksheetData(sheetNameToFetch) {
+    if (worksheetDataCache[sheetNameToFetch]) {
+        return worksheetDataCache[sheetNameToFetch];
     }
 
     try {
-        const sheet = context.workbook.worksheets.getItem(sheetName);
-        const usedRange = sheet.getUsedRange();
-        usedRange.load("values");
-        await context.sync();
-        
-        const values = usedRange.values;
-        if (!values || values.length < 1) return null;
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(sheetNameToFetch);
+            const range = sheet.getUsedRange();
+            range.load("values");
+            await context.sync();
 
-        const headers = values[0].map(h => String(h ?? '').toLowerCase());
-        const data = { headers, values: values.slice(1) };
-        
-        worksheetCache[sheetName] = data;
-        return data;
+            const values = range.values;
+            if (values.length > 1) {
+                worksheetDataCache[sheetNameToFetch] = {
+                    headers: values[0].map(h => String(h ?? '').toLowerCase()),
+                    values: values.slice(1)
+                };
+            } else {
+                 worksheetDataCache[sheetNameToFetch] = { headers: [], values: [] };
+            }
+        });
+        return worksheetDataCache[sheetNameToFetch];
     } catch (error) {
-        if (error.code === 'ItemNotFound') {
-            console.warn(`Worksheet "${sheetName}" not found.`);
-            worksheetCache[sheetName] = null; // Cache the fact that it's not found
-            return null;
+        if (error.code !== 'ItemNotFound') {
+            console.error(`Error loading '${sheetNameToFetch}' sheet:`, error);
         }
-        throw error;
+        worksheetDataCache[sheetNameToFetch] = null; // Cache null if not found
+        return null;
     }
 }
 
@@ -300,17 +294,18 @@ async function getStudentData() {
     status.textContent = `Fetching students from "${sheetName}"...`;
     status.style.color = 'gray';
     
-    studentDataCache = []; // Clear cache before fetching
+    studentDataCache = [];
+    worksheetDataCache = {}; // Reset cache for each run
 
-    await Excel.run(async (context) => {
-        try {
-            const mainSheetData = await getWorksheetData(sheetName, context);
-            if (!mainSheetData) {
-                 throw new Error(`Sheet "${sheetName}" not found or is empty.`);
-            }
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(sheetName);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values");
+            await context.sync();
 
-            const headers = mainSheetData.headers;
-            const values = mainSheetData.values;
+            const values = usedRange.values;
+            const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
             await loadCustomParameters();
 
@@ -327,8 +322,7 @@ async function getStudentData() {
                 }
             });
 
-
-            for (let i = 0; i < values.length; i++) {
+            for (let i = 1; i < values.length; i++) {
                 const row = values[i];
                 const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
@@ -344,10 +338,55 @@ async function getStudentData() {
                     Assigned: row[colIndices.Assigned] ?? ''
                 };
 
-                // Add custom parameter values to the student object
                 for (const param of customParameters) {
-                    let value = ''; // Default to empty string
-                    if (param.logicType === 'value-mapping') {
+                    let value = '';
+                    if (param.logicType === 'custom-script' && param.script) {
+                        try {
+                            const argNames = ['getWorksheet', 'sourceColumnValue'];
+                            const argValues = [getWorksheetData, '']; // Placeholder for sourceColumnValue
+
+                            let userScript = param.script;
+                            const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                            if (mainSourceColIndex !== -1) {
+                                argValues[1] = row[mainSourceColIndex];
+                            }
+
+                            if (param.scriptInputs) {
+                                for (const varName in param.scriptInputs) {
+                                    const sourceColName = param.scriptInputs[varName];
+                                    const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
+                                    const varValue = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
+                                    
+                                    argNames.push(varName);
+                                    argValues.push(varValue);
+
+                                    const declarationRegex = new RegExp(`\\blet\\s+${varName}\\s*;`, 'g');
+                                    userScript = userScript.replace(declarationRegex, '');
+                                }
+                            }
+                
+                            let finalScriptBody;
+                            const isAsync = /\bawait\b/.test(userScript);
+                            const hasReturn = /\breturn\b/.test(userScript);
+
+                            if (isAsync) {
+                                finalScriptBody = hasReturn ? userScript : `return (async () => { ${userScript} })();`;
+                                if (!hasReturn) console.warn(`Warning: Async script for parameter "${param.name}" is missing an explicit 'return' statement.`);
+                            } else {
+                                finalScriptBody = hasReturn ? userScript : `return (() => { "use strict"; ${userScript} })();`;
+                            }
+
+                            const executor = isAsync 
+                                ? new Function(...argNames, `return (async () => { "use strict"; ${finalScriptBody} })();`)
+                                : new Function(...argNames, finalScriptBody);
+                            
+                            value = await executor(...argValues);
+
+                        } catch (e) {
+                            console.error(`Error executing script for parameter "${param.name}":`, e);
+                            value = `[SCRIPT ERROR]`;
+                        }
+                    } else { // Handle value-mapping logic
                         const colIndex = customParamIndices[param.name];
                         if (colIndex !== undefined) {
                             const cellValue = row[colIndex] ?? '';
@@ -365,71 +404,43 @@ async function getStudentData() {
                                 value = cellValue;
                             }
                         }
-                    } else if (param.logicType === 'custom-script' && param.script) {
-                        try {
-                            const scriptInputs = {};
-                            const inputDeclarations = [];
-                            if (param.scriptInputs) {
-                                for (const key in param.scriptInputs) {
-                                    const sourceColumn = param.scriptInputs[key];
-                                    const colIdx = headers.indexOf(sourceColumn.toLowerCase());
-                                    scriptInputs[key] = colIdx !== -1 ? row[colIdx] : undefined;
-                                    inputDeclarations.push(key);
-                                }
-                            }
-                            
-                            const getWorksheet = (name) => getWorksheetData(name, context);
-                            const tools = { getWorksheet };
-
-                            const isAsync = /await/.test(param.script);
-                            const finalScript = isAsync ? `(async () => { ${param.script} })()` : `(() => { ${param.script} })()`;
-
-                            const runner = new Function(...inputDeclarations, 'tools', finalScript);
-                            
-                            const injectedValues = inputDeclarations.map(key => scriptInputs[key]);
-                           
-                            value = await runner(...injectedValues, tools);
-
-                        } catch (e) {
-                            value = `[SCRIPT ERROR: ${e.message}]`;
-                            console.error(`Error executing script for parameter "${param.name}": ${e.stack}`);
-                        }
                     }
-                     student[param.name] = value;
+                    student[param.name] = value;
                 }
+                
                 studentDataCache.push(student);
             }
-            status.textContent = `Found ${studentDataCache.length} students.`;
-            setTimeout(() => status.textContent = '', 3000);
-        } catch (error) {
-            status.textContent = `Error: ${error.message}`;
-            status.style.color = 'red';
-            console.error(error);
-            throw error;
+        });
+
+        status.textContent = `Found ${studentDataCache.length} students.`;
+        setTimeout(() => status.textContent = '', 3000);
+
+    } catch (error) {
+        if (error.code === 'ItemNotFound') {
+            status.textContent = `Error: Sheet "${sheetName}" not found.`;
+        } else {
+            status.textContent = 'An error occurred while fetching data.';
         }
-    });
+        status.style.color = 'red';
+        console.error(error);
+        throw error;
+    }
 }
 
 const renderTemplate = (template, data) => {
     if (!template) return '';
     let result = template;
     let iterations = 0;
-    const maxIterations = 10; // Safeguard against infinite loops
-
+    const maxIterations = 10;
     const regex = /\{(\w+)\}/g;
     
-    // Keep replacing while the regex finds a match and we are under the iteration limit
     while (result.match(regex) && iterations < maxIterations) {
         result = result.replace(regex, (match, key) => {
             let valueToInsert = data.hasOwnProperty(key) ? data[key] : match;
-
-            // Check if the value is a string and looks like a single Quill paragraph
             if (typeof valueToInsert === 'string') {
                 const trimmedValue = valueToInsert.trim();
                 if (trimmedValue.startsWith('<p>') && trimmedValue.endsWith('</p>')) {
-                    // This is a simplistic check. It assumes the content is a single paragraph.
                     const innerHtml = trimmedValue.substring(3, trimmedValue.length - 4);
-                    // Only strip if it doesn't contain another block-level element.
                     if (!innerHtml.includes('<p>') && !innerHtml.includes('<div>')) {
                          valueToInsert = innerHtml;
                     }
@@ -598,7 +609,6 @@ function renderCCPills() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
     
-    // Remove only pills, not the input
     container.querySelectorAll('.cc-pill').forEach(pill => pill.remove());
 
     ccRecipients.forEach((recipient, index) => {
