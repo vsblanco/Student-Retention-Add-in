@@ -6,7 +6,7 @@ export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
 // -- PARAMETERS --
 // Standard, built-in parameters that are always available.
-export const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
+export const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
 
 // -- QUILL EDITOR SETTINGS --
 // Configuration for the main rich text editor.
@@ -39,8 +39,7 @@ export const COLUMN_MAPPINGS = {
     StudentEmail: ["student email", "school email", "email"],
     PersonalEmail: ["personal email", "otheremail"],
     Grade: ["grade", "course grade"],
-    DaysOut: ["days out", "daysout"],
-    Assigned: ["assigned"]
+    DaysOut: ["days out", "daysout"]
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
@@ -70,7 +69,7 @@ export const PARAMETER_BUTTON_STYLES = {
     // Style for custom parameters that have mappings which include other nested parameters.
     nested: 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200',
     // Style for custom parameters that are powered by a Custom Script.
-    script: 'px-2 py-1 bg-gray-700 text-white text-xs rounded hover:bg-gray-600'
+    script: 'px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600'
 };
 
 
