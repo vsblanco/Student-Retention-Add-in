@@ -1,4 +1,4 @@
-// V-2.7 - 2025-09-11 - 7:50 PM EDT
+// V-2.8 - 2025-09-17 - 4:36 PM EDT
 // -- CORE CONFIGURATION --
 // These are the primary keys used to store data within the Excel workbook's settings.
 export const EMAIL_TEMPLATES_KEY = "emailTemplates";
@@ -68,7 +68,9 @@ export const PARAMETER_BUTTON_STYLES = {
     // Style for custom parameters that have mapping rules.
     mapped: 'px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded hover:bg-purple-200',
     // Style for custom parameters that have mappings which include other nested parameters.
-    nested: 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200'
+    nested: 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200',
+    // Style for custom parameters that are powered by a Custom Script.
+    script: 'px-2 py-1 bg-gray-700 text-white text-xs rounded hover:bg-gray-600'
 };
 
 
@@ -88,4 +90,3 @@ export const PAYLOAD_SCHEMA = {
         "required": ["from", "to", "subject", "body"]
     }
 };
-
