@@ -1,4 +1,4 @@
-// V-3.4 - 2025-09-17 - 3:14 PM EDT
+// V-3.5 - 2025-09-17 - 3:41 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -359,6 +359,18 @@ async function getStudentData() {
                             const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
                             const sourceColumnValue = (mainSourceColIndex !== -1) ? row[mainSourceColIndex] : '';
                             
+                            let scriptBodyToInject;
+                            const isAsync = /\bawait\b/.test(userScript);
+                            const hasReturn = /\breturn\b/.test(userScript);
+
+                            if (isAsync) {
+                                // Asynchronous scripts MUST have an explicit return.
+                                scriptBodyToInject = userScript;
+                            } else {
+                                // Synchronous scripts can have an implicit return.
+                                scriptBodyToInject = hasReturn ? userScript : `return (() => { ${userScript} })();`;
+                            }
+
                             const scriptToExecute = `
                                 (async () => {
                                     "use strict";
@@ -367,7 +379,7 @@ async function getStudentData() {
                                     ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
                                     
                                     // --- User Script ---
-                                    ${ !/\breturn\b/.test(userScript) ? `return (() => { ${userScript} })();` : userScript }
+                                    ${scriptBodyToInject}
                                 })()
                             `;
                             
@@ -377,7 +389,7 @@ async function getStudentData() {
                             console.error(`Error executing script for parameter "${param.name}":`, e);
                             value = `[SCRIPT ERROR]`;
                         }
-                    } else {
+                    } else { // Handle value-mapping logic
                         const colIndex = customParamIndices[param.name];
                         if (colIndex !== undefined) {
                             const cellValue = row[colIndex] ?? '';
