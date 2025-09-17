@@ -1,4 +1,4 @@
-// V-2.9 - 2025-09-17 - 1:57 PM EDT
+// V-3.0 - 2025-09-17 - 2:12 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -314,11 +314,17 @@ async function getStudentData() {
                     if (param.logicType === 'custom-script' && param.script) {
                         try {
                             const scriptArgs = {};
+                            let userScript = param.script;
+
                             if (param.scriptInputs) {
                                 for (const varName in param.scriptInputs) {
                                     const sourceColName = param.scriptInputs[varName];
                                     const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
                                     scriptArgs[varName] = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
+                                    
+                                    // Remove the 'let var;' declaration from the user's script
+                                    const declarationRegex = new RegExp(`\\blet\\s+${varName}\\s*;`, 'g');
+                                    userScript = userScript.replace(declarationRegex, '');
                                 }
                             }
                 
@@ -326,11 +332,12 @@ async function getStudentData() {
                             const sourceColumnValue = (mainSourceColIndex !== -1) ? row[mainSourceColIndex] : '';
                             
                             const scriptBody = `
+                                "use strict";
                                 const sourceColumnValue = ${JSON.stringify(sourceColumnValue)};
                                 ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
                                 
                                 // --- User Script ---
-                                ${param.script}
+                                ${userScript}
                             `;
                 
                             const scriptFunction = new Function(scriptBody);
@@ -587,3 +594,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
