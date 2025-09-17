@@ -1,4 +1,4 @@
-// V-3.0 - 2025-09-17 - 2:12 PM EDT
+// V-3.4 - 2025-09-17 - 3:14 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -10,6 +10,7 @@ let quill; // To hold the editor instance
 let ccRecipients = [];
 let customParameters = [];
 let modalManager;
+let worksheetDataCache = {}; // Cache for worksheet data
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -218,30 +219,58 @@ function evaluateMapping(cellValue, mapping) {
     const cellStr = String(cellValue).trim().toLowerCase();
     const conditionStr = String(mapping.if).trim().toLowerCase();
 
-    // Attempt to convert to numbers for numerical comparisons
     const cellNum = parseFloat(cellValue);
     const conditionNum = parseFloat(mapping.if);
 
     switch (mapping.operator) {
-        // Text operators
         case 'eq': return cellStr === conditionStr;
         case 'neq': return cellStr !== conditionStr;
         case 'contains': return cellStr.includes(conditionStr);
         case 'does_not_contain': return !cellStr.includes(conditionStr);
         case 'starts_with': return cellStr.startsWith(conditionStr);
         case 'ends_with': return cellStr.endsWith(conditionStr);
-        
-        // Numerical operators
-        case 'gt':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum > conditionNum;
-        case 'lt':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum < conditionNum;
-        case 'gte':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum >= conditionNum;
-        case 'lte':
-            return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum <= conditionNum;
-            
+        case 'gt': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum > conditionNum;
+        case 'lt': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum < conditionNum;
+        case 'gte': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum >= conditionNum;
+        case 'lte': return !isNaN(cellNum) && !isNaN(conditionNum) && cellNum <= conditionNum;
         default: return false;
+    }
+}
+
+/**
+ * Fetches data for a given worksheet and caches it.
+ * @param {string} sheetNameToFetch The name of the worksheet to get data from.
+ * @returns {Promise<object|null>} The cached data object or null if not found.
+ */
+async function getWorksheetData(sheetNameToFetch) {
+    if (worksheetDataCache[sheetNameToFetch]) {
+        return worksheetDataCache[sheetNameToFetch];
+    }
+
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(sheetNameToFetch);
+            const range = sheet.getUsedRange();
+            range.load("values");
+            await context.sync();
+
+            const values = range.values;
+            if (values.length > 1) {
+                worksheetDataCache[sheetNameToFetch] = {
+                    headers: values[0].map(h => String(h ?? '').toLowerCase()),
+                    values: values.slice(1)
+                };
+            } else {
+                 worksheetDataCache[sheetNameToFetch] = { headers: [], values: [] };
+            }
+        });
+        return worksheetDataCache[sheetNameToFetch];
+    } catch (error) {
+        if (error.code !== 'ItemNotFound') {
+            console.error(`Error loading '${sheetNameToFetch}' sheet:`, error);
+        }
+        worksheetDataCache[sheetNameToFetch] = null; // Cache null if not found
+        return null;
     }
 }
 
@@ -265,10 +294,11 @@ async function getStudentData() {
     status.textContent = `Fetching students from "${sheetName}"...`;
     status.style.color = 'gray';
     
-    studentDataCache = []; // Clear cache before fetching
+    studentDataCache = [];
+    worksheetDataCache = {}; // Reset cache for each run
 
-    await Excel.run(async (context) => {
-        try {
+    try {
+        await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
@@ -308,9 +338,8 @@ async function getStudentData() {
                     Assigned: row[colIndices.Assigned] ?? ''
                 };
 
-                customParameters.forEach(param => {
-                    let value = ''; 
-                
+                for (const param of customParameters) {
+                    let value = '';
                     if (param.logicType === 'custom-script' && param.script) {
                         try {
                             const scriptArgs = {};
@@ -322,7 +351,6 @@ async function getStudentData() {
                                     const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
                                     scriptArgs[varName] = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
                                     
-                                    // Remove the 'let var;' declaration from the user's script
                                     const declarationRegex = new RegExp(`\\blet\\s+${varName}\\s*;`, 'g');
                                     userScript = userScript.replace(declarationRegex, '');
                                 }
@@ -331,22 +359,25 @@ async function getStudentData() {
                             const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
                             const sourceColumnValue = (mainSourceColIndex !== -1) ? row[mainSourceColIndex] : '';
                             
-                            const scriptBody = `
-                                "use strict";
-                                const sourceColumnValue = ${JSON.stringify(sourceColumnValue)};
-                                ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
-                                
-                                // --- User Script ---
-                                ${userScript}
+                            const scriptToExecute = `
+                                (async () => {
+                                    "use strict";
+                                    const getWorksheet = async (name) => getWorksheetData(name);
+                                    const sourceColumnValue = ${JSON.stringify(sourceColumnValue)};
+                                    ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
+                                    
+                                    // --- User Script ---
+                                    ${ !/\breturn\b/.test(userScript) ? `return (() => { ${userScript} })();` : userScript }
+                                })()
                             `;
-                
-                            const scriptFunction = new Function(scriptBody);
-                            value = scriptFunction();
+                            
+                            value = await new Function(`return ${scriptToExecute}`)();
+
                         } catch (e) {
                             console.error(`Error executing script for parameter "${param.name}":`, e);
                             value = `[SCRIPT ERROR]`;
                         }
-                    } else { // Handles "value-mapping" or older parameters without a logicType
+                    } else {
                         const colIndex = customParamIndices[param.name];
                         if (colIndex !== undefined) {
                             const cellValue = row[colIndex] ?? '';
@@ -366,45 +397,41 @@ async function getStudentData() {
                         }
                     }
                     student[param.name] = value;
-                });
+                }
                 
                 studentDataCache.push(student);
             }
-            status.textContent = `Found ${studentDataCache.length} students.`;
-            setTimeout(() => status.textContent = '', 3000);
-        } catch (error) {
-            if (error.code === 'ItemNotFound') {
-                status.textContent = `Error: Sheet "${sheetName}" not found.`;
-            } else {
-                status.textContent = 'An error occurred while fetching data.';
-            }
-            status.style.color = 'red';
-            console.error(error);
-            throw error;
+        });
+
+        status.textContent = `Found ${studentDataCache.length} students.`;
+        setTimeout(() => status.textContent = '', 3000);
+
+    } catch (error) {
+        if (error.code === 'ItemNotFound') {
+            status.textContent = `Error: Sheet "${sheetName}" not found.`;
+        } else {
+            status.textContent = 'An error occurred while fetching data.';
         }
-    });
+        status.style.color = 'red';
+        console.error(error);
+        throw error;
+    }
 }
 
 const renderTemplate = (template, data) => {
     if (!template) return '';
     let result = template;
     let iterations = 0;
-    const maxIterations = 10; // Safeguard against infinite loops
-
+    const maxIterations = 10;
     const regex = /\{(\w+)\}/g;
     
-    // Keep replacing while the regex finds a match and we are under the iteration limit
     while (result.match(regex) && iterations < maxIterations) {
         result = result.replace(regex, (match, key) => {
             let valueToInsert = data.hasOwnProperty(key) ? data[key] : match;
-
-            // Check if the value is a string and looks like a single Quill paragraph
             if (typeof valueToInsert === 'string') {
                 const trimmedValue = valueToInsert.trim();
                 if (trimmedValue.startsWith('<p>') && trimmedValue.endsWith('</p>')) {
-                    // This is a simplistic check. It assumes the content is a single paragraph.
                     const innerHtml = trimmedValue.substring(3, trimmedValue.length - 4);
-                    // Only strip if it doesn't contain another block-level element.
                     if (!innerHtml.includes('<p>') && !innerHtml.includes('<div>')) {
                          valueToInsert = innerHtml;
                     }
@@ -573,7 +600,6 @@ function renderCCPills() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
     
-    // Remove only pills, not the input
     container.querySelectorAll('.cc-pill').forEach(pill => pill.remove());
 
     ccRecipients.forEach((recipient, index) => {
