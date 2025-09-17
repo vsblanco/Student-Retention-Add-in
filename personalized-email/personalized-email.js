@@ -1,4 +1,4 @@
-// V-2.7 - 2025-09-11 - 7:50 PM EDT
+// V-2.9 - 2025-09-17 - 1:57 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -292,7 +292,6 @@ async function getStudentData() {
                 }
             });
 
-
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
                 const studentName = row[colIndices.StudentName] ?? '';
@@ -309,28 +308,59 @@ async function getStudentData() {
                     Assigned: row[colIndices.Assigned] ?? ''
                 };
 
-                // Add custom parameter values to the student object
                 customParameters.forEach(param => {
-                    const colIndex = customParamIndices[param.name];
-                    let value = ''; // Default to empty string
-                    if (colIndex !== undefined) {
-                        const cellValue = row[colIndex] ?? ''; // Default cell value to empty string if null/undefined
-                        let mappingFound = false;
-                        if (param.mappings && cellValue !== '') { // Only check mappings if there's a cell value
-                            for (const mapping of param.mappings) {
-                                if (evaluateMapping(cellValue, mapping)) {
-                                    value = mapping.then;
-                                    mappingFound = true;
-                                    break;
+                    let value = ''; 
+                
+                    if (param.logicType === 'custom-script' && param.script) {
+                        try {
+                            const scriptArgs = {};
+                            if (param.scriptInputs) {
+                                for (const varName in param.scriptInputs) {
+                                    const sourceColName = param.scriptInputs[varName];
+                                    const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
+                                    scriptArgs[varName] = (sourceColIndex !== -1) ? row[sourceColIndex] : undefined;
                                 }
                             }
+                
+                            const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                            const sourceColumnValue = (mainSourceColIndex !== -1) ? row[mainSourceColIndex] : '';
+                            
+                            const scriptBody = `
+                                const sourceColumnValue = ${JSON.stringify(sourceColumnValue)};
+                                ${Object.keys(scriptArgs).map(name => `let ${name} = ${JSON.stringify(scriptArgs[name])};`).join('\n')}
+                                
+                                // --- User Script ---
+                                ${param.script}
+                            `;
+                
+                            const scriptFunction = new Function(scriptBody);
+                            value = scriptFunction();
+                        } catch (e) {
+                            console.error(`Error executing script for parameter "${param.name}":`, e);
+                            value = `[SCRIPT ERROR]`;
                         }
-                        if (!mappingFound) {
-                            value = cellValue; // If no mapping found, use the original cell value
+                    } else { // Handles "value-mapping" or older parameters without a logicType
+                        const colIndex = customParamIndices[param.name];
+                        if (colIndex !== undefined) {
+                            const cellValue = row[colIndex] ?? '';
+                            let mappingFound = false;
+                            if (param.mappings && cellValue !== '') {
+                                for (const mapping of param.mappings) {
+                                    if (evaluateMapping(cellValue, mapping)) {
+                                        value = mapping.then;
+                                        mappingFound = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!mappingFound) {
+                                value = cellValue;
+                            }
                         }
                     }
                     student[param.name] = value;
                 });
+                
                 studentDataCache.push(student);
             }
             status.textContent = `Found ${studentDataCache.length} students.`;
