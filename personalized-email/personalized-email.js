@@ -1,4 +1,4 @@
-// V-2.7 - 2025-09-11 - 7:50 PM EDT
+// V-2.8 - 2025-09-17 - 12:27 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -17,10 +17,7 @@ Office.onReady((info) => {
         
         const appContext = {
             quill,
-            getStudentData: async () => { 
-                await getStudentData(); // Ensures cache is fresh
-                return studentDataCache;
-            },
+            getStudentData,
             renderTemplate,
             renderCCTemplate,
             getTemplates,
@@ -37,6 +34,7 @@ Office.onReady((info) => {
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
+            get studentDataCache() { return studentDataCache; }
         };
 
         modalManager = new ModalManager(appContext);
@@ -82,9 +80,12 @@ async function populateParameterButtons() {
         
         if (isCustom) {
             const hasMappings = param.mappings && param.mappings.length > 0;
+            const isScript = param.type === 'script';
             const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
             
-            if (hasNested) {
+            if (isScript) {
+                 button.className = PARAMETER_BUTTON_STYLES.script;
+            } else if (hasNested) {
                 button.className = PARAMETER_BUTTON_STYLES.nested;
             } else if (hasMappings) {
                 button.className = PARAMETER_BUTTON_STYLES.mapped;
@@ -310,27 +311,39 @@ async function getStudentData() {
                 };
 
                 // Add custom parameter values to the student object
-                customParameters.forEach(param => {
+                for (const param of customParameters) {
                     const colIndex = customParamIndices[param.name];
                     let value = ''; // Default to empty string
                     if (colIndex !== undefined) {
                         const cellValue = row[colIndex] ?? ''; // Default cell value to empty string if null/undefined
-                        let mappingFound = false;
-                        if (param.mappings && cellValue !== '') { // Only check mappings if there's a cell value
-                            for (const mapping of param.mappings) {
-                                if (evaluateMapping(cellValue, mapping)) {
-                                    value = mapping.then;
-                                    mappingFound = true;
-                                    break;
+                        
+                        if (param.type === 'script' && param.scriptCode) {
+                            try {
+                                const scriptFunction = new Function('inputValue', 'rowData', param.scriptCode);
+                                value = scriptFunction(cellValue, student);
+                            } catch (e) {
+                                console.error(`Error executing script for parameter {${param.name}} on row ${i+1}:`, e);
+                                value = '#SCRIPT_ERROR#';
+                            }
+
+                        } else if (param.type === 'mapping' || !param.type) { // Handle mapping type and legacy params
+                            let mappingFound = false;
+                            if (param.mappings && cellValue !== '') { // Only check mappings if there's a cell value
+                                for (const mapping of param.mappings) {
+                                    if (evaluateMapping(cellValue, mapping)) {
+                                        value = mapping.then;
+                                        mappingFound = true;
+                                        break;
+                                    }
                                 }
                             }
-                        }
-                        if (!mappingFound) {
-                            value = cellValue; // If no mapping found, use the original cell value
+                            if (!mappingFound) {
+                                value = cellValue; // If no mapping found, use the original cell value
+                            }
                         }
                     }
                     student[param.name] = value;
-                });
+                }
                 studentDataCache.push(student);
             }
             status.textContent = `Found ${studentDataCache.length} students.`;
@@ -557,4 +570,3 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
-
