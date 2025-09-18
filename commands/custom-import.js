@@ -1,10 +1,11 @@
-// Timestamp: 2025-09-18 02:13 PM EDT
-// Version: 1.7.0
+// Timestamp: 2025-09-18 03:03 PM EDT
+// Version: 1.8.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
- * from a single JSON file that contains both the schema and the data.
- * Version 1.7.0 adds the ability to read the URL from HYPERLINK formulas
- * when mapping the sheetKeyColumn.
+ * from a single JSON file.
+ * Version 1.8.0 adds support for encapsulated schemas (under a CUSTOM_IMPORT key)
+ * and the ability to flatten nested data arrays (e.g., a student with multiple assignments)
+ * using a `dataArrayKey` in the schema.
  */
 
 /**
@@ -50,11 +51,12 @@ export async function handleCustomImport(message, sendMessageToDialog) {
         sendMessageToDialog("Starting custom import from JSON file...");
 
         // 1. Parse and Validate the JSON Schema and Data
-        const importFile = parseAndValidateImportFile(message.data, sendMessageToDialog);
-        if (!importFile) return;
+        const importPayload = parseAndValidateImportFile(message.data, sendMessageToDialog);
+        if (!importPayload) return;
 
-        const { schema, data: sourceData } = importFile;
+        const { schema, data: sourceData } = importPayload;
         sendMessageToDialog(`Successfully validated schema: "${schema.importName}".`);
+        sendMessageToDialog(`Found ${sourceData.length} flattened rows to process.`);
 
         const allSheetNames = new Set([schema.targetSheet]);
         schema.columnMappings.forEach(m => {
@@ -107,7 +109,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 
                 const resolvedKeyColumn = findFirstMatchingHeader(schema.sheetKeyColumn, headers);
                 if (!resolvedKeyColumn) {
-                    throw new Error(`None of the specified key columns were found in sheet "${sheetName}". Please add one and try again.`);
+                    throw new Error(`None of the specified key columns ${JSON.stringify(schema.sheetKeyColumn)} were found in sheet "${sheetName}". Please add one and try again.`);
                 }
                 const keyColumnIndex = headers.indexOf(resolvedKeyColumn);
 
@@ -126,15 +128,24 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             // 5. Determine the source key mapping for each sheet's resolved key column
             const sourceKeyMappingBySheet = new Map();
             for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
-                const keyColumnName = sheetInfo.resolvedKeyColumn;
-                const keyMapping = schema.columnMappings.find(m => {
-                    const targets = Array.isArray(m.target) ? m.target : [m.target];
-                    return targets.includes(keyColumnName);
-                });
-                if (!keyMapping) {
-                    throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}" on sheet "${sheetName}".`);
-                }
-                sourceKeyMappingBySheet.set(sheetName, keyMapping.source);
+                 const keyColumnName = sheetInfo.resolvedKeyColumn;
+                 // Find the mapping where the target is the key column for this sheet
+                 const keyMapping = schema.columnMappings.find(m => {
+                     const targets = Array.isArray(m.target) ? m.target : [m.target];
+                     // Check if the keyColumnName is one of the targets AND the mapping applies to this sheet
+                     return targets.includes(keyColumnName) && (m.targetSheet || schema.targetSheet) === sheetName;
+                 });
+                 
+                 // If no mapping found for the key, try to find a mapping for the primary key (for default sheet)
+                 const fallbackKeyMapping = schema.columnMappings.find(m => {
+                     const targets = Array.isArray(m.target) ? m.target : [m.target];
+                     return targets.includes(keyColumnName);
+                 });
+ 
+                 if (!keyMapping && !fallbackKeyMapping) {
+                     throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}" on sheet "${sheetName}".`);
+                 }
+                 sourceKeyMappingBySheet.set(sheetName, (keyMapping || fallbackKeyMapping).source);
             }
             sendMessageToDialog("Resolved source keys for all target sheets.");
 
@@ -162,9 +173,8 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     const sheetInfo = sheetDataCache.get(sheetName);
                     if (!sheetInfo) continue;
 
-                    // Get the correct key for THIS specific sheet from the source data
-                    const sourceKey = sourceKeyMappingBySheet.get(sheetName);
-                    const key = sourceObject[sourceKey];
+                    const sourceKeyName = sourceKeyMappingBySheet.get(sheetName);
+                    const key = sourceObject[sourceKeyName];
                     if (key === undefined) continue;
 
                     const newRowData = new Array(sheetInfo.headers.length).fill(null);
@@ -179,7 +189,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     } else {
                         newRowData[sheetInfo.keyColumnIndex] = key;
                         writesBySheet.get(sheetName).rowsToAdd.push(newRowData);
-                        // Add to map to prevent duplicate adds in the same run for this sheet.
                         sheetInfo.dataMap.set(String(key), { rowIndex: -1, data: newRowData }); 
                     }
                 }
@@ -195,7 +204,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                 if (writes.rowsToUpdate.length > 0) {
                     for (const row of writes.rowsToUpdate) {
-                         // Skip updates for rows that were just added in this run
                         if (row.rowIndex === -1) continue;
                         sheet.getRangeByIndexes(row.rowIndex, 0, 1, sheetInfo.headers.length).values = [row.values];
                     }
@@ -214,7 +222,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
     } catch (error) {
         console.error("Custom Import Error: ", error);
-        sendMessageToDialog(`Error: ${error.message}`, 'error');
+        sendMessageToDialog(`Error: ${error.message}`, 'error', [error.stack]);
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug Info: " + JSON.stringify(error.debugInfo));
         }
@@ -223,6 +231,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
 /**
  * Parses and validates the provided JSON import file.
+ * It now handles encapsulated schemas and flattens nested data arrays.
  * @param {string} dataUrl The data URL of the JSON file.
  * @param {function} sendMessageToDialog Function to send status messages.
  * @returns {object|null} An object with 'schema' and 'data' properties, or null if validation fails.
@@ -230,36 +239,26 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
     try {
         const jsonString = atob(dataUrl.split(',')[1]);
-        const importFile = JSON.parse(jsonString);
+        let importFile = JSON.parse(jsonString);
 
+        // --- NEW: Check for encapsulated schema ---
+        if (importFile.CUSTOM_IMPORT && typeof importFile.CUSTOM_IMPORT === 'object') {
+            sendMessageToDialog("Detected encapsulated 'CUSTOM_IMPORT' schema.");
+            importFile = importFile.CUSTOM_IMPORT;
+        }
+
+        // --- Schema Validation ---
         if (!importFile.importName || typeof importFile.importName !== 'string') throw new Error("Missing a valid 'importName'.");
         if (!importFile.targetSheet || typeof importFile.targetSheet !== 'string') throw new Error("Missing a valid default 'targetSheet'.");
-        
-        if (!importFile.sheetKeyColumn || (typeof importFile.sheetKeyColumn !== 'string' && !Array.isArray(importFile.sheetKeyColumn))) {
-            throw new Error("'sheetKeyColumn' must be a non-empty string or an array of non-empty strings.");
-        }
-        if (Array.isArray(importFile.sheetKeyColumn) && importFile.sheetKeyColumn.length === 0) {
-            throw new Error("'sheetKeyColumn' array cannot be empty.");
-        }
-
-
+        if (!importFile.sheetKeyColumn || (typeof importFile.sheetKeyColumn !== 'string' && !Array.isArray(importFile.sheetKeyColumn))) throw new Error("'sheetKeyColumn' must be a non-empty string or an array of non-empty strings.");
+        if (Array.isArray(importFile.sheetKeyColumn) && importFile.sheetKeyColumn.length === 0) throw new Error("'sheetKeyColumn' array cannot be empty.");
         if (!Array.isArray(importFile.columnMappings) || importFile.columnMappings.length === 0) throw new Error("Must have a non-empty 'columnMappings' array.");
-
         for (const mapping of importFile.columnMappings) {
-            if (!mapping.source || typeof mapping.source !== 'string') {
-                 throw new Error("Each item in 'columnMappings' must have a valid 'source' property.");
-            }
-            if (!mapping.target || (typeof mapping.target !== 'string' && !Array.isArray(mapping.target))) {
-                throw new Error("Each 'target' in 'columnMappings' must be a non-empty string or an array of non-empty strings.");
-            }
-            if (Array.isArray(mapping.target) && mapping.target.length === 0) {
-                throw new Error("A 'target' array cannot be empty.");
-            }
-            if (mapping.targetSheet && typeof mapping.targetSheet !== 'string') {
-                throw new Error("If 'targetSheet' is specified in a mapping, it must be a string.");
-            }
+            if (!mapping.source || typeof mapping.source !== 'string') throw new Error("Each item in 'columnMappings' must have a valid 'source' property.");
+            if (!mapping.target || (typeof mapping.target !== 'string' && !Array.isArray(mapping.target))) throw new Error("Each 'target' in 'columnMappings' must be a non-empty string or an array of non-empty strings.");
+            if (Array.isArray(mapping.target) && mapping.target.length === 0) throw new Error("A 'target' array cannot be empty.");
+            if (mapping.targetSheet && typeof mapping.targetSheet !== 'string') throw new Error("If 'targetSheet' is specified in a mapping, it must be a string.");
         }
-        
         if (!Array.isArray(importFile.data)) throw new Error("The 'data' property must be an array.");
 
         const schema = {
@@ -267,11 +266,36 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             targetSheet: importFile.targetSheet,
             sheetKeyColumn: importFile.sheetKeyColumn,
             columnMappings: importFile.columnMappings,
+            dataArrayKey: importFile.dataArrayKey // Optional key for flattening
         };
-        return { schema, data: importFile.data };
+
+        // --- NEW: Data Flattening Logic ---
+        let sourceData = importFile.data;
+        if (schema.dataArrayKey && typeof schema.dataArrayKey === 'string') {
+            sendMessageToDialog(`Flattening nested data using key: '${schema.dataArrayKey}'...`);
+            const flattenedData = [];
+            sourceData.forEach(parentObject => {
+                const nestedArray = parentObject[schema.dataArrayKey];
+                if (Array.isArray(nestedArray)) {
+                    nestedArray.forEach(childObject => {
+                        // Create a new object combining parent and child properties
+                        const combinedObject = { ...parentObject, ...childObject };
+                        // Remove the original nested array to avoid confusion
+                        delete combinedObject[schema.dataArrayKey];
+                        flattenedData.push(combinedObject);
+                    });
+                } else {
+                    // If the key doesn't point to an array, just add the parent object
+                    flattenedData.push(parentObject);
+                }
+            });
+            sourceData = flattenedData; // Replace original data with the flattened version
+        }
+
+        return { schema, data: sourceData };
+
     } catch (error) {
         sendMessageToDialog(`JSON file validation failed: ${error.message}`, 'error');
         return null;
     }
 }
-
