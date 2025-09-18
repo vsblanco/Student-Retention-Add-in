@@ -1,5 +1,3 @@
-<!-- Timestamp: 2025-09-18 02:37 PM EDT -->
-<!-- Version: 1.11.0 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -18,7 +16,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { -webkit-user-select: none; -ms-user-select: none; user-select: none; }
-        #log-container, #json-paste-area { -webkit-user-select: text; -ms-user-select: text; user-select: text; }
+        #log-container { -webkit-user-select: text; -ms-user-select: text; user-select: text; }
         .collapsible-log { cursor: pointer; }
         .collapsible-log .arrow { display: inline-block; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid #9ca3af; transition: transform 0.2s ease-in-out; margin-right: 8px; }
         .collapsible-log.open .arrow { transform: rotate(90deg); }
@@ -36,23 +34,9 @@
 <body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
 
     <!-- Initial File Import View -->
-    <div id="initial-view" class="w-full max-w-sm text-center">
-        
-        <!-- Paste from Text Area -->
-        <div id="paste-container" class="mb-4">
-            <label for="json-paste-area" class="block text-sm font-medium text-gray-700 mb-2">Paste JSON data here:</label>
-            <textarea id="json-paste-area" rows="6" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" placeholder='{ "importName": "...", "data": [...] }'></textarea>
-            <button id="import-from-text-button" class="mt-2 w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition-colors duration-200">
-                Import from Text
-            </button>
-        </div>
-
-        <div class="my-4 text-xs text-gray-500">OR</div>
-        
-        <!-- Select from File -->
+    <div id="initial-view" class="w-full max-w-sm text-center hidden">
         <label for="file-input" class="block text-sm font-medium text-gray-700 mb-2">Select a file to import:</label>
         <input type="file" id="file-input" accept=".csv, .xlsx, .json, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-0"/>
-        
         <div id="button-container" class="mt-4 space-y-2">
             <button id="update-master-list-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Master List
@@ -60,7 +44,7 @@
             <button id="update-grades-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Grades
             </button>
-            <button id="custom-import-button" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
+            <button id="custom-import-button" class="w-full bg-orange-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Custom Import
             </button>
         </div>
@@ -128,60 +112,28 @@
             const createMasterListPromptButton = document.getElementById("create-master-list-prompt-button");
             const finalizeSheetButton = document.getElementById("finalize-sheet-button");
             const creationStatus = document.getElementById("creation-status");
-            const pasteArea = document.getElementById("json-paste-area");
-            const importFromTextButton = document.getElementById("import-from-text-button");
+            const includedColumnsContainer = document.getElementById("included-columns");
+            const availableColumnsContainer = document.getElementById("available-columns");
 
-            function showView(viewToShow) {
-                [initialView, progressView, noMasterListView, columnMappingView].forEach(view => {
-                    if (view.id === viewToShow) {
-                        view.classList.remove('hidden');
-                    } else {
-                        view.classList.add('hidden');
-                    }
-                });
-            }
-
-            // --- Functions ---
-            function createColumnItem(header) {
-                const colItem = document.createElement("div");
-                colItem.className = "column-item";
-                colItem.textContent = header;
-                colItem.dataset.columnName = header;
-                return colItem;
-            }
-
-            function setupColumnMapping() {
-                const includedColumnsContainer = document.getElementById("included-columns");
-                const availableColumnsContainer = document.getElementById("available-columns");
-                const defaultIncluded = ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'Grade', 'Phone', 'Outreach'];
-                const defaultAvailable = ['Gender', 'Course', 'Course ID', 'Course Last Access', 'Primary Phone', 'Other Phone', 'Student Email', 'Personal Email', 'Grade Book', 'Course Missing Assignments', 'Course Zero Assignments'];
-                
-                includedColumnsContainer.innerHTML = '';
-                availableColumnsContainer.innerHTML = '';
-
-                defaultIncluded.forEach(header => includedColumnsContainer.appendChild(createColumnItem(header)));
-                defaultAvailable.forEach(header => availableColumnsContainer.appendChild(createColumnItem(header)));
-
-                const sharedSortableOptions = { group: 'shared-columns', animation: 150, ghostClass: 'sortable-ghost' };
-                new Sortable(includedColumnsContainer, sharedSortableOptions);
-                new Sortable(availableColumnsContainer, sharedSortableOptions);
-            }
-            
-            // --- Event Listeners and Initial Setup ---
+            // Initial state
             updateMasterButton.disabled = true;
             updateGradesButton.disabled = true;
             customImportButton.disabled = true;
             
+            // Tell parent we're ready
             Office.context.ui.messageParent(JSON.stringify({ type: 'dialogReady' }));
 
+            // --- Event Listeners ---
+
             createMasterListPromptButton.addEventListener('click', () => {
-                showView('column-mapping-view');
+                noMasterListView.classList.add('hidden');
+                columnMappingView.classList.remove('hidden');
                 setupColumnMapping();
             });
 
             finalizeSheetButton.addEventListener('click', () => {
                 creationStatus.textContent = "Creating sheet...";
-                const includedColumns = Array.from(document.getElementById("included-columns").querySelectorAll(".column-item")).map(item => item.dataset.columnName);
+                const includedColumns = Array.from(includedColumnsContainer.querySelectorAll(".column-item")).map(item => item.dataset.columnName);
                 Office.context.ui.messageParent(JSON.stringify({ type: 'createMasterList', columns: includedColumns }));
             });
 
@@ -208,46 +160,24 @@
                 }
             });
 
-            const startImport = (actionType, sourcePayload, fileName) => {
-                showView('progress-view');
-                logContainer.innerHTML = '';
-                closeButton.classList.add('hidden');
-                // The btoa function correctly converts the string to Base64 for the data URL.
-                const dataUrl = 'data:application/json;base64,' + btoa(unescape(encodeURIComponent(sourcePayload)));
-                Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: fileName, data: dataUrl }));
-            };
+            const startImport = (actionType) => {
+                if (selectedFile) {
+                    initialView.classList.add('hidden');
+                    progressView.classList.remove('hidden');
+                    logContainer.innerHTML = '';
+                    closeButton.classList.add('hidden');
 
-            importFromTextButton.addEventListener('click', () => {
-                const text = pasteArea.value.trim();
-                if (text) {
-                    try {
-                        JSON.parse(text); 
-                        startImport('customImport', text, 'pasted.json');
-                    } catch (e) {
-                        status.textContent = "Error: Pasted text is not valid JSON.";
-                    }
-                } else {
-                    status.textContent = "Please paste JSON data into the text area.";
-                }
-            });
-            
-            function startImportFromFile(actionType) {
-                 if (selectedFile) {
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        showView('progress-view');
-                        logContainer.innerHTML = '';
-                        closeButton.classList.add('hidden');
                         Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: selectedFile.name, data: event.target.result }));
                     };
                     reader.readAsDataURL(selectedFile);
                 }
-            }
-            
-            updateMasterButton.addEventListener('click', () => startImportFromFile('updateMaster'));
-            updateGradesButton.addEventListener('click', () => startImportFromFile('updateGrades'));
-            customImportButton.addEventListener('click', () => startImportFromFile('customImport'));
-            
+            };
+
+            updateMasterButton.addEventListener('click', () => startImport('updateMaster'));
+            updateGradesButton.addEventListener('click', () => startImport('updateGrades'));
+            customImportButton.addEventListener('click', () => startImport('customImport'));
             closeButton.addEventListener('click', () => {
                 Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
             });
@@ -263,33 +193,57 @@
                 }
             });
 
+            // --- Functions ---
+            
+            function createColumnItem(header) {
+                const colItem = document.createElement("div");
+                colItem.className = "column-item";
+                colItem.textContent = header;
+                colItem.dataset.columnName = header;
+                return colItem;
+            }
+
+            function setupColumnMapping() {
+                const defaultIncluded = ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'Grade', 'Phone', 'Outreach'];
+                const defaultAvailable = ['Gender', 'Course', 'Course ID', 'Course Last Access', 'Primary Phone', 'Other Phone', 'Student Email', 'Personal Email', 'Grade Book', 'Course Missing Assignments', 'Course Zero Assignments'];
+                
+                includedColumnsContainer.innerHTML = '';
+                availableColumnsContainer.innerHTML = '';
+
+                defaultIncluded.forEach(header => includedColumnsContainer.appendChild(createColumnItem(header)));
+                defaultAvailable.forEach(header => availableColumnsContainer.appendChild(createColumnItem(header)));
+
+                const sharedSortableOptions = { group: 'shared-columns', animation: 150, ghostClass: 'sortable-ghost' };
+                new Sortable(includedColumnsContainer, sharedSortableOptions);
+                new Sortable(availableColumnsContainer, sharedSortableOptions);
+            }
+
             // --- Parent Message Handler ---
+
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
                 
-                updateMasterButton.classList.add('hidden');
-                updateGradesButton.classList.add('hidden');
-                customImportButton.classList.add('hidden');
-
                 switch (message.type) {
                     case 'masterListCheckResult':
                         if (message.exists) {
-                            showView('initial-view');
+                            initialView.classList.remove('hidden');
                         } else {
-                            showView('no-master-list-view');
+                            noMasterListView.classList.remove('hidden');
                         }
                         break;
                     
                     case 'masterListCreated':
                         creationStatus.textContent = "Sheet created successfully!";
                         setTimeout(() => {
-                            showView('initial-view');
+                            columnMappingView.classList.add('hidden');
+                            initialView.classList.remove('hidden');
                         }, 1500);
                         break;
 
                     case 'log':
                     case 'error':
                     case 'complete':
+                        // ... existing log handling logic ...
                         const logEntry = document.createElement('div');
                         if (message.details && message.details.length > 0) {
                             logEntry.className = 'collapsible-log';
@@ -307,7 +261,6 @@
                         } else {
                             logEntry.textContent = message.status;
                         }
-
                         if (message.type === 'error') {
                             logEntry.className += ' text-red-400';
                         } else if (message.type === 'complete') {
@@ -316,27 +269,36 @@
                         } else {
                             logEntry.className += ' text-gray-300';
                         }
-                        
                         if (!message.details || message.details.length === 0) {
                            logContainer.appendChild(logEntry);
                         }
                         logContainer.scrollTop = logContainer.scrollHeight;
                         break;
 
-                    default: // This is the file check response
+                    default:
+                        // Initial file check response
                         status.textContent = message.status || "";
                         if (message.canUpdateMaster) {
                             updateMasterButton.classList.remove('hidden');
                             updateMasterButton.disabled = false;
+                        } else {
+                            updateMasterButton.classList.add('hidden');
+                            updateMasterButton.disabled = true;
                         }
                         if (message.canUpdateGrades) {
                             updateGradesButton.classList.remove('hidden');
                             updateGradesButton.disabled = false;
+                        } else {
+                            updateGradesButton.classList.add('hidden');
+                            updateGradesButton.disabled = true;
                         }
-                        if (message.importName) {
-                            customImportButton.textContent = `Import '${message.importName}'`;
+                         if (message.canCustomImport) {
+                            customImportButton.textContent = message.importName || 'Custom Import';
                             customImportButton.classList.remove('hidden');
                             customImportButton.disabled = false;
+                        } else {
+                            customImportButton.classList.add('hidden');
+                            customImportButton.disabled = true;
                         }
                         break;
                 }
