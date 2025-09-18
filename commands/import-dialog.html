@@ -1,3 +1,5 @@
+<!-- Timestamp: 2025-09-18 02:37 PM EDT -->
+<!-- Version: 1.11.0 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -16,7 +18,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { -webkit-user-select: none; -ms-user-select: none; user-select: none; }
-        #log-container { -webkit-user-select: text; -ms-user-select: text; user-select: text; }
+        #log-container, #json-paste-area { -webkit-user-select: text; -ms-user-select: text; user-select: text; }
         .collapsible-log { cursor: pointer; }
         .collapsible-log .arrow { display: inline-block; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid #9ca3af; transition: transform 0.2s ease-in-out; margin-right: 8px; }
         .collapsible-log.open .arrow { transform: rotate(90deg); }
@@ -34,10 +36,20 @@
 <body class="p-4 flex flex-col items-center justify-center min-h-screen bg-gray-100 text-gray-800">
 
     <!-- Initial File Import View -->
-    <div id="initial-view" class="w-full max-w-sm text-center hidden">
-        <!-- This container is for the magic clipboard button -->
-        <div id="clipboard-import-container" class="mb-4"></div>
+    <div id="initial-view" class="w-full max-w-sm text-center">
         
+        <!-- Paste from Text Area -->
+        <div id="paste-container" class="mb-4">
+            <label for="json-paste-area" class="block text-sm font-medium text-gray-700 mb-2">Paste JSON data here:</label>
+            <textarea id="json-paste-area" rows="6" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500" placeholder='{ "importName": "...", "data": [...] }'></textarea>
+            <button id="import-from-text-button" class="mt-2 w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition-colors duration-200">
+                Import from Text
+            </button>
+        </div>
+
+        <div class="my-4 text-xs text-gray-500">OR</div>
+        
+        <!-- Select from File -->
         <label for="file-input" class="block text-sm font-medium text-gray-700 mb-2">Select a file to import:</label>
         <input type="file" id="file-input" accept=".csv, .xlsx, .json, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-0"/>
         
@@ -48,7 +60,6 @@
             <button id="update-grades-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Update Grades
             </button>
-            <!-- A separate, relabelable button for custom imports -->
             <button id="custom-import-button" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition-colors duration-200 hidden">
                 Custom Import
             </button>
@@ -96,7 +107,6 @@
 
     <script>
         let selectedFile = null;
-        let clipboardJsonData = null; // Store valid JSON from clipboard
 
         Office.onReady(() => {
             console.log("Import dialog HTML page loaded successfully.");
@@ -117,45 +127,21 @@
             const status = document.getElementById("status");
             const createMasterListPromptButton = document.getElementById("create-master-list-prompt-button");
             const finalizeSheetButton = document.getElementById("finalize-sheet-button");
-            const clipboardContainer = document.getElementById("clipboard-import-container");
             const creationStatus = document.getElementById("creation-status");
+            const pasteArea = document.getElementById("json-paste-area");
+            const importFromTextButton = document.getElementById("import-from-text-button");
+
+            function showView(viewToShow) {
+                [initialView, progressView, noMasterListView, columnMappingView].forEach(view => {
+                    if (view.id === viewToShow) {
+                        view.classList.remove('hidden');
+                    } else {
+                        view.classList.add('hidden');
+                    }
+                });
+            }
 
             // --- Functions ---
-            
-            /**
-             * Checks the clipboard for valid JSON with an 'importName' property.
-             * If found, it shows a dedicated button for a one-click import.
-             */
-            async function checkClipboardForJson() {
-                try {
-                    // Modern clipboard API requires user permission, which is good for security.
-                    const clipboardText = await navigator.clipboard.readText();
-                    if (!clipboardText) return;
-
-                    // Check if the text is our specific kind of JSON
-                    const data = JSON.parse(clipboardText);
-                    if (data && data.importName && Array.isArray(data.columnMappings)) {
-                        clipboardJsonData = {
-                            text: clipboardText,
-                            importName: data.importName
-                        };
-                        
-                        // Create and show the clipboard import button
-                        clipboardContainer.innerHTML = `
-                            <button id="import-from-clipboard-button" class="w-full bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 transition-colors duration-200">
-                                Import '${data.importName}' from Clipboard
-                            </button>
-                            <div class="my-4 text-xs text-gray-500">OR</div>
-                        `;
-                        document.getElementById("import-from-clipboard-button")
-                           .addEventListener('click', () => startImport('customImport', 'clipboard'));
-                    }
-                } catch (error) {
-                    // It's either not JSON or not the JSON we want, so we just ignore it.
-                    console.log("Clipboard content is not a valid import JSON: " + error.message);
-                }
-            }
-            
             function createColumnItem(header) {
                 const colItem = document.createElement("div");
                 colItem.className = "column-item";
@@ -182,19 +168,14 @@
             }
             
             // --- Event Listeners and Initial Setup ---
-
             updateMasterButton.disabled = true;
             updateGradesButton.disabled = true;
             customImportButton.disabled = true;
             
-            // Tell parent we're ready and check the clipboard
             Office.context.ui.messageParent(JSON.stringify({ type: 'dialogReady' }));
-            checkClipboardForJson();
-
 
             createMasterListPromptButton.addEventListener('click', () => {
-                noMasterListView.classList.add('hidden');
-                columnMappingView.classList.remove('hidden');
+                showView('column-mapping-view');
                 setupColumnMapping();
             });
 
@@ -227,27 +208,45 @@
                 }
             });
 
-            const startImport = (actionType, source = 'file') => {
-                initialView.classList.add('hidden');
-                progressView.classList.remove('hidden');
+            const startImport = (actionType, sourcePayload, fileName) => {
+                showView('progress-view');
                 logContainer.innerHTML = '';
                 closeButton.classList.add('hidden');
+                // The btoa function correctly converts the string to Base64 for the data URL.
+                const dataUrl = 'data:application/json;base64,' + btoa(unescape(encodeURIComponent(sourcePayload)));
+                Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: fileName, data: dataUrl }));
+            };
 
-                if (source === 'clipboard' && clipboardJsonData) {
-                    const dataUrl = 'data:application/json;base64,' + btoa(clipboardJsonData.text);
-                    Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: 'clipboard.json', data: dataUrl }));
-                } else if (source === 'file' && selectedFile) {
+            importFromTextButton.addEventListener('click', () => {
+                const text = pasteArea.value.trim();
+                if (text) {
+                    try {
+                        JSON.parse(text); 
+                        startImport('customImport', text, 'pasted.json');
+                    } catch (e) {
+                        status.textContent = "Error: Pasted text is not valid JSON.";
+                    }
+                } else {
+                    status.textContent = "Please paste JSON data into the text area.";
+                }
+            });
+            
+            function startImportFromFile(actionType) {
+                 if (selectedFile) {
                     const reader = new FileReader();
                     reader.onload = function(event) {
+                        showView('progress-view');
+                        logContainer.innerHTML = '';
+                        closeButton.classList.add('hidden');
                         Office.context.ui.messageParent(JSON.stringify({ type: actionType, fileName: selectedFile.name, data: event.target.result }));
                     };
                     reader.readAsDataURL(selectedFile);
                 }
-            };
+            }
             
-            updateMasterButton.addEventListener('click', () => startImport('updateMaster'));
-            updateGradesButton.addEventListener('click', () => startImport('updateGrades'));
-            customImportButton.addEventListener('click', () => startImport('customImport'));
+            updateMasterButton.addEventListener('click', () => startImportFromFile('updateMaster'));
+            updateGradesButton.addEventListener('click', () => startImportFromFile('updateGrades'));
+            customImportButton.addEventListener('click', () => startImportFromFile('customImport'));
             
             closeButton.addEventListener('click', () => {
                 Office.context.ui.messageParent(JSON.stringify({ type: 'closeDialog' }));
@@ -265,11 +264,9 @@
             });
 
             // --- Parent Message Handler ---
-
             Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, (arg) => {
                 const message = JSON.parse(arg.message);
                 
-                // Clear all buttons before showing new ones
                 updateMasterButton.classList.add('hidden');
                 updateGradesButton.classList.add('hidden');
                 customImportButton.classList.add('hidden');
@@ -277,17 +274,16 @@
                 switch (message.type) {
                     case 'masterListCheckResult':
                         if (message.exists) {
-                            initialView.classList.remove('hidden');
+                            showView('initial-view');
                         } else {
-                            noMasterListView.classList.remove('hidden');
+                            showView('no-master-list-view');
                         }
                         break;
                     
                     case 'masterListCreated':
                         creationStatus.textContent = "Sheet created successfully!";
                         setTimeout(() => {
-                            columnMappingView.classList.add('hidden');
-                            initialView.classList.remove('hidden');
+                            showView('initial-view');
                         }, 1500);
                         break;
 
@@ -311,6 +307,7 @@
                         } else {
                             logEntry.textContent = message.status;
                         }
+
                         if (message.type === 'error') {
                             logEntry.className += ' text-red-400';
                         } else if (message.type === 'complete') {
@@ -319,6 +316,7 @@
                         } else {
                             logEntry.className += ' text-gray-300';
                         }
+                        
                         if (!message.details || message.details.length === 0) {
                            logContainer.appendChild(logEntry);
                         }
