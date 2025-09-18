@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 05:24 PM EDT
-// Version: 2.2.0
+// Timestamp: 2025-09-18 05:43 PM EDT
+// Version: 2.3.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 2.2.0 optimizes the update process to prevent timeouts with large
- * datasets by performing a single bulk write instead of row-by-row updates.
+ * Version 2.3.0 fixes a bug where the script could use the wrong source key
+ * when mappings existed for the same column name across multiple sheets.
  */
 
 /**
@@ -107,8 +107,14 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             const sourceKeyMappingBySheet = new Map();
             for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
                 const keyColumnName = sheetInfo.resolvedKeyColumn;
-                const mapping = schema.columnMappings.find(m => (Array.isArray(m.target) ? m.target : [m.target]).includes(keyColumnName));
-                if (!mapping) throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}".`);
+                
+                // Find a mapping where the target column and target sheet both match.
+                const mapping = schema.columnMappings.find(m =>
+                    (m.targetSheet || schema.targetSheet) === sheetName &&
+                    (Array.isArray(m.target) ? m.target : [m.target]).includes(keyColumnName)
+                );
+
+                if (!mapping) throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}" on sheet "${sheetName}".`);
                 sourceKeyMappingBySheet.set(sheetName, mapping.source);
             }
 
