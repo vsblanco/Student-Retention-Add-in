@@ -1,7 +1,9 @@
-// Timestamp: 2025-09-18 01:37 PM EDT
-// Version: 1.5.0
+// Timestamp: 2025-09-18 03:22 PM EDT
+// Version: 1.6.0
 /*
  * This file contains the logic for the "Import Data" ribbon button command.
+ * Version 1.6.0 updates the initial JSON check to support encapsulated schemas
+ * under a "CUSTOM_IMPORT" key.
  */
 import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './utils.js';
 import { handleCustomImport } from './custom-import.js';
@@ -152,7 +154,10 @@ async function handleFileSelected(message) {
             // Decode and parse just enough to get the importName for the UI
             const jsonString = atob(dataUrl.split(',')[1]);
             const importFile = JSON.parse(jsonString);
-            const importName = importFile.importName;
+            
+            // --- UPDATED LOGIC ---
+            // Check for importName at the top level OR within a CUSTOM_IMPORT object
+            const importName = importFile.importName || (importFile.CUSTOM_IMPORT && importFile.CUSTOM_IMPORT.importName);
 
             if (importName && typeof importName === 'string') {
                  sendMessageToDialog(`Detected custom import: "${importName}".`);
@@ -850,4 +855,3 @@ async function applyGradeConditionalFormatting(context) {
     await context.sync();
     sendMessageToDialog("Conditional formatting applied.");
 }
-
