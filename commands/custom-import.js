@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 06:10 PM EDT
-// Version: 2.4.0
+// Timestamp: 2025-09-18 07:22 PM EDT
+// Version: 2.5.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 2.4.0 adds a safety check to prevent TypeErrors when updating
- * rows in cases of data inconsistency between the read map and the write array.
+ * Version 2.5.0 updates the flattening logic to include parent records
+ * (e.g., students) even if their nested data array (e.g., assignments) is empty.
  */
 
 /**
@@ -161,8 +161,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                         const rowIndex = existingRow.rowIndex;
                         const targetRow = writes.finalFormulas[rowIndex];
 
-                        // --- FIX: Safety Check ---
-                        // If the target row is unexpectedly missing, skip it to prevent a crash.
                         if (!targetRow) {
                             console.warn(`Inconsistent row index found for key: ${key}`);
                             continue;
@@ -267,14 +265,21 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             const flattenedData = [];
             sourceData.forEach(parentObject => {
                 const nestedArray = parentObject[schema.dataArrayKey];
-                if (Array.isArray(nestedArray)) {
+                
+                // --- UPDATED LOGIC ---
+                // If the nested array has items, loop through and create combined objects.
+                if (Array.isArray(nestedArray) && nestedArray.length > 0) {
                     nestedArray.forEach(childObject => {
                         const combinedObject = { ...parentObject, ...childObject };
                         delete combinedObject[schema.dataArrayKey];
                         flattenedData.push(combinedObject);
                     });
                 } else {
-                    flattenedData.push(parentObject);
+                    // If the nested array is empty or doesn't exist, add the parent object by itself.
+                    // This ensures students with no missing assignments are still processed.
+                    const parentOnlyObject = { ...parentObject };
+                    delete parentOnlyObject[schema.dataArrayKey]; // Clean up the (potentially empty) array key
+                    flattenedData.push(parentOnlyObject);
                 }
             });
             sourceData = flattenedData;
