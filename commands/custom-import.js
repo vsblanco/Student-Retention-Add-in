@@ -1,11 +1,10 @@
-// Timestamp: 2025-09-18 03:03 PM EDT
-// Version: 1.8.0
+// Timestamp: 2025-09-18 03:52 PM EDT
+// Version: 1.9.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 1.8.0 adds support for encapsulated schemas (under a CUSTOM_IMPORT key)
- * and the ability to flatten nested data arrays (e.g., a student with multiple assignments)
- * using a `dataArrayKey` in the schema.
+ * Version 1.9.0 prevents the sheetKeyColumn from being overwritten during an
+ * update, preserving formulas like HYPERLINK.
  */
 
 /**
@@ -129,14 +128,11 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             const sourceKeyMappingBySheet = new Map();
             for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
                  const keyColumnName = sheetInfo.resolvedKeyColumn;
-                 // Find the mapping where the target is the key column for this sheet
                  const keyMapping = schema.columnMappings.find(m => {
                      const targets = Array.isArray(m.target) ? m.target : [m.target];
-                     // Check if the keyColumnName is one of the targets AND the mapping applies to this sheet
                      return targets.includes(keyColumnName) && (m.targetSheet || schema.targetSheet) === sheetName;
                  });
                  
-                 // If no mapping found for the key, try to find a mapping for the primary key (for default sheet)
                  const fallbackKeyMapping = schema.columnMappings.find(m => {
                      const targets = Array.isArray(m.target) ? m.target : [m.target];
                      return targets.includes(keyColumnName);
@@ -184,7 +180,15 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                     if (sheetInfo.dataMap.has(String(key))) {
                         const existingRow = sheetInfo.dataMap.get(String(key));
-                        const finalRowData = existingRow.data.map((val, idx) => newRowData[idx] !== null ? newRowData[idx] : val);
+                        // --- UPDATED LOGIC ---
+                        const finalRowData = existingRow.data.map((val, idx) => {
+                            // If the current column is the key column, preserve the existing value.
+                            if (idx === sheetInfo.keyColumnIndex) {
+                                return val; // Keep the original formula/value
+                            }
+                            // Otherwise, use the new value if it exists, or fallback to the old one.
+                            return newRowData[idx] !== null ? newRowData[idx] : val;
+                        });
                         writesBySheet.get(sheetName).rowsToUpdate.push({ rowIndex: existingRow.rowIndex, values: finalRowData });
                     } else {
                         newRowData[sheetInfo.keyColumnIndex] = key;
@@ -241,13 +245,11 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
         const jsonString = atob(dataUrl.split(',')[1]);
         let importFile = JSON.parse(jsonString);
 
-        // --- NEW: Check for encapsulated schema ---
         if (importFile.CUSTOM_IMPORT && typeof importFile.CUSTOM_IMPORT === 'object') {
             sendMessageToDialog("Detected encapsulated 'CUSTOM_IMPORT' schema.");
             importFile = importFile.CUSTOM_IMPORT;
         }
 
-        // --- Schema Validation ---
         if (!importFile.importName || typeof importFile.importName !== 'string') throw new Error("Missing a valid 'importName'.");
         if (!importFile.targetSheet || typeof importFile.targetSheet !== 'string') throw new Error("Missing a valid default 'targetSheet'.");
         if (!importFile.sheetKeyColumn || (typeof importFile.sheetKeyColumn !== 'string' && !Array.isArray(importFile.sheetKeyColumn))) throw new Error("'sheetKeyColumn' must be a non-empty string or an array of non-empty strings.");
@@ -266,10 +268,9 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             targetSheet: importFile.targetSheet,
             sheetKeyColumn: importFile.sheetKeyColumn,
             columnMappings: importFile.columnMappings,
-            dataArrayKey: importFile.dataArrayKey // Optional key for flattening
+            dataArrayKey: importFile.dataArrayKey
         };
 
-        // --- NEW: Data Flattening Logic ---
         let sourceData = importFile.data;
         if (schema.dataArrayKey && typeof schema.dataArrayKey === 'string') {
             sendMessageToDialog(`Flattening nested data using key: '${schema.dataArrayKey}'...`);
@@ -278,18 +279,15 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
                 const nestedArray = parentObject[schema.dataArrayKey];
                 if (Array.isArray(nestedArray)) {
                     nestedArray.forEach(childObject => {
-                        // Create a new object combining parent and child properties
                         const combinedObject = { ...parentObject, ...childObject };
-                        // Remove the original nested array to avoid confusion
                         delete combinedObject[schema.dataArrayKey];
                         flattenedData.push(combinedObject);
                     });
                 } else {
-                    // If the key doesn't point to an array, just add the parent object
                     flattenedData.push(parentObject);
                 }
             });
-            sourceData = flattenedData; // Replace original data with the flattened version
+            sourceData = flattenedData;
         }
 
         return { schema, data: sourceData };
@@ -299,3 +297,4 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
         return null;
     }
 }
+
