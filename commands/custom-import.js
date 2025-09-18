@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 02:01 PM EDT
-// Version: 1.6.0
+// Timestamp: 2025-09-18 02:13 PM EDT
+// Version: 1.7.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file that contains both the schema and the data.
- * Version 1.6.0 fixes a bug related to multi-sheet imports with different
- * key columns by resolving the source key on a per-sheet basis.
+ * Version 1.7.0 adds the ability to read the URL from HYPERLINK formulas
+ * when mapping the sheetKeyColumn.
  */
 
 /**
@@ -22,6 +22,23 @@ function findFirstMatchingHeader(target, sheetHeaders) {
     }
     return null;
 }
+
+/**
+ * Extracts the key from a cell, prioritizing the URL from a HYPERLINK formula.
+ * @param {string} formula The formula of the cell.
+ * @param {any} value The value of the cell.
+ * @returns {string|null} The extracted key as a string, or null.
+ */
+function getKeyFromCell(formula, value) {
+    if (typeof formula === 'string' && formula.toUpperCase().startsWith('=HYPERLINK')) {
+        const match = formula.match(/=HYPERLINK\("([^"]+)"/i);
+        if (match && match[1]) {
+            return match[1]; // Return the URL part of the hyperlink
+        }
+    }
+    return value ? String(value) : null; // Fallback to the cell's display value
+}
+
 
 /**
  * Main function to handle the custom import process from a self-contained JSON file.
@@ -81,10 +98,11 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             // 4. Read existing data and resolve the key column for each sheet
             for (const [sheetName, sheet] of sheetCache.entries()) {
                 const usedRange = sheet.getUsedRange(true);
-                usedRange.load("values, rowCount");
+                usedRange.load("values, formulas, rowCount");
                 await context.sync();
 
                 const values = usedRange.values || [];
+                const formulas = usedRange.formulas || [];
                 const headers = values.length > 0 ? values[0].map(h => String(h || '')) : [];
                 
                 const resolvedKeyColumn = findFirstMatchingHeader(schema.sheetKeyColumn, headers);
@@ -95,7 +113,10 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                 const dataMap = new Map();
                 for (let i = 1; i < usedRange.rowCount; i++) {
-                    const key = values[i][keyColumnIndex];
+                    const cellFormula = formulas[i][keyColumnIndex];
+                    const cellValue = values[i][keyColumnIndex];
+                    const key = getKeyFromCell(cellFormula, cellValue);
+                    
                     if (key) dataMap.set(String(key), { rowIndex: i, data: values[i] });
                 }
                 sheetDataCache.set(sheetName, { headers, resolvedKeyColumn, keyColumnIndex, dataMap, rowCount: usedRange.rowCount });
