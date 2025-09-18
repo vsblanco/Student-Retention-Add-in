@@ -293,6 +293,7 @@
                             updateGradesButton.disabled = true;
                         }
                          if (message.canCustomImport) {
+                            customImportButton.textContent = message.importName || 'Custom Import';
                             customImportButton.classList.remove('hidden');
                             customImportButton.disabled = false;
                         } else {
@@ -306,3 +307,4 @@
     </script>
 </body>
 </html>
+

@@ -1,5 +1,5 @@
-// Timestamp: 2025-09-18 01:08 PM EDT
-// Version: 1.2.0
+// Timestamp: 2025-09-18 01:37 PM EDT
+// Version: 1.5.0
 /*
  * This file contains the logic for the "Import Data" ribbon button command.
  */
@@ -148,14 +148,36 @@ async function handleFileSelected(message) {
     
     // Handle JSON files for custom import
     if (fileName.toLowerCase().endsWith('.json')) {
-        sendMessageToDialog("Detected .json file. Ready for custom import.");
-        if (importDialog) {
-            importDialog.messageChild(JSON.stringify({ 
-                canUpdateMaster: false,
-                canUpdateGrades: false,
-                canCustomImport: true,
-                status: "Ready for custom JSON import."
-            }));
+        try {
+            // Decode and parse just enough to get the importName for the UI
+            const jsonString = atob(dataUrl.split(',')[1]);
+            const importFile = JSON.parse(jsonString);
+            const importName = importFile.importName;
+
+            if (importName && typeof importName === 'string') {
+                 sendMessageToDialog(`Detected custom import: "${importName}".`);
+                 if (importDialog) {
+                    importDialog.messageChild(JSON.stringify({ 
+                        canUpdateMaster: false,
+                        canUpdateGrades: false,
+                        canCustomImport: true,
+                        importName: importName, // Pass the name to the dialog
+                        status: `Ready to run: ${importName}`
+                    }));
+                }
+            } else {
+                throw new Error("JSON file is missing a valid 'importName' property.");
+            }
+        } catch (error) {
+            sendMessageToDialog(`Error reading JSON file: ${error.message}`, 'error');
+            if (importDialog) {
+                importDialog.messageChild(JSON.stringify({ 
+                    canUpdateMaster: false,
+                    canUpdateGrades: false,
+                    canCustomImport: false,
+                    status: `Error: ${error.message}`
+                }));
+            }
         }
         return; // Exit early for JSON files
     }
@@ -828,3 +850,4 @@ async function applyGradeConditionalFormatting(context) {
     await context.sync();
     sendMessageToDialog("Conditional formatting applied.");
 }
+
