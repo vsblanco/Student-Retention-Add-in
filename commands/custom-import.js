@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 01:32 PM EDT
-// Version: 1.4.0
+// Timestamp: 2025-09-18 01:43 PM EDT
+// Version: 1.5.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file that contains both the schema and the data.
- * Version 1.4.0 introduces support for fallback target column names by allowing
- * the 'target' property in a mapping to be an array of strings.
+ * Version 1.5.0 introduces support for fallback names for the 'sheetKeyColumn'
+ * by allowing it to be an array of strings.
  */
 
 /**
@@ -39,7 +39,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
         const { schema, data: sourceData } = importFile;
         sendMessageToDialog(`Successfully validated schema: "${schema.importName}".`);
 
-        // 2. Identify all unique target sheets from the schema
         const allSheetNames = new Set([schema.targetSheet]);
         schema.columnMappings.forEach(m => {
             if (m.targetSheet) allSheetNames.add(m.targetSheet);
@@ -50,7 +49,9 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             const sheetCache = new Map();
             const sheetDataCache = new Map();
 
-            // 3. Ensure all target sheets exist, creating them if necessary
+            const primaryKeyColumn = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn[0] : schema.sheetKeyColumn;
+
+            // 3. Ensure all target sheets exist
             for (const sheetName of allSheetNames) {
                 let sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
                 await context.sync();
@@ -59,26 +60,16 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     sendMessageToDialog(`Sheet "${sheetName}" not found, creating it...`);
                     sheet = context.workbook.worksheets.add(sheetName);
                     
-                    const headers = [];
-                    const addedHeaders = new Set();
-
-                    // The key column must be the first one added to ensure its presence.
-                    headers.push(schema.sheetKeyColumn);
-                    addedHeaders.add(schema.sheetKeyColumn);
-
+                    const headers = new Set([primaryKeyColumn]);
                     schema.columnMappings
                         .filter(m => (m.targetSheet || schema.targetSheet) === sheetName)
                         .forEach(m => {
-                            // Use the first name in the array as the canonical header for new sheets
                             const primaryTarget = Array.isArray(m.target) ? m.target[0] : m.target;
-                            if (!addedHeaders.has(primaryTarget)) {
-                                headers.push(primaryTarget);
-                                addedHeaders.add(primaryTarget);
-                            }
+                            headers.add(primaryTarget);
                         });
                     
-                    const headerRange = sheet.getRangeByIndexes(0, 0, 1, headers.length);
-                    headerRange.values = [headers];
+                    const headerRange = sheet.getRangeByIndexes(0, 0, 1, headers.size);
+                    headerRange.values = [Array.from(headers)];
                     headerRange.format.font.bold = true;
                 } else {
                     sendMessageToDialog(`Found existing sheet: "${sheetName}".`);
@@ -87,7 +78,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             }
             await context.sync();
 
-            // 4. Read existing data from all target sheets into memory
+            // 4. Read existing data and resolve the key column for each sheet
             for (const [sheetName, sheet] of sheetCache.entries()) {
                 const usedRange = sheet.getUsedRange(true);
                 usedRange.load("values, rowCount");
@@ -95,30 +86,35 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                 const values = usedRange.values || [];
                 const headers = values.length > 0 ? values[0].map(h => String(h || '')) : [];
-                const keyColumnIndex = headers.indexOf(schema.sheetKeyColumn);
-
-                if (keyColumnIndex === -1) {
-                    throw new Error(`The key column "${schema.sheetKeyColumn}" was not found in sheet "${sheetName}". Please add it and try again.`);
+                
+                const resolvedKeyColumn = findFirstMatchingHeader(schema.sheetKeyColumn, headers);
+                if (!resolvedKeyColumn) {
+                    throw new Error(`None of the specified key columns were found in sheet "${sheetName}". Please add one and try again.`);
                 }
+                const keyColumnIndex = headers.indexOf(resolvedKeyColumn);
 
                 const dataMap = new Map();
                 for (let i = 1; i < usedRange.rowCount; i++) {
                     const key = values[i][keyColumnIndex];
                     if (key) dataMap.set(String(key), { rowIndex: i, data: values[i] });
                 }
-                sheetDataCache.set(sheetName, { headers, keyColumnIndex, dataMap, rowCount: usedRange.rowCount });
-                sendMessageToDialog(`Mapped ${dataMap.size} existing rows from "${sheetName}".`);
+                sheetDataCache.set(sheetName, { headers, resolvedKeyColumn, keyColumnIndex, dataMap, rowCount: usedRange.rowCount });
+                sendMessageToDialog(`Using "${resolvedKeyColumn}" as key for sheet "${sheetName}". Mapped ${dataMap.size} existing rows.`);
             }
 
-            // 5. Prepare data for writing by grouping updates and additions by sheet
+            // 5. Find the single source key from the data file
+            const keyColumnNames = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn : [schema.sheetKeyColumn];
+            let sourceKey = null;
+            const sourceKeyMapping = schema.columnMappings.find(m => {
+                const targets = Array.isArray(m.target) ? m.target : [m.target];
+                return targets.some(t => keyColumnNames.includes(t));
+            });
+            if (!sourceKeyMapping) throw new Error(`Could not find a 'source' in columnMappings for any of the specified sheetKeyColumns.`);
+            sourceKey = sourceKeyMapping.source;
+
+            // 6. Prepare data for writing
             const writesBySheet = new Map();
             allSheetNames.forEach(name => writesBySheet.set(name, { rowsToUpdate: [], rowsToAdd: [] }));
-            const sourceKeyMapping = schema.columnMappings.find(m => {
-                 const targets = Array.isArray(m.target) ? m.target : [m.target];
-                 return targets.includes(schema.sheetKeyColumn);
-            });
-            if (!sourceKeyMapping) throw new Error(`Could not find a 'source' mapping for the sheetKeyColumn "${schema.sheetKeyColumn}".`);
-            const sourceKey = sourceKeyMapping.source;
 
             sourceData.forEach(sourceObject => {
                 const key = sourceObject[sourceKey];
@@ -128,15 +124,13 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 schema.columnMappings.forEach(mapping => {
                     const sheetName = mapping.targetSheet || schema.targetSheet;
                     const sheetInfo = sheetDataCache.get(sheetName);
-                    if (!sheetInfo) return; // Safeguard
+                    if (!sheetInfo) return;
 
                     if (!valuesBySheet.has(sheetName)) valuesBySheet.set(sheetName, {});
                     
-                    // Find the first matching header in the actual sheet from the target array
                     const resolvedTargetHeader = findFirstMatchingHeader(mapping.target, sheetInfo.headers);
 
                     if (resolvedTargetHeader && sourceObject[mapping.source] !== undefined) {
-                        // Map the source value to the resolved header name
                         valuesBySheet.get(sheetName)[resolvedTargetHeader] = sourceObject[mapping.source];
                     }
                 });
@@ -152,19 +146,17 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                     if (sheetInfo.dataMap.has(String(key))) {
                         const existingRow = sheetInfo.dataMap.get(String(key));
-                        // Merge new values with existing data
                         const finalRowData = existingRow.data.map((val, idx) => newRowData[idx] !== null ? newRowData[idx] : val);
                         writesBySheet.get(sheetName).rowsToUpdate.push({ rowIndex: existingRow.rowIndex, values: finalRowData });
                     } else {
-                        // For new rows, ensure the key is set
                         newRowData[sheetInfo.keyColumnIndex] = key;
                         writesBySheet.get(sheetName).rowsToAdd.push(newRowData);
-                        sheetInfo.dataMap.set(String(key), { rowIndex: -1, data: newRowData }); // Prevent duplicate adds in the same run
+                        sheetInfo.dataMap.set(String(key), { rowIndex: -1, data: newRowData }); 
                     }
                 }
             });
 
-            // 6. Perform bulk write operations for each sheet
+            // 7. Perform bulk write operations
             for (const [sheetName, writes] of writesBySheet.entries()) {
                 if (writes.rowsToUpdate.length === 0 && writes.rowsToAdd.length === 0) continue;
                 sendMessageToDialog(`Writing ${writes.rowsToUpdate.length} updates and ${writes.rowsToAdd.length} new rows to "${sheetName}".`);
@@ -177,7 +169,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                         sheet.getRangeByIndexes(row.rowIndex, 0, 1, sheetInfo.headers.length).values = [row.values];
                     }
                 }
-
                 if (writes.rowsToAdd.length > 0) {
                     const startRow = sheetInfo.rowCount;
                     sheet.getRangeByIndexes(startRow, 0, writes.rowsToAdd.length, sheetInfo.headers.length).values = writes.rowsToAdd;
@@ -212,7 +203,15 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
 
         if (!importFile.importName || typeof importFile.importName !== 'string') throw new Error("Missing a valid 'importName'.");
         if (!importFile.targetSheet || typeof importFile.targetSheet !== 'string') throw new Error("Missing a valid default 'targetSheet'.");
-        if (!importFile.sheetKeyColumn || typeof importFile.sheetKeyColumn !== 'string') throw new Error("Missing a valid 'sheetKeyColumn'.");
+        
+        if (!importFile.sheetKeyColumn || (typeof importFile.sheetKeyColumn !== 'string' && !Array.isArray(importFile.sheetKeyColumn))) {
+            throw new Error("'sheetKeyColumn' must be a non-empty string or an array of non-empty strings.");
+        }
+        if (Array.isArray(importFile.sheetKeyColumn) && importFile.sheetKeyColumn.length === 0) {
+            throw new Error("'sheetKeyColumn' array cannot be empty.");
+        }
+
+
         if (!Array.isArray(importFile.columnMappings) || importFile.columnMappings.length === 0) throw new Error("Must have a non-empty 'columnMappings' array.");
 
         for (const mapping of importFile.columnMappings) {
@@ -222,13 +221,8 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             if (!mapping.target || (typeof mapping.target !== 'string' && !Array.isArray(mapping.target))) {
                 throw new Error("Each 'target' in 'columnMappings' must be a non-empty string or an array of non-empty strings.");
             }
-            if (Array.isArray(mapping.target)) {
-                if (mapping.target.length === 0) throw new Error("A 'target' array cannot be empty.");
-                for (const targetName of mapping.target) {
-                    if (typeof targetName !== 'string' || targetName.trim() === '') {
-                        throw new Error("All items in a 'target' array must be non-empty strings.");
-                    }
-                }
+            if (Array.isArray(mapping.target) && mapping.target.length === 0) {
+                throw new Error("A 'target' array cannot be empty.");
             }
             if (mapping.targetSheet && typeof mapping.targetSheet !== 'string') {
                 throw new Error("If 'targetSheet' is specified in a mapping, it must be a string.");
