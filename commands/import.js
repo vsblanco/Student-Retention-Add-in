@@ -1,7 +1,10 @@
+// Timestamp: 2025-09-18 01:08 PM EDT
+// Version: 1.2.0
 /*
  * This file contains the logic for the "Import Data" ribbon button command.
  */
 import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './utils.js';
+import { handleCustomImport } from './custom-import.js';
 
 let importDialog = null;
 
@@ -65,6 +68,9 @@ async function processImportMessage(arg) {
             break;
         case 'updateGrades':
             await handleUpdateGrades(message);
+            break;
+        case 'customImport':
+            await handleCustomImport(message, sendMessageToDialog);
             break;
         case 'closeDialog':
             if (importDialog) {
@@ -139,8 +145,22 @@ async function handleCreateMasterList(columns) {
 async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
     sendMessageToDialog(`File selected: ${fileName}. Starting analysis...`);
-    let hasMasterListSheet = false;
+    
+    // Handle JSON files for custom import
+    if (fileName.toLowerCase().endsWith('.json')) {
+        sendMessageToDialog("Detected .json file. Ready for custom import.");
+        if (importDialog) {
+            importDialog.messageChild(JSON.stringify({ 
+                canUpdateMaster: false,
+                canUpdateGrades: false,
+                canCustomImport: true,
+                status: "Ready for custom JSON import."
+            }));
+        }
+        return; // Exit early for JSON files
+    }
 
+    let hasMasterListSheet = false;
     try {
         const arrayBuffer = dataUrlToArrayBuffer(dataUrl);
         const workbook = new ExcelJS.Workbook();
@@ -225,6 +245,7 @@ async function handleFileSelected(message) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: canUpdateMaster,
                 canUpdateGrades: canUpdateGrades,
+                canCustomImport: false,
                 status: statusMessage
             }));
         }
@@ -235,6 +256,7 @@ async function handleFileSelected(message) {
             importDialog.messageChild(JSON.stringify({ 
                 canUpdateMaster: false,
                 canUpdateGrades: false,
+                canCustomImport: false,
                 status: `Error: ${error.message}`
             }));
         }
