@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 03:52 PM EDT
-// Version: 1.9.0
+// Timestamp: 2025-09-18 04:20 PM EDT
+// Version: 2.1.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 1.9.0 prevents the sheetKeyColumn from being overwritten during an
- * update, preserving formulas like HYPERLINK.
+ * Version 2.1.0 refines the update logic to only preserve the sheetKeyColumn
+ * if it contains a formula; otherwise, it allows the text to be updated.
  */
 
 /**
@@ -118,7 +118,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     const cellValue = values[i][keyColumnIndex];
                     const key = getKeyFromCell(cellFormula, cellValue);
                     
-                    if (key) dataMap.set(String(key), { rowIndex: i, data: values[i] });
+                    if (key) dataMap.set(String(key), { rowIndex: i, formulas: formulas[i] });
                 }
                 sheetDataCache.set(sheetName, { headers, resolvedKeyColumn, keyColumnIndex, dataMap, rowCount: usedRange.rowCount });
                 sendMessageToDialog(`Using "${resolvedKeyColumn}" as key for sheet "${sheetName}". Mapped ${dataMap.size} existing rows.`);
@@ -180,20 +180,30 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                     if (sheetInfo.dataMap.has(String(key))) {
                         const existingRow = sheetInfo.dataMap.get(String(key));
-                        // --- UPDATED LOGIC ---
-                        const finalRowData = existingRow.data.map((val, idx) => {
-                            // If the current column is the key column, preserve the existing value.
-                            if (idx === sheetInfo.keyColumnIndex) {
-                                return val; // Keep the original formula/value
+                        
+                        const finalRowFormulas = [...existingRow.formulas];
+
+                        for (let i = 0; i < sheetInfo.headers.length; i++) {
+                            const isKeyColumn = (i === sheetInfo.keyColumnIndex);
+                            const existingContent = existingRow.formulas[i];
+                            const isExistingContentAFormula = typeof existingContent === 'string' && existingContent.startsWith('=');
+
+                            // If this is the key column AND its existing content is a formula, skip it to preserve it.
+                            if (isKeyColumn && isExistingContentAFormula) {
+                                continue;
                             }
-                            // Otherwise, use the new value if it exists, or fallback to the old one.
-                            return newRowData[idx] !== null ? newRowData[idx] : val;
-                        });
-                        writesBySheet.get(sheetName).rowsToUpdate.push({ rowIndex: existingRow.rowIndex, values: finalRowData });
+
+                            // For all other cases (not the key column, or the key column with plain text),
+                            // update if there is new data for the cell.
+                            if (newRowData[i] !== null) {
+                                finalRowFormulas[i] = newRowData[i];
+                            }
+                        }
+                        writesBySheet.get(sheetName).rowsToUpdate.push({ rowIndex: existingRow.rowIndex, values: finalRowFormulas });
                     } else {
                         newRowData[sheetInfo.keyColumnIndex] = key;
                         writesBySheet.get(sheetName).rowsToAdd.push(newRowData);
-                        sheetInfo.dataMap.set(String(key), { rowIndex: -1, data: newRowData }); 
+                        sheetInfo.dataMap.set(String(key), { rowIndex: -1, formulas: newRowData }); 
                     }
                 }
             });
