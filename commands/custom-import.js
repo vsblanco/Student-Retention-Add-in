@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 04:20 PM EDT
-// Version: 2.1.0
+// Timestamp: 2025-09-18 05:24 PM EDT
+// Version: 2.2.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 2.1.0 refines the update logic to only preserve the sheetKeyColumn
- * if it contains a formula; otherwise, it allows the text to be updated.
+ * Version 2.2.0 optimizes the update process to prevent timeouts with large
+ * datasets by performing a single bulk write instead of row-by-row updates.
  */
 
 /**
@@ -49,7 +49,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
     try {
         sendMessageToDialog("Starting custom import from JSON file...");
 
-        // 1. Parse and Validate the JSON Schema and Data
         const importPayload = parseAndValidateImportFile(message.data, sendMessageToDialog);
         if (!importPayload) return;
 
@@ -58,174 +57,136 @@ export async function handleCustomImport(message, sendMessageToDialog) {
         sendMessageToDialog(`Found ${sourceData.length} flattened rows to process.`);
 
         const allSheetNames = new Set([schema.targetSheet]);
-        schema.columnMappings.forEach(m => {
-            if (m.targetSheet) allSheetNames.add(m.targetSheet);
-        });
+        schema.columnMappings.forEach(m => { if (m.targetSheet) allSheetNames.add(m.targetSheet); });
         sendMessageToDialog(`Preparing to process ${allSheetNames.size} target sheet(s).`);
 
         await Excel.run(async (context) => {
             const sheetCache = new Map();
             const sheetDataCache = new Map();
 
-            const primaryKeyColumn = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn[0] : schema.sheetKeyColumn;
-
-            // 3. Ensure all target sheets exist
+            // 1. Ensure all sheets exist and cache them
             for (const sheetName of allSheetNames) {
                 let sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
                 await context.sync();
-
                 if (sheet.isNullObject) {
-                    sendMessageToDialog(`Sheet "${sheetName}" not found, creating it...`);
                     sheet = context.workbook.worksheets.add(sheetName);
-                    
-                    const headers = new Set([primaryKeyColumn]);
+                    const primaryKey = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn[0] : schema.sheetKeyColumn;
+                    const headers = new Set([primaryKey]);
                     schema.columnMappings
                         .filter(m => (m.targetSheet || schema.targetSheet) === sheetName)
-                        .forEach(m => {
-                            const primaryTarget = Array.isArray(m.target) ? m.target[0] : m.target;
-                            headers.add(primaryTarget);
-                        });
-                    
-                    const headerRange = sheet.getRangeByIndexes(0, 0, 1, headers.size);
-                    headerRange.values = [Array.from(headers)];
-                    headerRange.format.font.bold = true;
-                } else {
-                    sendMessageToDialog(`Found existing sheet: "${sheetName}".`);
+                        .forEach(m => headers.add(Array.isArray(m.target) ? m.target[0] : m.target));
+                    sheet.getRangeByIndexes(0, 0, 1, headers.size).values = [Array.from(headers)];
                 }
                 sheetCache.set(sheetName, sheet);
             }
             await context.sync();
 
-            // 4. Read existing data and resolve the key column for each sheet
+            // 2. Read all sheet data into memory and create maps
             for (const [sheetName, sheet] of sheetCache.entries()) {
                 const usedRange = sheet.getUsedRange(true);
                 usedRange.load("values, formulas, rowCount");
                 await context.sync();
 
-                const values = usedRange.values || [];
                 const formulas = usedRange.formulas || [];
-                const headers = values.length > 0 ? values[0].map(h => String(h || '')) : [];
-                
+                const headers = formulas.length > 0 ? formulas[0].map(h => String(h || '')) : [];
                 const resolvedKeyColumn = findFirstMatchingHeader(schema.sheetKeyColumn, headers);
-                if (!resolvedKeyColumn) {
-                    throw new Error(`None of the specified key columns ${JSON.stringify(schema.sheetKeyColumn)} were found in sheet "${sheetName}". Please add one and try again.`);
-                }
+                if (!resolvedKeyColumn) throw new Error(`Key column not found in sheet "${sheetName}".`);
                 const keyColumnIndex = headers.indexOf(resolvedKeyColumn);
-
+                
                 const dataMap = new Map();
                 for (let i = 1; i < usedRange.rowCount; i++) {
-                    const cellFormula = formulas[i][keyColumnIndex];
-                    const cellValue = values[i][keyColumnIndex];
-                    const key = getKeyFromCell(cellFormula, cellValue);
-                    
+                    const key = getKeyFromCell(formulas[i][keyColumnIndex], formulas[i][keyColumnIndex]);
                     if (key) dataMap.set(String(key), { rowIndex: i, formulas: formulas[i] });
                 }
-                sheetDataCache.set(sheetName, { headers, resolvedKeyColumn, keyColumnIndex, dataMap, rowCount: usedRange.rowCount });
-                sendMessageToDialog(`Using "${resolvedKeyColumn}" as key for sheet "${sheetName}". Mapped ${dataMap.size} existing rows.`);
+                
+                sheetDataCache.set(sheetName, { headers, resolvedKeyColumn, keyColumnIndex, dataMap, formulas: formulas, rowCount: usedRange.rowCount });
+                sendMessageToDialog(`Mapped ${dataMap.size} existing rows for sheet "${sheetName}".`);
             }
 
-            // 5. Determine the source key mapping for each sheet's resolved key column
+            // 3. Resolve source keys for each sheet
             const sourceKeyMappingBySheet = new Map();
             for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
-                 const keyColumnName = sheetInfo.resolvedKeyColumn;
-                 const keyMapping = schema.columnMappings.find(m => {
-                     const targets = Array.isArray(m.target) ? m.target : [m.target];
-                     return targets.includes(keyColumnName) && (m.targetSheet || schema.targetSheet) === sheetName;
-                 });
-                 
-                 const fallbackKeyMapping = schema.columnMappings.find(m => {
-                     const targets = Array.isArray(m.target) ? m.target : [m.target];
-                     return targets.includes(keyColumnName);
-                 });
- 
-                 if (!keyMapping && !fallbackKeyMapping) {
-                     throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}" on sheet "${sheetName}".`);
-                 }
-                 sourceKeyMappingBySheet.set(sheetName, (keyMapping || fallbackKeyMapping).source);
+                const keyColumnName = sheetInfo.resolvedKeyColumn;
+                const mapping = schema.columnMappings.find(m => (Array.isArray(m.target) ? m.target : [m.target]).includes(keyColumnName));
+                if (!mapping) throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}".`);
+                sourceKeyMappingBySheet.set(sheetName, mapping.source);
             }
-            sendMessageToDialog("Resolved source keys for all target sheets.");
 
-            // 6. Prepare data for writing
+            // 4. Prepare updates and new rows IN MEMORY
             const writesBySheet = new Map();
-            allSheetNames.forEach(name => writesBySheet.set(name, { rowsToUpdate: [], rowsToAdd: [] }));
+            for (const sheetName of allSheetNames) {
+                const sheetInfo = sheetDataCache.get(sheetName);
+                writesBySheet.set(sheetName, {
+                    finalFormulas: sheetInfo.formulas.map(row => [...row]), // Create a mutable copy
+                    rowsToAdd: [],
+                    updatedRowCount: 0
+                });
+            }
 
             sourceData.forEach(sourceObject => {
                 const valuesBySheet = new Map();
-                schema.columnMappings.forEach(mapping => {
+                 schema.columnMappings.forEach(mapping => {
                     const sheetName = mapping.targetSheet || schema.targetSheet;
-                    const sheetInfo = sheetDataCache.get(sheetName);
-                    if (!sheetInfo) return;
-
                     if (!valuesBySheet.has(sheetName)) valuesBySheet.set(sheetName, {});
-                    
-                    const resolvedTargetHeader = findFirstMatchingHeader(mapping.target, sheetInfo.headers);
-
-                    if (resolvedTargetHeader && sourceObject[mapping.source] !== undefined) {
-                        valuesBySheet.get(sheetName)[resolvedTargetHeader] = sourceObject[mapping.source];
+                    const sheetInfo = sheetDataCache.get(sheetName);
+                    const targetHeader = findFirstMatchingHeader(mapping.target, sheetInfo.headers);
+                    if (targetHeader && sourceObject[mapping.source] !== undefined) {
+                        valuesBySheet.get(sheetName)[targetHeader] = sourceObject[mapping.source];
                     }
                 });
 
                 for (const [sheetName, newValues] of valuesBySheet.entries()) {
                     const sheetInfo = sheetDataCache.get(sheetName);
-                    if (!sheetInfo) continue;
-
+                    const writes = writesBySheet.get(sheetName);
                     const sourceKeyName = sourceKeyMappingBySheet.get(sheetName);
                     const key = sourceObject[sourceKeyName];
                     if (key === undefined) continue;
 
-                    const newRowData = new Array(sheetInfo.headers.length).fill(null);
-                    sheetInfo.headers.forEach((header, index) => {
-                        if (newValues[header] !== undefined) newRowData[index] = newValues[header];
-                    });
-
-                    if (sheetInfo.dataMap.has(String(key))) {
-                        const existingRow = sheetInfo.dataMap.get(String(key));
-                        
-                        const finalRowFormulas = [...existingRow.formulas];
-
+                    const existingRow = sheetInfo.dataMap.get(String(key));
+                    if (existingRow) {
+                        // Update existing row in the finalFormulas array
+                        const rowIndex = existingRow.rowIndex;
                         for (let i = 0; i < sheetInfo.headers.length; i++) {
-                            const isKeyColumn = (i === sheetInfo.keyColumnIndex);
-                            const existingContent = existingRow.formulas[i];
-                            const isExistingContentAFormula = typeof existingContent === 'string' && existingContent.startsWith('=');
-
-                            // If this is the key column AND its existing content is a formula, skip it to preserve it.
-                            if (isKeyColumn && isExistingContentAFormula) {
-                                continue;
-                            }
-
-                            // For all other cases (not the key column, or the key column with plain text),
-                            // update if there is new data for the cell.
-                            if (newRowData[i] !== null) {
-                                finalRowFormulas[i] = newRowData[i];
+                            const header = sheetInfo.headers[i];
+                            const isKeyCol = (i === sheetInfo.keyColumnIndex);
+                            const isFormula = typeof writes.finalFormulas[rowIndex][i] === 'string' && writes.finalFormulas[rowIndex][i].startsWith('=');
+                            if (isKeyCol && isFormula) continue;
+                            if (newValues[header] !== undefined) {
+                                writes.finalFormulas[rowIndex][i] = newValues[header];
                             }
                         }
-                        writesBySheet.get(sheetName).rowsToUpdate.push({ rowIndex: existingRow.rowIndex, values: finalRowFormulas });
+                         writes.updatedRowCount++;
                     } else {
-                        newRowData[sheetInfo.keyColumnIndex] = key;
-                        writesBySheet.get(sheetName).rowsToAdd.push(newRowData);
-                        sheetInfo.dataMap.set(String(key), { rowIndex: -1, formulas: newRowData }); 
+                        // Prepare a new row to be added later
+                        const newRow = new Array(sheetInfo.headers.length).fill(null);
+                        sheetInfo.headers.forEach((header, index) => {
+                            if (newValues[header] !== undefined) newRow[index] = newValues[header];
+                        });
+                        newRow[sheetInfo.keyColumnIndex] = key;
+                        writes.rowsToAdd.push(newRow);
+                        sheetInfo.dataMap.set(String(key), { rowIndex: -1 }); // Prevent duplicate adds
                     }
                 }
             });
 
-            // 7. Perform bulk write operations
+            // 5. Perform BULK write operations
             for (const [sheetName, writes] of writesBySheet.entries()) {
-                if (writes.rowsToUpdate.length === 0 && writes.rowsToAdd.length === 0) continue;
-                sendMessageToDialog(`Writing ${writes.rowsToUpdate.length} updates and ${writes.rowsToAdd.length} new rows to "${sheetName}".`);
-
+                if (writes.updatedRowCount === 0 && writes.rowsToAdd.length === 0) continue;
+                sendMessageToDialog(`Writing ${writes.updatedRowCount} updates and ${writes.rowsToAdd.length} new rows to "${sheetName}".`);
+                
                 const sheet = sheetCache.get(sheetName);
                 const sheetInfo = sheetDataCache.get(sheetName);
 
-                if (writes.rowsToUpdate.length > 0) {
-                    for (const row of writes.rowsToUpdate) {
-                        if (row.rowIndex === -1) continue;
-                        sheet.getRangeByIndexes(row.rowIndex, 0, 1, sheetInfo.headers.length).values = [row.values];
-                    }
+                // Single bulk write for all updates
+                if (writes.updatedRowCount > 0) {
+                    const updateRange = sheet.getRangeByIndexes(0, 0, sheetInfo.rowCount, sheetInfo.headers.length);
+                    updateRange.values = writes.finalFormulas;
                 }
+                
+                // Single bulk write for all new rows
                 if (writes.rowsToAdd.length > 0) {
-                    const startRow = sheetInfo.rowCount;
-                    sheet.getRangeByIndexes(startRow, 0, writes.rowsToAdd.length, sheetInfo.headers.length).values = writes.rowsToAdd;
-                    sheetInfo.rowCount += writes.rowsToAdd.length;
+                    const addRange = sheet.getRangeByIndexes(sheetInfo.rowCount, 0, writes.rowsToAdd.length, sheetInfo.headers.length);
+                    addRange.values = writes.rowsToAdd;
                 }
                 sheet.getUsedRange().format.autofitColumns();
             }
