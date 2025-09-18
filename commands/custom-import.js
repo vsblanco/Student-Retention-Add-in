@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 01:43 PM EDT
-// Version: 1.5.0
+// Timestamp: 2025-09-18 02:01 PM EDT
+// Version: 1.6.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file that contains both the schema and the data.
- * Version 1.5.0 introduces support for fallback names for the 'sheetKeyColumn'
- * by allowing it to be an array of strings.
+ * Version 1.6.0 fixes a bug related to multi-sheet imports with different
+ * key columns by resolving the source key on a per-sheet basis.
  */
 
 /**
@@ -102,24 +102,26 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 sendMessageToDialog(`Using "${resolvedKeyColumn}" as key for sheet "${sheetName}". Mapped ${dataMap.size} existing rows.`);
             }
 
-            // 5. Find the single source key from the data file
-            const keyColumnNames = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn : [schema.sheetKeyColumn];
-            let sourceKey = null;
-            const sourceKeyMapping = schema.columnMappings.find(m => {
-                const targets = Array.isArray(m.target) ? m.target : [m.target];
-                return targets.some(t => keyColumnNames.includes(t));
-            });
-            if (!sourceKeyMapping) throw new Error(`Could not find a 'source' in columnMappings for any of the specified sheetKeyColumns.`);
-            sourceKey = sourceKeyMapping.source;
+            // 5. Determine the source key mapping for each sheet's resolved key column
+            const sourceKeyMappingBySheet = new Map();
+            for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
+                const keyColumnName = sheetInfo.resolvedKeyColumn;
+                const keyMapping = schema.columnMappings.find(m => {
+                    const targets = Array.isArray(m.target) ? m.target : [m.target];
+                    return targets.includes(keyColumnName);
+                });
+                if (!keyMapping) {
+                    throw new Error(`Could not find a 'source' in columnMappings for the key column "${keyColumnName}" on sheet "${sheetName}".`);
+                }
+                sourceKeyMappingBySheet.set(sheetName, keyMapping.source);
+            }
+            sendMessageToDialog("Resolved source keys for all target sheets.");
 
             // 6. Prepare data for writing
             const writesBySheet = new Map();
             allSheetNames.forEach(name => writesBySheet.set(name, { rowsToUpdate: [], rowsToAdd: [] }));
 
             sourceData.forEach(sourceObject => {
-                const key = sourceObject[sourceKey];
-                if (key === undefined) return;
-
                 const valuesBySheet = new Map();
                 schema.columnMappings.forEach(mapping => {
                     const sheetName = mapping.targetSheet || schema.targetSheet;
@@ -139,6 +141,11 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     const sheetInfo = sheetDataCache.get(sheetName);
                     if (!sheetInfo) continue;
 
+                    // Get the correct key for THIS specific sheet from the source data
+                    const sourceKey = sourceKeyMappingBySheet.get(sheetName);
+                    const key = sourceObject[sourceKey];
+                    if (key === undefined) continue;
+
                     const newRowData = new Array(sheetInfo.headers.length).fill(null);
                     sheetInfo.headers.forEach((header, index) => {
                         if (newValues[header] !== undefined) newRowData[index] = newValues[header];
@@ -151,6 +158,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     } else {
                         newRowData[sheetInfo.keyColumnIndex] = key;
                         writesBySheet.get(sheetName).rowsToAdd.push(newRowData);
+                        // Add to map to prevent duplicate adds in the same run for this sheet.
                         sheetInfo.dataMap.set(String(key), { rowIndex: -1, data: newRowData }); 
                     }
                 }
@@ -166,6 +174,8 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                 if (writes.rowsToUpdate.length > 0) {
                     for (const row of writes.rowsToUpdate) {
+                         // Skip updates for rows that were just added in this run
+                        if (row.rowIndex === -1) continue;
                         sheet.getRangeByIndexes(row.rowIndex, 0, 1, sheetInfo.headers.length).values = [row.values];
                     }
                 }
