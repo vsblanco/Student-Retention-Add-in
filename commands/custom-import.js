@@ -1,10 +1,10 @@
-// Timestamp: 2025-09-18 05:43 PM EDT
-// Version: 2.3.0
+// Timestamp: 2025-09-18 06:10 PM EDT
+// Version: 2.4.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 2.3.0 fixes a bug where the script could use the wrong source key
- * when mappings existed for the same column name across multiple sheets.
+ * Version 2.4.0 adds a safety check to prevent TypeErrors when updating
+ * rows in cases of data inconsistency between the read map and the write array.
  */
 
 /**
@@ -71,11 +71,19 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 if (sheet.isNullObject) {
                     sheet = context.workbook.worksheets.add(sheetName);
                     const primaryKey = Array.isArray(schema.sheetKeyColumn) ? schema.sheetKeyColumn[0] : schema.sheetKeyColumn;
-                    const headers = new Set([primaryKey]);
+                    
+                    const headerArray = [primaryKey];
+                    const seenHeaders = new Set([primaryKey]);
                     schema.columnMappings
                         .filter(m => (m.targetSheet || schema.targetSheet) === sheetName)
-                        .forEach(m => headers.add(Array.isArray(m.target) ? m.target[0] : m.target));
-                    sheet.getRangeByIndexes(0, 0, 1, headers.size).values = [Array.from(headers)];
+                        .forEach(m => {
+                            const targetHeader = Array.isArray(m.target) ? m.target[0] : m.target;
+                            if (!seenHeaders.has(targetHeader)) {
+                                headerArray.push(targetHeader);
+                                seenHeaders.add(targetHeader);
+                            }
+                        });
+                    sheet.getRangeByIndexes(0, 0, 1, headerArray.length).values = [headerArray];
                 }
                 sheetCache.set(sheetName, sheet);
             }
@@ -108,7 +116,6 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             for (const [sheetName, sheetInfo] of sheetDataCache.entries()) {
                 const keyColumnName = sheetInfo.resolvedKeyColumn;
                 
-                // Find a mapping where the target column and target sheet both match.
                 const mapping = schema.columnMappings.find(m =>
                     (m.targetSheet || schema.targetSheet) === sheetName &&
                     (Array.isArray(m.target) ? m.target : [m.target]).includes(keyColumnName)
@@ -123,7 +130,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
             for (const sheetName of allSheetNames) {
                 const sheetInfo = sheetDataCache.get(sheetName);
                 writesBySheet.set(sheetName, {
-                    finalFormulas: sheetInfo.formulas.map(row => [...row]), // Create a mutable copy
+                    finalFormulas: sheetInfo.formulas.map(row => [...row]),
                     rowsToAdd: [],
                     updatedRowCount: 0
                 });
@@ -135,6 +142,7 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                     const sheetName = mapping.targetSheet || schema.targetSheet;
                     if (!valuesBySheet.has(sheetName)) valuesBySheet.set(sheetName, {});
                     const sheetInfo = sheetDataCache.get(sheetName);
+                    if (!sheetInfo) return; 
                     const targetHeader = findFirstMatchingHeader(mapping.target, sheetInfo.headers);
                     if (targetHeader && sourceObject[mapping.source] !== undefined) {
                         valuesBySheet.get(sheetName)[targetHeader] = sourceObject[mapping.source];
@@ -150,27 +158,34 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
                     const existingRow = sheetInfo.dataMap.get(String(key));
                     if (existingRow) {
-                        // Update existing row in the finalFormulas array
                         const rowIndex = existingRow.rowIndex;
+                        const targetRow = writes.finalFormulas[rowIndex];
+
+                        // --- FIX: Safety Check ---
+                        // If the target row is unexpectedly missing, skip it to prevent a crash.
+                        if (!targetRow) {
+                            console.warn(`Inconsistent row index found for key: ${key}`);
+                            continue;
+                        }
+
                         for (let i = 0; i < sheetInfo.headers.length; i++) {
                             const header = sheetInfo.headers[i];
                             const isKeyCol = (i === sheetInfo.keyColumnIndex);
-                            const isFormula = typeof writes.finalFormulas[rowIndex][i] === 'string' && writes.finalFormulas[rowIndex][i].startsWith('=');
+                            const isFormula = typeof targetRow[i] === 'string' && targetRow[i].startsWith('=');
                             if (isKeyCol && isFormula) continue;
                             if (newValues[header] !== undefined) {
-                                writes.finalFormulas[rowIndex][i] = newValues[header];
+                                targetRow[i] = newValues[header];
                             }
                         }
                          writes.updatedRowCount++;
                     } else {
-                        // Prepare a new row to be added later
                         const newRow = new Array(sheetInfo.headers.length).fill(null);
                         sheetInfo.headers.forEach((header, index) => {
                             if (newValues[header] !== undefined) newRow[index] = newValues[header];
                         });
                         newRow[sheetInfo.keyColumnIndex] = key;
                         writes.rowsToAdd.push(newRow);
-                        sheetInfo.dataMap.set(String(key), { rowIndex: -1 }); // Prevent duplicate adds
+                        sheetInfo.dataMap.set(String(key), { rowIndex: -1 });
                     }
                 }
             });
@@ -183,13 +198,11 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 const sheet = sheetCache.get(sheetName);
                 const sheetInfo = sheetDataCache.get(sheetName);
 
-                // Single bulk write for all updates
                 if (writes.updatedRowCount > 0) {
                     const updateRange = sheet.getRangeByIndexes(0, 0, sheetInfo.rowCount, sheetInfo.headers.length);
                     updateRange.values = writes.finalFormulas;
                 }
                 
-                // Single bulk write for all new rows
                 if (writes.rowsToAdd.length > 0) {
                     const addRange = sheet.getRangeByIndexes(sheetInfo.rowCount, 0, writes.rowsToAdd.length, sheetInfo.headers.length);
                     addRange.values = writes.rowsToAdd;
