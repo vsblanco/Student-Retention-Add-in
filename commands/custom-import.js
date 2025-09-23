@@ -1,10 +1,11 @@
-// Timestamp: 2025-09-18 07:22 PM EDT
-// Version: 2.5.0
+// Timestamp: 2025-09-23 11:12 AM EDT
+// Version: 2.6.0
 /*
  * This file contains the logic for handling custom, schema-driven imports
  * from a single JSON file.
- * Version 2.5.0 updates the flattening logic to include parent records
- * (e.g., students) even if their nested data array (e.g., assignments) is empty.
+ * Version 2.6.0 adds an 'overwriteTargetSheet' option to the schema.
+ * When true, it removes rows from the primary target sheet that do not
+ * exist in the source JSON file, ensuring an exact match.
  */
 
 /**
@@ -54,6 +55,9 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
         const { schema, data: sourceData } = importPayload;
         sendMessageToDialog(`Successfully validated schema: "${schema.importName}".`);
+        if (schema.overwriteTargetSheet) {
+            sendMessageToDialog(`Overwrite mode enabled for sheet: "${schema.targetSheet}".`);
+        }
         sendMessageToDialog(`Found ${sourceData.length} flattened rows to process.`);
 
         const allSheetNames = new Set([schema.targetSheet]);
@@ -125,6 +129,14 @@ export async function handleCustomImport(message, sendMessageToDialog) {
                 sourceKeyMappingBySheet.set(sheetName, mapping.source);
             }
 
+            // Prepare a set of all source keys for the primary sheet if overwrite is enabled
+            let mainSheetSourceKeySet = null;
+            if (schema.overwriteTargetSheet) {
+                const mainSheetSourceKey = sourceKeyMappingBySheet.get(schema.targetSheet);
+                mainSheetSourceKeySet = new Set(sourceData.map(item => String(item[mainSheetSourceKey])));
+            }
+
+
             // 4. Prepare updates and new rows IN MEMORY
             const writesBySheet = new Map();
             for (const sheetName of allSheetNames) {
@@ -190,6 +202,41 @@ export async function handleCustomImport(message, sendMessageToDialog) {
 
             // 5. Perform BULK write operations
             for (const [sheetName, writes] of writesBySheet.entries()) {
+                // --- Overwrite logic for the primary target sheet ---
+                if (sheetName === schema.targetSheet && schema.overwriteTargetSheet) {
+                    const sheet = sheetCache.get(sheetName);
+                    const sheetInfo = sheetDataCache.get(sheetName);
+                    const keyIndex = sheetInfo.keyColumnIndex;
+
+                    // Filter the existing (and updated) rows to keep only those present in the source JSON
+                    const rowsToKeep = [writes.finalFormulas[0]]; // Always keep the header row
+                    for (let i = 1; i < writes.finalFormulas.length; i++) {
+                        const row = writes.finalFormulas[i];
+                        const key = getKeyFromCell(row[keyIndex], row[keyIndex]);
+                        if (mainSheetSourceKeySet.has(String(key))) {
+                            rowsToKeep.push(row);
+                        }
+                    }
+
+                    const finalSheetContent = [...rowsToKeep, ...writes.rowsToAdd];
+                    const rowsRemovedCount = (sheetInfo.rowCount - 1) - (rowsToKeep.length - 1);
+                    
+                    sendMessageToDialog(`For sheet "${sheetName}": ${rowsToKeep.length -1} rows kept, ${writes.rowsToAdd.length} rows added, ${rowsRemovedCount} rows removed.`);
+
+                    // Clear the sheet and write the final, synchronized content
+                    const usedRange = sheet.getUsedRange();
+                    if(usedRange) usedRange.clear();
+                    await context.sync();
+                    
+                    if (finalSheetContent.length > 0) {
+                        const newRange = sheet.getRangeByIndexes(0, 0, finalSheetContent.length, sheetInfo.headers.length);
+                        newRange.values = finalSheetContent;
+                    }
+                    sheet.getUsedRange().format.autofitColumns();
+                    continue; // Skip the standard write logic for this sheet
+                }
+                
+                // --- Standard update/add logic for all other sheets ---
                 if (writes.updatedRowCount === 0 && writes.rowsToAdd.length === 0) continue;
                 sendMessageToDialog(`Writing ${writes.updatedRowCount} updates and ${writes.rowsToAdd.length} new rows to "${sheetName}".`);
                 
@@ -243,6 +290,8 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
         if (!importFile.sheetKeyColumn || (typeof importFile.sheetKeyColumn !== 'string' && !Array.isArray(importFile.sheetKeyColumn))) throw new Error("'sheetKeyColumn' must be a non-empty string or an array of non-empty strings.");
         if (Array.isArray(importFile.sheetKeyColumn) && importFile.sheetKeyColumn.length === 0) throw new Error("'sheetKeyColumn' array cannot be empty.");
         if (!Array.isArray(importFile.columnMappings) || importFile.columnMappings.length === 0) throw new Error("Must have a non-empty 'columnMappings' array.");
+        if (importFile.overwriteTargetSheet && typeof importFile.overwriteTargetSheet !== 'boolean') throw new Error("If 'overwriteTargetSheet' is specified, it must be a boolean (true/false).");
+
         for (const mapping of importFile.columnMappings) {
             if (!mapping.source || typeof mapping.source !== 'string') throw new Error("Each item in 'columnMappings' must have a valid 'source' property.");
             if (!mapping.target || (typeof mapping.target !== 'string' && !Array.isArray(mapping.target))) throw new Error("Each 'target' in 'columnMappings' must be a non-empty string or an array of non-empty strings.");
@@ -256,7 +305,8 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             targetSheet: importFile.targetSheet,
             sheetKeyColumn: importFile.sheetKeyColumn,
             columnMappings: importFile.columnMappings,
-            dataArrayKey: importFile.dataArrayKey
+            dataArrayKey: importFile.dataArrayKey,
+            overwriteTargetSheet: importFile.overwriteTargetSheet || false
         };
 
         let sourceData = importFile.data;
@@ -266,8 +316,6 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
             sourceData.forEach(parentObject => {
                 const nestedArray = parentObject[schema.dataArrayKey];
                 
-                // --- UPDATED LOGIC ---
-                // If the nested array has items, loop through and create combined objects.
                 if (Array.isArray(nestedArray) && nestedArray.length > 0) {
                     nestedArray.forEach(childObject => {
                         const combinedObject = { ...parentObject, ...childObject };
@@ -275,10 +323,8 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
                         flattenedData.push(combinedObject);
                     });
                 } else {
-                    // If the nested array is empty or doesn't exist, add the parent object by itself.
-                    // This ensures students with no missing assignments are still processed.
                     const parentOnlyObject = { ...parentObject };
-                    delete parentOnlyObject[schema.dataArrayKey]; // Clean up the (potentially empty) array key
+                    delete parentOnlyObject[schema.dataArrayKey]; 
                     flattenedData.push(parentOnlyObject);
                 }
             });
@@ -292,4 +338,3 @@ function parseAndValidateImportFile(dataUrl, sendMessageToDialog) {
         return null;
     }
 }
-
