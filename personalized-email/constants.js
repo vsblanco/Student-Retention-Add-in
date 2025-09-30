@@ -42,7 +42,7 @@ export const COLUMN_MAPPINGS = {
     DaysOut: ["days out", "daysout"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
     History: ['history', 'tags', 'contact history', 'notes', 'tag'],
-    StudentNumber: ['student number', 'StudentNumber'],
+    StudentNumber: ['StudentNumber', 'Student Number'],
     StudentIdentifier: ['student identifier', 'student id']
 };
 
