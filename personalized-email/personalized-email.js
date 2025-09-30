@@ -1,4 +1,4 @@
-// V-3.8 - 2025-09-30 - 12:14 PM EDT
+// V-4.4 - 2025-09-30 - 2:12 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -38,6 +38,7 @@ Office.onReady((info) => {
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
+            studentDataCache // Make cache accessible for modals
         };
 
         modalManager = new ModalManager(appContext);
@@ -46,39 +47,15 @@ Office.onReady((info) => {
         document.getElementById("send-email-button").onclick = () => modalManager.showSendConfirmModal();
         document.getElementById("create-connection-button").onclick = createConnection;
 
-        // Context menu for Example button
-        const exampleButton = document.getElementById('show-example-button');
-        const contextMenu = document.getElementById('example-context-menu');
-        const payloadOption = document.getElementById('context-menu-payload');
-
-        exampleButton.addEventListener('contextmenu', (event) => {
-            event.preventDefault();
-            contextMenu.style.top = `${event.pageY}px`;
-            contextMenu.style.left = `${event.pageX}px`;
-            contextMenu.classList.remove('hidden');
-        });
-
-        // Hide context menu when clicking elsewhere
-        window.addEventListener('click', () => {
-            if (!contextMenu.classList.contains('hidden')) {
-                contextMenu.classList.add('hidden');
-            }
-        });
-
-        payloadOption.addEventListener('click', (event) => {
-            event.preventDefault(); // Prevent default link behavior
-            modalManager.showPayloadModal();
-            contextMenu.classList.add('hidden');
-        });
-
         // Dropdown listener
-        document.getElementById('recipient-list').onchange = () => {
+        const recipientList = document.getElementById('recipient-list');
+        recipientList.onchange = () => {
             toggleCustomSheetInput();
             document.getElementById('student-count-pill').classList.add('hidden');
-            studentDataCache = [];
         };
         
         setupCcInput();
+        setupExampleContextMenu();
         const subjectInput = document.getElementById('email-subject');
         const fromInput = document.getElementById('email-from');
         
@@ -97,13 +74,40 @@ Office.onReady((info) => {
     }
 });
 
+function setupExampleContextMenu() {
+    const exampleButton = document.getElementById('show-example-button');
+    const contextMenu = document.getElementById('example-context-menu');
+
+    exampleButton.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        contextMenu.style.left = `${e.pageX}px`;
+        contextMenu.style.top = `${e.pageY}px`;
+        contextMenu.classList.remove('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.classList.add('hidden');
+        }
+    });
+    
+    document.getElementById('context-menu-payload').onclick = (e) => {
+        e.preventDefault();
+        modalManager.showPayloadModal();
+        contextMenu.classList.add('hidden');
+    };
+}
+
 async function populateParameterButtons() {
     const standardContainer = document.getElementById('standard-parameter-buttons');
     const customContainer = document.getElementById('custom-parameter-buttons');
+    const moreCustomContainer = document.getElementById('more-custom-parameters');
     const customSection = document.getElementById('custom-parameter-section');
+    const showMoreButton = document.getElementById('show-more-params-button');
     
     standardContainer.innerHTML = ''; 
     customContainer.innerHTML = '';
+    moreCustomContainer.innerHTML = '';
 
     const createButton = (param) => {
         const button = document.createElement('button');
@@ -135,12 +139,36 @@ async function populateParameterButtons() {
     });
 
     if (customParameters.length > 0) {
-        customParameters.forEach(param => {
+        customSection.classList.remove('hidden');
+        const topParams = customParameters.slice(0, 5);
+        const remainingParams = customParameters.slice(5);
+
+        topParams.forEach(param => {
             customContainer.appendChild(createButton(param));
         });
-        customSection.classList.remove('hidden');
+
+        if (remainingParams.length > 0) {
+            remainingParams.forEach(param => {
+                moreCustomContainer.appendChild(createButton(param));
+            });
+            showMoreButton.textContent = `Show ${remainingParams.length} More...`;
+            showMoreButton.classList.remove('hidden');
+            
+            showMoreButton.onclick = () => {
+                const isHidden = moreCustomContainer.classList.contains('hidden');
+                moreCustomContainer.classList.toggle('hidden');
+                moreCustomContainer.classList.toggle('flex');
+                showMoreButton.textContent = isHidden ? 'Show Less' : `Show ${remainingParams.length} More...`;
+            };
+        } else {
+            showMoreButton.classList.add('hidden');
+            moreCustomContainer.classList.add('hidden');
+        }
+
     } else {
         customSection.classList.add('hidden');
+        showMoreButton.classList.add('hidden');
+        moreCustomContainer.classList.add('hidden');
     }
 }
 
@@ -440,22 +468,22 @@ async function getStudentData() {
                 studentDataCache.push(student);
             }
         });
+        
+        const studentCountPill = document.getElementById('student-count-pill');
+        studentCountPill.textContent = `${studentDataCache.length} students found`;
+        studentCountPill.classList.remove('hidden');
 
         status.textContent = `Found ${studentDataCache.length} students.`;
-        const pill = document.getElementById('student-count-pill');
-        pill.textContent = `${studentDataCache.length} ${studentDataCache.length === 1 ? 'student' : 'students'} found`;
-        pill.classList.remove('hidden');
-
         setTimeout(() => status.textContent = '', 3000);
 
     } catch (error) {
-        document.getElementById('student-count-pill').classList.add('hidden');
         if (error.code === 'ItemNotFound') {
             status.textContent = `Error: Sheet "${sheetName}" not found.`;
         } else {
             status.textContent = 'An error occurred while fetching data.';
         }
         status.style.color = 'red';
+        document.getElementById('student-count-pill').classList.add('hidden');
         console.error(error);
         throw error;
     }
