@@ -1,4 +1,4 @@
-// V-2.8 - 2025-09-17 - 4:36 PM EDT
+// V-4.7 - 2025-09-30 - 2:50 PM EDT
 // -- CORE CONFIGURATION --
 // These are the primary keys used to store data within the Excel workbook's settings.
 export const EMAIL_TEMPLATES_KEY = "emailTemplates";
@@ -39,7 +39,8 @@ export const COLUMN_MAPPINGS = {
     StudentEmail: ["student email", "school email", "email"],
     PersonalEmail: ["personal email", "otheremail"],
     Grade: ["grade", "course grade"],
-    DaysOut: ["days out", "daysout"]
+    DaysOut: ["days out", "daysout"],
+    History: ['history', 'tags', 'contact history', 'notes']
 };
 
 // Defines the operators available for creating custom parameter mapping rules.

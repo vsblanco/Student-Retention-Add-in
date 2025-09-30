@@ -1,4 +1,4 @@
-// V-4.5 - 2025-09-30 - 2:20 PM EDT
+// V-4.7 - 2025-09-30 - 2:50 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -64,6 +64,7 @@ export default class ModalManager {
             radio.onchange = () => this._handleRecipientSourceChange();
         });
         document.getElementById('recipient-custom-sheet-name').oninput = () => this._handleRecipientSourceChange();
+        document.getElementById('exclude-dnc-toggle').onchange = () => this._handleRecipientSourceChange();
     }
 
     show(modalId) {
@@ -79,9 +80,11 @@ export default class ModalManager {
         this.currentRecipientSelection = { ...this.appContext.recipientSelection };
         this.tempStudentCount = 0;
 
-        const { type, customSheetName } = this.currentRecipientSelection;
+        const { type, customSheetName, excludeDNC } = this.currentRecipientSelection;
         document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
         document.getElementById('recipient-custom-sheet-name').value = customSheetName || '';
+        document.getElementById('exclude-dnc-toggle').checked = excludeDNC;
+
 
         this._updateRecipientModalUI();
         this._fetchStudentCountForModal();
@@ -91,7 +94,8 @@ export default class ModalManager {
     _handleRecipientSourceChange() {
         const selectedType = document.querySelector('input[name="recipient-source"]:checked').value;
         const customSheetName = document.getElementById('recipient-custom-sheet-name').value.trim();
-        this.currentRecipientSelection = { type: selectedType, customSheetName };
+        const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
+        this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC };
         this._updateRecipientModalUI();
         this._fetchStudentCountForModal();
     }
@@ -112,7 +116,7 @@ export default class ModalManager {
             const students = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
             this.tempStudentCount = students.length;
             statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
-            confirmBtn.disabled = this.tempStudentCount === 0;
+            confirmBtn.disabled = false; // Always allow confirmation, even for 0 students
         } catch (error) {
             this.tempStudentCount = 0;
             statusEl.textContent = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred.');
@@ -131,18 +135,16 @@ export default class ModalManager {
 
     // --- Example Modal Logic ---
     async showExampleModal() {
-        try {
-            this.studentsForExample = await this.appContext.getStudentDataWithUI();
-            if (this.studentsForExample.length === 0) {
-                document.getElementById('status').textContent = 'No students found to generate an example.';
-                document.getElementById('status').style.color = 'orange';
-                return;
-            }
-            this.currentExampleIndex = 0;
-            this._resetExampleSearch();
-            this._renderExampleForIndex(this.currentExampleIndex);
-            this.show('example-modal');
-        } catch (error) { /* Error is already handled by getStudentDataWithUI */ }
+        if (this.appContext.studentDataCache.length === 0) {
+             document.getElementById('status').textContent = 'Please select recipients before viewing an example.';
+             document.getElementById('status').style.color = 'orange';
+             return;
+        }
+        this.studentsForExample = this.appContext.studentDataCache;
+        this.currentExampleIndex = 0;
+        this._resetExampleSearch();
+        this._renderExampleForIndex(this.currentExampleIndex);
+        this.show('example-modal');
     }
 
     _renderExampleForIndex(index) {
@@ -237,25 +239,26 @@ export default class ModalManager {
     }
 
     async showPayloadModal() {
-        try {
-            const students = await this.appContext.getStudentDataWithUI();
-            if (students.length === 0) return;
-            
-            const fromTemplate = document.getElementById('email-from').value;
-            const subjectTemplate = document.getElementById('email-subject').value;
-            const bodyTemplate = this.appContext.quill.root.innerHTML;
+        if (this.appContext.studentDataCache.length === 0) {
+             document.getElementById('status').textContent = 'Please select recipients before viewing payload.';
+             document.getElementById('status').style.color = 'orange';
+             return;
+        }
+        
+        const fromTemplate = document.getElementById('email-from').value;
+        const subjectTemplate = document.getElementById('email-subject').value;
+        const bodyTemplate = this.appContext.quill.root.innerHTML;
 
-            const payload = students.map(student => ({
-                from: this.appContext.renderTemplate(fromTemplate, student),
-                to: student.StudentEmail || '',
-                cc: this.appContext.renderCCTemplate(this.appContext.ccRecipients, student),
-                subject: this.appContext.renderTemplate(subjectTemplate, student),
-                body: this.appContext.renderTemplate(bodyTemplate, student)
-            })).filter(email => email.to && email.from);
+        const payload = this.appContext.studentDataCache.map(student => ({
+            from: this.appContext.renderTemplate(fromTemplate, student),
+            to: student.StudentEmail || '',
+            cc: this.appContext.renderCCTemplate(this.appContext.ccRecipients, student),
+            subject: this.appContext.renderTemplate(subjectTemplate, student),
+            body: this.appContext.renderTemplate(bodyTemplate, student)
+        })).filter(email => email.to && email.from);
 
-            document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
-            this.show('payload-modal');
-        } catch (error) { /* Handled by getStudentDataWithUI */ }
+        document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
+        this.show('payload-modal');
     }
 
     _togglePayloadSchema() {
@@ -659,18 +662,14 @@ export default class ModalManager {
     }
 
     async showSendConfirmModal() {
-        // Ensure data is loaded before confirming
-        try {
-            await this.appContext.getStudentDataWithUI();
-            const count = this.appContext.studentDataCache.length;
-            if (count === 0) {
-                document.getElementById('status').textContent = 'No students selected to send emails to.';
-                document.getElementById('status').style.color = 'orange';
-                return;
-            }
-            document.getElementById('send-confirm-message').textContent = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
-            this.show('send-confirm-modal');
-        } catch (error) { /* Error already displayed */ }
+        if (this.appContext.studentDataCache.length === 0) {
+            document.getElementById('status').textContent = 'Please select recipients before sending.';
+            document.getElementById('status').style.color = 'orange';
+            return;
+        }
+        const count = this.appContext.studentDataCache.length;
+        document.getElementById('send-confirm-message').textContent = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
+        this.show('send-confirm-modal');
     }
 }
 

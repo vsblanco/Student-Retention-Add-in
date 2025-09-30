@@ -1,4 +1,4 @@
-// V-4.5 - 2025-09-30 - 2:20 PM EDT
+// V-4.8 - 2025-09-30 - 2:58 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -11,16 +11,16 @@ let ccRecipients = [];
 let customParameters = [];
 let modalManager;
 let worksheetDataCache = {}; // Cache for worksheet data
-let recipientSelection = { type: 'lda', customSheetName: '' };
+let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true };
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
- * processes it, and populates the `studentDataCache`. It does not interact with the UI.
+ * processes it, and populates the `studentDataCache`.
  * @param {object} selection - The recipient selection object.
  * @returns {Promise<Array>} A promise that resolves with the student data array.
  */
 async function _getStudentDataCore(selection) {
-    const { type, customSheetName } = selection;
+    const { type, customSheetName, excludeDNC } = selection;
     let sheetName;
 
     if (type === 'custom') {
@@ -39,6 +39,39 @@ async function _getStudentDataCore(selection) {
 
     try {
         await Excel.run(async (context) => {
+            // Step 1: Build a list of DNC students if the exclusion is enabled.
+            const dncStudentNames = new Set();
+            if (excludeDNC) {
+                try {
+                    const historySheet = context.workbook.worksheets.getItem("Student History");
+                    const historyRange = historySheet.getUsedRange();
+                    historyRange.load("values");
+                    await context.sync();
+                    
+                    const historyValues = historyRange.values;
+                    if (historyValues.length > 1) {
+                        const historyHeaders = historyValues[0].map(h => String(h ?? '').toLowerCase());
+                        const nameIndex = findColumnIndex(historyHeaders, ['student name']);
+                        const tagsIndex = findColumnIndex(historyHeaders, ['tags']);
+
+                        if (nameIndex !== -1 && tagsIndex !== -1) {
+                            for (let i = 1; i < historyValues.length; i++) {
+                                const row = historyValues[i];
+                                const tags = String(row[tagsIndex] || '').toUpperCase();
+                                if (tags.includes('DNC')) {
+                                    const studentName = row[nameIndex];
+                                    if(studentName) dncStudentNames.add(studentName);
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    // If Student History sheet doesn't exist, log it and continue without exclusions.
+                    console.warn("Could not find 'Student History' sheet for DNC exclusion. Proceeding without it.");
+                }
+            }
+
+            // Step 2: Fetch and process the main student list.
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
@@ -65,6 +98,12 @@ async function _getStudentDataCore(selection) {
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
                 const studentName = row[colIndices.StudentName] ?? '';
+
+                // Step 3: Filter out DNC students from the main list.
+                if (excludeDNC && dncStudentNames.has(studentName)) {
+                    continue; // Skip this student
+                }
+
                 const nameParts = getNameParts(studentName);
 
                 const student = {
