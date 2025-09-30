@@ -1,4 +1,4 @@
-<!-- 2025-09-30 - 1:04 PM EDT - V-4.0 -->
+<!-- 2025-09-30 - 1:37 PM EDT - V-4.1 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -171,7 +171,27 @@
         <!-- Modals -->
         <div id="example-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-60">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-                <h3 class="text-lg font-semibold text-gray-800 mb-4">Email Preview</h3>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Email Preview</h3>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-student-button" class="p-1 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" title="Previous Student">
+                            <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <span id="example-student-counter" class="text-sm text-gray-600 font-medium w-24 text-center"></span>
+                        <button id="next-student-button" class="p-1 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" title="Next Student">
+                            <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                        <button id="random-student-button" class="p-1 rounded-full hover:bg-gray-200" title="Random Student">
+                            <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.667 0l3.182-3.182m0-11.667l-3.182 3.182a8.25 8.25 0 00-11.667 0L2.985 19.644z" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
                 <div class="space-y-3 text-sm border-t border-b py-4">
                      <div class="flex">
                         <label class="font-semibold text-gray-600 w-16">From:</label>
