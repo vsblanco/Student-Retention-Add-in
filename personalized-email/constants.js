@@ -42,7 +42,8 @@ export const COLUMN_MAPPINGS = {
     DaysOut: ["days out", "daysout"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
     Tags: ['history', 'tags', 'tag'],
-    StudentIdentifier: ['student identifier','studentnumber']
+    StudentIdentifier: ['student identifier','studentnumber'],
+    Outreach: ['outreach']
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
