@@ -1,4 +1,4 @@
-// V-5.6 - 2025-09-30 - 5:29 PM EDT
+// V-5.7 - 2025-09-30 - 5:55 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -136,7 +136,8 @@ async function _getStudentDataCore(selection) {
                 // Fill Color exclusion
                 if (excludeFillColor && colIndices.Outreach !== -1) {
                     const cellColor = usedRange.format.fill.color[i][colIndices.Outreach];
-                    // Any color other than white ('#FFFFFF') is considered a fill.
+                    // Any color other than white ('#FFFFFF') or no-fill ('#000000' with a null tint) is considered a fill.
+                    // Excel JS API returns #000000 for no-fill, so we must check. It seems safer to check for not white.
                     if (cellColor !== '#FFFFFF') {
                          console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color: ${cellColor}.`);
                         continue;
