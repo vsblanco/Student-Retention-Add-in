@@ -1,4 +1,4 @@
-// V-6.1 - 2025-09-30 - 6:33 PM EDT
+// V-6.2 - 2025-09-30 - 6:53 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -294,7 +294,7 @@ Office.onReady((info) => {
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
-            studentDataCache
+            get studentDataCache() { return studentDataCache; }
         };
 
         modalManager = new ModalManager(appContext);
@@ -681,4 +681,3 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
-
