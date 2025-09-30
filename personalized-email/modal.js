@@ -1,4 +1,4 @@
-// V-3.9 - 2025-09-30 - 12:19 PM EDT
+// V-4.0 - 2025-09-30 - 1:04 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -23,9 +23,10 @@ export default class ModalManager {
         document.getElementById('close-templates-modal-button').onclick = () => this.hide('templates-modal');
         document.getElementById('save-current-template-button').onclick = () => this.showSaveTemplateModal();
         
-        // Save Template Modal
+        // Save/Edit Template Modal
         document.getElementById('cancel-save-template-button').onclick = () => this.hide('save-template-modal');
         document.getElementById('confirm-save-template-button').onclick = () => this._saveTemplate();
+        document.getElementById('delete-template-button').onclick = () => this._deleteTemplate();
 
         // Custom Parameter Modal
         document.getElementById('create-custom-param-button').onclick = () => this.showCustomParamModal();
@@ -234,12 +235,12 @@ export default class ModalManager {
         loadButton.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200';
         loadButton.onclick = () => this._loadTemplate(template);
         
-        const deleteButton = document.createElement('button');
-        deleteButton.textContent = 'Delete';
-        deleteButton.className = 'px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200';
-        deleteButton.onclick = () => this._deleteTemplate(template.id);
-        
-        buttons.append(loadButton, deleteButton);
+        const editButton = document.createElement('button');
+        editButton.textContent = 'Edit';
+        editButton.className = 'px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300';
+        editButton.onclick = () => this.showSaveTemplateModal(template);
+
+        buttons.append(loadButton, editButton);
         item.append(name, buttons);
         return item;
     }
@@ -253,18 +254,38 @@ export default class ModalManager {
         this.hide('templates-modal');
     }
 
-    async _deleteTemplate(templateId) {
+    async _deleteTemplate() {
+        if (!this.editingTemplateId) return;
+
         let templates = await this.appContext.getTemplates();
-        templates = templates.filter(t => t.id !== templateId);
+        templates = templates.filter(t => t.id !== this.editingTemplateId);
         await this.appContext.saveTemplates(templates);
+
+        this.hide('save-template-modal');
         await this._populateTemplatesList();
+        this.show('templates-modal');
     }
     
-    // --- Save Template Modal Logic ---
-    showSaveTemplateModal() {
+    // --- Save/Edit Template Modal Logic ---
+    showSaveTemplateModal(templateToEdit = null) {
         this.hide('templates-modal');
-        document.getElementById('template-name').value = '';
-        document.getElementById('template-author').value = '';
+        const titleEl = document.getElementById('save-template-modal-title');
+        const deleteBtn = document.getElementById('delete-template-button');
+        
+        if (templateToEdit) {
+            this.editingTemplateId = templateToEdit.id;
+            titleEl.textContent = 'Edit Template';
+            document.getElementById('template-name').value = templateToEdit.name;
+            document.getElementById('template-author').value = templateToEdit.author;
+            deleteBtn.classList.remove('hidden');
+        } else {
+            this.editingTemplateId = null;
+            titleEl.textContent = 'Save New Template';
+            document.getElementById('template-name').value = '';
+            document.getElementById('template-author').value = '';
+            deleteBtn.classList.add('hidden');
+        }
+        
         document.getElementById('save-template-status').textContent = '';
         this.show('save-template-modal');
     }
@@ -280,19 +301,38 @@ export default class ModalManager {
             return;
         }
 
-        const newTemplate = {
-            id: 'tpl-' + Math.random().toString(36).substr(2, 9),
-            name: name,
-            author: author,
-            from: document.getElementById('email-from').value,
-            subject: document.getElementById('email-subject').value,
-            body: this.appContext.quill.root.innerHTML,
-            cc: [...this.appContext.ccRecipients],
-            createdAt: new Date().toISOString()
-        };
-        
         const templates = await this.appContext.getTemplates();
-        templates.push(newTemplate);
+
+        if (this.editingTemplateId) {
+            // Update existing template
+            const templateIndex = templates.findIndex(t => t.id === this.editingTemplateId);
+            if (templateIndex > -1) {
+                const updatedTemplate = {
+                    ...templates[templateIndex],
+                    name,
+                    author,
+                    from: document.getElementById('email-from').value,
+                    subject: document.getElementById('email-subject').value,
+                    body: this.appContext.quill.root.innerHTML,
+                    cc: [...this.appContext.ccRecipients],
+                };
+                templates[templateIndex] = updatedTemplate;
+            }
+        } else {
+            // Create new template
+            const newTemplate = {
+                id: 'tpl-' + Math.random().toString(36).substr(2, 9),
+                name,
+                author,
+                from: document.getElementById('email-from').value,
+                subject: document.getElementById('email-subject').value,
+                body: this.appContext.quill.root.innerHTML,
+                cc: [...this.appContext.ccRecipients],
+                createdAt: new Date().toISOString()
+            };
+            templates.push(newTemplate);
+        }
+        
         await this.appContext.saveTemplates(templates);
 
         status.textContent = 'Template saved successfully!';
@@ -300,6 +340,7 @@ export default class ModalManager {
 
         setTimeout(() => {
             this.hide('save-template-modal');
+            this.showTemplatesModal();
         }, 1500);
     }
     
@@ -630,3 +671,4 @@ export default class ModalManager {
         return svg;
     }
 }
+
