@@ -41,9 +41,8 @@ export const COLUMN_MAPPINGS = {
     Grade: ["grade", "course grade"],
     DaysOut: ["days out", "daysout"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
-    History: ['history', 'tags', 'tag'],
-    StudentNumber: ['StudentNumber'],
-    StudentIdentifier: ['student identifier']
+    Tags: ['history', 'tags', 'tag'],
+    StudentIdentifier: ['student identifier','StudentNumber']
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
