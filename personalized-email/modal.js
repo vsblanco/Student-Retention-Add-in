@@ -1,4 +1,4 @@
-// V-4.7 - 2025-09-30 - 2:50 PM EDT
+// V-4.8 - 2025-09-30 - 5:55 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -65,6 +65,7 @@ export default class ModalManager {
         });
         document.getElementById('recipient-custom-sheet-name').oninput = () => this._handleRecipientSourceChange();
         document.getElementById('exclude-dnc-toggle').onchange = () => this._handleRecipientSourceChange();
+        document.getElementById('exclude-fill-color-toggle').onchange = () => this._handleRecipientSourceChange();
     }
 
     show(modalId) {
@@ -80,10 +81,11 @@ export default class ModalManager {
         this.currentRecipientSelection = { ...this.appContext.recipientSelection };
         this.tempStudentCount = 0;
 
-        const { type, customSheetName, excludeDNC } = this.currentRecipientSelection;
+        const { type, customSheetName, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
         document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
         document.getElementById('recipient-custom-sheet-name').value = customSheetName || '';
         document.getElementById('exclude-dnc-toggle').checked = excludeDNC;
+        document.getElementById('exclude-fill-color-toggle').checked = excludeFillColor;
 
 
         this._updateRecipientModalUI();
@@ -95,7 +97,8 @@ export default class ModalManager {
         const selectedType = document.querySelector('input[name="recipient-source"]:checked').value;
         const customSheetName = document.getElementById('recipient-custom-sheet-name').value.trim();
         const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
-        this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC };
+        const excludeFillColor = document.getElementById('exclude-fill-color-toggle').checked;
+        this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC, excludeFillColor };
         this._updateRecipientModalUI();
         this._fetchStudentCountForModal();
     }
