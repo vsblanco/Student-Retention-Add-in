@@ -1,4 +1,4 @@
-// V-5.8 - 2025-09-30 - 6:06 PM EDT
+// V-6.1 - 2025-09-30 - 6:33 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -121,6 +121,10 @@ async function _getStudentDataCore(selection) {
             });
 
             console.log("Step 3: Processing and filtering recipient list...");
+            if (excludeFillColor && colIndices.Outreach !== -1) {
+                console.log("--- Begin Outreach Fill Color Analysis ---");
+            }
+
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
                 if (!row) continue; // Defensive check for empty rows that might be in the usedRange
@@ -137,16 +141,18 @@ async function _getStudentDataCore(selection) {
 
                 // Fill Color exclusion
                 if (excludeFillColor && colIndices.Outreach !== -1) {
-                    // The API may return null for format.fill.color if no cells in the range have a fill color.
-                    if (usedRange.format.fill.color) {
-                        const cellColor = usedRange.format.fill.color[i][colIndices.Outreach];
-                        
-                        // Exclude if a color exists and it's not white.
-                        // The API may return '#000000' for "No Fill", which should also be ignored.
-                        if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
-                            console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color: ${cellColor}.`);
-                            continue;
-                        }
+                    let cellColor = '#FFFFFF'; // Default to white (no fill)
+                    if (usedRange.format.fill.color && usedRange.format.fill.color[i]) {
+                        cellColor = usedRange.format.fill.color[i][colIndices.Outreach];
+                    }
+                    
+                    // Log the color for every student for debugging
+                    console.log(`- Student: ${row[colIndices.StudentName] || 'Unknown Name'}, Outreach Color: ${cellColor}`);
+
+                    // The API may return '#000000' for "No Fill", which should also be ignored.
+                    if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
+                        console.log(`  ↳ EXCLUDING student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color.`);
+                        continue;
                     }
                 }
                 
@@ -212,6 +218,9 @@ async function _getStudentDataCore(selection) {
                     student[param.name] = value;
                 }
                 studentDataCache.push(student);
+            }
+            if (excludeFillColor && colIndices.Outreach !== -1) {
+                console.log("--- End Outreach Fill Color Analysis ---");
             }
         });
         console.log(`--- Process Complete. Final recipient count: ${studentDataCache.length} ---`);
