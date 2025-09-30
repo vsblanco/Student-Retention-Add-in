@@ -1,4 +1,4 @@
-// V-3.7 - 2025-09-30 - 12:07 PM EDT
+// V-3.8 - 2025-09-30 - 12:14 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -45,6 +45,31 @@ Office.onReady((info) => {
         // Main Buttons not related to modals
         document.getElementById("send-email-button").onclick = () => modalManager.showSendConfirmModal();
         document.getElementById("create-connection-button").onclick = createConnection;
+
+        // Context menu for Example button
+        const exampleButton = document.getElementById('show-example-button');
+        const contextMenu = document.getElementById('example-context-menu');
+        const payloadOption = document.getElementById('context-menu-payload');
+
+        exampleButton.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            contextMenu.style.top = `${event.pageY}px`;
+            contextMenu.style.left = `${event.pageX}px`;
+            contextMenu.classList.remove('hidden');
+        });
+
+        // Hide context menu when clicking elsewhere
+        window.addEventListener('click', () => {
+            if (!contextMenu.classList.contains('hidden')) {
+                contextMenu.classList.add('hidden');
+            }
+        });
+
+        payloadOption.addEventListener('click', (event) => {
+            event.preventDefault(); // Prevent default link behavior
+            modalManager.showPayloadModal();
+            contextMenu.classList.add('hidden');
+        });
 
         // Dropdown listener
         document.getElementById('recipient-list').onchange = () => {
@@ -638,3 +663,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
