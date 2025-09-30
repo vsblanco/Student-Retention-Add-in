@@ -1,4 +1,4 @@
-// V-5.5 - 2025-09-30 - 5:21 PM EDT
+// V-5.6 - 2025-09-30 - 5:29 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -11,7 +11,7 @@ let ccRecipients = [];
 let customParameters = [];
 let modalManager;
 let worksheetDataCache = {}; // Cache for worksheet data
-let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true };
+let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
@@ -21,8 +21,8 @@ let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true };
  */
 async function _getStudentDataCore(selection) {
     console.log("--- Starting Data Fetch & DNC Exclusion Process ---");
-    const { type, customSheetName, excludeDNC } = selection;
-    console.log(`Selection criteria: type=${type}, customSheet='${customSheetName}', excludeDNC=${excludeDNC}`);
+    const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
+    console.log(`Selection criteria: type=${type}, customSheet='${customSheetName}', excludeDNC=${excludeDNC}, excludeFillColor=${excludeFillColor}`);
     let sheetName;
 
     if (type === 'custom') {
@@ -63,7 +63,6 @@ async function _getStudentDataCore(selection) {
                         if (identifierIndex !== -1 && tagsIndex !== -1) {
                             for (let i = 1; i < historyValues.length; i++) {
                                 const row = historyValues[i];
-                                // New DNC Logic: Exclude for any DNC tag except specific phone-related ones.
                                 const tagsString = String(row[tagsIndex] || '').toUpperCase();
                                 const individualTags = tagsString.split(',').map(t => t.trim());
 
@@ -98,9 +97,9 @@ async function _getStudentDataCore(selection) {
             console.log(`Step 2: Fetching recipients from '${sheetName}' sheet.`);
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values");
+            usedRange.load("values, format/fill/color");
             await context.sync();
-            console.log(`Successfully loaded '${sheetName}' sheet.`);
+            console.log(`Successfully loaded '${sheetName}' sheet with values and formatting.`);
 
             const values = usedRange.values;
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
@@ -110,26 +109,6 @@ async function _getStudentDataCore(selection) {
                 colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
             }
             console.log("Recipient sheet column indices found:", colIndices);
-            
-            // --- Enhanced Logging for Debugging ---
-            if (excludeDNC && colIndices.StudentIdentifier !== -1) {
-                const recipientStudentIdentifiersForLogging = [];
-                for (let i = 1; i < values.length; i++) {
-                    const studentIdentifier = values[i][colIndices.StudentIdentifier];
-                    if (studentIdentifier) recipientStudentIdentifiersForLogging.push(String(studentIdentifier));
-                }
-                console.log(`Found ${recipientStudentIdentifiersForLogging.length} student identifiers in '${sheetName}':`, recipientStudentIdentifiersForLogging);
-                
-                const matchedIds = recipientStudentIdentifiersForLogging.filter(id => dncStudentIdentifiers.has(id));
-                if (matchedIds.length > 0) {
-                    console.log(`%cFound ${matchedIds.length} MATCH(ES) between recipient list and DNC list. These students will be excluded:`, 'color: orange; font-weight: bold;', matchedIds);
-                } else {
-                    console.log("Found NO MATCHES between recipient list and DNC list. No students will be excluded based on DNC tag.");
-                }
-            } else if (excludeDNC) {
-                 console.warn(`Could not find a 'Student Identifier' column in '${sheetName}'. Cannot perform DNC exclusion check.`);
-            }
-            // --- End Enhanced Logging ---
             
             await loadCustomParameters();
 
@@ -144,13 +123,23 @@ async function _getStudentDataCore(selection) {
             console.log("Step 3: Processing and filtering recipient list...");
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
+                const studentIdentifier = row[colIndices.StudentIdentifier];
 
-                // Step 3: Filter out DNC students using their ID from the main list.
+                // DNC Tag exclusion
                 if (excludeDNC && colIndices.StudentIdentifier !== -1) {
-                    const studentIdentifier = row[colIndices.StudentIdentifier];
                     if (studentIdentifier && dncStudentIdentifiers.has(String(studentIdentifier))) {
                         console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because they are on the DNC list.`);
-                        continue; // Skip this student
+                        continue;
+                    }
+                }
+
+                // Fill Color exclusion
+                if (excludeFillColor && colIndices.Outreach !== -1) {
+                    const cellColor = usedRange.format.fill.color[i][colIndices.Outreach];
+                    // Any color other than white ('#FFFFFF') is considered a fill.
+                    if (cellColor !== '#FFFFFF') {
+                         console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color: ${cellColor}.`);
+                        continue;
                     }
                 }
                 
