@@ -1,4 +1,4 @@
-// V-4.8 - 2025-09-30 - 2:58 PM EDT
+// V-4.9 - 2025-09-30 - 3:17 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -39,8 +39,8 @@ async function _getStudentDataCore(selection) {
 
     try {
         await Excel.run(async (context) => {
-            // Step 1: Build a list of DNC students if the exclusion is enabled.
-            const dncStudentNames = new Set();
+            // Step 1: Build a list of DNC students by their ID if exclusion is enabled.
+            const dncStudentIdentifiers = new Set();
             if (excludeDNC) {
                 try {
                     const historySheet = context.workbook.worksheets.getItem("Student History");
@@ -51,16 +51,16 @@ async function _getStudentDataCore(selection) {
                     const historyValues = historyRange.values;
                     if (historyValues.length > 1) {
                         const historyHeaders = historyValues[0].map(h => String(h ?? '').toLowerCase());
-                        const nameIndex = findColumnIndex(historyHeaders, ['student name']);
-                        const tagsIndex = findColumnIndex(historyHeaders, ['tags']);
+                        const identifierIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.StudentIdentifier);
+                        const tagsIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.History);
 
-                        if (nameIndex !== -1 && tagsIndex !== -1) {
+                        if (identifierIndex !== -1 && tagsIndex !== -1) {
                             for (let i = 1; i < historyValues.length; i++) {
                                 const row = historyValues[i];
                                 const tags = String(row[tagsIndex] || '').toUpperCase();
                                 if (tags.includes('DNC')) {
-                                    const studentName = row[nameIndex];
-                                    if(studentName) dncStudentNames.add(studentName);
+                                    const studentIdentifier = row[identifierIndex];
+                                    if(studentIdentifier) dncStudentIdentifiers.add(String(studentIdentifier));
                                 }
                             }
                         }
@@ -97,13 +97,16 @@ async function _getStudentDataCore(selection) {
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
-                const studentName = row[colIndices.StudentName] ?? '';
 
-                // Step 3: Filter out DNC students from the main list.
-                if (excludeDNC && dncStudentNames.has(studentName)) {
-                    continue; // Skip this student
+                // Step 3: Filter out DNC students using their ID from the main list.
+                if (excludeDNC && colIndices.StudentNumber !== -1) {
+                    const studentNumber = row[colIndices.StudentNumber];
+                    if (studentNumber && dncStudentIdentifiers.has(String(studentNumber))) {
+                        continue; // Skip this student
+                    }
                 }
-
+                
+                const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
 
                 const student = {
