@@ -1,4 +1,4 @@
-// V-6.2 - 2025-09-30 - 6:53 PM EDT
+// V-6.4 - 2025-09-30 - 7:09 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -305,6 +305,7 @@ Office.onReady((info) => {
         
         setupCcInput();
         setupExampleContextMenu();
+        setupSettingsModal();
         const subjectInput = document.getElementById('email-subject');
         const fromInput = document.getElementById('email-from');
         
@@ -340,6 +341,11 @@ function setupExampleContextMenu() {
     document.getElementById('context-menu-payload').onclick = (e) => {
         e.preventDefault();
         modalManager.showPayloadModal();
+        contextMenu.classList.add('hidden');
+    };
+    document.getElementById('context-menu-settings').onclick = (e) => {
+        e.preventDefault();
+        showSettingsModal();
         contextMenu.classList.add('hidden');
     };
 }
@@ -419,6 +425,45 @@ function insertParameter(param) {
     } else {
         quill.focus();
         quill.insertText(quill.getLength(), param, 'user');
+    }
+}
+
+function setupSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    const closeButton = document.getElementById('close-settings-modal-button');
+    closeButton.onclick = () => modal.classList.add('hidden');
+}
+
+async function showSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    const contentEl = document.getElementById('settings-content');
+    contentEl.textContent = 'Loading settings...';
+    modal.classList.remove('hidden');
+
+    try {
+        await Excel.run(async (context) => {
+            const settings = context.workbook.settings;
+            const keysToFetch = ["connections", EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY];
+            const settingsResult = {};
+
+            for (const key of keysToFetch) {
+                const settingItem = settings.getItemOrNullObject(key);
+                settingItem.load("value");
+                settingsResult[key] = settingItem;
+            }
+            
+            await context.sync();
+
+            const settingsToShow = {};
+            for (const key in settingsResult) {
+                settingsToShow[key] = settingsResult[key].value ? JSON.parse(settingsResult[key].value) : null;
+            }
+
+            contentEl.textContent = JSON.stringify(settingsToShow, null, 2);
+        });
+    } catch (error) {
+        console.error("Error fetching workbook settings:", error);
+        contentEl.textContent = `Error fetching settings:\n\n${error.message}`;
     }
 }
 
@@ -681,3 +726,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
