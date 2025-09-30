@@ -1,4 +1,4 @@
-// V-3.6 - 2025-09-17 - 4:00 PM EDT
+// V-3.7 - 2025-09-30 - 12:07 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -47,7 +47,11 @@ Office.onReady((info) => {
         document.getElementById("create-connection-button").onclick = createConnection;
 
         // Dropdown listener
-        document.getElementById('recipient-list').onchange = toggleCustomSheetInput;
+        document.getElementById('recipient-list').onchange = () => {
+            toggleCustomSheetInput();
+            document.getElementById('student-count-pill').classList.add('hidden');
+            studentDataCache = [];
+        };
         
         setupCcInput();
         const subjectInput = document.getElementById('email-subject');
@@ -413,9 +417,14 @@ async function getStudentData() {
         });
 
         status.textContent = `Found ${studentDataCache.length} students.`;
+        const pill = document.getElementById('student-count-pill');
+        pill.textContent = `${studentDataCache.length} ${studentDataCache.length === 1 ? 'student' : 'students'} found`;
+        pill.classList.remove('hidden');
+
         setTimeout(() => status.textContent = '', 3000);
 
     } catch (error) {
+        document.getElementById('student-count-pill').classList.add('hidden');
         if (error.code === 'ItemNotFound') {
             status.textContent = `Error: Sheet "${sheetName}" not found.`;
         } else {
@@ -629,4 +638,3 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
-
