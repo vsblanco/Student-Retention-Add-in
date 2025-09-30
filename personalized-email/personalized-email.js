@@ -1,4 +1,4 @@
-// V-4.9 - 2025-09-30 - 3:17 PM EDT
+// V-5.0 - 2025-09-30 - 3:36 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -20,7 +20,9 @@ let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true };
  * @returns {Promise<Array>} A promise that resolves with the student data array.
  */
 async function _getStudentDataCore(selection) {
+    console.log("--- Starting Data Fetch & DNC Exclusion Process ---");
     const { type, customSheetName, excludeDNC } = selection;
+    console.log(`Selection criteria: type=${type}, customSheet='${customSheetName}', excludeDNC=${excludeDNC}`);
     let sheetName;
 
     if (type === 'custom') {
@@ -42,17 +44,20 @@ async function _getStudentDataCore(selection) {
             // Step 1: Build a list of DNC students by their ID if exclusion is enabled.
             const dncStudentIdentifiers = new Set();
             if (excludeDNC) {
+                console.log("Step 1: Building DNC exclusion list...");
                 try {
                     const historySheet = context.workbook.worksheets.getItem("Student History");
                     const historyRange = historySheet.getUsedRange();
                     historyRange.load("values");
                     await context.sync();
+                    console.log("Successfully loaded 'Student History' sheet.");
                     
                     const historyValues = historyRange.values;
                     if (historyValues.length > 1) {
                         const historyHeaders = historyValues[0].map(h => String(h ?? '').toLowerCase());
                         const identifierIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.StudentIdentifier);
                         const tagsIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.History);
+                        console.log(`'Student History' Headers found: StudentIdentifier at index ${identifierIndex}, Tags at index ${tagsIndex}`);
 
                         if (identifierIndex !== -1 && tagsIndex !== -1) {
                             for (let i = 1; i < historyValues.length; i++) {
@@ -60,22 +65,31 @@ async function _getStudentDataCore(selection) {
                                 const tags = String(row[tagsIndex] || '').toUpperCase();
                                 if (tags.includes('DNC')) {
                                     const studentIdentifier = row[identifierIndex];
-                                    if(studentIdentifier) dncStudentIdentifiers.add(String(studentIdentifier));
+                                    if(studentIdentifier) {
+                                        dncStudentIdentifiers.add(String(studentIdentifier));
+                                        console.log(`Found DNC tag for Student ID: ${studentIdentifier}. Added to exclusion list.`);
+                                    }
                                 }
                             }
+                        } else {
+                            console.warn("Could not find 'Student Identifier' or 'Tags' column in 'Student History'. Cannot perform DNC exclusion.");
                         }
                     }
+                    console.log(`Finished building exclusion list. Found ${dncStudentIdentifiers.size} unique students with DNC tags.`);
                 } catch (error) {
-                    // If Student History sheet doesn't exist, log it and continue without exclusions.
-                    console.warn("Could not find 'Student History' sheet for DNC exclusion. Proceeding without it.");
+                    console.error("Error processing 'Student History' sheet for DNC exclusion. Proceeding without it.", error);
                 }
+            } else {
+                 console.log("DNC exclusion is turned OFF. Skipping exclusion list build.");
             }
 
             // Step 2: Fetch and process the main student list.
+            console.log(`Step 2: Fetching recipients from '${sheetName}' sheet.`);
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
             usedRange.load("values");
             await context.sync();
+            console.log(`Successfully loaded '${sheetName}' sheet.`);
 
             const values = usedRange.values;
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
@@ -86,6 +100,8 @@ async function _getStudentDataCore(selection) {
             for (const key in COLUMN_MAPPINGS) {
                 colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
             }
+            console.log("Recipient sheet column indices found:", colIndices);
+
 
             const customParamIndices = {};
             customParameters.forEach(param => {
@@ -95,6 +111,7 @@ async function _getStudentDataCore(selection) {
                 }
             });
 
+            console.log("Step 3: Processing and filtering recipient list...");
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
 
@@ -102,6 +119,7 @@ async function _getStudentDataCore(selection) {
                 if (excludeDNC && colIndices.StudentNumber !== -1) {
                     const studentNumber = row[colIndices.StudentNumber];
                     if (studentNumber && dncStudentIdentifiers.has(String(studentNumber))) {
+                        console.log(`Excluding student with ID ${studentNumber} because they are on the DNC list.`);
                         continue; // Skip this student
                     }
                 }
@@ -170,8 +188,10 @@ async function _getStudentDataCore(selection) {
                 studentDataCache.push(student);
             }
         });
+        console.log(`--- Process Complete. Final recipient count: ${studentDataCache.length} ---`);
         return studentDataCache;
     } catch (error) {
+        console.error("--- A critical error occurred during data fetch ---", error);
         if (error.code === 'ItemNotFound') {
             error.userFacingMessage = `Error: Sheet "${sheetName}" not found.`;
         }
@@ -202,7 +222,7 @@ Office.onReady((info) => {
                 const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while fetching data.');
                 status.textContent = message;
                 status.style.color = 'red';
-                console.error(error);
+                // No need to log here as _getStudentDataCore already logs the detailed error
                 throw error;
             }
         }
