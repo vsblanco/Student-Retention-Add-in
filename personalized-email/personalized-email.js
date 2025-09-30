@@ -1,4 +1,4 @@
-// V-5.0 - 2025-09-30 - 3:36 PM EDT
+// V-5.1 - 2025-09-30 - 3:55 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -43,6 +43,7 @@ async function _getStudentDataCore(selection) {
         await Excel.run(async (context) => {
             // Step 1: Build a list of DNC students by their ID if exclusion is enabled.
             const dncStudentIdentifiers = new Set();
+            const dncEntriesForLogging = []; // Array for detailed logging
             if (excludeDNC) {
                 console.log("Step 1: Building DNC exclusion list...");
                 try {
@@ -66,8 +67,9 @@ async function _getStudentDataCore(selection) {
                                 if (tags.includes('DNC')) {
                                     const studentIdentifier = row[identifierIndex];
                                     if(studentIdentifier) {
-                                        dncStudentIdentifiers.add(String(studentIdentifier));
-                                        console.log(`Found DNC tag for Student ID: ${studentIdentifier}. Added to exclusion list.`);
+                                        const idStr = String(studentIdentifier);
+                                        dncStudentIdentifiers.add(idStr);
+                                        dncEntriesForLogging.push({ id: idStr, tags: row[tagsIndex] });
                                     }
                                 }
                             }
@@ -76,6 +78,7 @@ async function _getStudentDataCore(selection) {
                         }
                     }
                     console.log(`Finished building exclusion list. Found ${dncStudentIdentifiers.size} unique students with DNC tags.`);
+                    console.log("DNC Entries found in 'Student History':", dncEntriesForLogging);
                 } catch (error) {
                     console.error("Error processing 'Student History' sheet for DNC exclusion. Proceeding without it.", error);
                 }
@@ -94,14 +97,33 @@ async function _getStudentDataCore(selection) {
             const values = usedRange.values;
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
-            await loadCustomParameters();
-
             const colIndices = {};
             for (const key in COLUMN_MAPPINGS) {
                 colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
             }
             console.log("Recipient sheet column indices found:", colIndices);
-
+            
+            // --- Enhanced Logging for Debugging ---
+            if (excludeDNC && colIndices.StudentNumber !== -1) {
+                const recipientStudentNumbersForLogging = [];
+                for (let i = 1; i < values.length; i++) {
+                    const studentNumber = values[i][colIndices.StudentNumber];
+                    if (studentNumber) recipientStudentNumbersForLogging.push(String(studentNumber));
+                }
+                console.log(`Found ${recipientStudentNumbersForLogging.length} student numbers in '${sheetName}':`, recipientStudentNumbersForLogging);
+                
+                const matchedIds = recipientStudentNumbersForLogging.filter(id => dncStudentIdentifiers.has(id));
+                if (matchedIds.length > 0) {
+                    console.log(`%cFound ${matchedIds.length} MATCH(ES) between recipient list and DNC list. These students will be excluded:`, 'color: orange; font-weight: bold;', matchedIds);
+                } else {
+                    console.log("Found NO MATCHES between recipient list and DNC list. No students will be excluded based on DNC tag.");
+                }
+            } else if (excludeDNC) {
+                 console.warn(`Could not find a 'Student Number' column in '${sheetName}'. Cannot perform DNC exclusion check.`);
+            }
+            // --- End Enhanced Logging ---
+            
+            await loadCustomParameters();
 
             const customParamIndices = {};
             customParameters.forEach(param => {
@@ -119,7 +141,7 @@ async function _getStudentDataCore(selection) {
                 if (excludeDNC && colIndices.StudentNumber !== -1) {
                     const studentNumber = row[colIndices.StudentNumber];
                     if (studentNumber && dncStudentIdentifiers.has(String(studentNumber))) {
-                        console.log(`Excluding student with ID ${studentNumber} because they are on the DNC list.`);
+                        console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentNumber}) because they are on the DNC list.`);
                         continue; // Skip this student
                     }
                 }
