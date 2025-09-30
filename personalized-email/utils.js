@@ -1,6 +1,8 @@
+// V-1.1 - 2025-09-30 - 5:10 PM EDT
 export function findColumnIndex(headers, possibleNames) {
     for (const name of possibleNames) {
-        const index = headers.indexOf(name);
+        // Lowercase the possible name to ensure a case-insensitive match
+        const index = headers.indexOf(name.toLowerCase());
         if (index !== -1) {
             return index;
         }
@@ -37,4 +39,3 @@ export function getNameParts(fullName) {
         return { first: firstName, last: lastName };
     }
 }
-
