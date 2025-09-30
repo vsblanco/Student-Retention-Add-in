@@ -1,4 +1,4 @@
-// V-4.2 - 2025-09-30 - 1:52 PM EDT
+// V-4.5 - 2025-09-30 - 2:20 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -7,6 +7,8 @@ export default class ModalManager {
         this.currentScriptInputs = {};
         this.currentExampleIndex = 0;
         this.studentsForExample = [];
+        this.currentRecipientSelection = {};
+        this.tempStudentCount = 0;
 
         this._setupEventListeners();
     }
@@ -55,6 +57,13 @@ export default class ModalManager {
         document.getElementById('import-script-button').onclick = () => document.getElementById('script-file-input').click();
         document.getElementById('script-file-input').onchange = (e) => this._handleScriptFileUpload(e);
 
+        // Recipient Modal
+        document.getElementById('cancel-recipient-modal-button').onclick = () => this.hide('recipient-modal');
+        document.getElementById('confirm-recipient-modal-button').onclick = () => this._confirmRecipientSelection();
+        document.querySelectorAll('input[name="recipient-source"]').forEach(radio => {
+            radio.onchange = () => this._handleRecipientSourceChange();
+        });
+        document.getElementById('recipient-custom-sheet-name').oninput = () => this._handleRecipientSourceChange();
     }
 
     show(modalId) {
@@ -65,10 +74,65 @@ export default class ModalManager {
         document.getElementById(modalId).classList.add('hidden');
     }
 
+    // --- Recipient Modal Logic ---
+    showRecipientModal() {
+        this.currentRecipientSelection = { ...this.appContext.recipientSelection };
+        this.tempStudentCount = 0;
+
+        const { type, customSheetName } = this.currentRecipientSelection;
+        document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
+        document.getElementById('recipient-custom-sheet-name').value = customSheetName || '';
+
+        this._updateRecipientModalUI();
+        this._fetchStudentCountForModal();
+        this.show('recipient-modal');
+    }
+
+    _handleRecipientSourceChange() {
+        const selectedType = document.querySelector('input[name="recipient-source"]:checked').value;
+        const customSheetName = document.getElementById('recipient-custom-sheet-name').value.trim();
+        this.currentRecipientSelection = { type: selectedType, customSheetName };
+        this._updateRecipientModalUI();
+        this._fetchStudentCountForModal();
+    }
+
+    _updateRecipientModalUI() {
+        const isCustom = this.currentRecipientSelection.type === 'custom';
+        document.getElementById('recipient-custom-sheet-container').classList.toggle('hidden', !isCustom);
+    }
+
+    async _fetchStudentCountForModal() {
+        const statusEl = document.getElementById('recipient-modal-status');
+        const confirmBtn = document.getElementById('confirm-recipient-modal-button');
+        
+        statusEl.textContent = 'Counting students...';
+        confirmBtn.disabled = true;
+
+        try {
+            const students = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
+            this.tempStudentCount = students.length;
+            statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
+            confirmBtn.disabled = this.tempStudentCount === 0;
+        } catch (error) {
+            this.tempStudentCount = 0;
+            statusEl.textContent = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred.');
+        }
+    }
+
+    _confirmRecipientSelection() {
+        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.tempStudentCount);
+        this.hide('recipient-modal');
+        // Trigger a data fetch with UI updates for the main screen
+        this.appContext.getStudentDataWithUI().catch(() => {
+            // Reset button if the fetch fails after confirmation
+            this.appContext.updateRecipientSelection(this.appContext.recipientSelection, -1);
+        });
+    }
+
     // --- Example Modal Logic ---
     async showExampleModal() {
         try {
-            this.studentsForExample = await this.appContext.getStudentData();
+            this.studentsForExample = await this.appContext.getStudentDataWithUI();
             if (this.studentsForExample.length === 0) {
                 document.getElementById('status').textContent = 'No students found to generate an example.';
                 document.getElementById('status').style.color = 'orange';
@@ -78,9 +142,7 @@ export default class ModalManager {
             this._resetExampleSearch();
             this._renderExampleForIndex(this.currentExampleIndex);
             this.show('example-modal');
-        } catch (error) {
-            console.error("Could not generate example:", error);
-        }
+        } catch (error) { /* Error is already handled by getStudentDataWithUI */ }
     }
 
     _renderExampleForIndex(index) {
@@ -101,7 +163,6 @@ export default class ModalManager {
         document.getElementById('example-subject').textContent = subject;
         document.getElementById('example-body').innerHTML = body;
 
-        // Update counter and button states
         document.getElementById('example-student-counter').textContent = `Student: ${index + 1} / ${students.length}`;
         document.getElementById('prev-student-button').disabled = index === 0;
         document.getElementById('next-student-button').disabled = index === students.length - 1;
@@ -125,7 +186,6 @@ export default class ModalManager {
         }
     }
 
-    // --- Example Modal Search Logic ---
     _toggleExampleSearch() {
         document.getElementById('example-search-container').classList.toggle('hidden');
     }
@@ -149,7 +209,6 @@ export default class ModalManager {
 
         const matches = this.studentsForExample.map((student, index) => ({ student, originalIndex: index }))
             .filter(item => item.student.StudentName && item.student.StudentName.toLowerCase().includes(term));
-
         this._renderSearchResults(matches);
     }
 
@@ -159,18 +218,15 @@ export default class ModalManager {
 
         if (matches.length === 0) {
             resultsContainer.innerHTML = '<div class="px-3 py-2 text-sm text-gray-500">No matches found.</div>';
-            resultsContainer.classList.remove('hidden');
-            return;
+        } else {
+            matches.slice(0, 10).forEach(match => {
+                const item = document.createElement('div');
+                item.className = 'px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100';
+                item.textContent = match.student.StudentName;
+                item.onclick = () => this._selectSearchResult(match.originalIndex);
+                resultsContainer.appendChild(item);
+            });
         }
-
-        matches.slice(0, 10).forEach(match => { // Limit to 10 results for performance
-            const item = document.createElement('div');
-            item.className = 'px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100';
-            item.textContent = match.student.StudentName;
-            item.onclick = () => this._selectSearchResult(match.originalIndex);
-            resultsContainer.appendChild(item);
-        });
-        
         resultsContainer.classList.remove('hidden');
     }
 
@@ -180,15 +236,10 @@ export default class ModalManager {
         this._resetExampleSearch();
     }
 
-    // --- Payload Modal Logic ---
     async showPayloadModal() {
         try {
-            const students = await this.appContext.getStudentData();
-            if (students.length === 0) {
-                document.getElementById('status').textContent = 'No students found to generate a payload.';
-                document.getElementById('status').style.color = 'orange';
-                return;
-            }
+            const students = await this.appContext.getStudentDataWithUI();
+            if (students.length === 0) return;
             
             const fromTemplate = document.getElementById('email-from').value;
             const subjectTemplate = document.getElementById('email-subject').value;
@@ -204,9 +255,7 @@ export default class ModalManager {
 
             document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
             this.show('payload-modal');
-        } catch (error) {
-            console.error("Could not generate payload:", error);
-        }
+        } catch (error) { /* Handled by getStudentDataWithUI */ }
     }
 
     _togglePayloadSchema() {
@@ -227,26 +276,18 @@ export default class ModalManager {
             title.textContent = 'Expected JSON Schema for Power Automate';
             
             if (!schemaContent.textContent) {
-                 const schema = {
+                 schemaContent.textContent = JSON.stringify({
                     "type": "array",
                     "items": {
                         "type": "object",
-                        "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" },
-                        "cc": { "type": "string" },
-                        "subject": { "type": "string" },
-                        "body": { "type": "string" }
-                        },
+                        "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "cc": { "type": "string" }, "subject": { "type": "string" }, "body": { "type": "string" } },
                         "required": ["from", "to", "subject", "body"]
                     }
-                };
-                schemaContent.textContent = JSON.stringify(schema, null, 2);
+                }, null, 2);
             }
         }
     }
 
-    // --- Templates Modal Logic ---
     async showTemplatesModal() {
         await this._populateTemplatesList();
         this.show('templates-modal');
@@ -264,49 +305,30 @@ export default class ModalManager {
         
         const groupedByAuthor = templates.reduce((acc, template) => {
             const author = template.author || 'Uncategorized';
-            if (!acc[author]) {
-                acc[author] = [];
-            }
+            if (!acc[author]) acc[author] = [];
             acc[author].push(template);
             return acc;
         }, {});
 
         Object.keys(groupedByAuthor).sort().forEach(author => {
-            const authorTemplates = groupedByAuthor[author];
-            
-            const authorContainer = document.createElement('div');
-            
             const authorHeader = document.createElement('div');
             authorHeader.className = 'flex items-center justify-between p-2 rounded-md hover:bg-gray-100 cursor-pointer';
-            
-            const authorInfo = document.createElement('div');
-            authorInfo.className = 'flex items-center space-x-2';
-            
-            const folderIcon = this._createIconSVG('folder');
-            const authorName = document.createElement('span');
-            authorName.className = 'font-semibold text-gray-700';
-            authorName.textContent = author;
-            
-            authorInfo.append(folderIcon, authorName);
-
-            const chevronIcon = this._createIconSVG('chevron');
-            chevronIcon.classList.add('chevron-icon');
-
-            authorHeader.append(authorInfo, chevronIcon);
-            
+            authorHeader.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <svg class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>
+                    <span class="font-semibold text-gray-700">${author}</span>
+                </div>
+                <svg class="h-5 w-5 text-gray-500 chevron-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"></path></svg>
+            `;
             const templatesContainer = document.createElement('div');
             templatesContainer.className = 'hidden pl-6 border-l-2 border-gray-200 ml-2';
-
-            authorTemplates.forEach(template => {
-                const templateEl = this._createTemplateElement(template);
-                templatesContainer.appendChild(templateEl);
-            });
-
+            groupedByAuthor[author].forEach(template => templatesContainer.appendChild(this._createTemplateElement(template)));
+            
             authorHeader.onclick = () => {
                 templatesContainer.classList.toggle('hidden');
-                chevronIcon.classList.toggle('chevron-open');
+                authorHeader.querySelector('.chevron-icon').classList.toggle('chevron-open');
             };
-
+            const authorContainer = document.createElement('div');
             authorContainer.append(authorHeader, templatesContainer);
             container.appendChild(authorContainer);
         });
@@ -315,26 +337,15 @@ export default class ModalManager {
     _createTemplateElement(template) {
         const item = document.createElement('div');
         item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
-
-        const name = document.createElement('div');
-        name.textContent = template.name;
-        name.className = 'text-sm font-medium text-gray-800';
-        
-        const buttons = document.createElement('div');
-        buttons.className = 'flex space-x-2';
-
-        const loadButton = document.createElement('button');
-        loadButton.textContent = 'Load';
-        loadButton.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200';
-        loadButton.onclick = () => this._loadTemplate(template);
-        
-        const editButton = document.createElement('button');
-        editButton.textContent = 'Edit';
-        editButton.className = 'px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300';
-        editButton.onclick = () => this.showSaveTemplateModal(template);
-
-        buttons.append(loadButton, editButton);
-        item.append(name, buttons);
+        item.innerHTML = `
+            <div class="text-sm font-medium text-gray-800">${template.name}</div>
+            <div class="flex space-x-2">
+                <button class="load-btn px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
+                <button class="edit-btn px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300">Edit</button>
+            </div>
+        `;
+        item.querySelector('.load-btn').onclick = () => this._loadTemplate(template);
+        item.querySelector('.edit-btn').onclick = () => this.showSaveTemplateModal(template);
         return item;
     }
 
@@ -349,17 +360,14 @@ export default class ModalManager {
 
     async _deleteTemplate() {
         if (!this.editingTemplateId) return;
-
         let templates = await this.appContext.getTemplates();
         templates = templates.filter(t => t.id !== this.editingTemplateId);
         await this.appContext.saveTemplates(templates);
-
         this.hide('save-template-modal');
         await this._populateTemplatesList();
         this.show('templates-modal');
     }
     
-    // --- Save/Edit Template Modal Logic ---
     showSaveTemplateModal(templateToEdit = null) {
         this.hide('templates-modal');
         const titleEl = document.getElementById('save-template-modal-title');
@@ -378,7 +386,6 @@ export default class ModalManager {
             document.getElementById('template-author').value = '';
             deleteBtn.classList.add('hidden');
         }
-        
         document.getElementById('save-template-status').textContent = '';
         this.show('save-template-modal');
     }
@@ -395,39 +402,22 @@ export default class ModalManager {
         }
 
         const templates = await this.appContext.getTemplates();
+        const newTemplateData = {
+            name, author,
+            from: document.getElementById('email-from').value,
+            subject: document.getElementById('email-subject').value,
+            body: this.appContext.quill.root.innerHTML,
+            cc: [...this.appContext.ccRecipients],
+        };
 
         if (this.editingTemplateId) {
-            // Update existing template
             const templateIndex = templates.findIndex(t => t.id === this.editingTemplateId);
-            if (templateIndex > -1) {
-                const updatedTemplate = {
-                    ...templates[templateIndex],
-                    name,
-                    author,
-                    from: document.getElementById('email-from').value,
-                    subject: document.getElementById('email-subject').value,
-                    body: this.appContext.quill.root.innerHTML,
-                    cc: [...this.appContext.ccRecipients],
-                };
-                templates[templateIndex] = updatedTemplate;
-            }
+            if (templateIndex > -1) templates[templateIndex] = { ...templates[templateIndex], ...newTemplateData };
         } else {
-            // Create new template
-            const newTemplate = {
-                id: 'tpl-' + Math.random().toString(36).substr(2, 9),
-                name,
-                author,
-                from: document.getElementById('email-from').value,
-                subject: document.getElementById('email-subject').value,
-                body: this.appContext.quill.root.innerHTML,
-                cc: [...this.appContext.ccRecipients],
-                createdAt: new Date().toISOString()
-            };
-            templates.push(newTemplate);
+            templates.push({ ...newTemplateData, id: 'tpl-' + Date.now(), createdAt: new Date().toISOString() });
         }
         
         await this.appContext.saveTemplates(templates);
-
         status.textContent = 'Template saved successfully!';
         status.style.color = 'green';
 
@@ -437,7 +427,6 @@ export default class ModalManager {
         }, 1500);
     }
     
-    // --- Custom Parameter Modal Logic ---
     showCustomParamModal(paramToEdit = null) {
         this._resetCustomParamModal();
         if (paramToEdit) {
@@ -450,9 +439,7 @@ export default class ModalManager {
             document.getElementById('logic-type-dropdown').value = logicType;
             this._toggleLogicContainers(logicType);
 
-            if (logicType === 'value-mapping' && paramToEdit.mappings) {
-                paramToEdit.mappings.forEach(m => this._addMappingRow(m));
-            }
+            if (logicType === 'value-mapping' && paramToEdit.mappings) paramToEdit.mappings.forEach(m => this._addMappingRow(m));
             if (logicType === 'custom-script' && paramToEdit.script) {
                 document.getElementById('custom-script-editor').value = paramToEdit.script;
                 if (paramToEdit.scriptInputs) {
@@ -496,10 +483,7 @@ export default class ModalManager {
         }
 
         const newParam = { name, sourceColumn, logicType };
-
-        if (logicType === 'value-mapping') {
-            newParam.mappings = this._getMappingsFromDOM();
-        }
+        if (logicType === 'value-mapping') newParam.mappings = this._getMappingsFromDOM();
         if (logicType === 'custom-script') {
             newParam.script = document.getElementById('custom-script-editor').value.trim();
             this._updateScriptInputsFromDOM();
@@ -508,44 +492,30 @@ export default class ModalManager {
 
         let params = await this.appContext.getCustomParameters();
         if (this.editingParamName && this.editingParamName !== name) {
-            // If name changed, ensure new name isn't a duplicate
             if (params.some(p => p.name === name)) {
                 status.textContent = 'A parameter with this name already exists.';
                 status.style.color = 'red';
                 return;
             }
-            // Remove old param
             params = params.filter(p => p.name !== this.editingParamName);
-        } else if (!this.editingParamName) {
-            // If creating new, check for duplicate name
-             if (params.some(p => p.name === name)) {
-                status.textContent = 'A parameter with this name already exists.';
-                status.style.color = 'red';
-                return;
-            }
+        } else if (!this.editingParamName && params.some(p => p.name === name)) {
+            status.textContent = 'A parameter with this name already exists.';
+            status.style.color = 'red';
+            return;
         }
         
         const existingIndex = params.findIndex(p => p.name === name);
-        if (existingIndex > -1) {
-            params[existingIndex] = newParam;
-        } else {
-            params.push(newParam);
-        }
+        if (existingIndex > -1) params[existingIndex] = newParam;
+        else params.push(newParam);
 
         await this.appContext.saveCustomParameters(params);
         await this.appContext.loadCustomParameters();
         this.appContext.populateParameterButtons();
-        
         status.textContent = 'Parameter saved!';
         status.style.color = 'green';
-
-        setTimeout(() => {
-            this.hide('custom-param-modal');
-            this.showManageCustomParamsModal(); // Show updated list
-        }, 1000);
+        setTimeout(() => { this.hide('custom-param-modal'); this.showManageCustomParamsModal(); }, 1000);
     }
     
-    // --- Manage Custom Parameters Modal Logic ---
     async showManageCustomParamsModal() {
         this.hide('custom-param-modal');
         await this._populateManageParamsList();
@@ -565,34 +535,18 @@ export default class ModalManager {
         params.forEach(param => {
             const item = document.createElement('div');
             item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
-
-            const info = document.createElement('div');
-            const name = document.createElement('span');
-            name.textContent = `{${param.name}}`;
-            name.className = 'text-sm font-medium text-gray-800';
-            const source = document.createElement('span');
-            source.textContent = ` (from: ${param.sourceColumn})`;
-            source.className = 'text-xs text-gray-500';
-            info.append(name, source);
-            
-            const buttons = document.createElement('div');
-            buttons.className = 'flex space-x-2';
-
-            const editButton = document.createElement('button');
-            editButton.textContent = 'Edit';
-            editButton.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200';
-            editButton.onclick = () => {
-                this.hide('manage-custom-params-modal');
-                this.showCustomParamModal(param);
-            };
-            
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = 'Delete';
-            deleteButton.className = 'px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200';
-            deleteButton.onclick = () => this._deleteCustomParameter(param.name);
-            
-            buttons.append(editButton, deleteButton);
-            item.append(info, buttons);
+            item.innerHTML = `
+                <div>
+                    <span class="text-sm font-medium text-gray-800">{${param.name}}</span>
+                    <span class="text-xs text-gray-500">(from: ${param.sourceColumn})</span>
+                </div>
+                <div class="flex space-x-2">
+                    <button class="edit-btn px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Edit</button>
+                    <button class="delete-btn px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            `;
+            item.querySelector('.edit-btn').onclick = () => { this.hide('manage-custom-params-modal'); this.showCustomParamModal(param); };
+            item.querySelector('.delete-btn').onclick = () => this._deleteCustomParameter(param.name);
             container.appendChild(item);
         });
     }
@@ -606,12 +560,9 @@ export default class ModalManager {
         await this._populateManageParamsList();
     }
     
-    // --- Custom Parameter - Value Mapping UI Logic ---
     _toggleLogicContainers(selectedValue) {
-        const mappingContainer = document.getElementById('value-mapping-logic-container');
-        const scriptContainer = document.getElementById('custom-script-logic-container');
-        mappingContainer.classList.toggle('hidden', selectedValue !== 'value-mapping');
-        scriptContainer.classList.toggle('hidden', selectedValue !== 'custom-script');
+        document.getElementById('value-mapping-logic-container').classList.toggle('hidden', selectedValue !== 'value-mapping');
+        document.getElementById('custom-script-logic-container').classList.toggle('hidden', selectedValue !== 'custom-script');
     }
     
     _addMappingRow(mapping = { if: '', operator: 'eq', then: '' }) {
@@ -642,40 +593,26 @@ export default class ModalManager {
     }
     
     _getMappingsFromDOM() {
-        const mappings = [];
-        document.querySelectorAll('.mapping-row').forEach(row => {
-            const operator = row.querySelector('.operator-select').value;
-            const ifValue = row.querySelector('.if-input').value;
-            const thenValue = row.querySelector('.then-input').value;
-            if (ifValue) {
-                mappings.push({ if: ifValue, operator, then: thenValue });
-            }
-        });
-        return mappings;
+        return Array.from(document.querySelectorAll('.mapping-row')).map(row => ({
+            if: row.querySelector('.if-input').value,
+            operator: row.querySelector('.operator-select').value,
+            then: row.querySelector('.then-input').value,
+        })).filter(m => m.if);
     }
 
-    // --- Custom Parameter - Custom Script Logic ---
-     _scanScriptForInputs() {
+    _scanScriptForInputs() {
         const script = document.getElementById('custom-script-editor').value;
-        // Regex to find variable declarations (let, const, var) that are NOT assigned a value
         const regex = /\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?!\s*=)/g;
-        let match;
         const newInputs = new Set();
+        let match;
         while ((match = regex.exec(script)) !== null) {
-            const varName = match[1];
-            // Exclude standard provided arguments
-            if (varName !== 'getWorksheet' && varName !== 'sourceColumnValue') {
-                newInputs.add(varName);
+            if (match[1] !== 'getWorksheet' && match[1] !== 'sourceColumnValue') {
+                newInputs.add(match[1]);
             }
         }
-
-        // Preserve existing values if the variable still exists
         const updatedScriptInputs = {};
-        newInputs.forEach(name => {
-            updatedScriptInputs[name] = this.currentScriptInputs[name] || '';
-        });
+        newInputs.forEach(name => { updatedScriptInputs[name] = this.currentScriptInputs[name] || ''; });
         this.currentScriptInputs = updatedScriptInputs;
-        
         this._renderScriptInputFields();
     }
 
@@ -683,7 +620,6 @@ export default class ModalManager {
         const container = document.getElementById('script-inputs-list');
         const parentContainer = document.getElementById('script-variable-inputs-container');
         container.innerHTML = '';
-
         const inputNames = Object.keys(this.currentScriptInputs);
 
         if (inputNames.length === 0) {
@@ -700,14 +636,12 @@ export default class ModalManager {
             `;
             container.appendChild(row);
         });
-
         parentContainer.classList.remove('hidden');
     }
 
     _updateScriptInputsFromDOM() {
         document.querySelectorAll('.script-input-field').forEach(input => {
-            const varName = input.dataset.varname;
-            this.currentScriptInputs[varName] = input.value.trim();
+            this.currentScriptInputs[input.dataset.varname] = input.value.trim();
         });
     }
 
@@ -721,47 +655,22 @@ export default class ModalManager {
             };
             reader.readAsText(file);
         }
-        // Reset file input so the same file can be loaded again
         event.target.value = '';
     }
 
-    // --- Send Confirmation Modal Logic ---
     async showSendConfirmModal() {
+        // Ensure data is loaded before confirming
         try {
-            await this.appContext.getStudentData();
+            await this.appContext.getStudentDataWithUI();
             const count = this.appContext.studentDataCache.length;
             if (count === 0) {
-                document.getElementById('status').textContent = 'No students found to send emails to.';
+                document.getElementById('status').textContent = 'No students selected to send emails to.';
                 document.getElementById('status').style.color = 'orange';
                 return;
             }
-            const message = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
-            document.getElementById('send-confirm-message').textContent = message;
+            document.getElementById('send-confirm-message').textContent = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
             this.show('send-confirm-modal');
-        } catch (error) {
-            // Error is handled in getStudentData, no need to show another message.
-        }
-    }
-    
-    // --- Helper to create SVG icons ---
-    _createIconSVG(type) {
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('class', 'h-5 w-5 text-gray-500');
-        svg.setAttribute('viewBox', '0 0 20 20');
-        svg.setAttribute('fill', 'currentColor');
-        let pathData = '';
-        switch(type) {
-            case 'folder':
-                pathData = 'M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z';
-                break;
-            case 'chevron':
-                pathData = 'M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z';
-                break;
-        }
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', pathData);
-        svg.appendChild(path);
-        return svg;
+        } catch (error) { /* Error already displayed */ }
     }
 }
 
