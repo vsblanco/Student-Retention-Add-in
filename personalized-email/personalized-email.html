@@ -1,4 +1,4 @@
-<!-- 2025-09-30 - 2:00 PM EDT - V-4.3 -->
+<!-- 2025-09-30 - 2:12 PM EDT - V-4.4 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -150,8 +150,12 @@
                     <div id="custom-parameter-section" class="mt-3 hidden">
                         <label class="block text-xs font-medium text-gray-600 mb-2">Custom Parameters</label>
                         <div id="custom-parameter-buttons" class="flex flex-wrap gap-2">
-                            <!-- Custom parameter buttons will be inserted here by JS -->
+                            <!-- First 5 custom parameter buttons will be inserted here by JS -->
                         </div>
+                        <div id="more-custom-parameters" class="hidden flex flex-wrap gap-2 mt-2">
+                            <!-- Rest of the custom parameter buttons will be inserted here by JS -->
+                        </div>
+                        <button id="show-more-params-button" class="hidden mt-2 text-xs text-blue-600 hover:underline">Show More...</button>
                     </div>
                     <button id="create-custom-param-button" class="mt-2 text-xs text-blue-600 hover:underline">+ Create Custom Parameter</button>
                 </div>
