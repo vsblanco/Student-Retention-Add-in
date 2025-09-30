@@ -41,7 +41,7 @@ export const COLUMN_MAPPINGS = {
     Grade: ["grade", "course grade"],
     DaysOut: ["days out", "daysout"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
-    History: ['history', 'tags', 'contact history', 'notes'],
+    History: ['history', 'tags', 'contact history', 'notes', 'tag'],
     StudentNumber: ['student number', 'StudentNumber'],
     StudentIdentifier: ['student identifier', 'student id']
 };
