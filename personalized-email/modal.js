@@ -1,4 +1,4 @@
-// V-4.1 - 2025-09-30 - 1:37 PM EDT
+// V-4.2 - 2025-09-30 - 1:52 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -18,6 +18,8 @@ export default class ModalManager {
         document.getElementById('prev-student-button').onclick = () => this._navigateExample(-1);
         document.getElementById('next-student-button').onclick = () => this._navigateExample(1);
         document.getElementById('random-student-button').onclick = () => this._randomizeExample();
+        document.getElementById('search-student-button').onclick = () => this._toggleExampleSearch();
+        document.getElementById('example-search-input').oninput = (e) => this._filterStudents(e.target.value);
 
         // Payload Modal
         document.getElementById('close-payload-modal-button').onclick = () => this.hide('payload-modal');
@@ -73,6 +75,7 @@ export default class ModalManager {
                 return;
             }
             this.currentExampleIndex = 0;
+            this._resetExampleSearch();
             this._renderExampleForIndex(this.currentExampleIndex);
             this.show('example-modal');
         } catch (error) {
@@ -109,6 +112,7 @@ export default class ModalManager {
         if (newIndex >= 0 && newIndex < this.studentsForExample.length) {
             this.currentExampleIndex = newIndex;
             this._renderExampleForIndex(this.currentExampleIndex);
+            this._resetExampleSearch();
         }
     }
 
@@ -117,7 +121,63 @@ export default class ModalManager {
             const randomIndex = Math.floor(Math.random() * this.studentsForExample.length);
             this.currentExampleIndex = randomIndex;
             this._renderExampleForIndex(this.currentExampleIndex);
+            this._resetExampleSearch();
         }
+    }
+
+    // --- Example Modal Search Logic ---
+    _toggleExampleSearch() {
+        document.getElementById('example-search-container').classList.toggle('hidden');
+    }
+
+    _resetExampleSearch() {
+        document.getElementById('example-search-container').classList.add('hidden');
+        document.getElementById('example-search-input').value = '';
+        document.getElementById('example-search-results').classList.add('hidden');
+        document.getElementById('example-search-results').innerHTML = '';
+    }
+    
+    _filterStudents(searchTerm) {
+        const resultsContainer = document.getElementById('example-search-results');
+        const term = searchTerm.toLowerCase().trim();
+
+        if (term.length === 0) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.classList.add('hidden');
+            return;
+        }
+
+        const matches = this.studentsForExample.map((student, index) => ({ student, originalIndex: index }))
+            .filter(item => item.student.StudentName && item.student.StudentName.toLowerCase().includes(term));
+
+        this._renderSearchResults(matches);
+    }
+
+    _renderSearchResults(matches) {
+        const resultsContainer = document.getElementById('example-search-results');
+        resultsContainer.innerHTML = '';
+
+        if (matches.length === 0) {
+            resultsContainer.innerHTML = '<div class="px-3 py-2 text-sm text-gray-500">No matches found.</div>';
+            resultsContainer.classList.remove('hidden');
+            return;
+        }
+
+        matches.slice(0, 10).forEach(match => { // Limit to 10 results for performance
+            const item = document.createElement('div');
+            item.className = 'px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100';
+            item.textContent = match.student.StudentName;
+            item.onclick = () => this._selectSearchResult(match.originalIndex);
+            resultsContainer.appendChild(item);
+        });
+        
+        resultsContainer.classList.remove('hidden');
+    }
+
+    _selectSearchResult(originalIndex) {
+        this.currentExampleIndex = originalIndex;
+        this._renderExampleForIndex(this.currentExampleIndex);
+        this._resetExampleSearch();
     }
 
     // --- Payload Modal Logic ---
