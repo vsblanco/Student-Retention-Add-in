@@ -1,10 +1,12 @@
-// V-4.0 - 2025-09-30 - 1:04 PM EDT
+// V-4.1 - 2025-09-30 - 1:37 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
         this.editingTemplateId = null;
         this.editingParamName = null;
         this.currentScriptInputs = {};
+        this.currentExampleIndex = 0;
+        this.studentsForExample = [];
 
         this._setupEventListeners();
     }
@@ -13,6 +15,9 @@ export default class ModalManager {
         // Example Modal
         document.getElementById('show-example-button').onclick = () => this.showExampleModal();
         document.getElementById('close-example-modal-button').onclick = () => this.hide('example-modal');
+        document.getElementById('prev-student-button').onclick = () => this._navigateExample(-1);
+        document.getElementById('next-student-button').onclick = () => this._navigateExample(1);
+        document.getElementById('random-student-button').onclick = () => this._randomizeExample();
 
         // Payload Modal
         document.getElementById('close-payload-modal-button').onclick = () => this.hide('payload-modal');
@@ -61,29 +66,57 @@ export default class ModalManager {
     // --- Example Modal Logic ---
     async showExampleModal() {
         try {
-            const students = await this.appContext.getStudentData();
-            if (students.length === 0) {
+            this.studentsForExample = await this.appContext.getStudentData();
+            if (this.studentsForExample.length === 0) {
                 document.getElementById('status').textContent = 'No students found to generate an example.';
                 document.getElementById('status').style.color = 'orange';
                 return;
             }
-            const firstStudent = students[0];
-            
-            const from = this.appContext.renderTemplate(document.getElementById('email-from').value, firstStudent);
-            const to = firstStudent.StudentEmail || '[No Email]';
-            const cc = this.appContext.renderCCTemplate(this.appContext.ccRecipients, firstStudent);
-            const subject = this.appContext.renderTemplate(document.getElementById('email-subject').value, firstStudent);
-            const body = this.appContext.renderTemplate(this.appContext.quill.root.innerHTML, firstStudent);
-
-            document.getElementById('example-from').textContent = from;
-            document.getElementById('example-to').textContent = to;
-            document.getElementById('example-cc').textContent = cc;
-            document.getElementById('example-subject').textContent = subject;
-            document.getElementById('example-body').innerHTML = body;
-
+            this.currentExampleIndex = 0;
+            this._renderExampleForIndex(this.currentExampleIndex);
             this.show('example-modal');
         } catch (error) {
             console.error("Could not generate example:", error);
+        }
+    }
+
+    _renderExampleForIndex(index) {
+        const students = this.studentsForExample;
+        if (!students || students.length === 0 || index < 0 || index >= students.length) return;
+        
+        const student = students[index];
+        
+        const from = this.appContext.renderTemplate(document.getElementById('email-from').value, student);
+        const to = student.StudentEmail || '[No Email]';
+        const cc = this.appContext.renderCCTemplate(this.appContext.ccRecipients, student);
+        const subject = this.appContext.renderTemplate(document.getElementById('email-subject').value, student);
+        const body = this.appContext.renderTemplate(this.appContext.quill.root.innerHTML, student);
+
+        document.getElementById('example-from').textContent = from;
+        document.getElementById('example-to').textContent = to;
+        document.getElementById('example-cc').textContent = cc;
+        document.getElementById('example-subject').textContent = subject;
+        document.getElementById('example-body').innerHTML = body;
+
+        // Update counter and button states
+        document.getElementById('example-student-counter').textContent = `Student: ${index + 1} / ${students.length}`;
+        document.getElementById('prev-student-button').disabled = index === 0;
+        document.getElementById('next-student-button').disabled = index === students.length - 1;
+    }
+
+    _navigateExample(direction) {
+        const newIndex = this.currentExampleIndex + direction;
+        if (newIndex >= 0 && newIndex < this.studentsForExample.length) {
+            this.currentExampleIndex = newIndex;
+            this._renderExampleForIndex(this.currentExampleIndex);
+        }
+    }
+
+    _randomizeExample() {
+        if (this.studentsForExample.length > 0) {
+            const randomIndex = Math.floor(Math.random() * this.studentsForExample.length);
+            this.currentExampleIndex = randomIndex;
+            this._renderExampleForIndex(this.currentExampleIndex);
         }
     }
 
