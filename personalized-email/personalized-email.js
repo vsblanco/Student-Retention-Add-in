@@ -1,4 +1,4 @@
-// V-5.2 - 2025-09-30 - 5:01 PM EDT
+// V-5.5 - 2025-09-30 - 5:21 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -63,10 +63,18 @@ async function _getStudentDataCore(selection) {
                         if (identifierIndex !== -1 && tagsIndex !== -1) {
                             for (let i = 1; i < historyValues.length; i++) {
                                 const row = historyValues[i];
-                                const tags = String(row[tagsIndex] || '').toUpperCase();
-                                if (tags.includes('DNC')) {
+                                // New DNC Logic: Exclude for any DNC tag except specific phone-related ones.
+                                const tagsString = String(row[tagsIndex] || '').toUpperCase();
+                                const individualTags = tagsString.split(',').map(t => t.trim());
+
+                                const hasExcludableDnc = individualTags.some(tag => {
+                                    const isPhoneDnc = tag === 'DNC - PHONE' || tag === 'DNC - OTHER PHONE';
+                                    return tag.includes('DNC') && !isPhoneDnc;
+                                });
+
+                                if (hasExcludableDnc) {
                                     const studentIdentifier = row[identifierIndex];
-                                    if(studentIdentifier) {
+                                    if (studentIdentifier) {
                                         const idStr = String(studentIdentifier);
                                         dncStudentIdentifiers.add(idStr);
                                         dncEntriesForLogging.push({ id: idStr, tags: row[tagsIndex] });
@@ -668,3 +676,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
