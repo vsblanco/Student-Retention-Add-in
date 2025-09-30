@@ -6,7 +6,7 @@ export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
 // -- PARAMETERS --
 // Standard, built-in parameters that are always available.
-export const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
+export const standardParameters = ['FirstName', 'LastName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
 
 // -- QUILL EDITOR SETTINGS --
 // Configuration for the main rich text editor.
@@ -41,9 +41,9 @@ export const COLUMN_MAPPINGS = {
     Grade: ["grade", "course grade"],
     DaysOut: ["days out", "daysout"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
-    History: ['history', 'tags', 'contact history', 'notes', 'tag'],
+    History: ['history', 'tags', 'tag'],
     StudentNumber: ['StudentNumber', 'Student Number'],
-    StudentIdentifier: ['student identifier', 'student id']
+    StudentIdentifier: ['student identifier']
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
