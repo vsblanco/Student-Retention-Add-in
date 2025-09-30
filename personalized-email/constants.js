@@ -1,4 +1,4 @@
-// V-4.7 - 2025-09-30 - 2:50 PM EDT
+// V-4.9 - 2025-09-30 - 3:17 PM EDT
 // -- CORE CONFIGURATION --
 // These are the primary keys used to store data within the Excel workbook's settings.
 export const EMAIL_TEMPLATES_KEY = "emailTemplates";
@@ -6,7 +6,7 @@ export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
 // -- PARAMETERS --
 // Standard, built-in parameters that are always available.
-export const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut'];
+export const standardParameters = ['FirstName', 'LastName', 'StudentName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
 
 // -- QUILL EDITOR SETTINGS --
 // Configuration for the main rich text editor.
@@ -40,7 +40,10 @@ export const COLUMN_MAPPINGS = {
     PersonalEmail: ["personal email", "otheremail"],
     Grade: ["grade", "course grade"],
     DaysOut: ["days out", "daysout"],
-    History: ['history', 'tags', 'contact history', 'notes']
+    Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
+    History: ['history', 'tags', 'contact history', 'notes'],
+    StudentNumber: ['student number', 'StudentNumber'],
+    StudentIdentifier: ['student identifier', 'student id']
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
@@ -90,3 +93,4 @@ export const PAYLOAD_SCHEMA = {
         "required": ["from", "to", "subject", "body"]
     }
 };
+
