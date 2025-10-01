@@ -1,4 +1,4 @@
-// V-7.2 - 2025-10-01 - 4:01 PM EDT
+// V-7.3 - 2025-10-01 - 4:43 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -436,12 +436,29 @@ function setupExampleContextMenu() {
     document.getElementById('context-menu-receipt').onclick = (e) => {
         e.preventDefault();
         const status = document.getElementById('status');
-        if (lastSentPayload && lastSentPayload.length > 0) {
-            generatePdfReceipt(lastSentPayload);
-            status.textContent = 'PDF receipt downloaded.';
-            status.style.color = 'green';
+        if (studentDataCache && studentDataCache.length > 0) {
+            // Create a payload from the current setup for the example receipt
+            const fromTemplate = document.getElementById('email-from').value;
+            const subjectTemplate = document.getElementById('email-subject').value;
+            const bodyTemplate = quill.root.innerHTML;
+            const examplePayload = studentDataCache.map(student => ({
+                from: renderTemplate(fromTemplate, student),
+                to: student.StudentEmail || '',
+                cc: renderCCTemplate(ccRecipients, student),
+                subject: renderTemplate(subjectTemplate, student),
+                body: renderTemplate(bodyTemplate, student)
+            })).filter(email => email.to && email.from);
+
+            if (examplePayload.length > 0) {
+                generatePdfReceipt(examplePayload);
+                status.textContent = 'Example PDF receipt downloaded.';
+                status.style.color = 'green';
+            } else {
+                status.textContent = 'No valid students for example receipt.';
+                 status.style.color = 'orange';
+            }
         } else {
-            status.textContent = 'No receipt to download. Please send emails first.';
+            status.textContent = 'Please select recipients to generate an example receipt.';
             status.style.color = 'orange';
         }
         setTimeout(() => status.textContent = '', 3000);
