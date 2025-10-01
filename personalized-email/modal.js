@@ -1,4 +1,4 @@
-// V-2.2 - 2025-10-01 - 12:23 PM EDT
+// V-2.4 - 2025-10-01 - 1:05 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -111,6 +111,9 @@ export default class ModalManager {
         document.querySelectorAll('input[name="recipient-source"]').forEach(radio => {
             radio.addEventListener('change', (e) => this._handleRecipientSourceChange(e.target.value));
         });
+
+        // Generic Confirm Modal
+        document.getElementById('cancel-confirm-modal-button').onclick = () => this.hideModal('confirm-modal');
     }
 
     // --- Recipient Modal Logic ---
@@ -443,20 +446,26 @@ export default class ModalManager {
     }
     
     async deleteTemplate() {
-        if (!this.editingTemplate || !confirm('Are you sure you want to delete this template?')) return;
-        
-        try {
-            let templates = await this.appContext.getTemplates();
-            templates = templates.filter(t => t.id !== this.editingTemplate.id);
-            await this.appContext.saveTemplates(templates);
-            this.hideModal('save-template-modal');
-            this.editingTemplate = null;
-        } catch(error) {
-            const status = document.getElementById('save-template-status');
-            status.textContent = "Error deleting template.";
-            status.style.color = 'red';
-            console.error("Error deleting template:", error);
-        }
+        if (!this.editingTemplate) return;
+
+        this.showConfirmModal({
+            title: 'Delete Template',
+            message: `Are you sure you want to delete the template "${this.editingTemplate.name}"?`,
+            onConfirm: async () => {
+                try {
+                    let templates = await this.appContext.getTemplates();
+                    templates = templates.filter(t => t.id !== this.editingTemplate.id);
+                    await this.appContext.saveTemplates(templates);
+                    this.hideModal('save-template-modal');
+                    this.editingTemplate = null;
+                } catch (error) {
+                    const status = document.getElementById('save-template-status');
+                    status.textContent = "Error deleting template.";
+                    status.style.color = 'red';
+                    console.error("Error deleting template:", error);
+                }
+            }
+        });
     }
 
     // --- Custom Parameter Modals ---
@@ -494,13 +503,21 @@ export default class ModalManager {
             });
              container.querySelectorAll('.delete-param-btn').forEach(btn => {
                 btn.onclick = async () => {
-                    if (!confirm('Are you sure you want to delete this parameter?')) return;
                     const paramId = btn.dataset.paramId;
-                    const updatedParams = params.filter(p => p.id !== paramId);
-                    await this.appContext.saveCustomParameters(updatedParams);
-                    await this.appContext.loadCustomParameters();
-                    this.appContext.populateParameterButtons();
-                    this.showManageParamsModal(); // Refresh the list
+                    const paramToDelete = params.find(p => p.id === paramId);
+                    if (!paramToDelete) return;
+
+                    this.showConfirmModal({
+                        title: 'Delete Parameter',
+                        message: `Are you sure you want to delete the parameter "{${paramToDelete.name}}"? This may affect saved templates that use it.`,
+                        onConfirm: async () => {
+                            const updatedParams = params.filter(p => p.id !== paramId);
+                            await this.appContext.saveCustomParameters(updatedParams);
+                            await this.appContext.loadCustomParameters();
+                            this.appContext.populateParameterButtons();
+                            this.showManageParamsModal(); // Refresh the list
+                        }
+                    });
                 };
             });
         }
@@ -711,6 +728,25 @@ export default class ModalManager {
 
     hideModal(modalId) {
         document.getElementById(modalId).classList.add('hidden');
+    }
+
+    // --- Generic Confirmation Modal ---
+    showConfirmModal({ title, message, onConfirm }) {
+        document.getElementById('confirm-modal-title').textContent = title;
+        document.getElementById('confirm-modal-message').textContent = message;
+
+        const confirmButton = document.getElementById('confirm-confirm-modal-button');
+        
+        // Clone and replace to remove old listeners and ensure the correct onConfirm is used
+        const newConfirmButton = confirmButton.cloneNode(true);
+        confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+        
+        newConfirmButton.onclick = () => {
+            this.hideModal('confirm-modal');
+            onConfirm(); // Execute the specific callback for this confirmation
+        };
+
+        this.showModal('confirm-modal');
     }
 }
 
