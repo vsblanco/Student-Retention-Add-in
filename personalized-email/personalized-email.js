@@ -1,7 +1,8 @@
-// V-7.0 - 2025-10-01 - 3:16 PM EDT
+// V-7.1 - 2025-10-01 - 3:44 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
+import { generatePdfReceipt } from './receipt-generator.js';
 
 let powerAutomateConnection = null;
 let studentDataCache = [];
@@ -14,6 +15,7 @@ let customParameters = [];
 let modalManager;
 let worksheetDataCache = {}; // Cache for worksheet data
 let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+let lastSentPayload = []; // To store the payload for the PDF receipt
 
 /**
  * Checks if all required fields are filled and enables/disables the send button accordingly.
@@ -373,6 +375,15 @@ Office.onReady((info) => {
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
+        // PDF Receipt Button
+        document.getElementById('download-receipt-button').onclick = () => {
+            if (lastSentPayload.length > 0) {
+                generatePdfReceipt(lastSentPayload);
+            } else {
+                console.error("No payload available to generate a receipt.");
+            }
+        };
+
         setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
@@ -643,10 +654,13 @@ async function executeSend() {
         subject: renderTemplate(subjectTemplate, student),
         body: renderTemplate(bodyTemplate, student)
     })).filter(email => email.to && email.from);
+    
+    lastSentPayload = payload; // Cache the payload for the receipt
 
     if(payload.length === 0) {
         status.textContent = 'No students with valid "To" and "From" email addresses found.';
         status.style.color = 'orange';
+        lastSentPayload = []; // Clear if nothing to send
         return;
     }
 
@@ -657,12 +671,15 @@ async function executeSend() {
             body: JSON.stringify(payload)
         });
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        status.textContent = `Successfully sent ${payload.length} emails!`;
-        status.style.color = 'green';
+        
+        status.textContent = ``; // Clear working status
+        modalManager.showSendSuccessModal(payload.length); // Show success modal
+
     } catch (error) {
         status.textContent = `Failed to send emails: ${error.message}`;
         status.style.color = 'red';
         console.error("Error sending emails:", error);
+        lastSentPayload = []; // Clear payload on error
     }
 }
 

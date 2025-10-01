@@ -1,4 +1,4 @@
-// V-5.0 - 2025-10-01 - 2:57 PM EDT
+// V-5.1 - 2025-10-01 - 3:44 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -51,6 +51,9 @@ export default class ModalManager {
         // Send Confirmation Modal
         document.getElementById('cancel-send-button').onclick = () => this.hide('send-confirm-modal');
         document.getElementById('confirm-send-button').onclick = () => this.appContext.executeSend();
+        
+        // Send Success Modal
+        document.getElementById('close-success-modal-button').onclick = () => this.hide('send-success-modal');
 
         // Custom Script Logic
         document.getElementById('scan-script-button').onclick = () => this._scanScriptForInputs();
@@ -171,6 +174,11 @@ export default class ModalManager {
         
         // 4. Trigger a new pre-cache for the next time the modal is opened.
         this.appContext.preCacheRecipientCounts();
+    }
+
+    showSendSuccessModal(count) {
+        document.getElementById('send-success-message').textContent = `You have successfully sent ${count} ${count === 1 ? 'email' : 'emails'}.`;
+        this.show('send-success-modal');
     }
 
     // --- Example Modal Logic ---
