@@ -1,4 +1,4 @@
-// V-6.9 - 2025-10-01 - 2:57 PM EDT
+// V-7.0 - 2025-10-01 - 3:16 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -14,6 +14,34 @@ let customParameters = [];
 let modalManager;
 let worksheetDataCache = {}; // Cache for worksheet data
 let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+
+/**
+ * Checks if all required fields are filled and enables/disables the send button accordingly.
+ */
+function updateSendButtonState() {
+    const sendButton = document.getElementById('send-email-button');
+    const fromFilled = fromPill.length > 0;
+    const recipientsSelected = studentDataCache.length > 0;
+    const subjectFilled = document.getElementById('email-subject').value.trim() !== '';
+    // The editor is considered non-empty if it contains more than just the initial newline character.
+    const bodyFilled = quill.getLength() > 1;
+
+    if (fromFilled && recipientsSelected && subjectFilled && bodyFilled) {
+        sendButton.disabled = false;
+        sendButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        sendButton.title = ''; // Clear the title when enabled
+    } else {
+        sendButton.disabled = true;
+        sendButton.classList.add('opacity-50', 'cursor-not-allowed');
+        const missing = [];
+        if (!fromFilled) missing.push('From');
+        if (!recipientsSelected) missing.push('Recipients');
+        if (!subjectFilled) missing.push('Subject');
+        if (!bodyFilled) missing.push('Body');
+        sendButton.title = `Please fill in the following fields: ${missing.join(', ')}`;
+    }
+}
+
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
@@ -298,6 +326,7 @@ Office.onReady((info) => {
                 status.style.color = 'red';
                 throw error; // Rethrow to be caught by the modal if needed
             }
+            updateSendButtonState();
         }
         
         const appContext = {
@@ -347,12 +376,15 @@ Office.onReady((info) => {
         setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
-        const subjectInput = document.getElementById('email-subject');
         
+        const subjectInput = document.getElementById('email-subject');
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
+        subjectInput.addEventListener('input', updateSendButtonState);
+        
         quill.on('selection-change', (range) => {
             if (range) lastFocusedInput = quill;
         });
+        quill.on('text-change', updateSendButtonState);
 
         loadCustomParameters().then(populateParameterButtons);
         checkConnection().then(() => {
@@ -360,6 +392,8 @@ Office.onReady((info) => {
                 preCacheRecipientCounts(); // Initial cache on load
             }
         });
+
+        updateSendButtonState(); // Call once on load to set initial disabled state
     }
 });
 
@@ -732,6 +766,7 @@ function renderFromPills() {
     if (hiddenInput) {
         hiddenInput.value = fromPill.length > 0 ? fromPill[0] : '';
     }
+    updateSendButtonState();
 }
 
 function setupCcInput() {
