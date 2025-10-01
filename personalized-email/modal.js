@@ -1,4 +1,4 @@
-// V-4.9 - 2025-10-01 - 2:43 PM EDT
+// V-5.0 - 2025-10-01 - 2:57 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -58,7 +58,10 @@ export default class ModalManager {
         document.getElementById('script-file-input').onchange = (e) => this._handleScriptFileUpload(e);
 
         // Recipient Modal
-        document.getElementById('cancel-recipient-modal-button').onclick = () => this.hide('recipient-modal');
+        document.getElementById('cancel-recipient-modal-button').onclick = () => {
+            this.hide('recipient-modal');
+            this.appContext.preCacheRecipientCounts(); // Re-cache for next time
+        };
         document.getElementById('confirm-recipient-modal-button').onclick = () => this._confirmRecipientSelection();
         document.querySelectorAll('input[name="recipient-source"]').forEach(radio => {
             radio.onchange = () => this._handleRecipientSourceChange();
@@ -101,28 +104,32 @@ export default class ModalManager {
 
         this._updateRecipientModalUI();
 
-        // Immediately display pre-cached count if available and settings match.
         const statusEl = document.getElementById('recipient-modal-status');
+        const confirmBtn = document.getElementById('confirm-recipient-modal-button');
         const { lda: ldaCount, master: masterCount } = this.appContext.recipientCountCache;
-        const canUsePrecache = excludeDNC && excludeFillColor; // Can only use if exclusions are default
+        const canUsePrecache = excludeDNC && excludeFillColor;
 
         let usedPrecache = false;
         if (canUsePrecache) {
             if (selectedType === 'lda' && ldaCount !== null) {
-                statusEl.textContent = ldaCount === -1 ? "Could not find Today's LDA sheet." : `${ldaCount} student${ldaCount !== 1 ? 's' : ''} found.`;
+                const count = ldaCount >= 0 ? ldaCount : 0;
+                statusEl.textContent = ldaCount === -1 ? "Could not find Today's LDA sheet." : `${count} student${count !== 1 ? 's' : ''} found.`;
+                this.finalStudentCount = count;
                 usedPrecache = true;
             } else if (selectedType === 'master' && masterCount !== null) {
-                statusEl.textContent = masterCount === -1 ? 'Could not find Master List sheet.' : `${masterCount} student${masterCount !== 1 ? 's' : ''} found.`;
+                const count = masterCount >= 0 ? masterCount : 0;
+                statusEl.textContent = masterCount === -1 ? 'Could not find Master List sheet.' : `${count} student${count !== 1 ? 's' : ''} found.`;
+                this.finalStudentCount = count;
                 usedPrecache = true;
             }
         }
         
-        if (!usedPrecache) {
+        if (usedPrecache) {
+            confirmBtn.disabled = false;
+        } else {
             statusEl.textContent = 'Counting students...';
+            this._fetchStudentCountForModal();
         }
-        
-        // Always fetch the live, accurately filtered count to confirm or update.
-        this._fetchStudentCountForModal();
     }
 
     _updateRecipientModalUI() {
@@ -161,6 +168,9 @@ export default class ModalManager {
 
         // 3. Close the modal.
         this.hide('recipient-modal');
+        
+        // 4. Trigger a new pre-cache for the next time the modal is opened.
+        this.appContext.preCacheRecipientCounts();
     }
 
     // --- Example Modal Logic ---
@@ -702,3 +712,4 @@ export default class ModalManager {
         this.show('send-confirm-modal');
     }
 }
+

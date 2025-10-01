@@ -1,4 +1,4 @@
-// V-6.8 - 2025-10-01 - 2:43 PM EDT
+// V-6.9 - 2025-10-01 - 2:57 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -333,7 +333,8 @@ Office.onReady((info) => {
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
             get studentDataCache() { return studentDataCache; },
-            get recipientCountCache() { return recipientCountCache; }
+            get recipientCountCache() { return recipientCountCache; },
+            preCacheRecipientCounts
         };
 
         modalManager = new ModalManager(appContext);
@@ -355,9 +356,8 @@ Office.onReady((info) => {
 
         loadCustomParameters().then(populateParameterButtons);
         checkConnection().then(() => {
-            // Only start pre-caching after we confirm there's a connection.
-            if (powerAutomateConnection) {
-                preCacheRecipientCounts();
+             if (powerAutomateConnection) {
+                preCacheRecipientCounts(); // Initial cache on load
             }
         });
     }
@@ -779,3 +779,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
