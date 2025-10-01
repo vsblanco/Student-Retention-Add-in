@@ -1,4 +1,4 @@
-// V-6.5 - 2025-10-01 - 11:57 AM EDT
+// V-6.4 - 2025-10-01 - 11:42 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -7,7 +7,6 @@ let powerAutomateConnection = null;
 let studentDataCache = [];
 let lastFocusedInput = null;
 let quill; // To hold the editor instance
-let fromParts = [];
 let ccRecipients = [];
 let customParameters = [];
 let modalManager;
@@ -98,7 +97,9 @@ async function _getStudentDataCore(selection) {
             console.log(`Step 2: Fetching recipients from '${sheetName}' sheet.`);
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
-            
+
+            // *** MODIFICATION START ***
+            // Use getCellProperties for robust, cell-by-cell color detection.
             const propertiesToLoad = {
                 format: {
                     fill: {
@@ -106,6 +107,7 @@ async function _getStudentDataCore(selection) {
                     }
                 }
             };
+            // This queues the request. The result is accessed via .value after context.sync().
             const cellProperties = usedRange.getCellProperties(propertiesToLoad);
             usedRange.load("values");
             
@@ -113,7 +115,9 @@ async function _getStudentDataCore(selection) {
             console.log(`Successfully loaded '${sheetName}' sheet with values and cell properties.`);
 
             const values = usedRange.values;
+            // The result of getCellProperties is now in the .value property.
             const formats = cellProperties.value; 
+            // *** MODIFICATION END ***
             
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
@@ -140,10 +144,11 @@ async function _getStudentDataCore(selection) {
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
-                if (!row) continue; 
+                if (!row) continue; // Defensive check for empty rows that might be in the usedRange
 
                 const studentIdentifier = row[colIndices.StudentIdentifier];
 
+                // DNC Tag exclusion
                 if (excludeDNC && colIndices.StudentIdentifier !== -1) {
                     if (studentIdentifier && dncStudentIdentifiers.has(String(studentIdentifier))) {
                         console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because they are on the DNC list.`);
@@ -151,12 +156,15 @@ async function _getStudentDataCore(selection) {
                     }
                 }
 
+                // Fill Color exclusion using the reliable data from getCellProperties
                 if (excludeFillColor && colIndices.Outreach !== -1) {
+                    // Safely access the specific cell's format from the loaded properties
                     const cellFormat = formats[i] ? formats[i][colIndices.Outreach] : null;
                     const cellColor = cellFormat ? cellFormat.format.fill.color : '#FFFFFF';
                     
                     console.log(`- Student: ${row[colIndices.StudentName] || 'Unknown Name'}, Outreach Color: ${cellColor}`);
 
+                    // The API returns '#000000' for "No Fill" on some platforms. Both should be treated as no fill.
                     if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
                         console.log(`  ↳ EXCLUDING student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color.`);
                         continue;
@@ -297,16 +305,7 @@ Office.onReady((info) => {
             saveCustomParameters,
             populateParameterButtons,
             executeSend,
-            get fromParts() { return fromParts; },
-            setFromParts: (newParts) => {
-                fromParts = Array.isArray(newParts) ? newParts : (newParts ? [newParts] : []);
-                renderFromPills();
-            },
             ccRecipients,
-            setCcRecipients: (newRecipients) => {
-                ccRecipients = Array.isArray(newRecipients) ? newRecipients : (newRecipients ? [newRecipients] : []);
-                renderCCPills();
-            },
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
@@ -319,12 +318,13 @@ Office.onReady((info) => {
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
-        setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
         const subjectInput = document.getElementById('email-subject');
+        const fromInput = document.getElementById('email-from');
         
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
+        fromInput.addEventListener('focus', () => lastFocusedInput = fromInput);
         quill.on('selection-change', (range) => {
             if (range) lastFocusedInput = quill;
         });
@@ -423,8 +423,6 @@ function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
         const range = lastFocusedInput.getSelection(true);
         lastFocusedInput.insertText(range.index, param, 'user');
-    } else if (lastFocusedInput && lastFocusedInput.id === 'email-from-input') {
-        addFromPart(param);
     } else if (lastFocusedInput && lastFocusedInput.id === 'email-cc-input') {
         addCcRecipient(param);
     } else if (lastFocusedInput) {
@@ -571,7 +569,7 @@ async function executeSend() {
     status.textContent = `Sending ${studentDataCache.length} emails...`;
     status.style.color = 'gray';
 
-    const fromTemplate = fromParts.join('');
+    const fromTemplate = document.getElementById('email-from').value;
     const subjectTemplate = document.getElementById('email-subject').value;
     const bodyTemplate = quill.root.innerHTML;
 
@@ -653,52 +651,6 @@ async function saveTemplates(templates) {
     });
 }
 
-function setupFromInput() {
-    const container = document.getElementById('email-from-container');
-    const input = document.getElementById('email-from-input');
-    container.onclick = () => { input.focus(); lastFocusedInput = input; };
-    input.onfocus = () => lastFocusedInput = input;
-    input.onkeydown = (e) => {
-        if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
-            e.preventDefault();
-            addFromPart(input.value.trim());
-            input.value = '';
-        } else if (e.key === 'Backspace' && input.value === '' && fromParts.length > 0) {
-            removeFromPart(fromParts.length - 1);
-        }
-    };
-    input.onblur = () => { addFromPart(input.value.trim()); input.value = ''; };
-}
-
-function addFromPart(text) {
-    if (text) {
-        fromParts.push(text);
-        renderFromPills();
-    }
-}
-
-function removeFromPart(index) {
-    fromParts.splice(index, 1);
-    renderFromPills();
-}
-
-function renderFromPills() {
-    const container = document.getElementById('email-from-container');
-    const input = document.getElementById('email-from-input');
-    container.querySelectorAll('.cc-pill').forEach(pill => pill.remove());
-    fromParts.forEach((part, index) => {
-        const pill = document.createElement('span');
-        pill.className = part.startsWith('{') && part.endsWith('}') ? 'cc-pill param' : 'cc-pill';
-        pill.textContent = part;
-        const removeBtn = document.createElement('span');
-        removeBtn.textContent = '×';
-        removeBtn.className = 'cc-pill-remove';
-        removeBtn.onclick = (e) => { e.stopPropagation(); removeFromPart(index); };
-        pill.appendChild(removeBtn);
-        container.insertBefore(pill, input);
-    });
-}
-
 function setupCcInput() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
@@ -744,4 +696,3 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
-
