@@ -1,4 +1,4 @@
-// V-7.4 - 2025-10-01 - 4:56 PM EDT
+// V-7.0 - 2025-10-01 - 6:53 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -6,57 +6,26 @@ import { generatePdfReceipt } from './receipt-generator.js';
 
 let powerAutomateConnection = null;
 let studentDataCache = [];
-let recipientCountCache = { lda: null, master: null };
 let lastFocusedInput = null;
-let quill; // To hold the editor instance
+let quill;
 let fromPill = [];
 let ccRecipients = [];
 let customParameters = [];
 let modalManager;
-let worksheetDataCache = {}; // Cache for worksheet data
-let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
-let lastSentPayload = []; // To store the payload for the PDF receipt
-
-/**
- * Checks if all required fields are filled and enables/disables the send button accordingly.
- */
-function updateSendButtonState() {
-    const sendButton = document.getElementById('send-email-button');
-    const fromFilled = fromPill.length > 0;
-    const recipientsSelected = studentDataCache.length > 0;
-    const subjectFilled = document.getElementById('email-subject').value.trim() !== '';
-    // The editor is considered non-empty if it contains more than just the initial newline character.
-    const bodyFilled = quill.getLength() > 1;
-
-    if (fromFilled && recipientsSelected && subjectFilled && bodyFilled) {
-        sendButton.disabled = false;
-        sendButton.classList.remove('opacity-50', 'cursor-not-allowed');
-        sendButton.title = ''; // Clear the title when enabled
-    } else {
-        sendButton.disabled = true;
-        sendButton.classList.add('opacity-50', 'cursor-not-allowed');
-        const missing = [];
-        if (!fromFilled) missing.push('From');
-        if (!recipientsSelected) missing.push('Recipients');
-        if (!subjectFilled) missing.push('Subject');
-        if (!bodyFilled) missing.push('Body');
-        sendButton.title = `Please fill in the following fields: ${missing.join(', ')}`;
-    }
-}
-
+let worksheetDataCache = {};
+let lastSentPayload = [];
+let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true, hasBeenSet: false };
+let recipientCountCache = new Map();
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
- * processes it, and returns a processed array of student data.
+ * processes it, and returns both included and excluded students.
  * @param {object} selection - The recipient selection object.
- * @returns {Promise<Array>} A promise that resolves with the student data array.
+ * @returns {Promise<{included: Array, excluded: Array}>} A promise that resolves with an object containing included and excluded students.
  */
 async function _getStudentDataCore(selection) {
-    console.log("--- Starting Data Fetch & DNC Exclusion Process ---");
     const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
-    console.log(`Selection criteria: type=${type}, customSheet='${customSheetName}', excludeDNC=${excludeDNC}, excludeFillColor=${excludeFillColor}`);
     let sheetName;
-    let processedStudents = [];
 
     if (type === 'custom') {
         sheetName = customSheetName.trim();
@@ -69,143 +38,97 @@ async function _getStudentDataCore(selection) {
         sheetName = type === 'lda' ? getTodaysLdaSheetName() : 'Master List';
     }
     
+    const includedStudents = [];
+    const excludedStudents = [];
     worksheetDataCache = {}; 
 
     try {
         await Excel.run(async (context) => {
-            // Step 1: Build a list of DNC students by their ID if exclusion is enabled.
             const dncStudentIdentifiers = new Set();
-            const dncEntriesForLogging = []; // Array for detailed logging
             if (excludeDNC) {
-                console.log("Step 1: Building DNC exclusion list...");
                 try {
                     const historySheet = context.workbook.worksheets.getItem("Student History");
                     const historyRange = historySheet.getUsedRange();
                     historyRange.load("values");
                     await context.sync();
-                    console.log("Successfully loaded 'Student History' sheet.");
                     
                     const historyValues = historyRange.values;
                     if (historyValues.length > 1) {
                         const historyHeaders = historyValues[0].map(h => String(h ?? '').toLowerCase());
                         const identifierIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.StudentIdentifier);
                         const tagsIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.Tags);
-                        console.log(`'Student History' Headers found: StudentIdentifier at index ${identifierIndex}, Tags at index ${tagsIndex}`);
 
                         if (identifierIndex !== -1 && tagsIndex !== -1) {
                             for (let i = 1; i < historyValues.length; i++) {
                                 const row = historyValues[i];
                                 const tagsString = String(row[tagsIndex] || '').toUpperCase();
                                 const individualTags = tagsString.split(',').map(t => t.trim());
-
-                                const hasExcludableDnc = individualTags.some(tag => {
-                                    const isPhoneDnc = tag === 'DNC - PHONE' || tag === 'DNC - OTHER PHONE';
-                                    return tag.includes('DNC') && !isPhoneDnc;
-                                });
+                                const hasExcludableDnc = individualTags.some(tag => tag.includes('DNC') && !['DNC - PHONE', 'DNC - OTHER PHONE'].includes(tag));
 
                                 if (hasExcludableDnc) {
                                     const studentIdentifier = row[identifierIndex];
-                                    if (studentIdentifier) {
-                                        const idStr = String(studentIdentifier);
-                                        dncStudentIdentifiers.add(idStr);
-                                        dncEntriesForLogging.push({ id: idStr, tags: row[tagsIndex] });
-                                    }
+                                    if (studentIdentifier) dncStudentIdentifiers.add(String(studentIdentifier));
                                 }
                             }
-                        } else {
-                            console.warn("Could not find 'Student Identifier' or 'Tags' column in 'Student History'. Cannot perform DNC exclusion.");
                         }
                     }
-                    console.log(`Finished building exclusion list. Found ${dncStudentIdentifiers.size} unique students with DNC tags.`);
-                    console.log("DNC Entries found in 'Student History':", dncEntriesForLogging);
                 } catch (error) {
-                    console.error("Error processing 'Student History' sheet for DNC exclusion. Proceeding without it.", error);
+                    console.error("Could not process 'Student History' sheet for DNC exclusion.", error);
                 }
-            } else {
-                 console.log("DNC exclusion is turned OFF. Skipping exclusion list build.");
             }
 
-            // Step 2: Fetch and process the main student list.
-            console.log(`Step 2: Fetching recipients from '${sheetName}' sheet.`);
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
-
-            const propertiesToLoad = {
-                format: {
-                    fill: {
-                        color: true
-                    }
-                }
-            };
-            const cellProperties = usedRange.getCellProperties(propertiesToLoad);
+            const cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
             usedRange.load("values");
             
             await context.sync();
-            console.log(`Successfully loaded '${sheetName}' sheet with values and cell properties.`);
 
             const values = usedRange.values;
             const formats = cellProperties.value; 
-            
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
             const colIndices = {};
             for (const key in COLUMN_MAPPINGS) {
                 colIndices[key] = findColumnIndex(headers, COLUMN_MAPPINGS[key]);
             }
-            console.log("Recipient sheet column indices found:", colIndices);
             
             await loadCustomParameters();
-
             const customParamIndices = {};
             customParameters.forEach(param => {
                 const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
-                if (headerIndex !== -1) {
-                    customParamIndices[param.name] = headerIndex;
-                }
+                if (headerIndex !== -1) customParamIndices[param.name] = headerIndex;
             });
-
-            console.log("Step 3: Processing and filtering recipient list...");
-            if (excludeFillColor && colIndices.Outreach !== -1) {
-                console.log("--- Begin Outreach Fill Color Analysis ---");
-            }
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
                 if (!row) continue; 
 
                 const studentIdentifier = row[colIndices.StudentIdentifier];
+                const studentNameForRow = row[colIndices.StudentName] || `ID: ${studentIdentifier || 'Unknown'}`;
 
                 if (excludeDNC && colIndices.StudentIdentifier !== -1) {
                     if (studentIdentifier && dncStudentIdentifiers.has(String(studentIdentifier))) {
-                        console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because they are on the DNC list.`);
+                        excludedStudents.push({ name: studentNameForRow, reason: 'DNC Tag' });
                         continue;
                     }
                 }
 
                 if (excludeFillColor && colIndices.Outreach !== -1) {
-                    const cellFormat = formats[i] ? formats[i][colIndices.Outreach] : null;
-                    const cellColor = cellFormat ? cellFormat.format.fill.color : '#FFFFFF';
-                    
-                    console.log(`- Student: ${row[colIndices.StudentName] || 'Unknown Name'}, Outreach Color: ${cellColor}`);
-
+                    const cellFormat = formats[i]?.[colIndices.Outreach];
+                    const cellColor = cellFormat?.format.fill.color;
                     if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
-                        console.log(`  ↳ EXCLUDING student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color.`);
+                        excludedStudents.push({ name: studentNameForRow, reason: 'Fill Color' });
                         continue;
                     }
                 }
                 
                 const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
-
                 const student = {
-                    StudentName: studentName,
-                    FirstName: nameParts.first,
-                    LastName: nameParts.last,
-                    StudentEmail: row[colIndices.StudentEmail] ?? '',
-                    PersonalEmail: row[colIndices.PersonalEmail] ?? '',
-                    Grade: row[colIndices.Grade] ?? '',
-                    DaysOut: row[colIndices.DaysOut] ?? '',
-                    Assigned: row[colIndices.Assigned] ?? ''
+                    StudentName: studentName, FirstName: nameParts.first, LastName: nameParts.last,
+                    StudentEmail: row[colIndices.StudentEmail] ?? '', PersonalEmail: row[colIndices.PersonalEmail] ?? '',
+                    Grade: row[colIndices.Grade] ?? '', DaysOut: row[colIndices.DaysOut] ?? '', Assigned: row[colIndices.Assigned] ?? ''
                 };
 
                 for (const param of customParameters) {
@@ -255,16 +178,11 @@ async function _getStudentDataCore(selection) {
                     }
                     student[param.name] = value;
                 }
-                processedStudents.push(student);
-            }
-            if (excludeFillColor && colIndices.Outreach !== -1) {
-                console.log("--- End Outreach Fill Color Analysis ---");
+                includedStudents.push(student);
             }
         });
-        console.log(`--- Process Complete for ${sheetName}. Final count: ${processedStudents.length} ---`);
-        return processedStudents;
+        return { included: includedStudents, excluded: excludedStudents };
     } catch (error) {
-        console.error(`--- A critical error occurred during data fetch for ${sheetName} ---`, error);
         if (error.code === 'ItemNotFound') {
             error.userFacingMessage = `Error: Sheet "${sheetName}" not found.`;
         }
@@ -272,63 +190,29 @@ async function _getStudentDataCore(selection) {
     }
 }
 
-/**
- * In the background, fetches the counts for the two primary sheets (LDA and Master)
- * to make the recipient modal feel faster.
- */
-async function preCacheRecipientCounts() {
-    console.log("--- Starting background pre-cache of recipient counts ---");
-    // Use the default exclusion settings for the pre-cache.
-    const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
-    const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
-
-    try {
-        const ldaStudents = await _getStudentDataCore(ldaSelection);
-        recipientCountCache.lda = ldaStudents.length;
-        console.log(`Pre-cached LDA count: ${recipientCountCache.lda}`);
-    } catch (error) {
-        recipientCountCache.lda = -1; // Use -1 to indicate an error (e.g., sheet not found)
-        console.warn("Could not pre-cache LDA count:", error.message);
-    }
-
-    try {
-        const masterStudents = await _getStudentDataCore(masterSelection);
-        recipientCountCache.master = masterStudents.length;
-        console.log(`Pre-cached Master List count: ${recipientCountCache.master}`);
-    } catch (error) {
-        recipientCountCache.master = -1; // Use -1 to indicate an error
-        console.warn("Could not pre-cache Master List count:", error.message);
-    }
-    console.log("--- Background pre-cache complete ---");
-}
-
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         quill = new Quill('#editor-container', QUILL_EDITOR_CONFIG);
 
-        /**
-         * Populates the main studentDataCache with the final selection of students
-         * after the user confirms their choice in the recipient modal.
-         * @param {object} selection The final recipient selection from the modal.
-         */
-        async function getStudentDataWithUI(selection) {
+        async function getStudentDataWithUI() {
             const status = document.getElementById('status');
-            status.textContent = 'Loading selected students...';
+            status.textContent = 'Fetching students...';
             status.style.color = 'gray';
             try {
-                // The core function is called here to populate the main cache for the app
-                studentDataCache = await _getStudentDataCore(selection);
-                status.textContent = `Loaded ${studentDataCache.length} students.`;
+                const result = await _getStudentDataCore(recipientSelection);
+                studentDataCache = result.included;
+                status.textContent = `Found ${studentDataCache.length} students.`;
+                validateAllFields();
                 setTimeout(() => status.textContent = '', 3000);
+                return studentDataCache;
             } catch (error) {
-                studentDataCache = []; // Clear cache on error
-                const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while loading students.');
+                const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while fetching data.');
                 status.textContent = message;
                 status.style.color = 'red';
-                throw error; // Rethrow to be caught by the modal if needed
+                validateAllFields();
+                throw error;
             }
-            updateSendButtonState();
         }
         
         const appContext = {
@@ -336,7 +220,7 @@ Office.onReady((info) => {
             getStudentDataWithUI,
             getStudentDataCore: _getStudentDataCore,
             updateRecipientSelection: (newSelection, count) => {
-                recipientSelection = newSelection;
+                recipientSelection = { ...newSelection, hasBeenSet: true };
                 const button = document.getElementById('select-students-button');
                 if (count >= 0) {
                     button.textContent = `${count} Student${count !== 1 ? 's' : ''} Selected`;
@@ -345,8 +229,11 @@ Office.onReady((info) => {
                     button.textContent = 'Select Students';
                     button.classList.remove('bg-green-100', 'text-green-800', 'font-semibold');
                 }
+                validateAllFields();
             },
             recipientSelection,
+            recipientCountCache,
+            preCacheRecipientCounts,
             renderTemplate,
             renderCCTemplate,
             getTemplates,
@@ -363,49 +250,29 @@ Office.onReady((info) => {
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
-            get studentDataCache() { return studentDataCache; },
-            get recipientCountCache() { return recipientCountCache; },
-            preCacheRecipientCounts
+            get studentDataCache() { return studentDataCache; }
         };
 
         modalManager = new ModalManager(appContext);
         
-        // Wire up button event handlers
         document.getElementById("send-email-button").onclick = () => modalManager.showSendConfirmModal();
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
-        // PDF Receipt Button
-        document.getElementById('download-receipt-button').onclick = () => {
-            if (lastSentPayload.length > 0) {
-                const bodyTemplate = quill.root.innerHTML;
-                generatePdfReceipt(lastSentPayload, bodyTemplate);
-            } else {
-                console.error("No payload available to generate a receipt.");
-            }
-        };
-
         setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
         
         const subjectInput = document.getElementById('email-subject');
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
-        subjectInput.addEventListener('input', updateSendButtonState);
+        subjectInput.addEventListener('input', validateAllFields);
         
-        quill.on('selection-change', (range) => {
-            if (range) lastFocusedInput = quill;
-        });
-        quill.on('text-change', updateSendButtonState);
+        quill.on('selection-change', (range) => { if (range) lastFocusedInput = quill; });
+        quill.on('text-change', validateAllFields);
 
         loadCustomParameters().then(populateParameterButtons);
-        checkConnection().then(() => {
-             if (powerAutomateConnection) {
-                preCacheRecipientCounts(); // Initial cache on load
-            }
-        });
-
-        updateSendButtonState(); // Call once on load to set initial disabled state
+        checkConnection().then(preCacheRecipientCounts);
+        validateAllFields();
     }
 });
 
@@ -416,9 +283,8 @@ function setupExampleContextMenu() {
     exampleButton.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const rect = e.target.getBoundingClientRect();
-        // Position the menu relative to the button's position in the viewport
         contextMenu.style.left = `${rect.left}px`;
-        contextMenu.style.top = `${rect.bottom + 2}px`; // Add 2px for a small gap
+        contextMenu.style.top = `${rect.bottom}px`;
         contextMenu.classList.remove('hidden');
     });
 
@@ -436,38 +302,20 @@ function setupExampleContextMenu() {
 
     document.getElementById('context-menu-receipt').onclick = (e) => {
         e.preventDefault();
-        const status = document.getElementById('status');
-        if (studentDataCache && studentDataCache.length > 0) {
-            // Create a payload from the current setup for the example receipt
-            const fromTemplate = document.getElementById('email-from').value;
-            const subjectTemplate = document.getElementById('email-subject').value;
-            const bodyTemplate = quill.root.innerHTML;
-            const examplePayload = studentDataCache.map(student => ({
-                from: renderTemplate(fromTemplate, student),
-                to: student.StudentEmail || '',
-                cc: renderCCTemplate(ccRecipients, student),
-                subject: renderTemplate(subjectTemplate, student),
-                body: renderTemplate(bodyTemplate, student)
-            })).filter(email => email.to && email.from);
-
-            if (examplePayload.length > 0) {
-                generatePdfReceipt(examplePayload, bodyTemplate);
-                status.textContent = 'Example PDF receipt downloaded.';
-                status.style.color = 'green';
-            } else {
-                status.textContent = 'No valid students for example receipt.';
-                 status.style.color = 'orange';
-            }
+        const bodyTemplate = quill.root.innerHTML;
+        const payload = generatePayload();
+        if (payload.length > 0) {
+            generatePdfReceipt(payload, bodyTemplate);
         } else {
-            status.textContent = 'Please select recipients to generate an example receipt.';
-            status.style.color = 'orange';
+            document.getElementById('status').textContent = 'Please select recipients before generating a receipt.';
+            document.getElementById('status').style.color = 'orange';
         }
-        setTimeout(() => status.textContent = '', 3000);
         contextMenu.classList.add('hidden');
     };
 }
 
 async function populateParameterButtons() {
+    // ... (rest of the function is unchanged)
     const standardContainer = document.getElementById('standard-parameter-buttons');
     const customContainer = document.getElementById('custom-parameter-buttons');
     const moreCustomContainer = document.getElementById('more-custom-parameters');
@@ -544,9 +392,11 @@ function insertParameter(param) {
         quill.focus();
         quill.insertText(quill.getLength(), param, 'user');
     }
+    validateAllFields();
 }
 
 async function checkConnection() {
+    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const connectionsSetting = settings.getItemOrNullObject("connections");
@@ -567,6 +417,7 @@ async function checkConnection() {
 }
 
 async function createConnection() {
+    // ... (rest of the function is unchanged)
     const urlInput = document.getElementById('power-automate-url');
     const status = document.getElementById('setup-status');
     const url = urlInput.value.trim();
@@ -606,6 +457,7 @@ async function createConnection() {
 }
 
 function evaluateMapping(cellValue, mapping) {
+    // ... (rest of the function is unchanged)
     const cellStr = String(cellValue).trim().toLowerCase();
     const conditionStr = String(mapping.if).trim().toLowerCase();
     const cellNum = parseFloat(cellValue), conditionNum = parseFloat(mapping.if);
@@ -627,6 +479,7 @@ function evaluateMapping(cellValue, mapping) {
 }
 
 async function getWorksheetData(sheetNameToFetch) {
+    // ... (rest of the function is unchanged)
     if (worksheetDataCache[sheetNameToFetch]) return worksheetDataCache[sheetNameToFetch];
     try {
         await Excel.run(async (context) => {
@@ -648,6 +501,7 @@ async function getWorksheetData(sheetNameToFetch) {
 }
 
 const renderTemplate = (template, data) => {
+    // ... (rest of the function is unchanged)
     if (!template) return '';
     let result = template;
     for (let i = 0; i < 10 && /\{(\w+)\}/.test(result); i++) {
@@ -667,8 +521,23 @@ const renderTemplate = (template, data) => {
 };
 
 const renderCCTemplate = (recipients, data) => {
+    // ... (rest of the function is unchanged)
     if (!recipients || recipients.length === 0) return '';
     return recipients.map(recipient => renderTemplate(recipient, data)).join(';');
+}
+
+function generatePayload() {
+    const fromTemplate = document.getElementById('email-from').value;
+    const subjectTemplate = document.getElementById('email-subject').value;
+    const bodyTemplate = quill.root.innerHTML;
+
+    return studentDataCache.map(student => ({
+        from: renderTemplate(fromTemplate, student),
+        to: student.StudentEmail || '',
+        cc: renderCCTemplate(ccRecipients, student),
+        subject: renderTemplate(subjectTemplate, student),
+        body: renderTemplate(bodyTemplate, student)
+    })).filter(email => email.to && email.from);
 }
 
 async function executeSend() {
@@ -677,24 +546,12 @@ async function executeSend() {
     status.textContent = `Sending ${studentDataCache.length} emails...`;
     status.style.color = 'gray';
 
-    const fromTemplate = document.getElementById('email-from').value;
-    const subjectTemplate = document.getElementById('email-subject').value;
-    const bodyTemplate = quill.root.innerHTML;
-
-    const payload = studentDataCache.map(student => ({
-        from: renderTemplate(fromTemplate, student),
-        to: student.StudentEmail || '',
-        cc: renderCCTemplate(ccRecipients, student),
-        subject: renderTemplate(subjectTemplate, student),
-        body: renderTemplate(bodyTemplate, student)
-    })).filter(email => email.to && email.from);
-    
-    lastSentPayload = payload; // Cache the payload for the receipt
+    const payload = generatePayload();
+    lastSentPayload = payload;
 
     if(payload.length === 0) {
         status.textContent = 'No students with valid "To" and "From" email addresses found.';
         status.style.color = 'orange';
-        lastSentPayload = []; // Clear if nothing to send
         return;
     }
 
@@ -705,19 +562,18 @@ async function executeSend() {
             body: JSON.stringify(payload)
         });
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
-        status.textContent = ``; // Clear working status
-        modalManager.showSendSuccessModal(payload.length); // Show success modal
-
+        status.textContent = `Successfully sent ${payload.length} emails!`;
+        status.style.color = 'green';
+        modalManager.showSuccessModal(payload.length, lastSentPayload, quill.root.innerHTML);
     } catch (error) {
         status.textContent = `Failed to send emails: ${error.message}`;
         status.style.color = 'red';
         console.error("Error sending emails:", error);
-        lastSentPayload = []; // Clear payload on error
     }
 }
 
 function isValidHttpUrl(string) {
+    // ... (rest of the function is unchanged)
     try {
         const url = new URL(string);
         return url.protocol === "http:" || url.protocol === "https:";
@@ -727,11 +583,13 @@ function isValidHttpUrl(string) {
 }
 
 async function loadCustomParameters() {
+    // ... (rest of the function is unchanged)
     customParameters = await getCustomParameters();
     return customParameters;
 }
 
 async function getCustomParameters() {
+    // ... (rest of the function is unchanged)
     return Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const paramsSetting = settings.getItemOrNullObject(CUSTOM_PARAMS_KEY);
@@ -742,6 +600,7 @@ async function getCustomParameters() {
 }
 
 async function saveCustomParameters(params) {
+    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         context.workbook.settings.add(CUSTOM_PARAMS_KEY, JSON.stringify(params));
         await context.sync();
@@ -749,6 +608,7 @@ async function saveCustomParameters(params) {
 }
 
 async function getTemplates() {
+    // ... (rest of the function is unchanged)
     return Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
@@ -759,6 +619,7 @@ async function getTemplates() {
 }
 
 async function saveTemplates(templates) {
+    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         context.workbook.settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templates));
         await context.sync();
@@ -813,11 +674,10 @@ function renderFromPills() {
         container.insertBefore(pill, input);
     });
 
-    // Sync with the hidden input for modal.js
     if (hiddenInput) {
         hiddenInput.value = fromPill.length > 0 ? fromPill[0] : '';
     }
-    updateSendButtonState();
+    validateAllFields();
 }
 
 function setupCcInput() {
@@ -864,5 +724,48 @@ function renderCCPills() {
         pill.appendChild(removeBtn);
         container.insertBefore(pill, input);
     });
+}
+
+function validateAllFields() {
+    const from = document.getElementById('email-from').value;
+    const subject = document.getElementById('email-subject').value;
+    const body = quill.getText().trim();
+    const recipientsSet = recipientSelection.hasBeenSet;
+
+    const isFromValid = from && from.trim() !== '';
+    const isSubjectValid = subject && subject.trim() !== '';
+    const isBodyValid = body !== '';
+    const areRecipientsValid = recipientsSet && studentDataCache.length > 0;
+
+    const sendButton = document.getElementById('send-email-button');
+    const tooltip = document.getElementById('send-button-tooltip');
+    
+    if (isFromValid && isSubjectValid && isBodyValid && areRecipientsValid) {
+        sendButton.disabled = false;
+        tooltip.style.visibility = 'hidden';
+    } else {
+        sendButton.disabled = true;
+        tooltip.style.visibility = 'visible';
+        let missing = [];
+        if (!isFromValid) missing.push('From address');
+        if (!areRecipientsValid) missing.push('Recipients');
+        if (!isSubjectValid) missing.push('Subject');
+        if (!isBodyValid) missing.push('Body');
+        tooltip.textContent = `Required: ${missing.join(', ')}.`;
+    }
+}
+
+async function preCacheRecipientCounts() {
+    try {
+        const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+        const ldaResult = await _getStudentDataCore(ldaSelection);
+        recipientCountCache.set('lda', ldaResult.included.length);
+
+        const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+        const masterResult = await _getStudentDataCore(masterSelection);
+        recipientCountCache.set('master', masterResult.included.length);
+    } catch (error) {
+        console.warn("Pre-caching failed. This may happen if sheets are not yet created. The add-in will function normally.", error);
+    }
 }
 

@@ -1,4 +1,4 @@
-// V-5.1 - 2025-10-01 - 3:44 PM EDT
+// V-5.1 - 2025-10-01 - 6:53 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -8,7 +8,11 @@ export default class ModalManager {
         this.currentExampleIndex = 0;
         this.studentsForExample = [];
         this.currentRecipientSelection = {};
-        this.finalStudentCount = 0;
+        this.tempStudentCount = 0;
+        this.tempExcludedStudents = [];
+        this.currentPayloadForReceipt = [];
+        this.currentBodyForReceipt = '';
+
 
         this._setupEventListeners();
     }
@@ -48,12 +52,13 @@ export default class ModalManager {
         document.getElementById('manage-custom-params-button').onclick = () => this.showManageCustomParamsModal();
         document.getElementById('close-manage-custom-params-button').onclick = () => this.hide('manage-custom-params-modal');
         
-        // Send Confirmation Modal
+        // Send Confirmation Modals
         document.getElementById('cancel-send-button').onclick = () => this.hide('send-confirm-modal');
         document.getElementById('confirm-send-button').onclick = () => this.appContext.executeSend();
-        
-        // Send Success Modal
         document.getElementById('close-success-modal-button').onclick = () => this.hide('send-success-modal');
+        document.getElementById('download-receipt-button').onclick = () => {
+             window.jspdf.generatePdfReceipt(this.currentPayloadForReceipt, this.currentBodyForReceipt);
+        };
 
         // Custom Script Logic
         document.getElementById('scan-script-button').onclick = () => this._scanScriptForInputs();
@@ -61,10 +66,7 @@ export default class ModalManager {
         document.getElementById('script-file-input').onchange = (e) => this._handleScriptFileUpload(e);
 
         // Recipient Modal
-        document.getElementById('cancel-recipient-modal-button').onclick = () => {
-            this.hide('recipient-modal');
-            this.appContext.preCacheRecipientCounts(); // Re-cache for next time
-        };
+        document.getElementById('cancel-recipient-modal-button').onclick = () => this._closeRecipientModal();
         document.getElementById('confirm-recipient-modal-button').onclick = () => this._confirmRecipientSelection();
         document.querySelectorAll('input[name="recipient-source"]').forEach(radio => {
             radio.onchange = () => this._handleRecipientSourceChange();
@@ -72,6 +74,7 @@ export default class ModalManager {
         document.getElementById('recipient-custom-sheet-name').oninput = () => this._handleRecipientSourceChange();
         document.getElementById('exclude-dnc-toggle').onchange = () => this._handleRecipientSourceChange();
         document.getElementById('exclude-fill-color-toggle').onchange = () => this._handleRecipientSourceChange();
+        document.getElementById('show-excluded-list-button').onclick = (e) => this._toggleExclusionListPopup(e);
     }
 
     show(modalId) {
@@ -85,7 +88,8 @@ export default class ModalManager {
     // --- Recipient Modal Logic ---
     showRecipientModal() {
         this.currentRecipientSelection = { ...this.appContext.recipientSelection };
-        this.finalStudentCount = 0;
+        this.tempStudentCount = 0;
+        this.tempExcludedStudents = [];
 
         const { type, customSheetName, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
         document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
@@ -94,45 +98,23 @@ export default class ModalManager {
         document.getElementById('exclude-fill-color-toggle').checked = excludeFillColor;
 
         this._updateRecipientModalUI();
-        this._handleRecipientSourceChange(); // This will trigger the initial count display
+        this._fetchStudentCountForModal();
         this.show('recipient-modal');
     }
 
+    _closeRecipientModal() {
+        this.hide('recipient-modal');
+        this.appContext.preCacheRecipientCounts();
+    }
+    
     _handleRecipientSourceChange() {
         const selectedType = document.querySelector('input[name="recipient-source"]:checked').value;
         const customSheetName = document.getElementById('recipient-custom-sheet-name').value.trim();
         const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
         const excludeFillColor = document.getElementById('exclude-fill-color-toggle').checked;
         this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC, excludeFillColor };
-
         this._updateRecipientModalUI();
-
-        const statusEl = document.getElementById('recipient-modal-status');
-        const confirmBtn = document.getElementById('confirm-recipient-modal-button');
-        const { lda: ldaCount, master: masterCount } = this.appContext.recipientCountCache;
-        const canUsePrecache = excludeDNC && excludeFillColor;
-
-        let usedPrecache = false;
-        if (canUsePrecache) {
-            if (selectedType === 'lda' && ldaCount !== null) {
-                const count = ldaCount >= 0 ? ldaCount : 0;
-                statusEl.textContent = ldaCount === -1 ? "Could not find Today's LDA sheet." : `${count} student${count !== 1 ? 's' : ''} found.`;
-                this.finalStudentCount = count;
-                usedPrecache = true;
-            } else if (selectedType === 'master' && masterCount !== null) {
-                const count = masterCount >= 0 ? masterCount : 0;
-                statusEl.textContent = masterCount === -1 ? 'Could not find Master List sheet.' : `${count} student${count !== 1 ? 's' : ''} found.`;
-                this.finalStudentCount = count;
-                usedPrecache = true;
-            }
-        }
-        
-        if (usedPrecache) {
-            confirmBtn.disabled = false;
-        } else {
-            statusEl.textContent = 'Counting students...';
-            this._fetchStudentCountForModal();
-        }
+        this._fetchStudentCountForModal();
     }
 
     _updateRecipientModalUI() {
@@ -143,46 +125,100 @@ export default class ModalManager {
     async _fetchStudentCountForModal() {
         const statusEl = document.getElementById('recipient-modal-status');
         const confirmBtn = document.getElementById('confirm-recipient-modal-button');
+        
+        statusEl.textContent = 'Counting students...';
         confirmBtn.disabled = true;
+        this.tempExcludedStudents = [];
+        this._updateExcludedListButton();
+        document.getElementById('excluded-list-popup').classList.add('hidden');
+
+        // Check cache first
+        const { type, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
+        if (type !== 'custom' && excludeDNC && excludeFillColor && this.appContext.recipientCountCache.has(type)) {
+            this.tempStudentCount = this.appContext.recipientCountCache.get(type);
+            statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
+            confirmBtn.disabled = false;
+            // Note: Excluded list won't be available for cached counts, this is a trade-off for speed.
+            return;
+        }
 
         try {
-            // This call gets the live count based on the current selections in the modal.
-            const students = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
-            this.finalStudentCount = students.length;
-            statusEl.textContent = `${this.finalStudentCount} student${this.finalStudentCount !== 1 ? 's' : ''} found.`;
+            const result = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
+            this.tempStudentCount = result.included.length;
+            this.tempExcludedStudents = result.excluded;
+            statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
             confirmBtn.disabled = false;
+            this._updateExcludedListButton();
         } catch (error) {
-            this.finalStudentCount = 0;
+            this.tempStudentCount = 0;
+            this.tempExcludedStudents = [];
+            this._updateExcludedListButton();
             statusEl.textContent = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred.');
-            confirmBtn.disabled = false; // Allow user to confirm to close modal or change sheets.
         }
     }
 
     _confirmRecipientSelection() {
-        // 1. Update the main "Select Students" button text with the final count.
-        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.finalStudentCount);
-        
-        // 2. Trigger the final data load into the main app's cache. This happens
-        //    asynchronously after the modal closes.
-        this.appContext.getStudentDataWithUI(this.currentRecipientSelection).catch(() => {
-            // If the final load fails, reset the button to its initial state.
+        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.tempStudentCount);
+        this._closeRecipientModal();
+        this.appContext.getStudentDataWithUI().catch(() => {
             this.appContext.updateRecipientSelection(this.appContext.recipientSelection, -1);
         });
+    }
 
-        // 3. Close the modal.
-        this.hide('recipient-modal');
+    _updateExcludedListButton() {
+        const button = document.getElementById('show-excluded-list-button');
+        if (this.tempExcludedStudents.length > 0) {
+            button.classList.remove('hidden');
+            button.title = `${this.tempExcludedStudents.length} student(s) excluded. Click to view.`;
+        } else {
+            button.classList.add('hidden');
+        }
+    }
+
+    _toggleExclusionListPopup(event) {
+        event.stopPropagation();
+        const popup = document.getElementById('excluded-list-popup');
+        const content = document.getElementById('excluded-list-content');
         
-        // 4. Trigger a new pre-cache for the next time the modal is opened.
-        this.appContext.preCacheRecipientCounts();
+        if (popup.classList.contains('hidden')) {
+            content.innerHTML = '';
+            if (this.tempExcludedStudents.length === 0) {
+                content.innerHTML = '<p class="p-2 text-gray-500">No students were excluded.</p>';
+            } else {
+                const list = document.createElement('ul');
+                list.className = 'divide-y divide-gray-200';
+                this.tempExcludedStudents.forEach(student => {
+                    const item = document.createElement('li');
+                    item.className = 'p-2 flex justify-between items-center';
+                    item.innerHTML = `
+                        <span class="text-gray-700 truncate pr-2" title="${student.name}">${student.name}</span>
+                        <span class="flex-shrink-0 px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs">${student.reason}</span>
+                    `;
+                    list.appendChild(item);
+                });
+                content.appendChild(list);
+            }
+            popup.classList.remove('hidden');
+            document.addEventListener('click', this._closeExclusionPopupOnClickOutside.bind(this), { once: true });
+        } else {
+            popup.classList.add('hidden');
+        }
     }
 
-    showSendSuccessModal(count) {
-        document.getElementById('send-success-message').textContent = `You have successfully sent ${count} ${count === 1 ? 'email' : 'emails'}.`;
-        this.show('send-success-modal');
+    _closeExclusionPopupOnClickOutside(event) {
+        const popup = document.getElementById('excluded-list-popup');
+        if (!popup.contains(event.target)) {
+            popup.classList.add('hidden');
+        } else {
+            // Re-add listener if click was inside, to handle subsequent outside clicks
+             document.addEventListener('click', this._closeExclusionPopupOnClickOutside.bind(this), { once: true });
+        }
     }
+
 
     // --- Example Modal Logic ---
     async showExampleModal() {
+        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
              document.getElementById('status').textContent = 'Please select recipients before viewing an example.';
              document.getElementById('status').style.color = 'orange';
@@ -196,6 +232,7 @@ export default class ModalManager {
     }
 
     _renderExampleForIndex(index) {
+        // ... (rest of the function is unchanged)
         const students = this.studentsForExample;
         if (!students || students.length === 0 || index < 0 || index >= students.length) return;
         
@@ -219,6 +256,7 @@ export default class ModalManager {
     }
 
     _navigateExample(direction) {
+        // ... (rest of the function is unchanged)
         const newIndex = this.currentExampleIndex + direction;
         if (newIndex >= 0 && newIndex < this.studentsForExample.length) {
             this.currentExampleIndex = newIndex;
@@ -228,6 +266,7 @@ export default class ModalManager {
     }
 
     _randomizeExample() {
+        // ... (rest of the function is unchanged)
         if (this.studentsForExample.length > 0) {
             const randomIndex = Math.floor(Math.random() * this.studentsForExample.length);
             this.currentExampleIndex = randomIndex;
@@ -237,10 +276,12 @@ export default class ModalManager {
     }
 
     _toggleExampleSearch() {
+        // ... (rest of the function is unchanged)
         document.getElementById('example-search-container').classList.toggle('hidden');
     }
 
     _resetExampleSearch() {
+        // ... (rest of the function is unchanged)
         document.getElementById('example-search-container').classList.add('hidden');
         document.getElementById('example-search-input').value = '';
         document.getElementById('example-search-results').classList.add('hidden');
@@ -248,6 +289,7 @@ export default class ModalManager {
     }
     
     _filterStudents(searchTerm) {
+        // ... (rest of the function is unchanged)
         const resultsContainer = document.getElementById('example-search-results');
         const term = searchTerm.toLowerCase().trim();
 
@@ -263,6 +305,7 @@ export default class ModalManager {
     }
 
     _renderSearchResults(matches) {
+        // ... (rest of the function is unchanged)
         const resultsContainer = document.getElementById('example-search-results');
         resultsContainer.innerHTML = '';
 
@@ -281,12 +324,14 @@ export default class ModalManager {
     }
 
     _selectSearchResult(originalIndex) {
+        // ... (rest of the function is unchanged)
         this.currentExampleIndex = originalIndex;
         this._renderExampleForIndex(this.currentExampleIndex);
         this._resetExampleSearch();
     }
 
     async showPayloadModal() {
+        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
              document.getElementById('status').textContent = 'Please select recipients before viewing payload.';
              document.getElementById('status').style.color = 'orange';
@@ -310,6 +355,7 @@ export default class ModalManager {
     }
 
     _togglePayloadSchema() {
+        // ... (rest of the function is unchanged)
         const payloadContent = document.getElementById('payload-content');
         const schemaContent = document.getElementById('schema-content');
         const button = document.getElementById('toggle-payload-schema-button');
@@ -340,11 +386,13 @@ export default class ModalManager {
     }
 
     async showTemplatesModal() {
+        // ... (rest of the function is unchanged)
         await this._populateTemplatesList();
         this.show('templates-modal');
     }
 
     async _populateTemplatesList() {
+        // ... (rest of the function is unchanged)
         const container = document.getElementById('templates-list-container');
         container.innerHTML = '';
         const templates = await this.appContext.getTemplates();
@@ -386,6 +434,7 @@ export default class ModalManager {
     }
 
     _createTemplateElement(template) {
+        // ... (rest of the function is unchanged)
         const item = document.createElement('div');
         item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
         item.innerHTML = `
@@ -401,6 +450,7 @@ export default class ModalManager {
     }
 
     _loadTemplate(template) {
+        // ... (rest of the function is unchanged)
         document.getElementById('email-from').value = template.from;
         document.getElementById('email-subject').value = template.subject;
         this.appContext.quill.root.innerHTML = template.body;
@@ -410,6 +460,7 @@ export default class ModalManager {
     }
 
     async _deleteTemplate() {
+        // ... (rest of the function is unchanged)
         if (!this.editingTemplateId) return;
         let templates = await this.appContext.getTemplates();
         templates = templates.filter(t => t.id !== this.editingTemplateId);
@@ -420,6 +471,7 @@ export default class ModalManager {
     }
     
     showSaveTemplateModal(templateToEdit = null) {
+        // ... (rest of the function is unchanged)
         this.hide('templates-modal');
         const titleEl = document.getElementById('save-template-modal-title');
         const deleteBtn = document.getElementById('delete-template-button');
@@ -442,6 +494,7 @@ export default class ModalManager {
     }
 
     async _saveTemplate() {
+        // ... (rest of the function is unchanged)
         const name = document.getElementById('template-name').value.trim();
         const author = document.getElementById('template-author').value.trim();
         const status = document.getElementById('save-template-status');
@@ -479,6 +532,7 @@ export default class ModalManager {
     }
     
     showCustomParamModal(paramToEdit = null) {
+        // ... (rest of the function is unchanged)
         this._resetCustomParamModal();
         if (paramToEdit) {
             this.editingParamName = paramToEdit.name;
@@ -503,6 +557,7 @@ export default class ModalManager {
     }
 
     _resetCustomParamModal() {
+        // ... (rest of the function is unchanged)
         this.editingParamName = null;
         this.currentScriptInputs = {};
         document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
@@ -517,6 +572,7 @@ export default class ModalManager {
     }
 
     async _saveCustomParameter() {
+        // ... (rest of the function is unchanged)
         const name = document.getElementById('param-name').value.trim();
         const sourceColumn = document.getElementById('param-source-column').value.trim();
         const logicType = document.getElementById('logic-type-dropdown').value;
@@ -568,12 +624,14 @@ export default class ModalManager {
     }
     
     async showManageCustomParamsModal() {
+        // ... (rest of the function is unchanged)
         this.hide('custom-param-modal');
         await this._populateManageParamsList();
         this.show('manage-custom-params-modal');
     }
 
     async _populateManageParamsList() {
+        // ... (rest of the function is unchanged)
         const container = document.getElementById('manage-custom-params-list');
         container.innerHTML = '';
         const params = await this.appContext.getCustomParameters();
@@ -603,6 +661,7 @@ export default class ModalManager {
     }
 
     async _deleteCustomParameter(paramName) {
+        // ... (rest of the function is unchanged)
         let params = await this.appContext.getCustomParameters();
         params = params.filter(p => p.name !== paramName);
         await this.appContext.saveCustomParameters(params);
@@ -612,11 +671,13 @@ export default class ModalManager {
     }
     
     _toggleLogicContainers(selectedValue) {
+        // ... (rest of the function is unchanged)
         document.getElementById('value-mapping-logic-container').classList.toggle('hidden', selectedValue !== 'value-mapping');
         document.getElementById('custom-script-logic-container').classList.toggle('hidden', selectedValue !== 'custom-script');
     }
     
     _addMappingRow(mapping = { if: '', operator: 'eq', then: '' }) {
+        // ... (rest of the function is unchanged)
         const container = document.getElementById('param-mapping-container');
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2 mapping-row';
@@ -644,6 +705,7 @@ export default class ModalManager {
     }
     
     _getMappingsFromDOM() {
+        // ... (rest of the function is unchanged)
         return Array.from(document.querySelectorAll('.mapping-row')).map(row => ({
             if: row.querySelector('.if-input').value,
             operator: row.querySelector('.operator-select').value,
@@ -652,6 +714,7 @@ export default class ModalManager {
     }
 
     _scanScriptForInputs() {
+        // ... (rest of the function is unchanged)
         const script = document.getElementById('custom-script-editor').value;
         const regex = /\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?!\s*=)/g;
         const newInputs = new Set();
@@ -668,6 +731,7 @@ export default class ModalManager {
     }
 
     _renderScriptInputFields() {
+        // ... (rest of the function is unchanged)
         const container = document.getElementById('script-inputs-list');
         const parentContainer = document.getElementById('script-variable-inputs-container');
         container.innerHTML = '';
@@ -691,12 +755,14 @@ export default class ModalManager {
     }
 
     _updateScriptInputsFromDOM() {
+        // ... (rest of the function is unchanged)
         document.querySelectorAll('.script-input-field').forEach(input => {
             this.currentScriptInputs[input.dataset.varname] = input.value.trim();
         });
     }
 
     _handleScriptFileUpload(event) {
+        // ... (rest of the function is unchanged)
         const file = event.target.files[0];
         if (file) {
             const reader = new FileReader();
@@ -710,6 +776,7 @@ export default class ModalManager {
     }
 
     async showSendConfirmModal() {
+        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
             document.getElementById('status').textContent = 'Please select recipients before sending.';
             document.getElementById('status').style.color = 'orange';
@@ -718,6 +785,13 @@ export default class ModalManager {
         const count = this.appContext.studentDataCache.length;
         document.getElementById('send-confirm-message').textContent = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
         this.show('send-confirm-modal');
+    }
+
+    showSuccessModal(count, payload, bodyTemplate) {
+        this.currentPayloadForReceipt = payload;
+        this.currentBodyForReceipt = bodyTemplate;
+        document.getElementById('send-success-message').textContent = `Your batch of ${count} ${count === 1 ? 'email' : 'emails'} has been successfully sent to Power Automate.`;
+        this.show('send-success-modal');
     }
 }
 

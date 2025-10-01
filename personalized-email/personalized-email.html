@@ -1,4 +1,4 @@
-<!-- V-5.3 - 2025-10-01 - 4:43 PM EDT -->
+<!-- V-5.2 - 2025-10-01 - 6:53 PM EDT -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -9,10 +9,10 @@
 
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
+
     <!-- PDF Generation Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/jspdf-autotable@3.5.14/dist/jspdf.plugin.autotable.js"></script>
     
     <!-- Quill WYSIWYG Editor-->
     <link href="quill.snow.css" rel="stylesheet">
@@ -77,6 +77,34 @@
         }
         .chevron-open {
             transform: rotate(90deg);
+        }
+        /* Tooltip for disabled button */
+        .disabled-tooltip-container {
+            position: relative;
+            display: inline-block;
+            width: 50%; /* Match the button width */
+        }
+        .disabled-tooltip-text {
+            visibility: hidden;
+            width: 220px;
+            background-color: #2d3748; /* gray-800 */
+            color: #fff;
+            text-align: center;
+            border-radius: 0.375rem;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -110px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.75rem;
+            line-height: 1rem;
+        }
+        .disabled-tooltip-container:hover .disabled-tooltip-text {
+            visibility: visible;
+            opacity: 1;
         }
     </style>
 </head>
@@ -165,9 +193,12 @@
                 <button id="show-example-button" class="w-1/2 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200">
                     Example
                 </button>
-                <button id="send-email-button" class="w-1/2 bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200">
-                    Send Email
-                </button>
+                <div id="send-button-container" class="disabled-tooltip-container">
+                    <button id="send-email-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200" disabled>
+                        Send Email
+                    </button>
+                    <span id="send-button-tooltip" class="disabled-tooltip-text">Fill in all required fields to enable.</span>
+                </div>
             </div>
             <p id="status" class="text-xs text-gray-500 mt-2 h-4 text-center"></p>
         </div>
@@ -381,25 +412,27 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="send-success-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-130">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md text-center">
-                <svg class="mx-auto h-12 w-12 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 class="mt-4 text-lg font-semibold text-gray-800">Emails Sent Successfully!</h3>
-                <p id="send-success-message" class="mt-2 text-sm text-gray-600"></p>
-                <div class="mt-6 flex flex-col gap-3">
-                    <button id="download-receipt-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors duration-200">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                    <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-gray-800 mt-4">Emails Sent Successfully!</h3>
+                <p id="send-success-message" class="text-sm text-gray-600 mt-2"></p>
+                <div class="mt-6 flex flex-col space-y-2">
+                    <button id="download-receipt-button" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">
                         Download PDF Receipt
                     </button>
-                    <button id="close-success-modal-button" class="w-full bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-colors duration-200">
+                    <button id="close-success-modal-button" class="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300">
                         Close
                     </button>
                 </div>
             </div>
         </div>
-
+        
         <div id="recipient-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-120">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
                 <h3 class="text-lg font-semibold text-gray-800 mb-4">Select Recipients</h3>
@@ -426,7 +459,24 @@
                 </div>
 
                 <div class="mt-4 border-t pt-4">
-                    <p class="text-sm font-medium text-gray-700">Exclusions</p>
+                    <div class="flex items-center justify-between">
+                        <p class="text-sm font-medium text-gray-700">Exclusions</p>
+                        <div class="relative">
+                            <button id="show-excluded-list-button" class="hidden p-1 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" title="View Excluded Students">
+                                <svg class="h-5 w-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+                                </svg>
+                            </button>
+                            <div id="excluded-list-popup" class="hidden absolute right-0 bottom-full mb-2 w-72 bg-white border border-gray-300 rounded-lg shadow-xl z-10">
+                                <div class="p-3 border-b">
+                                    <h4 class="text-sm font-semibold text-gray-800">Excluded Students</h4>
+                                </div>
+                                <div id="excluded-list-content" class="max-h-48 overflow-y-auto p-2 text-xs">
+                                    <!-- Excluded students will be listed here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="mt-2 flex items-center justify-between bg-gray-50 p-3 rounded-md">
                         <label for="exclude-dnc-toggle" class="text-sm text-gray-700 flex-grow cursor-pointer">Exclude students with a "DNC" tag</label>
                         <div class="relative inline-flex items-center cursor-pointer">
@@ -456,7 +506,7 @@
         <!-- Context Menu -->
         <div id="example-context-menu" class="hidden absolute z-50 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
             <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
-                <a href="#" id="context-menu-payload" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900" role="menuitem">View Example Payload</a>
+                <a href="#" id="context-menu-payload" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900" role="menuitem">View Payload</a>
                 <a href="#" id="context-menu-receipt" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900" role="menuitem">Download Example Receipt</a>
             </div>
         </div>
