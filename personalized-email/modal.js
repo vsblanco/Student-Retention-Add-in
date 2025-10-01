@@ -1,4 +1,4 @@
-// V-5.1 - 2025-10-01 - 6:53 PM EDT
+// V-5.2 - 2025-10-01 - 7:08 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -104,7 +104,7 @@ export default class ModalManager {
 
     _closeRecipientModal() {
         this.hide('recipient-modal');
-        this.appContext.preCacheRecipientCounts();
+        this.appContext.preCacheRecipientData();
     }
     
     _handleRecipientSourceChange() {
@@ -134,11 +134,13 @@ export default class ModalManager {
 
         // Check cache first
         const { type, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
-        if (type !== 'custom' && excludeDNC && excludeFillColor && this.appContext.recipientCountCache.has(type)) {
-            this.tempStudentCount = this.appContext.recipientCountCache.get(type);
+        if (type !== 'custom' && excludeDNC && excludeFillColor && this.appContext.recipientDataCache.has(type)) {
+            const cachedResult = this.appContext.recipientDataCache.get(type);
+            this.tempStudentCount = cachedResult.included.length;
+            this.tempExcludedStudents = cachedResult.excluded;
             statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
             confirmBtn.disabled = false;
-            // Note: Excluded list won't be available for cached counts, this is a trade-off for speed.
+            this._updateExcludedListButton(); // Update the button with cached excluded students
             return;
         }
 
@@ -218,7 +220,6 @@ export default class ModalManager {
 
     // --- Example Modal Logic ---
     async showExampleModal() {
-        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
              document.getElementById('status').textContent = 'Please select recipients before viewing an example.';
              document.getElementById('status').style.color = 'orange';
@@ -232,7 +233,6 @@ export default class ModalManager {
     }
 
     _renderExampleForIndex(index) {
-        // ... (rest of the function is unchanged)
         const students = this.studentsForExample;
         if (!students || students.length === 0 || index < 0 || index >= students.length) return;
         
@@ -256,7 +256,6 @@ export default class ModalManager {
     }
 
     _navigateExample(direction) {
-        // ... (rest of the function is unchanged)
         const newIndex = this.currentExampleIndex + direction;
         if (newIndex >= 0 && newIndex < this.studentsForExample.length) {
             this.currentExampleIndex = newIndex;
@@ -266,7 +265,6 @@ export default class ModalManager {
     }
 
     _randomizeExample() {
-        // ... (rest of the function is unchanged)
         if (this.studentsForExample.length > 0) {
             const randomIndex = Math.floor(Math.random() * this.studentsForExample.length);
             this.currentExampleIndex = randomIndex;
@@ -276,12 +274,10 @@ export default class ModalManager {
     }
 
     _toggleExampleSearch() {
-        // ... (rest of the function is unchanged)
         document.getElementById('example-search-container').classList.toggle('hidden');
     }
 
     _resetExampleSearch() {
-        // ... (rest of the function is unchanged)
         document.getElementById('example-search-container').classList.add('hidden');
         document.getElementById('example-search-input').value = '';
         document.getElementById('example-search-results').classList.add('hidden');
@@ -289,7 +285,6 @@ export default class ModalManager {
     }
     
     _filterStudents(searchTerm) {
-        // ... (rest of the function is unchanged)
         const resultsContainer = document.getElementById('example-search-results');
         const term = searchTerm.toLowerCase().trim();
 
@@ -305,7 +300,6 @@ export default class ModalManager {
     }
 
     _renderSearchResults(matches) {
-        // ... (rest of the function is unchanged)
         const resultsContainer = document.getElementById('example-search-results');
         resultsContainer.innerHTML = '';
 
@@ -324,14 +318,12 @@ export default class ModalManager {
     }
 
     _selectSearchResult(originalIndex) {
-        // ... (rest of the function is unchanged)
         this.currentExampleIndex = originalIndex;
         this._renderExampleForIndex(this.currentExampleIndex);
         this._resetExampleSearch();
     }
 
     async showPayloadModal() {
-        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
              document.getElementById('status').textContent = 'Please select recipients before viewing payload.';
              document.getElementById('status').style.color = 'orange';
@@ -355,7 +347,6 @@ export default class ModalManager {
     }
 
     _togglePayloadSchema() {
-        // ... (rest of the function is unchanged)
         const payloadContent = document.getElementById('payload-content');
         const schemaContent = document.getElementById('schema-content');
         const button = document.getElementById('toggle-payload-schema-button');
@@ -386,13 +377,11 @@ export default class ModalManager {
     }
 
     async showTemplatesModal() {
-        // ... (rest of the function is unchanged)
         await this._populateTemplatesList();
         this.show('templates-modal');
     }
 
     async _populateTemplatesList() {
-        // ... (rest of the function is unchanged)
         const container = document.getElementById('templates-list-container');
         container.innerHTML = '';
         const templates = await this.appContext.getTemplates();
@@ -434,7 +423,6 @@ export default class ModalManager {
     }
 
     _createTemplateElement(template) {
-        // ... (rest of the function is unchanged)
         const item = document.createElement('div');
         item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
         item.innerHTML = `
@@ -450,7 +438,6 @@ export default class ModalManager {
     }
 
     _loadTemplate(template) {
-        // ... (rest of the function is unchanged)
         document.getElementById('email-from').value = template.from;
         document.getElementById('email-subject').value = template.subject;
         this.appContext.quill.root.innerHTML = template.body;
@@ -460,7 +447,6 @@ export default class ModalManager {
     }
 
     async _deleteTemplate() {
-        // ... (rest of the function is unchanged)
         if (!this.editingTemplateId) return;
         let templates = await this.appContext.getTemplates();
         templates = templates.filter(t => t.id !== this.editingTemplateId);
@@ -471,7 +457,6 @@ export default class ModalManager {
     }
     
     showSaveTemplateModal(templateToEdit = null) {
-        // ... (rest of the function is unchanged)
         this.hide('templates-modal');
         const titleEl = document.getElementById('save-template-modal-title');
         const deleteBtn = document.getElementById('delete-template-button');
@@ -494,7 +479,6 @@ export default class ModalManager {
     }
 
     async _saveTemplate() {
-        // ... (rest of the function is unchanged)
         const name = document.getElementById('template-name').value.trim();
         const author = document.getElementById('template-author').value.trim();
         const status = document.getElementById('save-template-status');
@@ -532,7 +516,6 @@ export default class ModalManager {
     }
     
     showCustomParamModal(paramToEdit = null) {
-        // ... (rest of the function is unchanged)
         this._resetCustomParamModal();
         if (paramToEdit) {
             this.editingParamName = paramToEdit.name;
@@ -557,7 +540,6 @@ export default class ModalManager {
     }
 
     _resetCustomParamModal() {
-        // ... (rest of the function is unchanged)
         this.editingParamName = null;
         this.currentScriptInputs = {};
         document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
@@ -572,7 +554,6 @@ export default class ModalManager {
     }
 
     async _saveCustomParameter() {
-        // ... (rest of the function is unchanged)
         const name = document.getElementById('param-name').value.trim();
         const sourceColumn = document.getElementById('param-source-column').value.trim();
         const logicType = document.getElementById('logic-type-dropdown').value;
@@ -624,14 +605,12 @@ export default class ModalManager {
     }
     
     async showManageCustomParamsModal() {
-        // ... (rest of the function is unchanged)
         this.hide('custom-param-modal');
         await this._populateManageParamsList();
         this.show('manage-custom-params-modal');
     }
 
     async _populateManageParamsList() {
-        // ... (rest of the function is unchanged)
         const container = document.getElementById('manage-custom-params-list');
         container.innerHTML = '';
         const params = await this.appContext.getCustomParameters();
@@ -661,7 +640,6 @@ export default class ModalManager {
     }
 
     async _deleteCustomParameter(paramName) {
-        // ... (rest of the function is unchanged)
         let params = await this.appContext.getCustomParameters();
         params = params.filter(p => p.name !== paramName);
         await this.appContext.saveCustomParameters(params);
@@ -671,13 +649,11 @@ export default class ModalManager {
     }
     
     _toggleLogicContainers(selectedValue) {
-        // ... (rest of the function is unchanged)
         document.getElementById('value-mapping-logic-container').classList.toggle('hidden', selectedValue !== 'value-mapping');
         document.getElementById('custom-script-logic-container').classList.toggle('hidden', selectedValue !== 'custom-script');
     }
     
     _addMappingRow(mapping = { if: '', operator: 'eq', then: '' }) {
-        // ... (rest of the function is unchanged)
         const container = document.getElementById('param-mapping-container');
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2 mapping-row';
@@ -705,7 +681,6 @@ export default class ModalManager {
     }
     
     _getMappingsFromDOM() {
-        // ... (rest of the function is unchanged)
         return Array.from(document.querySelectorAll('.mapping-row')).map(row => ({
             if: row.querySelector('.if-input').value,
             operator: row.querySelector('.operator-select').value,
@@ -714,7 +689,6 @@ export default class ModalManager {
     }
 
     _scanScriptForInputs() {
-        // ... (rest of the function is unchanged)
         const script = document.getElementById('custom-script-editor').value;
         const regex = /\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?!\s*=)/g;
         const newInputs = new Set();
@@ -731,7 +705,6 @@ export default class ModalManager {
     }
 
     _renderScriptInputFields() {
-        // ... (rest of the function is unchanged)
         const container = document.getElementById('script-inputs-list');
         const parentContainer = document.getElementById('script-variable-inputs-container');
         container.innerHTML = '';
@@ -755,14 +728,12 @@ export default class ModalManager {
     }
 
     _updateScriptInputsFromDOM() {
-        // ... (rest of the function is unchanged)
         document.querySelectorAll('.script-input-field').forEach(input => {
             this.currentScriptInputs[input.dataset.varname] = input.value.trim();
         });
     }
 
     _handleScriptFileUpload(event) {
-        // ... (rest of the function is unchanged)
         const file = event.target.files[0];
         if (file) {
             const reader = new FileReader();
@@ -776,7 +747,6 @@ export default class ModalManager {
     }
 
     async showSendConfirmModal() {
-        // ... (rest of the function is unchanged)
         if (this.appContext.studentDataCache.length === 0) {
             document.getElementById('status').textContent = 'Please select recipients before sending.';
             document.getElementById('status').style.color = 'orange';
