@@ -1,4 +1,4 @@
-<!-- V-4.8 - 2025-09-30 - 5:55 PM EDT -->
+<!-- V-4.9 - 2025-10-01 - 11:57 AM EDT -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -111,8 +111,10 @@
             
             <div class="space-y-4">
                  <div>
-                    <label for="email-from" class="block text-sm font-medium text-gray-700">From</label>
-                    <input type="email" id="email-from" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="sender@example.com">
+                    <label for="email-from-input" class="block text-sm font-medium text-gray-700">From</label>
+                    <div id="email-from-container" class="cc-pill-container mt-1">
+                        <input type="text" id="email-from-input" class="cc-input" placeholder="sender@example.com or {Parameter}">
+                    </div>
                 </div>
                 <div>
                     <label for="select-students-button" class="block text-sm font-medium text-gray-700">Recipient</label>
@@ -438,4 +440,3 @@
     </div>
 </body>
 </html>
-
