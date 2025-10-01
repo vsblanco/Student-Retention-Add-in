@@ -1,21 +1,89 @@
-// V-1.1 - 2025-10-01 - 4:56 PM EDT
+// V-1.2 - 2025-10-01 - 5:15 PM EDT
 import { getTodaysLdaSheetName } from './utils.js';
 
 /**
- * Helper function to strip HTML tags for clean text rendering in the PDF.
- * @param {string} html - The HTML string to clean.
- * @returns {string} The plain text content.
+ * Renders an HTML string with basic formatting into a jsPDF document.
+ * Supports <p>, <strong>, <em>, <ul>, <ol>, and <li> tags.
+ * @param {jsPDF} doc The jsPDF document instance.
+ * @param {string} html The HTML string to render.
+ * @param {object} options Configuration options (startX, startY, maxWidth).
+ * @returns {number} The final Y position after rendering.
  */
-function stripHtml(html) {
-    try {
-        // Use DOMParser to convert HTML string to a document, then extract text content.
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        return doc.body.textContent || "";
-    } catch (e) {
-        console.error("Could not parse HTML", e);
-        return html; // Fallback to original html if parsing fails
-    }
+function renderHtmlInPdf(doc, html, options) {
+    let { startX, startY, maxWidth } = options;
+    let currentY = startY;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.display = 'none';
+    tempDiv.innerHTML = html;
+    document.body.appendChild(tempDiv);
+
+    const processNode = (node, currentX, inheritedStyles = {}) => {
+        let textContent = (node.textContent || '').replace(/\s+/g, ' ');
+
+        // Apply styles
+        let isBold = inheritedStyles.isBold || node.tagName === 'STRONG' || node.tagName === 'B';
+        let isItalic = inheritedStyles.isItalic || node.tagName === 'EM' || node.tagName === 'I';
+        let fontStyle = 'normal';
+        if (isBold && isItalic) fontStyle = 'bolditalic';
+        else if (isBold) fontStyle = 'bold';
+        else if (isItalic) fontStyle = 'italic';
+        doc.setFont(undefined, fontStyle);
+
+        if (node.childNodes.length > 0 && node.tagName !== 'STRONG' && node.tagName !== 'EM' && node.tagName !== 'B' && node.tagName !== 'I') {
+            let newX = currentX;
+            for (const child of Array.from(node.childNodes)) {
+                newX = processNode(child, newX, { isBold, isItalic });
+            }
+            return newX;
+        } else {
+             const words = textContent.split(' ');
+             for (const word of words) {
+                if (!word) continue;
+                const wordWidth = doc.getTextWidth(word + ' ');
+                if (currentX + wordWidth > startX + maxWidth) {
+                    currentY += 12; // Line height
+                    currentX = startX;
+                }
+                doc.text(word, currentX, currentY);
+                currentX += wordWidth;
+             }
+             return currentX;
+        }
+    };
+    
+    Array.from(tempDiv.children).forEach(element => {
+        if (currentY > doc.internal.pageSize.height - 40) doc.addPage();
+        
+        switch (element.tagName) {
+            case 'P':
+                processNode(element, startX);
+                currentY += 18;
+                break;
+            case 'UL':
+            case 'OL':
+                Array.from(element.children).forEach((li, index) => {
+                    const bullet = (element.tagName === 'OL') ? `${index + 1}. ` : '• ';
+                    doc.text(bullet, startX, currentY);
+                    const originalStartX = startX;
+                    startX += 15; // Indent
+                    maxWidth -= 15;
+                    processNode(li, startX);
+                    currentY += 18;
+                    startX = originalStartX; // Reset indent
+                    maxWidth += 15;
+                });
+                break;
+            default:
+                processNode(element, startX);
+                currentY += 18;
+        }
+    });
+
+    document.body.removeChild(tempDiv);
+    return currentY;
 }
+
 
 /**
  * Generates a PDF receipt from the email payload using jsPDF and jsPDF-AutoTable.
@@ -30,94 +98,66 @@ export function generatePdfReceipt(payload, bodyTemplate) {
 
     try {
         const { jsPDF } = window.jspdf;
-        // Initialize jsPDF with portrait, pixel units, and letter size for consistency.
-        const doc = new jsPDF({
-            orientation: "portrait",
-            unit: "px",
-            format: "letter"
-        });
+        const doc = new jsPDF({ orientation: "portrait", unit: "px", format: "letter" });
         
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 30;
-        let currentY = 0; // Keep track of the vertical position on the page
+        const contentWidth = pageWidth - (margin * 2);
+        let currentY = 0;
 
         // --- PDF CONTENT ---
-
-        // 1. Header
         doc.setFontSize(18);
         doc.text("Email Sending Receipt", pageWidth / 2, currentY + 40, { align: "center" });
         doc.setFontSize(10);
-        const generationDate = new Date().toLocaleString();
-        doc.text(`Generated on: ${generationDate}`, pageWidth / 2, currentY + 55, { align: "center" });
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, currentY + 55, { align: "center" });
         currentY = 75;
 
-        // 2. Summary
         doc.setFontSize(12);
         doc.text("Summary", margin, currentY);
-        doc.setLineWidth(0.5);
-        doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2); // Underline
+        doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
         currentY += 15;
 
         doc.setFontSize(10);
         doc.text(`Total Emails Sent: ${payload.length}`, margin, currentY);
-        const sender = payload[0]?.from || "N/A";
-        doc.text(`Sent From: ${sender}`, margin, currentY + 12);
+        doc.text(`Sent From: ${payload[0]?.from || "N/A"}`, margin, currentY + 12);
         currentY += 32;
 
-        // 3. Body Message Section
+        // --- Message Body Section ---
         doc.setFontSize(12);
         doc.text("Message Body", margin, currentY);
-        doc.setLineWidth(0.5);
-        doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2); // Underline
-        currentY += 15;
+        doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
+        currentY += 20;
 
         // --- "Before" Template ---
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
         doc.text("Template Format (Before Personalization):", margin, currentY);
-        currentY += 12;
-        
-        doc.setFont(undefined, 'normal');
-        const beforeText = stripHtml(bodyTemplate);
-        const beforeLines = doc.splitTextToSize(beforeText, pageWidth - (margin * 2));
-        doc.text(beforeLines, margin, currentY);
-        currentY += (beforeLines.length * 10) + 15; // Calculate Y position after the 'before' text
+        currentY += 15;
+        currentY = renderHtmlInPdf(doc, bodyTemplate, { startX: margin, startY: currentY, maxWidth: contentWidth });
+        currentY += 10;
 
         // --- "After" Example ---
         doc.setFont(undefined, 'bold');
         doc.text("Example (After Personalization for a Random Student):", margin, currentY);
-        currentY += 12;
-
-        // Pick a random student from the payload for the example
+        currentY += 15;
         const randomStudentPayload = payload[Math.floor(Math.random() * payload.length)];
-        
-        doc.setFont(undefined, 'normal');
-        const afterText = stripHtml(randomStudentPayload.body);
-        const afterLines = doc.splitTextToSize(afterText, pageWidth - (margin * 2));
-        doc.text(afterLines, margin, currentY);
-        currentY += (afterLines.length * 10) + 20; // Calculate final Y before the table
+        currentY = renderHtmlInPdf(doc, randomStudentPayload.body, { startX: margin, startY: currentY, maxWidth: contentWidth });
+        currentY += 20;
 
-        // 4. Table of Recipients
+        // --- Table of Recipients ---
         const tableColumn = ["#", "Recipient Email", "Subject"];
-        const tableRows = [];
+        const tableRows = payload.map((email, index) => [
+            index + 1,
+            email.to,
+            email.subject.substring(0, 45) + (email.subject.length > 45 ? '...' : '')
+        ]);
 
-        payload.forEach((email, index) => {
-            const emailData = [
-                index + 1,
-                email.to,
-                // Truncate long subjects to prevent table overflow
-                email.subject.substring(0, 45) + (email.subject.length > 45 ? '...' : '') 
-            ];
-            tableRows.push(emailData);
-        });
-
-        // Add table using autoTable plugin, which handles pagination automatically
         doc.autoTable({
             head: [tableColumn],
             body: tableRows,
             startY: currentY,
             theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185] }, // A blue header color
+            headStyles: { fillColor: [41, 128, 185] },
             styles: { fontSize: 8, cellPadding: 2 },
             columnStyles: {
                 0: { cellWidth: 'auto' },
