@@ -1,81 +1,110 @@
-// V-1.2 - 2025-10-01 - 5:15 PM EDT
+// V-1.3 - 2025-10-01 - 6:04 PM EDT
 import { getTodaysLdaSheetName } from './utils.js';
 
 /**
- * Renders an HTML string with basic formatting into a jsPDF document.
+ * Renders an HTML string with basic formatting into a jsPDF document,
+ * respecting a maximum height for the content area.
  * Supports <p>, <strong>, <em>, <ul>, <ol>, and <li> tags.
  * @param {jsPDF} doc The jsPDF document instance.
  * @param {string} html The HTML string to render.
- * @param {object} options Configuration options (startX, startY, maxWidth).
+ * @param {object} options Configuration options (startX, startY, maxWidth, maxHeight).
  * @returns {number} The final Y position after rendering.
  */
 function renderHtmlInPdf(doc, html, options) {
-    let { startX, startY, maxWidth } = options;
+    let { startX, startY, maxWidth, maxHeight } = options;
     let currentY = startY;
+    let isTruncated = false;
 
     const tempDiv = document.createElement('div');
     tempDiv.style.display = 'none';
     tempDiv.innerHTML = html;
     document.body.appendChild(tempDiv);
 
-    const processNode = (node, currentX, inheritedStyles = {}) => {
-        let textContent = (node.textContent || '').replace(/\s+/g, ' ');
+    const processNode = (node, currentX, styles) => {
+        if (isTruncated) return currentX;
 
-        // Apply styles
-        let isBold = inheritedStyles.isBold || node.tagName === 'STRONG' || node.tagName === 'B';
-        let isItalic = inheritedStyles.isItalic || node.tagName === 'EM' || node.tagName === 'I';
+        // Check if we're about to overflow before processing a new line/element
+        if (currentY > startY + maxHeight - 12) { // 12 is approx line height
+            if (!isTruncated) {
+                doc.setFont(undefined, 'italic');
+                doc.setTextColor(150); // Muted grey color for the truncation message
+                doc.text("[... content truncated ...]", startX, currentY);
+                isTruncated = true;
+            }
+            return currentX;
+        }
+
+        // Apply styles based on tags
+        const isBold = styles.isBold || node.tagName === 'STRONG' || node.tagName === 'B';
+        const isItalic = styles.isItalic || node.tagName === 'EM' || node.tagName === 'I';
         let fontStyle = 'normal';
         if (isBold && isItalic) fontStyle = 'bolditalic';
         else if (isBold) fontStyle = 'bold';
         else if (isItalic) fontStyle = 'italic';
         doc.setFont(undefined, fontStyle);
+        doc.setTextColor(0); // Reset text color
 
-        if (node.childNodes.length > 0 && node.tagName !== 'STRONG' && node.tagName !== 'EM' && node.tagName !== 'B' && node.tagName !== 'I') {
-            let newX = currentX;
-            for (const child of Array.from(node.childNodes)) {
-                newX = processNode(child, newX, { isBold, isItalic });
-            }
-            return newX;
-        } else {
-             const words = textContent.split(' ');
-             for (const word of words) {
+        if (node.nodeType === 3) { // Text node
+            let textContent = (node.textContent || '').replace(/\s+/g, ' ');
+            const words = textContent.split(' ');
+            for (const word of words) {
                 if (!word) continue;
-                const wordWidth = doc.getTextWidth(word + ' ');
+                const wordWithSpace = word + ' ';
+                const wordWidth = doc.getTextWidth(wordWithSpace);
+                
                 if (currentX + wordWidth > startX + maxWidth) {
-                    currentY += 12; // Line height
+                    currentY += 12;
                     currentX = startX;
+                    if (currentY > startY + maxHeight - 12) {
+                        if (!isTruncated) {
+                            doc.setFont(undefined, 'italic');
+                            doc.setTextColor(150);
+                            doc.text("[... content truncated ...]", startX, currentY);
+                            isTruncated = true;
+                        }
+                        break;
+                    }
                 }
-                doc.text(word, currentX, currentY);
+                doc.text(wordWithSpace, currentX, currentY);
                 currentX += wordWidth;
-             }
-             return currentX;
+            }
+        } else { // Element node
+            for (const child of Array.from(node.childNodes)) {
+                if (isTruncated) break;
+                currentX = processNode(child, currentX, { isBold, isItalic });
+            }
         }
+        return currentX;
     };
     
     Array.from(tempDiv.children).forEach(element => {
-        if (currentY > doc.internal.pageSize.height - 40) doc.addPage();
+        if (isTruncated) return;
         
         switch (element.tagName) {
             case 'P':
-                processNode(element, startX);
+                processNode(element, startX, {});
                 currentY += 18;
                 break;
             case 'UL':
             case 'OL':
                 Array.from(element.children).forEach((li, index) => {
+                    if (isTruncated || currentY > startY + maxHeight - 12) {
+                        if (!isTruncated) {
+                            doc.setFont(undefined, 'italic');
+                            doc.setTextColor(150);
+                            doc.text("[... content truncated ...]", startX, currentY);
+                            isTruncated = true;
+                        }
+                        return;
+                    }
                     const bullet = (element.tagName === 'OL') ? `${index + 1}. ` : '• ';
                     doc.text(bullet, startX, currentY);
-                    const originalStartX = startX;
-                    startX += 15; // Indent
-                    maxWidth -= 15;
-                    processNode(li, startX);
+                    processNode(li, startX + 15, {}); // Process list item with indent
                     currentY += 18;
-                    startX = originalStartX; // Reset indent
-                    maxWidth += 15;
                 });
                 break;
             default:
-                processNode(element, startX);
+                processNode(element, startX, {});
                 currentY += 18;
         }
     });
@@ -103,6 +132,8 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 30;
         const contentWidth = pageWidth - (margin * 2);
+        const maxBodyContainerHeight = 120; // Max height for the body containers
+        const textPadding = 5; // Padding inside the containers
         let currentY = 0;
 
         // --- PDF CONTENT ---
@@ -128,21 +159,39 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
         currentY += 20;
 
-        // --- "Before" Template ---
+        // --- "Before" Template Container ---
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
-        doc.text("Template Format (Before Personalization):", margin, currentY);
+        doc.text("Template Format:", margin, currentY);
         currentY += 15;
-        currentY = renderHtmlInPdf(doc, bodyTemplate, { startX: margin, startY: currentY, maxWidth: contentWidth });
-        currentY += 10;
+        
+        const container1StartY = currentY;
+        doc.setDrawColor(220, 220, 220); // Light grey border
+        doc.roundedRect(margin, container1StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
+        renderHtmlInPdf(doc, bodyTemplate, {
+            startX: margin + textPadding,
+            startY: container1StartY + textPadding + 2, // Start slightly inside
+            maxWidth: contentWidth - (textPadding * 2),
+            maxHeight: maxBodyContainerHeight - (textPadding * 2)
+        });
+        currentY = container1StartY + maxBodyContainerHeight + 15;
 
-        // --- "After" Example ---
+        // --- "After" Example Container ---
         doc.setFont(undefined, 'bold');
-        doc.text("Example (After Personalization for a Random Student):", margin, currentY);
+        doc.text("Example:", margin, currentY);
         currentY += 15;
+
+        const container2StartY = currentY;
         const randomStudentPayload = payload[Math.floor(Math.random() * payload.length)];
-        currentY = renderHtmlInPdf(doc, randomStudentPayload.body, { startX: margin, startY: currentY, maxWidth: contentWidth });
-        currentY += 20;
+        doc.setDrawColor(220, 220, 220);
+        doc.roundedRect(margin, container2StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
+        renderHtmlInPdf(doc, randomStudentPayload.body, {
+            startX: margin + textPadding,
+            startY: container2StartY + textPadding + 2,
+            maxWidth: contentWidth - (textPadding * 2),
+            maxHeight: maxBodyContainerHeight - (textPadding * 2)
+        });
+        currentY = container2StartY + maxBodyContainerHeight + 20;
 
         // --- Table of Recipients ---
         const tableColumn = ["#", "Recipient Email", "Subject"];
