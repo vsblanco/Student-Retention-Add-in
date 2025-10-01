@@ -1,4 +1,4 @@
-// V-6.3 - 2025-10-01 - 11:25 AM EDT
+// V-6.4 - 2025-10-01 - 11:42 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -100,7 +100,6 @@ async function _getStudentDataCore(selection) {
 
             // *** MODIFICATION START ***
             // Use getCellProperties for robust, cell-by-cell color detection.
-            // This avoids the issue where loading format on a non-uniform range returns null.
             const propertiesToLoad = {
                 format: {
                     fill: {
@@ -108,15 +107,16 @@ async function _getStudentDataCore(selection) {
                     }
                 }
             };
+            // This queues the request. The result is accessed via .value after context.sync().
             const cellProperties = usedRange.getCellProperties(propertiesToLoad);
             usedRange.load("values");
-            cellProperties.load("value"); // Load the 'value' of the getCellProperties result
-
+            
             await context.sync();
             console.log(`Successfully loaded '${sheetName}' sheet with values and cell properties.`);
 
             const values = usedRange.values;
-            const formats = cellProperties.value; // This now holds a 2D array of format objects
+            // The result of getCellProperties is now in the .value property.
+            const formats = cellProperties.value; 
             // *** MODIFICATION END ***
             
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
@@ -156,7 +156,6 @@ async function _getStudentDataCore(selection) {
                     }
                 }
 
-                // *** MODIFICATION START ***
                 // Fill Color exclusion using the reliable data from getCellProperties
                 if (excludeFillColor && colIndices.Outreach !== -1) {
                     // Safely access the specific cell's format from the loaded properties
@@ -171,7 +170,6 @@ async function _getStudentDataCore(selection) {
                         continue;
                     }
                 }
-                // *** MODIFICATION END ***
                 
                 const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
@@ -698,3 +696,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
