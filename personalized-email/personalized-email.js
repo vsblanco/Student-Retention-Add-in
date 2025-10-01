@@ -1,4 +1,4 @@
-// V-7.1 - 2025-10-01 - 3:44 PM EDT
+// V-7.2 - 2025-10-01 - 4:01 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -415,8 +415,9 @@ function setupExampleContextMenu() {
     exampleButton.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const rect = e.target.getBoundingClientRect();
+        // Position the menu relative to the button's position in the viewport
         contextMenu.style.left = `${rect.left}px`;
-        contextMenu.style.top = `${rect.bottom}px`;
+        contextMenu.style.top = `${rect.bottom + 2}px`; // Add 2px for a small gap
         contextMenu.classList.remove('hidden');
     });
 
@@ -429,6 +430,21 @@ function setupExampleContextMenu() {
     document.getElementById('context-menu-payload').onclick = (e) => {
         e.preventDefault();
         modalManager.showPayloadModal();
+        contextMenu.classList.add('hidden');
+    };
+
+    document.getElementById('context-menu-receipt').onclick = (e) => {
+        e.preventDefault();
+        const status = document.getElementById('status');
+        if (lastSentPayload && lastSentPayload.length > 0) {
+            generatePdfReceipt(lastSentPayload);
+            status.textContent = 'PDF receipt downloaded.';
+            status.style.color = 'green';
+        } else {
+            status.textContent = 'No receipt to download. Please send emails first.';
+            status.style.color = 'orange';
+        }
+        setTimeout(() => status.textContent = '', 3000);
         contextMenu.classList.add('hidden');
     };
 }
