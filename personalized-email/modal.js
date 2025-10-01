@@ -1,288 +1,258 @@
-// V-2.4 - 2025-10-01 - 1:05 PM EDT
+// V-4.8 - 2025-09-30 - 5:55 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
+        this.editingTemplateId = null;
+        this.editingParamName = null;
+        this.currentScriptInputs = {};
         this.currentExampleIndex = 0;
-        this.editingTemplate = null; 
-        this.editingParam = null;
-        this.setupEventListeners();
-        this.currentPayload = null;
-        this.currentSchema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "from": { "type": "string", "description": "The sender's email address." },
-                    "to": { "type": "string", "description": "The recipient's email address." },
-                    "cc": { "type": "string", "description": "CC recipients, separated by semicolons." },
-                    "subject": { "type": "string", "description": "The subject line of the email." },
-                    "body": { "type": "string", "description": "The HTML body of the email." }
-                },
-                "required": ["from", "to", "subject", "body"]
-            }
-        };
+        this.studentsForExample = [];
+        this.currentRecipientSelection = {};
+        this.tempStudentCount = 0;
+
+        this._setupEventListeners();
     }
 
-    setupEventListeners() {
+    _setupEventListeners() {
         // Example Modal
         document.getElementById('show-example-button').onclick = () => this.showExampleModal();
-        document.getElementById('close-example-modal-button').onclick = () => this.hideModal('example-modal');
-        document.getElementById('prev-student-button').onclick = () => this.showAdjacentStudent(this.currentExampleIndex - 1);
-        document.getElementById('next-student-button').onclick = () => this.showAdjacentStudent(this.currentExampleIndex + 1);
-        document.getElementById('random-student-button').onclick = () => this.showRandomStudent();
-        
-        // Example search
-        const searchButton = document.getElementById('search-student-button');
-        const searchContainer = document.getElementById('example-search-container');
-        const searchInput = document.getElementById('example-search-input');
-        const searchResults = document.getElementById('example-search-results');
-
-        searchButton.onclick = () => {
-            searchContainer.classList.toggle('hidden');
-            if (!searchContainer.classList.contains('hidden')) {
-                searchInput.focus();
-            }
-        };
-
-        searchInput.addEventListener('input', () => {
-            const query = searchInput.value.toLowerCase();
-            if (query.length < 2) {
-                searchResults.classList.add('hidden');
-                return;
-            }
-            const filteredStudents = this.appContext.studentDataCache.filter(s => 
-                s.StudentName.toLowerCase().includes(query)
-            );
-            this.renderSearchResults(filteredStudents);
-        });
-        
-        document.addEventListener('click', (e) => {
-            if (!searchContainer.contains(e.target) && e.target !== searchButton && !searchButton.contains(e.target)) {
-                 searchContainer.classList.add('hidden');
-                 searchResults.classList.add('hidden');
-            }
-        });
-
+        document.getElementById('close-example-modal-button').onclick = () => this.hide('example-modal');
+        document.getElementById('prev-student-button').onclick = () => this._navigateExample(-1);
+        document.getElementById('next-student-button').onclick = () => this._navigateExample(1);
+        document.getElementById('random-student-button').onclick = () => this._randomizeExample();
+        document.getElementById('search-student-button').onclick = () => this._toggleExampleSearch();
+        document.getElementById('example-search-input').oninput = (e) => this._filterStudents(e.target.value);
 
         // Payload Modal
-        document.getElementById('close-payload-modal-button').onclick = () => this.hideModal('payload-modal');
-        document.getElementById('toggle-payload-schema-button').onclick = (e) => {
-            const payloadContent = document.getElementById('payload-content');
-            const schemaContent = document.getElementById('schema-content');
-            const isSchemaVisible = !schemaContent.classList.contains('hidden');
-            payloadContent.classList.toggle('hidden', !isSchemaVisible);
-            schemaContent.classList.toggle('hidden', isSchemaVisible);
-            e.target.textContent = isSchemaVisible ? 'Show Schema' : 'Show Payload';
-        };
-
+        document.getElementById('close-payload-modal-button').onclick = () => this.hide('payload-modal');
+        document.getElementById('toggle-payload-schema-button').onclick = () => this._togglePayloadSchema();
 
         // Templates Modal
         document.getElementById('templates-button').onclick = () => this.showTemplatesModal();
-        document.getElementById('close-templates-modal-button').onclick = () => this.hideModal('templates-modal');
+        document.getElementById('close-templates-modal-button').onclick = () => this.hide('templates-modal');
         document.getElementById('save-current-template-button').onclick = () => this.showSaveTemplateModal();
-
-        // Save Template Modal
-        document.getElementById('cancel-save-template-button').onclick = () => this.hideModal('save-template-modal');
-        document.getElementById('confirm-save-template-button').onclick = () => this.saveTemplate();
-        document.getElementById('delete-template-button').onclick = () => this.deleteTemplate();
-
-        // Custom Param Modal
-        document.getElementById('create-custom-param-button').onclick = () => this.showCustomParamModal();
-        document.getElementById('cancel-custom-param-button').onclick = () => this.hideModal('custom-param-modal');
-        document.getElementById('save-custom-param-button').onclick = () => this.saveCustomParameter();
-        document.getElementById('manage-custom-params-button').onclick = () => this.showManageParamsModal();
-        document.getElementById('close-manage-custom-params-button').onclick = () => this.hideModal('manage-custom-params-modal');
         
-        // Logic Type Dropdown
-        document.getElementById('logic-type-dropdown').onchange = (e) => this.toggleLogicSections(e.target.value);
+        // Save/Edit Template Modal
+        document.getElementById('cancel-save-template-button').onclick = () => this.hide('save-template-modal');
+        document.getElementById('confirm-save-template-button').onclick = () => this._saveTemplate();
+        document.getElementById('delete-template-button').onclick = () => this._deleteTemplate();
+
+        // Custom Parameter Modal
+        document.getElementById('create-custom-param-button').onclick = () => this.showCustomParamModal();
+        document.getElementById('cancel-custom-param-button').onclick = () => this.hide('custom-param-modal');
+        document.getElementById('save-custom-param-button').onclick = () => this._saveCustomParameter();
         document.getElementById('add-mapping-button').onclick = () => this._addMappingRow();
+        document.getElementById('logic-type-dropdown').onchange = (e) => this._toggleLogicContainers(e.target.value);
+        
+        // Manage Custom Parameters Modal
+        document.getElementById('manage-custom-params-button').onclick = () => this.showManageCustomParamsModal();
+        document.getElementById('close-manage-custom-params-button').onclick = () => this.hide('manage-custom-params-modal');
+        
+        // Send Confirmation Modal
+        document.getElementById('cancel-send-button').onclick = () => this.hide('send-confirm-modal');
+        document.getElementById('confirm-send-button').onclick = () => this.appContext.executeSend();
+
+        // Custom Script Logic
+        document.getElementById('scan-script-button').onclick = () => this._scanScriptForInputs();
         document.getElementById('import-script-button').onclick = () => document.getElementById('script-file-input').click();
         document.getElementById('script-file-input').onchange = (e) => this._handleScriptFileUpload(e);
-        document.getElementById('scan-script-button').onclick = () => this._scanScriptForInputs();
-
-        // Send Confirm Modal
-        document.getElementById('cancel-send-button').onclick = () => this.hideModal('send-confirm-modal');
-        document.getElementById('confirm-send-button').onclick = this.appContext.executeSend;
 
         // Recipient Modal
-        document.getElementById('cancel-recipient-modal-button').onclick = () => this.hideModal('recipient-modal');
+        document.getElementById('cancel-recipient-modal-button').onclick = () => this.hide('recipient-modal');
         document.getElementById('confirm-recipient-modal-button').onclick = () => this._confirmRecipientSelection();
-        
         document.querySelectorAll('input[name="recipient-source"]').forEach(radio => {
-            radio.addEventListener('change', (e) => this._handleRecipientSourceChange(e.target.value));
+            radio.onchange = () => this._handleRecipientSourceChange();
         });
+        document.getElementById('recipient-custom-sheet-name').oninput = () => this._handleRecipientSourceChange();
+        document.getElementById('exclude-dnc-toggle').onchange = () => this._handleRecipientSourceChange();
+        document.getElementById('exclude-fill-color-toggle').onchange = () => this._handleRecipientSourceChange();
+    }
 
-        // Generic Confirm Modal
-        document.getElementById('cancel-confirm-modal-button').onclick = () => this.hideModal('confirm-modal');
+    show(modalId) {
+        document.getElementById(modalId).classList.remove('hidden');
+    }
+
+    hide(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
     }
 
     // --- Recipient Modal Logic ---
+    showRecipientModal() {
+        this.currentRecipientSelection = { ...this.appContext.recipientSelection };
+        this.tempStudentCount = 0;
+
+        const { type, customSheetName, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
+        document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
+        document.getElementById('recipient-custom-sheet-name').value = customSheetName || '';
+        document.getElementById('exclude-dnc-toggle').checked = excludeDNC;
+        document.getElementById('exclude-fill-color-toggle').checked = excludeFillColor;
+
+
+        this._updateRecipientModalUI();
+        this._fetchStudentCountForModal();
+        this.show('recipient-modal');
+    }
+
+    _handleRecipientSourceChange() {
+        const selectedType = document.querySelector('input[name="recipient-source"]:checked').value;
+        const customSheetName = document.getElementById('recipient-custom-sheet-name').value.trim();
+        const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
+        const excludeFillColor = document.getElementById('exclude-fill-color-toggle').checked;
+        this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC, excludeFillColor };
+        this._updateRecipientModalUI();
+        this._fetchStudentCountForModal();
+    }
+
+    _updateRecipientModalUI() {
+        const isCustom = this.currentRecipientSelection.type === 'custom';
+        document.getElementById('recipient-custom-sheet-container').classList.toggle('hidden', !isCustom);
+    }
+
     async _fetchStudentCountForModal() {
         const statusEl = document.getElementById('recipient-modal-status');
         const confirmBtn = document.getElementById('confirm-recipient-modal-button');
         
         statusEl.textContent = 'Counting students...';
-        statusEl.style.color = 'gray';
         confirmBtn.disabled = true;
 
         try {
-            const selection = this._getRecipientSelectionFromModal();
-            const students = await this.appContext.getStudentDataCore(selection);
-            statusEl.textContent = `${students.length} student(s) will be selected.`;
-            statusEl.style.color = 'green';
-            confirmBtn.disabled = false;
-            return students.length;
+            const students = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
+            this.tempStudentCount = students.length;
+            statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
+            confirmBtn.disabled = false; // Always allow confirmation, even for 0 students
         } catch (error) {
-            const message = error.userFacingMessage || (error.userFacing ? error.message : 'Error counting students.');
-            statusEl.textContent = message;
-            statusEl.style.color = 'red';
-            return -1;
-        }
-    }
-    
-    _handleRecipientSourceChange(value) {
-        document.getElementById('recipient-custom-sheet-container').classList.toggle('hidden', value !== 'custom');
-        this._fetchStudentCountForModal();
-    }
-    
-    _getRecipientSelectionFromModal() {
-        const type = document.querySelector('input[name="recipient-source"]:checked').value;
-        const customSheetName = document.getElementById('recipient-custom-sheet-name').value;
-        const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
-        const excludeFillColor = document.getElementById('exclude-fill-color-toggle').checked;
-        return { type, customSheetName, excludeDNC, excludeFillColor };
-    }
-    
-    async _confirmRecipientSelection() {
-        const count = await this._fetchStudentCountForModal();
-        if (count >= 0) {
-            const selection = this._getRecipientSelectionFromModal();
-            this.appContext.updateRecipientSelection(selection, count);
-            this.hideModal('recipient-modal');
+            this.tempStudentCount = 0;
+            statusEl.textContent = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred.');
         }
     }
 
-    showRecipientModal() {
-        const { type, customSheetName, excludeDNC, excludeFillColor } = this.appContext.recipientSelection;
-        
-        document.getElementById(`recipient-${type}`).checked = true;
-        document.getElementById('recipient-custom-sheet-name').value = customSheetName;
-        document.getElementById('recipient-custom-sheet-container').classList.toggle('hidden', type !== 'custom');
-        document.getElementById('exclude-dnc-toggle').checked = excludeDNC;
-        document.getElementById('exclude-fill-color-toggle').checked = excludeFillColor;
-        
-        this.showModal('recipient-modal');
-        this._fetchStudentCountForModal(); // Initial count on open
-        
-        // Add debounced fetching on custom sheet name input
-        let debounceTimer;
-        const customSheetInput = document.getElementById('recipient-custom-sheet-name');
-        customSheetInput.oninput = () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => this._fetchStudentCountForModal(), 500);
-        };
-        document.getElementById('exclude-dnc-toggle').onchange = () => this._fetchStudentCountForModal();
-        document.getElementById('exclude-fill-color-toggle').onchange = () => this._fetchStudentCountForModal();
+    _confirmRecipientSelection() {
+        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.tempStudentCount);
+        this.hide('recipient-modal');
+        // Trigger a data fetch with UI updates for the main screen
+        this.appContext.getStudentDataWithUI().catch(() => {
+            // Reset button if the fetch fails after confirmation
+            this.appContext.updateRecipientSelection(this.appContext.recipientSelection, -1);
+        });
     }
 
-    // --- Send Confirm Modal ---
-    showSendConfirmModal() {
-        const studentCount = this.appContext.studentDataCache.length;
-        if (studentCount === 0) {
-            this.appContext.getStudentDataWithUI().then(students => {
-                if (students.length > 0) this.showSendConfirmModal();
-            }).catch(() => {}); 
-            return;
-        }
-        document.getElementById('send-confirm-message').textContent = `This will send a personalized email to ${studentCount} student(s). Are you sure you want to proceed?`;
-        this.showModal('send-confirm-modal');
-    }
-
-    // --- Example Modal & Payload Modal ---
+    // --- Example Modal Logic ---
     async showExampleModal() {
         if (this.appContext.studentDataCache.length === 0) {
-            try {
-                await this.appContext.getStudentDataWithUI();
-                if (this.appContext.studentDataCache.length === 0) {
-                    const status = document.getElementById('status');
-                    status.textContent = 'No students found to show an example.';
-                    status.style.color = 'orange';
-                    return;
-                }
-            } catch (error) {
-                return; 
-            }
+             document.getElementById('status').textContent = 'Please select recipients before viewing an example.';
+             document.getElementById('status').style.color = 'orange';
+             return;
         }
-        this.showModal('example-modal');
-        this.renderExampleForStudent(this.appContext.studentDataCache[this.currentExampleIndex]);
+        this.studentsForExample = this.appContext.studentDataCache;
+        this.currentExampleIndex = 0;
+        this._resetExampleSearch();
+        this._renderExampleForIndex(this.currentExampleIndex);
+        this.show('example-modal');
+    }
+
+    _renderExampleForIndex(index) {
+        const students = this.studentsForExample;
+        if (!students || students.length === 0 || index < 0 || index >= students.length) return;
+        
+        const student = students[index];
+        
+        const from = this.appContext.renderTemplate(document.getElementById('email-from').value, student);
+        const to = student.StudentEmail || '[No Email]';
+        const cc = this.appContext.renderCCTemplate(this.appContext.ccRecipients, student);
+        const subject = this.appContext.renderTemplate(document.getElementById('email-subject').value, student);
+        const body = this.appContext.renderTemplate(this.appContext.quill.root.innerHTML, student);
+
+        document.getElementById('example-from').textContent = from;
+        document.getElementById('example-to').textContent = to;
+        document.getElementById('example-cc').textContent = cc;
+        document.getElementById('example-subject').textContent = subject;
+        document.getElementById('example-body').innerHTML = body;
+
+        document.getElementById('example-student-counter').textContent = `Student: ${index + 1} / ${students.length}`;
+        document.getElementById('prev-student-button').disabled = index === 0;
+        document.getElementById('next-student-button').disabled = index === students.length - 1;
+    }
+
+    _navigateExample(direction) {
+        const newIndex = this.currentExampleIndex + direction;
+        if (newIndex >= 0 && newIndex < this.studentsForExample.length) {
+            this.currentExampleIndex = newIndex;
+            this._renderExampleForIndex(this.currentExampleIndex);
+            this._resetExampleSearch();
+        }
+    }
+
+    _randomizeExample() {
+        if (this.studentsForExample.length > 0) {
+            const randomIndex = Math.floor(Math.random() * this.studentsForExample.length);
+            this.currentExampleIndex = randomIndex;
+            this._renderExampleForIndex(this.currentExampleIndex);
+            this._resetExampleSearch();
+        }
+    }
+
+    _toggleExampleSearch() {
+        document.getElementById('example-search-container').classList.toggle('hidden');
+    }
+
+    _resetExampleSearch() {
+        document.getElementById('example-search-container').classList.add('hidden');
+        document.getElementById('example-search-input').value = '';
+        document.getElementById('example-search-results').classList.add('hidden');
+        document.getElementById('example-search-results').innerHTML = '';
     }
     
-    renderSearchResults(students) {
+    _filterStudents(searchTerm) {
         const resultsContainer = document.getElementById('example-search-results');
-        resultsContainer.innerHTML = '';
-        if (students.length === 0) {
+        const term = searchTerm.toLowerCase().trim();
+
+        if (term.length === 0) {
+            resultsContainer.innerHTML = '';
             resultsContainer.classList.add('hidden');
             return;
         }
-        students.slice(0, 5).forEach(student => {
-            const studentIndex = this.appContext.studentDataCache.findIndex(s => s.StudentEmail === student.StudentEmail);
-            const div = document.createElement('div');
-            div.className = 'px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm';
-            div.textContent = student.StudentName;
-            div.onclick = () => {
-                this.showAdjacentStudent(studentIndex);
-                resultsContainer.classList.add('hidden');
-                document.getElementById('example-search-input').value = '';
-            };
-            resultsContainer.appendChild(div);
-        });
+
+        const matches = this.studentsForExample.map((student, index) => ({ student, originalIndex: index }))
+            .filter(item => item.student.StudentName && item.student.StudentName.toLowerCase().includes(term));
+        this._renderSearchResults(matches);
+    }
+
+    _renderSearchResults(matches) {
+        const resultsContainer = document.getElementById('example-search-results');
+        resultsContainer.innerHTML = '';
+
+        if (matches.length === 0) {
+            resultsContainer.innerHTML = '<div class="px-3 py-2 text-sm text-gray-500">No matches found.</div>';
+        } else {
+            matches.slice(0, 10).forEach(match => {
+                const item = document.createElement('div');
+                item.className = 'px-3 py-2 text-sm text-gray-700 cursor-pointer hover:bg-gray-100';
+                item.textContent = match.student.StudentName;
+                item.onclick = () => this._selectSearchResult(match.originalIndex);
+                resultsContainer.appendChild(item);
+            });
+        }
         resultsContainer.classList.remove('hidden');
     }
 
-    renderExampleForStudent(student) {
-        if (!student) return;
-        const fromTemplate = this.appContext.fromParts.join('');
-        const ccTemplate = this.appContext.ccRecipients;
-        const subjectTemplate = document.getElementById('email-subject').value;
-        const bodyTemplate = this.appContext.quill.root.innerHTML;
+    _selectSearchResult(originalIndex) {
+        this.currentExampleIndex = originalIndex;
+        this._renderExampleForIndex(this.currentExampleIndex);
+        this._resetExampleSearch();
+    }
 
-        document.getElementById('example-from').textContent = this.appContext.renderTemplate(fromTemplate, student);
-        document.getElementById('example-to').textContent = student.StudentEmail || '(no email)';
-        document.getElementById('example-cc').textContent = this.appContext.renderCCTemplate(ccTemplate, student);
-        document.getElementById('example-subject').textContent = this.appContext.renderTemplate(subjectTemplate, student);
-        document.getElementById('example-body').innerHTML = this.appContext.renderTemplate(bodyTemplate, student);
+    async showPayloadModal() {
+        if (this.appContext.studentDataCache.length === 0) {
+             document.getElementById('status').textContent = 'Please select recipients before viewing payload.';
+             document.getElementById('status').style.color = 'orange';
+             return;
+        }
         
-        const totalStudents = this.appContext.studentDataCache.length;
-        document.getElementById('example-student-counter').textContent = `${this.currentExampleIndex + 1} of ${totalStudents}`;
-        document.getElementById('prev-student-button').disabled = this.currentExampleIndex === 0;
-        document.getElementById('next-student-button').disabled = this.currentExampleIndex >= totalStudents - 1;
-    }
-    
-    showAdjacentStudent(index) {
-        const total = this.appContext.studentDataCache.length;
-        if (index >= 0 && index < total) {
-            this.currentExampleIndex = index;
-            this.renderExampleForStudent(this.appContext.studentDataCache[index]);
-        }
-    }
-    
-    showRandomStudent() {
-        const total = this.appContext.studentDataCache.length;
-        if (total > 1) {
-            let randomIndex;
-            do {
-                randomIndex = Math.floor(Math.random() * total);
-            } while (randomIndex === this.currentExampleIndex);
-            this.showAdjacentStudent(randomIndex);
-        }
-    }
-
-    showPayloadModal() {
-        const fromTemplate = this.appContext.fromParts.join('');
+        const fromTemplate = document.getElementById('email-from').value;
         const subjectTemplate = document.getElementById('email-subject').value;
         const bodyTemplate = this.appContext.quill.root.innerHTML;
 
-        this.currentPayload = this.appContext.studentDataCache.map(student => ({
+        const payload = this.appContext.studentDataCache.map(student => ({
             from: this.appContext.renderTemplate(fromTemplate, student),
             to: student.StudentEmail || '',
             cc: this.appContext.renderCCTemplate(this.appContext.ccRecipients, student),
@@ -290,372 +260,395 @@ export default class ModalManager {
             body: this.appContext.renderTemplate(bodyTemplate, student)
         })).filter(email => email.to && email.from);
 
-        document.getElementById('payload-content').textContent = JSON.stringify(this.currentPayload, null, 2);
-        document.getElementById('schema-content').textContent = JSON.stringify(this.currentSchema, null, 2);
-        this.showModal('payload-modal');
+        document.getElementById('payload-content').textContent = JSON.stringify(payload, null, 2);
+        this.show('payload-modal');
     }
 
-    // --- Template Modals ---
+    _togglePayloadSchema() {
+        const payloadContent = document.getElementById('payload-content');
+        const schemaContent = document.getElementById('schema-content');
+        const button = document.getElementById('toggle-payload-schema-button');
+        const title = document.getElementById('payload-modal-title');
+
+        if (payloadContent.classList.contains('hidden')) {
+            payloadContent.classList.remove('hidden');
+            schemaContent.classList.add('hidden');
+            button.textContent = 'Show Schema';
+            title.textContent = 'Request Payload';
+        } else {
+            payloadContent.classList.add('hidden');
+            schemaContent.classList.remove('hidden');
+            button.textContent = 'Show Payload';
+            title.textContent = 'Expected JSON Schema for Power Automate';
+            
+            if (!schemaContent.textContent) {
+                 schemaContent.textContent = JSON.stringify({
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "cc": { "type": "string" }, "subject": { "type": "string" }, "body": { "type": "string" } },
+                        "required": ["from", "to", "subject", "body"]
+                    }
+                }, null, 2);
+            }
+        }
+    }
+
     async showTemplatesModal() {
-        this.showModal('templates-modal');
-        const templates = await this.appContext.getTemplates();
+        await this._populateTemplatesList();
+        this.show('templates-modal');
+    }
+
+    async _populateTemplatesList() {
         const container = document.getElementById('templates-list-container');
         container.innerHTML = '';
+        const templates = await this.appContext.getTemplates();
 
         if (templates.length === 0) {
-            container.innerHTML = '<p class="text-sm text-gray-500 text-center">No saved templates found.</p>';
+            container.innerHTML = '<p class="text-center text-gray-500 text-sm">No saved templates yet.</p>';
             return;
         }
-
-        // Group templates by folder
-        const groupedTemplates = templates.reduce((acc, template) => {
-            const folder = template.folder || 'Uncategorized';
-            if (!acc[folder]) {
-                acc[folder] = [];
-            }
-            acc[folder].push(template);
+        
+        const groupedByAuthor = templates.reduce((acc, template) => {
+            const author = template.author || 'Uncategorized';
+            if (!acc[author]) acc[author] = [];
+            acc[author].push(template);
             return acc;
         }, {});
 
-        // Render each folder
-        Object.keys(groupedTemplates).sort().forEach(folderName => {
-            const folderContainer = document.createElement('div');
-            folderContainer.className = 'py-2';
-
-            const folderHeader = document.createElement('div');
-            folderHeader.className = 'flex items-center justify-between cursor-pointer px-1 py-1 rounded hover:bg-gray-100';
-            folderHeader.innerHTML = `
-                <div class="flex items-center">
-                    <svg class="chevron-icon h-4 w-4 text-gray-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    <h3 class="text-sm font-semibold text-gray-700">${folderName}</h3>
+        Object.keys(groupedByAuthor).sort().forEach(author => {
+            const authorHeader = document.createElement('div');
+            authorHeader.className = 'flex items-center justify-between p-2 rounded-md hover:bg-gray-100 cursor-pointer';
+            authorHeader.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <svg class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path></svg>
+                    <span class="font-semibold text-gray-700">${author}</span>
                 </div>
-                <span class="text-xs text-gray-500">${groupedTemplates[folderName].length}</span>
+                <svg class="h-5 w-5 text-gray-500 chevron-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"></path></svg>
             `;
-
-            const templatesList = document.createElement('div');
-            templatesList.className = 'pl-4 mt-2 space-y-2 hidden'; // Initially hidden
-
-            folderHeader.onclick = () => {
-                templatesList.classList.toggle('hidden');
-                folderHeader.querySelector('.chevron-icon').classList.toggle('chevron-open');
-            };
+            const templatesContainer = document.createElement('div');
+            templatesContainer.className = 'hidden pl-6 border-l-2 border-gray-200 ml-2';
+            groupedByAuthor[author].forEach(template => templatesContainer.appendChild(this._createTemplateElement(template)));
             
-            // Render templates within the folder
-            groupedTemplates[folderName].forEach(template => {
-                const div = document.createElement('div');
-                div.className = 'p-3 border rounded-md hover:bg-gray-50';
-                div.innerHTML = `
-                    <div class="flex justify-between items-center">
-                        <div>
-                            <h4 class="font-semibold text-gray-800">${template.name}</h4>
-                            <p class="text-xs text-gray-500">by ${template.author || 'Unknown'}</p>
-                        </div>
-                        <div class="flex gap-2">
-                             <button data-template-id="${template.id}" class="apply-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Apply</button>
-                             <button data-template-id="${template.id}" class="edit-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Edit</button>
-                        </div>
-                    </div>
-                `;
-                templatesList.appendChild(div);
-            });
-            
-            folderContainer.appendChild(folderHeader);
-            folderContainer.appendChild(templatesList);
-            container.appendChild(folderContainer);
-        });
-        
-        container.querySelectorAll('.apply-btn').forEach(btn => {
-            btn.onclick = () => {
-                const template = templates.find(t => t.id === btn.dataset.templateId);
-                if(template) this._applyTemplate(template);
+            authorHeader.onclick = () => {
+                templatesContainer.classList.toggle('hidden');
+                authorHeader.querySelector('.chevron-icon').classList.toggle('chevron-open');
             };
+            const authorContainer = document.createElement('div');
+            authorContainer.append(authorHeader, templatesContainer);
+            container.appendChild(authorContainer);
         });
-        container.querySelectorAll('.edit-btn').forEach(btn => {
-            btn.onclick = () => {
-                const template = templates.find(t => t.id === btn.dataset.templateId);
-                if(template) this.showSaveTemplateModal(template);
-            };
-        });
-
     }
 
-    _applyTemplate(template) {
-        this.appContext.setFromParts(template.from || '');
-        this.appContext.setCcRecipients(template.cc || []);
-        document.getElementById('email-subject').value = template.subject || '';
-        this.appContext.quill.root.innerHTML = template.body || '';
-        this.hideModal('templates-modal');
+    _createTemplateElement(template) {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
+        item.innerHTML = `
+            <div class="text-sm font-medium text-gray-800">${template.name}</div>
+            <div class="flex space-x-2">
+                <button class="load-btn px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Load</button>
+                <button class="edit-btn px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300">Edit</button>
+            </div>
+        `;
+        item.querySelector('.load-btn').onclick = () => this._loadTemplate(template);
+        item.querySelector('.edit-btn').onclick = () => this.showSaveTemplateModal(template);
+        return item;
     }
 
-    showSaveTemplateModal(template = null) {
-        this.hideModal('templates-modal');
-        this.editingTemplate = template;
+    _loadTemplate(template) {
+        document.getElementById('email-from').value = template.from;
+        document.getElementById('email-subject').value = template.subject;
+        this.appContext.quill.root.innerHTML = template.body;
+        this.appContext.ccRecipients.splice(0, this.appContext.ccRecipients.length, ...template.cc);
+        this.appContext.renderCCPills();
+        this.hide('templates-modal');
+    }
+
+    async _deleteTemplate() {
+        if (!this.editingTemplateId) return;
+        let templates = await this.appContext.getTemplates();
+        templates = templates.filter(t => t.id !== this.editingTemplateId);
+        await this.appContext.saveTemplates(templates);
+        this.hide('save-template-modal');
+        await this._populateTemplatesList();
+        this.show('templates-modal');
+    }
+    
+    showSaveTemplateModal(templateToEdit = null) {
+        this.hide('templates-modal');
+        const titleEl = document.getElementById('save-template-modal-title');
+        const deleteBtn = document.getElementById('delete-template-button');
         
-        document.getElementById('save-template-modal-title').textContent = template ? 'Edit Template' : 'Save Template';
-        document.getElementById('template-name').value = template ? template.name : '';
-        document.getElementById('template-folder').value = template ? template.folder : '';
-        document.getElementById('template-author').value = template ? template.author : '';
-        document.getElementById('delete-template-button').classList.toggle('hidden', !template);
+        if (templateToEdit) {
+            this.editingTemplateId = templateToEdit.id;
+            titleEl.textContent = 'Edit Template';
+            document.getElementById('template-name').value = templateToEdit.name;
+            document.getElementById('template-author').value = templateToEdit.author;
+            deleteBtn.classList.remove('hidden');
+        } else {
+            this.editingTemplateId = null;
+            titleEl.textContent = 'Save New Template';
+            document.getElementById('template-name').value = '';
+            document.getElementById('template-author').value = '';
+            deleteBtn.classList.add('hidden');
+        }
         document.getElementById('save-template-status').textContent = '';
-        this.showModal('save-template-modal');
+        this.show('save-template-modal');
     }
 
-    async saveTemplate() {
+    async _saveTemplate() {
         const name = document.getElementById('template-name').value.trim();
-        const folder = document.getElementById('template-folder').value.trim();
         const author = document.getElementById('template-author').value.trim();
         const status = document.getElementById('save-template-status');
 
-        if (!name) {
-            status.textContent = "Template name is required.";
+        if (!name || !author) {
+            status.textContent = 'Name and Author are required.';
             status.style.color = 'red';
             return;
         }
 
-        const currentTemplate = {
-            id: this.editingTemplate ? this.editingTemplate.id : `template-${Date.now()}`,
-            name,
-            folder,
-            author,
-            from: this.appContext.fromParts,
-            cc: this.appContext.ccRecipients,
+        const templates = await this.appContext.getTemplates();
+        const newTemplateData = {
+            name, author,
+            from: document.getElementById('email-from').value,
             subject: document.getElementById('email-subject').value,
-            body: this.appContext.quill.root.innerHTML
+            body: this.appContext.quill.root.innerHTML,
+            cc: [...this.appContext.ccRecipients],
         };
 
-        try {
-            const templates = await this.appContext.getTemplates();
-            const existingIndex = this.editingTemplate ? templates.findIndex(t => t.id === this.editingTemplate.id) : -1;
-
-            if (existingIndex > -1) {
-                templates[existingIndex] = currentTemplate;
-            } else {
-                templates.push(currentTemplate);
-            }
-            
-            await this.appContext.saveTemplates(templates);
-            this.hideModal('save-template-modal');
-            this.editingTemplate = null;
-        } catch (error) {
-            status.textContent = "Error saving template.";
-            status.style.color = 'red';
-            console.error("Error saving template:", error);
+        if (this.editingTemplateId) {
+            const templateIndex = templates.findIndex(t => t.id === this.editingTemplateId);
+            if (templateIndex > -1) templates[templateIndex] = { ...templates[templateIndex], ...newTemplateData };
+        } else {
+            templates.push({ ...newTemplateData, id: 'tpl-' + Date.now(), createdAt: new Date().toISOString() });
         }
+        
+        await this.appContext.saveTemplates(templates);
+        status.textContent = 'Template saved successfully!';
+        status.style.color = 'green';
+
+        setTimeout(() => {
+            this.hide('save-template-modal');
+            this.showTemplatesModal();
+        }, 1500);
     }
     
-    async deleteTemplate() {
-        if (!this.editingTemplate) return;
+    showCustomParamModal(paramToEdit = null) {
+        this._resetCustomParamModal();
+        if (paramToEdit) {
+            this.editingParamName = paramToEdit.name;
+            document.getElementById('custom-param-modal-title').textContent = 'Edit Custom Parameter';
+            document.getElementById('param-name').value = paramToEdit.name;
+            document.getElementById('param-source-column').value = paramToEdit.sourceColumn;
+            
+            const logicType = paramToEdit.logicType || '';
+            document.getElementById('logic-type-dropdown').value = logicType;
+            this._toggleLogicContainers(logicType);
 
-        this.showConfirmModal({
-            title: 'Delete Template',
-            message: `Are you sure you want to delete the template "${this.editingTemplate.name}"?`,
-            onConfirm: async () => {
-                try {
-                    let templates = await this.appContext.getTemplates();
-                    templates = templates.filter(t => t.id !== this.editingTemplate.id);
-                    await this.appContext.saveTemplates(templates);
-                    this.hideModal('save-template-modal');
-                    this.editingTemplate = null;
-                } catch (error) {
-                    const status = document.getElementById('save-template-status');
-                    status.textContent = "Error deleting template.";
-                    status.style.color = 'red';
-                    console.error("Error deleting template:", error);
+            if (logicType === 'value-mapping' && paramToEdit.mappings) paramToEdit.mappings.forEach(m => this._addMappingRow(m));
+            if (logicType === 'custom-script' && paramToEdit.script) {
+                document.getElementById('custom-script-editor').value = paramToEdit.script;
+                if (paramToEdit.scriptInputs) {
+                    this.currentScriptInputs = { ...paramToEdit.scriptInputs };
+                    this._renderScriptInputFields();
                 }
             }
-        });
-    }
-
-    // --- Custom Parameter Modals ---
-    async showManageParamsModal() {
-        this.hideModal('custom-param-modal');
-        const params = await this.appContext.getCustomParameters();
-        const container = document.getElementById('manage-custom-params-list');
-        container.innerHTML = '';
-
-        if (params.length === 0) {
-            container.innerHTML = '<p class="text-sm text-gray-500 text-center">No custom parameters found.</p>';
-        } else {
-             params.forEach(param => {
-                const div = document.createElement('div');
-                div.className = 'flex justify-between items-center p-2 border-b';
-                div.innerHTML = `
-                    <div>
-                        <p class="font-semibold text-gray-800">{${param.name}}</p>
-                        <p class="text-xs text-gray-500">Source: ${param.sourceColumn}</p>
-                    </div>
-                    <div>
-                        <button data-param-id="${param.id}" class="edit-param-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Edit</button>
-                        <button data-param-id="${param.id}" class="delete-param-btn px-3 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-            
-            container.querySelectorAll('.edit-param-btn').forEach(btn => {
-                btn.onclick = () => {
-                    const paramId = btn.dataset.paramId;
-                    const paramToEdit = params.find(p => p.id === paramId);
-                    this.showCustomParamModal(paramToEdit);
-                };
-            });
-             container.querySelectorAll('.delete-param-btn').forEach(btn => {
-                btn.onclick = async () => {
-                    const paramId = btn.dataset.paramId;
-                    const paramToDelete = params.find(p => p.id === paramId);
-                    if (!paramToDelete) return;
-
-                    this.showConfirmModal({
-                        title: 'Delete Parameter',
-                        message: `Are you sure you want to delete the parameter "{${paramToDelete.name}}"? This may affect saved templates that use it.`,
-                        onConfirm: async () => {
-                            const updatedParams = params.filter(p => p.id !== paramId);
-                            await this.appContext.saveCustomParameters(updatedParams);
-                            await this.appContext.loadCustomParameters();
-                            this.appContext.populateParameterButtons();
-                            this.showManageParamsModal(); // Refresh the list
-                        }
-                    });
-                };
-            });
         }
-        this.showModal('manage-custom-params-modal');
+        this.show('custom-param-modal');
     }
-    
-    showCustomParamModal(param = null) {
-        this.hideModal('manage-custom-params-modal');
-        this.editingParam = param;
-        document.getElementById('custom-param-modal-title').textContent = param ? 'Edit Custom Parameter' : 'Create Custom Parameter';
-        document.getElementById('param-name').value = param ? param.name : '';
-        document.getElementById('param-source-column').value = param ? param.sourceColumn : '';
+
+    _resetCustomParamModal() {
+        this.editingParamName = null;
+        this.currentScriptInputs = {};
+        document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
+        document.getElementById('param-name').value = '';
+        document.getElementById('param-source-column').value = '';
+        document.getElementById('param-mapping-container').innerHTML = '';
         document.getElementById('save-param-status').textContent = '';
-
-        // Reset logic sections
-        const logicType = param ? param.logicType || '' : '';
-        document.getElementById('logic-type-dropdown').value = logicType;
-        this.toggleLogicSections(logicType);
-        
-        // Populate value mappings
-        const mappingContainer = document.getElementById('param-mapping-container');
-        mappingContainer.innerHTML = '';
-        if (logicType === 'value-mapping' && param.mappings) {
-            param.mappings.forEach(m => this._addMappingRow(m));
-        }
-        
-        // Populate custom script
-        const scriptEditor = document.getElementById('custom-script-editor');
-        scriptEditor.value = '';
-        if (logicType === 'custom-script' && param.script) {
-            scriptEditor.value = param.script;
-            if (param.scriptInputs) {
-                this._renderScriptInputs(param.scriptInputs);
-            }
-        }
-        this.showModal('custom-param-modal');
+        document.getElementById('logic-type-dropdown').value = '';
+        document.getElementById('custom-script-editor').value = '';
+        this._renderScriptInputFields();
+        this._toggleLogicContainers('');
     }
-    
-    async saveCustomParameter() {
-        const nameInput = document.getElementById('param-name');
-        const sourceColumnInput = document.getElementById('param-source-column');
-        const status = document.getElementById('save-param-status');
 
-        const name = nameInput.value.trim().replace(/[^a-zA-Z0-9_]/g, '');
-        const sourceColumn = sourceColumnInput.value.trim();
+    async _saveCustomParameter() {
+        const name = document.getElementById('param-name').value.trim();
+        const sourceColumn = document.getElementById('param-source-column').value.trim();
+        const logicType = document.getElementById('logic-type-dropdown').value;
+        const status = document.getElementById('save-param-status');
 
         if (!name || !sourceColumn) {
             status.textContent = 'Parameter Name and Source Column are required.';
             status.style.color = 'red';
             return;
         }
-        nameInput.value = name;
-
-        const logicType = document.getElementById('logic-type-dropdown').value;
-        const newParam = {
-            id: this.editingParam ? this.editingParam.id : `param-${Date.now()}`,
-            name,
-            sourceColumn,
-            logicType: logicType || null
-        };
-        
-        if (logicType === 'value-mapping') {
-            newParam.mappings = this._getMappingsFromDOM();
-        } else if (logicType === 'custom-script') {
-            newParam.script = document.getElementById('custom-script-editor').value;
-            newParam.scriptInputs = this._getScriptInputsFromDOM();
-        }
-
-        try {
-            const params = await this.appContext.getCustomParameters();
-            const existingIndex = this.editingParam ? params.findIndex(p => p.id === this.editingParam.id) : -1;
-
-            if (existingIndex > -1) {
-                params[existingIndex] = newParam;
-            } else {
-                 if (params.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-                    status.textContent = 'A parameter with this name already exists.';
-                    status.style.color = 'red';
-                    return;
-                }
-                params.push(newParam);
-            }
-            
-            await this.appContext.saveCustomParameters(params);
-            await this.appContext.loadCustomParameters();
-            this.appContext.populateParameterButtons();
-            this.hideModal('custom-param-modal');
-            this.editingParam = null;
-
-        } catch (error) {
-            status.textContent = 'Error saving parameter.';
+        if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+            status.textContent = 'Parameter Name can only contain letters, numbers, and underscores.';
             status.style.color = 'red';
-            console.error('Error saving custom parameter:', error);
+            return;
         }
+
+        const newParam = { name, sourceColumn, logicType };
+        if (logicType === 'value-mapping') newParam.mappings = this._getMappingsFromDOM();
+        if (logicType === 'custom-script') {
+            newParam.script = document.getElementById('custom-script-editor').value.trim();
+            this._updateScriptInputsFromDOM();
+            newParam.scriptInputs = this.currentScriptInputs;
+        }
+
+        let params = await this.appContext.getCustomParameters();
+        if (this.editingParamName && this.editingParamName !== name) {
+            if (params.some(p => p.name === name)) {
+                status.textContent = 'A parameter with this name already exists.';
+                status.style.color = 'red';
+                return;
+            }
+            params = params.filter(p => p.name !== this.editingParamName);
+        } else if (!this.editingParamName && params.some(p => p.name === name)) {
+            status.textContent = 'A parameter with this name already exists.';
+            status.style.color = 'red';
+            return;
+        }
+        
+        const existingIndex = params.findIndex(p => p.name === name);
+        if (existingIndex > -1) params[existingIndex] = newParam;
+        else params.push(newParam);
+
+        await this.appContext.saveCustomParameters(params);
+        await this.appContext.loadCustomParameters();
+        this.appContext.populateParameterButtons();
+        status.textContent = 'Parameter saved!';
+        status.style.color = 'green';
+        setTimeout(() => { this.hide('custom-param-modal'); this.showManageCustomParamsModal(); }, 1000);
     }
     
-    toggleLogicSections(selectedValue) {
+    async showManageCustomParamsModal() {
+        this.hide('custom-param-modal');
+        await this._populateManageParamsList();
+        this.show('manage-custom-params-modal');
+    }
+
+    async _populateManageParamsList() {
+        const container = document.getElementById('manage-custom-params-list');
+        container.innerHTML = '';
+        const params = await this.appContext.getCustomParameters();
+
+        if (params.length === 0) {
+            container.innerHTML = '<p class="text-center text-gray-500 text-sm">No custom parameters created yet.</p>';
+            return;
+        }
+        
+        params.forEach(param => {
+            const item = document.createElement('div');
+            item.className = 'flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50';
+            item.innerHTML = `
+                <div>
+                    <span class="text-sm font-medium text-gray-800">{${param.name}}</span>
+                    <span class="text-xs text-gray-500">(from: ${param.sourceColumn})</span>
+                </div>
+                <div class="flex space-x-2">
+                    <button class="edit-btn px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Edit</button>
+                    <button class="delete-btn px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200">Delete</button>
+                </div>
+            `;
+            item.querySelector('.edit-btn').onclick = () => { this.hide('manage-custom-params-modal'); this.showCustomParamModal(param); };
+            item.querySelector('.delete-btn').onclick = () => this._deleteCustomParameter(param.name);
+            container.appendChild(item);
+        });
+    }
+
+    async _deleteCustomParameter(paramName) {
+        let params = await this.appContext.getCustomParameters();
+        params = params.filter(p => p.name !== paramName);
+        await this.appContext.saveCustomParameters(params);
+        await this.appContext.loadCustomParameters();
+        this.appContext.populateParameterButtons();
+        await this._populateManageParamsList();
+    }
+    
+    _toggleLogicContainers(selectedValue) {
         document.getElementById('value-mapping-logic-container').classList.toggle('hidden', selectedValue !== 'value-mapping');
         document.getElementById('custom-script-logic-container').classList.toggle('hidden', selectedValue !== 'custom-script');
     }
-
+    
     _addMappingRow(mapping = { if: '', operator: 'eq', then: '' }) {
         const container = document.getElementById('param-mapping-container');
-        const div = document.createElement('div');
-        div.className = 'flex items-center gap-2 mapping-row';
-        div.innerHTML = `
-            <span class="text-sm">If value</span>
-            <select class="operator-select w-28 border border-gray-300 rounded-md shadow-sm text-sm py-1 px-2">
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 mapping-row';
+        row.innerHTML = `
+            <span class="text-sm">If cell</span>
+            <select class="operator-select w-32 px-2 py-1 border border-gray-300 rounded-md text-sm">
                 <option value="eq" ${mapping.operator === 'eq' ? 'selected' : ''}>is equal to</option>
                 <option value="neq" ${mapping.operator === 'neq' ? 'selected' : ''}>is not equal to</option>
                 <option value="contains" ${mapping.operator === 'contains' ? 'selected' : ''}>contains</option>
                 <option value="does_not_contain" ${mapping.operator === 'does_not_contain' ? 'selected' : ''}>does not contain</option>
                 <option value="starts_with" ${mapping.operator === 'starts_with' ? 'selected' : ''}>starts with</option>
                 <option value="ends_with" ${mapping.operator === 'ends_with' ? 'selected' : ''}>ends with</option>
-                <option value="gt" ${mapping.operator === 'gt' ? 'selected' : ''}>&gt;</option>
-                <option value="lt" ${mapping.operator === 'lt' ? 'selected' : ''}>&lt;</option>
-                <option value="gte" ${mapping.operator === 'gte' ? 'selected' : ''}>&gt;=</option>
-                <option value="lte" ${mapping.operator === 'lte' ? 'selected' : ''}>&lt;=</option>
+                <option value="gt" ${mapping.operator === 'gt' ? 'selected' : ''}>&gt; (number)</option>
+                <option value="lt" ${mapping.operator === 'lt' ? 'selected' : ''}>&lt; (number)</option>
+                <option value="gte" ${mapping.operator === 'gte' ? 'selected' : ''}>&gt;= (number)</option>
+                <option value="lte" ${mapping.operator === 'lte' ? 'selected' : ''}>&lt;= (number)</option>
             </select>
-            <input type="text" class="if-input flex-grow border border-gray-300 rounded-md shadow-sm text-sm py-1 px-2" value="${mapping.if}">
+            <input type="text" class="if-input flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Value..." value="${mapping.if}">
             <span class="text-sm">then</span>
-            <input type="text" class="then-input flex-grow border border-gray-300 rounded-md shadow-sm text-sm py-1 px-2" value="${mapping.then}">
+            <input type="text" class="then-input flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Result..." value="${mapping.then}">
             <button class="remove-mapping-btn text-red-500 hover:text-red-700">&times;</button>
         `;
-        div.querySelector('.remove-mapping-btn').onclick = () => div.remove();
-        container.appendChild(div);
+        row.querySelector('.remove-mapping-btn').onclick = () => row.remove();
+        container.appendChild(row);
     }
     
     _getMappingsFromDOM() {
-        const mappings = [];
-        document.querySelectorAll('#param-mapping-container .mapping-row').forEach(row => {
-            mappings.push({
-                operator: row.querySelector('.operator-select').value,
-                if: row.querySelector('.if-input').value,
-                then: row.querySelector('.then-input').value
-            });
+        return Array.from(document.querySelectorAll('.mapping-row')).map(row => ({
+            if: row.querySelector('.if-input').value,
+            operator: row.querySelector('.operator-select').value,
+            then: row.querySelector('.then-input').value,
+        })).filter(m => m.if);
+    }
+
+    _scanScriptForInputs() {
+        const script = document.getElementById('custom-script-editor').value;
+        const regex = /\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?!\s*=)/g;
+        const newInputs = new Set();
+        let match;
+        while ((match = regex.exec(script)) !== null) {
+            if (match[1] !== 'getWorksheet' && match[1] !== 'sourceColumnValue') {
+                newInputs.add(match[1]);
+            }
+        }
+        const updatedScriptInputs = {};
+        newInputs.forEach(name => { updatedScriptInputs[name] = this.currentScriptInputs[name] || ''; });
+        this.currentScriptInputs = updatedScriptInputs;
+        this._renderScriptInputFields();
+    }
+
+    _renderScriptInputFields() {
+        const container = document.getElementById('script-inputs-list');
+        const parentContainer = document.getElementById('script-variable-inputs-container');
+        container.innerHTML = '';
+        const inputNames = Object.keys(this.currentScriptInputs);
+
+        if (inputNames.length === 0) {
+            parentContainer.classList.add('hidden');
+            return;
+        }
+        
+        inputNames.forEach(varName => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2';
+            row.innerHTML = `
+                <label for="script-input-${varName}" class="w-1/3 text-sm font-mono text-gray-600">${varName}</label>
+                <input type="text" id="script-input-${varName}" data-varname="${varName}" class="script-input-field flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Source Column Name" value="${this.currentScriptInputs[varName] || ''}">
+            `;
+            container.appendChild(row);
         });
-        return mappings;
+        parentContainer.classList.remove('hidden');
+    }
+
+    _updateScriptInputsFromDOM() {
+        document.querySelectorAll('.script-input-field').forEach(input => {
+            this.currentScriptInputs[input.dataset.varname] = input.value.trim();
+        });
     }
 
     _handleScriptFileUpload(event) {
@@ -664,89 +657,21 @@ export default class ModalManager {
             const reader = new FileReader();
             reader.onload = (e) => {
                 document.getElementById('custom-script-editor').value = e.target.result;
+                this._scanScriptForInputs();
             };
             reader.readAsText(file);
         }
+        event.target.value = '';
     }
 
-    _scanScriptForInputs() {
-        const script = document.getElementById('custom-script-editor').value;
-        // Regex to find variable declarations like "let myVar;" or "let myVar, myOtherVar;"
-        const variableRegex = /let\s+([a-zA-Z0-9_,\s]+);/g;
-        let match;
-        const variables = new Set();
-        while ((match = variableRegex.exec(script)) !== null) {
-            match[1].split(',').forEach(v => {
-                const trimmed = v.trim();
-                if (trimmed) variables.add(trimmed);
-            });
-        }
-        
-        const existingInputs = this.editingParam ? this.editingParam.scriptInputs : {};
-        const scriptInputs = {};
-        variables.forEach(v => {
-            scriptInputs[v] = existingInputs[v] || '';
-        });
-        
-        this._renderScriptInputs(scriptInputs);
-    }
-    
-    _renderScriptInputs(inputs) {
-        const container = document.getElementById('script-variable-inputs-container');
-        const list = document.getElementById('script-inputs-list');
-        list.innerHTML = '';
-        
-        if (Object.keys(inputs).length === 0) {
-            container.classList.add('hidden');
+    async showSendConfirmModal() {
+        if (this.appContext.studentDataCache.length === 0) {
+            document.getElementById('status').textContent = 'Please select recipients before sending.';
+            document.getElementById('status').style.color = 'orange';
             return;
         }
-
-        for (const varName in inputs) {
-            const div = document.createElement('div');
-            div.className = 'flex items-center gap-2 script-input-row';
-            div.innerHTML = `
-                <label class="w-32 text-sm text-gray-600 font-mono">${varName}</label>
-                <input type="text" data-var-name="${varName}" class="flex-grow border border-gray-300 rounded-md shadow-sm text-sm py-1 px-2" value="${inputs[varName]}" placeholder="Source Column Name">
-            `;
-            list.appendChild(div);
-        }
-        container.classList.remove('hidden');
-    }
-    
-    _getScriptInputsFromDOM() {
-        const inputs = {};
-        document.querySelectorAll('#script-inputs-list .script-input-row input').forEach(inputEl => {
-            inputs[inputEl.dataset.varName] = inputEl.value;
-        });
-        return inputs;
-    }
-
-    // --- Generic Modal Visibility ---
-    showModal(modalId) {
-        document.getElementById(modalId).classList.remove('hidden');
-    }
-
-    hideModal(modalId) {
-        document.getElementById(modalId).classList.add('hidden');
-    }
-
-    // --- Generic Confirmation Modal ---
-    showConfirmModal({ title, message, onConfirm }) {
-        document.getElementById('confirm-modal-title').textContent = title;
-        document.getElementById('confirm-modal-message').textContent = message;
-
-        const confirmButton = document.getElementById('confirm-confirm-modal-button');
-        
-        // Clone and replace to remove old listeners and ensure the correct onConfirm is used
-        const newConfirmButton = confirmButton.cloneNode(true);
-        confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
-        
-        newConfirmButton.onclick = () => {
-            this.hideModal('confirm-modal');
-            onConfirm(); // Execute the specific callback for this confirmation
-        };
-
-        this.showModal('confirm-modal');
+        const count = this.appContext.studentDataCache.length;
+        document.getElementById('send-confirm-message').textContent = `You are about to send ${count} ${count === 1 ? 'email' : 'emails'}. Do you want to proceed?`;
+        this.show('send-confirm-modal');
     }
 }
-
