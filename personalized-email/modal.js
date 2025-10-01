@@ -1,4 +1,4 @@
-// V-4.8 - 2025-09-30 - 5:55 PM EDT
+// V-4.9 - 2025-10-01 - 2:43 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -8,7 +8,7 @@ export default class ModalManager {
         this.currentExampleIndex = 0;
         this.studentsForExample = [];
         this.currentRecipientSelection = {};
-        this.tempStudentCount = 0;
+        this.finalStudentCount = 0;
 
         this._setupEventListeners();
     }
@@ -79,7 +79,7 @@ export default class ModalManager {
     // --- Recipient Modal Logic ---
     showRecipientModal() {
         this.currentRecipientSelection = { ...this.appContext.recipientSelection };
-        this.tempStudentCount = 0;
+        this.finalStudentCount = 0;
 
         const { type, customSheetName, excludeDNC, excludeFillColor } = this.currentRecipientSelection;
         document.querySelector(`input[name="recipient-source"][value="${type}"]`).checked = true;
@@ -87,9 +87,8 @@ export default class ModalManager {
         document.getElementById('exclude-dnc-toggle').checked = excludeDNC;
         document.getElementById('exclude-fill-color-toggle').checked = excludeFillColor;
 
-
         this._updateRecipientModalUI();
-        this._fetchStudentCountForModal();
+        this._handleRecipientSourceChange(); // This will trigger the initial count display
         this.show('recipient-modal');
     }
 
@@ -99,7 +98,30 @@ export default class ModalManager {
         const excludeDNC = document.getElementById('exclude-dnc-toggle').checked;
         const excludeFillColor = document.getElementById('exclude-fill-color-toggle').checked;
         this.currentRecipientSelection = { type: selectedType, customSheetName, excludeDNC, excludeFillColor };
+
         this._updateRecipientModalUI();
+
+        // Immediately display pre-cached count if available and settings match.
+        const statusEl = document.getElementById('recipient-modal-status');
+        const { lda: ldaCount, master: masterCount } = this.appContext.recipientCountCache;
+        const canUsePrecache = excludeDNC && excludeFillColor; // Can only use if exclusions are default
+
+        let usedPrecache = false;
+        if (canUsePrecache) {
+            if (selectedType === 'lda' && ldaCount !== null) {
+                statusEl.textContent = ldaCount === -1 ? "Could not find Today's LDA sheet." : `${ldaCount} student${ldaCount !== 1 ? 's' : ''} found.`;
+                usedPrecache = true;
+            } else if (selectedType === 'master' && masterCount !== null) {
+                statusEl.textContent = masterCount === -1 ? 'Could not find Master List sheet.' : `${masterCount} student${masterCount !== 1 ? 's' : ''} found.`;
+                usedPrecache = true;
+            }
+        }
+        
+        if (!usedPrecache) {
+            statusEl.textContent = 'Counting students...';
+        }
+        
+        // Always fetch the live, accurately filtered count to confirm or update.
         this._fetchStudentCountForModal();
     }
 
@@ -111,29 +133,34 @@ export default class ModalManager {
     async _fetchStudentCountForModal() {
         const statusEl = document.getElementById('recipient-modal-status');
         const confirmBtn = document.getElementById('confirm-recipient-modal-button');
-        
-        statusEl.textContent = 'Counting students...';
         confirmBtn.disabled = true;
 
         try {
+            // This call gets the live count based on the current selections in the modal.
             const students = await this.appContext.getStudentDataCore(this.currentRecipientSelection);
-            this.tempStudentCount = students.length;
-            statusEl.textContent = `${this.tempStudentCount} student${this.tempStudentCount !== 1 ? 's' : ''} found.`;
-            confirmBtn.disabled = false; // Always allow confirmation, even for 0 students
+            this.finalStudentCount = students.length;
+            statusEl.textContent = `${this.finalStudentCount} student${this.finalStudentCount !== 1 ? 's' : ''} found.`;
+            confirmBtn.disabled = false;
         } catch (error) {
-            this.tempStudentCount = 0;
+            this.finalStudentCount = 0;
             statusEl.textContent = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred.');
+            confirmBtn.disabled = false; // Allow user to confirm to close modal or change sheets.
         }
     }
 
     _confirmRecipientSelection() {
-        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.tempStudentCount);
-        this.hide('recipient-modal');
-        // Trigger a data fetch with UI updates for the main screen
-        this.appContext.getStudentDataWithUI().catch(() => {
-            // Reset button if the fetch fails after confirmation
+        // 1. Update the main "Select Students" button text with the final count.
+        this.appContext.updateRecipientSelection(this.currentRecipientSelection, this.finalStudentCount);
+        
+        // 2. Trigger the final data load into the main app's cache. This happens
+        //    asynchronously after the modal closes.
+        this.appContext.getStudentDataWithUI(this.currentRecipientSelection).catch(() => {
+            // If the final load fails, reset the button to its initial state.
             this.appContext.updateRecipientSelection(this.appContext.recipientSelection, -1);
         });
+
+        // 3. Close the modal.
+        this.hide('recipient-modal');
     }
 
     // --- Example Modal Logic ---

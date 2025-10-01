@@ -1,10 +1,11 @@
-// V-6.7 - 2025-10-01 - 2:24 PM EDT
+// V-6.8 - 2025-10-01 - 2:43 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
 
 let powerAutomateConnection = null;
 let studentDataCache = [];
+let recipientCountCache = { lda: null, master: null };
 let lastFocusedInput = null;
 let quill; // To hold the editor instance
 let fromPill = [];
@@ -16,7 +17,7 @@ let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, e
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
- * processes it, and populates the `studentDataCache`.
+ * processes it, and returns a processed array of student data.
  * @param {object} selection - The recipient selection object.
  * @returns {Promise<Array>} A promise that resolves with the student data array.
  */
@@ -25,6 +26,7 @@ async function _getStudentDataCore(selection) {
     const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
     console.log(`Selection criteria: type=${type}, customSheet='${customSheetName}', excludeDNC=${excludeDNC}, excludeFillColor=${excludeFillColor}`);
     let sheetName;
+    let processedStudents = [];
 
     if (type === 'custom') {
         sheetName = customSheetName.trim();
@@ -37,7 +39,6 @@ async function _getStudentDataCore(selection) {
         sheetName = type === 'lda' ? getTodaysLdaSheetName() : 'Master List';
     }
     
-    studentDataCache = [];
     worksheetDataCache = {}; 
 
     try {
@@ -224,16 +225,16 @@ async function _getStudentDataCore(selection) {
                     }
                     student[param.name] = value;
                 }
-                studentDataCache.push(student);
+                processedStudents.push(student);
             }
             if (excludeFillColor && colIndices.Outreach !== -1) {
                 console.log("--- End Outreach Fill Color Analysis ---");
             }
         });
-        console.log(`--- Process Complete. Final recipient count: ${studentDataCache.length} ---`);
-        return studentDataCache;
+        console.log(`--- Process Complete for ${sheetName}. Final count: ${processedStudents.length} ---`);
+        return processedStudents;
     } catch (error) {
-        console.error("--- A critical error occurred during data fetch ---", error);
+        console.error(`--- A critical error occurred during data fetch for ${sheetName} ---`, error);
         if (error.code === 'ItemNotFound') {
             error.userFacingMessage = `Error: Sheet "${sheetName}" not found.`;
         }
@@ -241,25 +242,61 @@ async function _getStudentDataCore(selection) {
     }
 }
 
+/**
+ * In the background, fetches the counts for the two primary sheets (LDA and Master)
+ * to make the recipient modal feel faster.
+ */
+async function preCacheRecipientCounts() {
+    console.log("--- Starting background pre-cache of recipient counts ---");
+    // Use the default exclusion settings for the pre-cache.
+    const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+    const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+
+    try {
+        const ldaStudents = await _getStudentDataCore(ldaSelection);
+        recipientCountCache.lda = ldaStudents.length;
+        console.log(`Pre-cached LDA count: ${recipientCountCache.lda}`);
+    } catch (error) {
+        recipientCountCache.lda = -1; // Use -1 to indicate an error (e.g., sheet not found)
+        console.warn("Could not pre-cache LDA count:", error.message);
+    }
+
+    try {
+        const masterStudents = await _getStudentDataCore(masterSelection);
+        recipientCountCache.master = masterStudents.length;
+        console.log(`Pre-cached Master List count: ${recipientCountCache.master}`);
+    } catch (error) {
+        recipientCountCache.master = -1; // Use -1 to indicate an error
+        console.warn("Could not pre-cache Master List count:", error.message);
+    }
+    console.log("--- Background pre-cache complete ---");
+}
+
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         quill = new Quill('#editor-container', QUILL_EDITOR_CONFIG);
 
-        async function getStudentDataWithUI() {
+        /**
+         * Populates the main studentDataCache with the final selection of students
+         * after the user confirms their choice in the recipient modal.
+         * @param {object} selection The final recipient selection from the modal.
+         */
+        async function getStudentDataWithUI(selection) {
             const status = document.getElementById('status');
-            status.textContent = 'Fetching students...';
+            status.textContent = 'Loading selected students...';
             status.style.color = 'gray';
             try {
-                await _getStudentDataCore(recipientSelection);
-                status.textContent = `Found ${studentDataCache.length} students.`;
+                // The core function is called here to populate the main cache for the app
+                studentDataCache = await _getStudentDataCore(selection);
+                status.textContent = `Loaded ${studentDataCache.length} students.`;
                 setTimeout(() => status.textContent = '', 3000);
-                return studentDataCache;
             } catch (error) {
-                const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while fetching data.');
+                studentDataCache = []; // Clear cache on error
+                const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while loading students.');
                 status.textContent = message;
                 status.style.color = 'red';
-                throw error;
+                throw error; // Rethrow to be caught by the modal if needed
             }
         }
         
@@ -295,7 +332,8 @@ Office.onReady((info) => {
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
-            get studentDataCache() { return studentDataCache; }
+            get studentDataCache() { return studentDataCache; },
+            get recipientCountCache() { return recipientCountCache; }
         };
 
         modalManager = new ModalManager(appContext);
@@ -316,7 +354,12 @@ Office.onReady((info) => {
         });
 
         loadCustomParameters().then(populateParameterButtons);
-        checkConnection();
+        checkConnection().then(() => {
+            // Only start pre-caching after we confirm there's a connection.
+            if (powerAutomateConnection) {
+                preCacheRecipientCounts();
+            }
+        });
     }
 });
 
@@ -736,4 +779,3 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
-
