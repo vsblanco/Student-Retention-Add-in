@@ -1,4 +1,4 @@
-// V-6.6 - 2025-10-01 - 2:14 PM EDT
+// V-6.7 - 2025-10-01 - 2:24 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -299,6 +299,11 @@ Office.onReady((info) => {
         };
 
         modalManager = new ModalManager(appContext);
+        
+        // Wire up button event handlers
+        document.getElementById("send-email-button").onclick = () => modalManager.showSendConfirmModal();
+        document.getElementById("create-connection-button").onclick = createConnection;
+        document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
         setupFromInput();
         setupCcInput();
