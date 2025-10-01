@@ -1,4 +1,4 @@
-// V-2.1 - 2025-10-01 - 11:57 AM EDT
+// V-2.2 - 2025-10-01 - 12:23 PM EDT
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -297,49 +297,85 @@ export default class ModalManager {
         this.showModal('templates-modal');
         const templates = await this.appContext.getTemplates();
         const container = document.getElementById('templates-list-container');
-        container.innerHTML = ''; 
+        container.innerHTML = '';
 
         if (templates.length === 0) {
             container.innerHTML = '<p class="text-sm text-gray-500 text-center">No saved templates found.</p>';
             return;
         }
 
-        templates.forEach(template => {
-            const div = document.createElement('div');
-            div.className = 'p-3 border rounded-md hover:bg-gray-50';
-            
-            const header = document.createElement('div');
-            header.className = 'flex justify-between items-center';
-            
-            const title = document.createElement('h4');
-            title.className = 'font-semibold text-gray-800';
-            title.textContent = template.name;
-            
-            const author = document.createElement('p');
-            author.className = 'text-xs text-gray-500';
-            author.textContent = `by ${template.author || 'Unknown'}`;
-            
-            const buttonContainer = document.createElement('div');
-            buttonContainer.className = 'flex gap-2';
-            
-            const applyButton = document.createElement('button');
-            applyButton.className = 'px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200';
-            applyButton.textContent = 'Apply';
-            applyButton.onclick = () => this._applyTemplate(template);
+        // Group templates by folder
+        const groupedTemplates = templates.reduce((acc, template) => {
+            const folder = template.folder || 'Uncategorized';
+            if (!acc[folder]) {
+                acc[folder] = [];
+            }
+            acc[folder].push(template);
+            return acc;
+        }, {});
 
-            const editButton = document.createElement('button');
-            editButton.className = 'px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200';
-            editButton.textContent = 'Edit';
-            editButton.onclick = () => this.showSaveTemplateModal(template);
+        // Render each folder
+        Object.keys(groupedTemplates).sort().forEach(folderName => {
+            const folderContainer = document.createElement('div');
+            folderContainer.className = 'py-2';
 
-            buttonContainer.appendChild(applyButton);
-            buttonContainer.appendChild(editButton);
-            header.appendChild(title);
-            header.appendChild(buttonContainer);
-            div.appendChild(header);
-            div.appendChild(author);
-            container.appendChild(div);
+            const folderHeader = document.createElement('div');
+            folderHeader.className = 'flex items-center justify-between cursor-pointer px-1 py-1 rounded hover:bg-gray-100';
+            folderHeader.innerHTML = `
+                <div class="flex items-center">
+                    <svg class="chevron-icon h-4 w-4 text-gray-500 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                    <h3 class="text-sm font-semibold text-gray-700">${folderName}</h3>
+                </div>
+                <span class="text-xs text-gray-500">${groupedTemplates[folderName].length}</span>
+            `;
+
+            const templatesList = document.createElement('div');
+            templatesList.className = 'pl-4 mt-2 space-y-2 hidden'; // Initially hidden
+
+            folderHeader.onclick = () => {
+                templatesList.classList.toggle('hidden');
+                folderHeader.querySelector('.chevron-icon').classList.toggle('chevron-open');
+            };
+            
+            // Render templates within the folder
+            groupedTemplates[folderName].forEach(template => {
+                const div = document.createElement('div');
+                div.className = 'p-3 border rounded-md hover:bg-gray-50';
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 class="font-semibold text-gray-800">${template.name}</h4>
+                            <p class="text-xs text-gray-500">by ${template.author || 'Unknown'}</p>
+                        </div>
+                        <div class="flex gap-2">
+                             <button data-template-id="${template.id}" class="apply-btn px-3 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200">Apply</button>
+                             <button data-template-id="${template.id}" class="edit-btn px-3 py-1 bg-gray-100 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-200">Edit</button>
+                        </div>
+                    </div>
+                `;
+                templatesList.appendChild(div);
+            });
+            
+            folderContainer.appendChild(folderHeader);
+            folderContainer.appendChild(templatesList);
+            container.appendChild(folderContainer);
         });
+        
+        container.querySelectorAll('.apply-btn').forEach(btn => {
+            btn.onclick = () => {
+                const template = templates.find(t => t.id === btn.dataset.templateId);
+                if(template) this._applyTemplate(template);
+            };
+        });
+        container.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.onclick = () => {
+                const template = templates.find(t => t.id === btn.dataset.templateId);
+                if(template) this.showSaveTemplateModal(template);
+            };
+        });
+
     }
 
     _applyTemplate(template) {
@@ -356,6 +392,7 @@ export default class ModalManager {
         
         document.getElementById('save-template-modal-title').textContent = template ? 'Edit Template' : 'Save Template';
         document.getElementById('template-name').value = template ? template.name : '';
+        document.getElementById('template-folder').value = template ? template.folder : '';
         document.getElementById('template-author').value = template ? template.author : '';
         document.getElementById('delete-template-button').classList.toggle('hidden', !template);
         document.getElementById('save-template-status').textContent = '';
@@ -364,6 +401,7 @@ export default class ModalManager {
 
     async saveTemplate() {
         const name = document.getElementById('template-name').value.trim();
+        const folder = document.getElementById('template-folder').value.trim();
         const author = document.getElementById('template-author').value.trim();
         const status = document.getElementById('save-template-status');
 
@@ -376,6 +414,7 @@ export default class ModalManager {
         const currentTemplate = {
             id: this.editingTemplate ? this.editingTemplate.id : `template-${Date.now()}`,
             name,
+            folder,
             author,
             from: this.appContext.fromParts,
             cc: this.appContext.ccRecipients,
@@ -674,3 +713,4 @@ export default class ModalManager {
         document.getElementById(modalId).classList.add('hidden');
     }
 }
+
