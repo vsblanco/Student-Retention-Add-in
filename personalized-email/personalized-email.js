@@ -1,4 +1,4 @@
-// V-7.3 - 2025-10-01 - 4:43 PM EDT
+// V-7.4 - 2025-10-01 - 4:56 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -378,7 +378,8 @@ Office.onReady((info) => {
         // PDF Receipt Button
         document.getElementById('download-receipt-button').onclick = () => {
             if (lastSentPayload.length > 0) {
-                generatePdfReceipt(lastSentPayload);
+                const bodyTemplate = quill.root.innerHTML;
+                generatePdfReceipt(lastSentPayload, bodyTemplate);
             } else {
                 console.error("No payload available to generate a receipt.");
             }
@@ -450,7 +451,7 @@ function setupExampleContextMenu() {
             })).filter(email => email.to && email.from);
 
             if (examplePayload.length > 0) {
-                generatePdfReceipt(examplePayload);
+                generatePdfReceipt(examplePayload, bodyTemplate);
                 status.textContent = 'Example PDF receipt downloaded.';
                 status.style.color = 'green';
             } else {
