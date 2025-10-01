@@ -1,4 +1,4 @@
-// V-7.0 - 2025-10-01 - 6:53 PM EDT
+// V-7.1 - 2025-10-01 - 7:08 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -15,7 +15,7 @@ let modalManager;
 let worksheetDataCache = {};
 let lastSentPayload = [];
 let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true, hasBeenSet: false };
-let recipientCountCache = new Map();
+let recipientDataCache = new Map(); // Changed from recipientCountCache to store full data objects
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
@@ -232,8 +232,8 @@ Office.onReady((info) => {
                 validateAllFields();
             },
             recipientSelection,
-            recipientCountCache,
-            preCacheRecipientCounts,
+            recipientDataCache,
+            preCacheRecipientData,
             renderTemplate,
             renderCCTemplate,
             getTemplates,
@@ -271,7 +271,7 @@ Office.onReady((info) => {
         quill.on('text-change', validateAllFields);
 
         loadCustomParameters().then(populateParameterButtons);
-        checkConnection().then(preCacheRecipientCounts);
+        checkConnection().then(preCacheRecipientData);
         validateAllFields();
     }
 });
@@ -315,7 +315,6 @@ function setupExampleContextMenu() {
 }
 
 async function populateParameterButtons() {
-    // ... (rest of the function is unchanged)
     const standardContainer = document.getElementById('standard-parameter-buttons');
     const customContainer = document.getElementById('custom-parameter-buttons');
     const moreCustomContainer = document.getElementById('more-custom-parameters');
@@ -396,7 +395,6 @@ function insertParameter(param) {
 }
 
 async function checkConnection() {
-    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const connectionsSetting = settings.getItemOrNullObject("connections");
@@ -417,7 +415,6 @@ async function checkConnection() {
 }
 
 async function createConnection() {
-    // ... (rest of the function is unchanged)
     const urlInput = document.getElementById('power-automate-url');
     const status = document.getElementById('setup-status');
     const url = urlInput.value.trim();
@@ -457,7 +454,6 @@ async function createConnection() {
 }
 
 function evaluateMapping(cellValue, mapping) {
-    // ... (rest of the function is unchanged)
     const cellStr = String(cellValue).trim().toLowerCase();
     const conditionStr = String(mapping.if).trim().toLowerCase();
     const cellNum = parseFloat(cellValue), conditionNum = parseFloat(mapping.if);
@@ -479,7 +475,6 @@ function evaluateMapping(cellValue, mapping) {
 }
 
 async function getWorksheetData(sheetNameToFetch) {
-    // ... (rest of the function is unchanged)
     if (worksheetDataCache[sheetNameToFetch]) return worksheetDataCache[sheetNameToFetch];
     try {
         await Excel.run(async (context) => {
@@ -501,7 +496,6 @@ async function getWorksheetData(sheetNameToFetch) {
 }
 
 const renderTemplate = (template, data) => {
-    // ... (rest of the function is unchanged)
     if (!template) return '';
     let result = template;
     for (let i = 0; i < 10 && /\{(\w+)\}/.test(result); i++) {
@@ -521,7 +515,6 @@ const renderTemplate = (template, data) => {
 };
 
 const renderCCTemplate = (recipients, data) => {
-    // ... (rest of the function is unchanged)
     if (!recipients || recipients.length === 0) return '';
     return recipients.map(recipient => renderTemplate(recipient, data)).join(';');
 }
@@ -573,7 +566,6 @@ async function executeSend() {
 }
 
 function isValidHttpUrl(string) {
-    // ... (rest of the function is unchanged)
     try {
         const url = new URL(string);
         return url.protocol === "http:" || url.protocol === "https:";
@@ -583,13 +575,11 @@ function isValidHttpUrl(string) {
 }
 
 async function loadCustomParameters() {
-    // ... (rest of the function is unchanged)
     customParameters = await getCustomParameters();
     return customParameters;
 }
 
 async function getCustomParameters() {
-    // ... (rest of the function is unchanged)
     return Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const paramsSetting = settings.getItemOrNullObject(CUSTOM_PARAMS_KEY);
@@ -600,7 +590,6 @@ async function getCustomParameters() {
 }
 
 async function saveCustomParameters(params) {
-    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         context.workbook.settings.add(CUSTOM_PARAMS_KEY, JSON.stringify(params));
         await context.sync();
@@ -608,7 +597,6 @@ async function saveCustomParameters(params) {
 }
 
 async function getTemplates() {
-    // ... (rest of the function is unchanged)
     return Excel.run(async (context) => {
         const settings = context.workbook.settings;
         const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
@@ -619,7 +607,6 @@ async function getTemplates() {
 }
 
 async function saveTemplates(templates) {
-    // ... (rest of the function is unchanged)
     await Excel.run(async (context) => {
         context.workbook.settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templates));
         await context.sync();
@@ -755,15 +742,15 @@ function validateAllFields() {
     }
 }
 
-async function preCacheRecipientCounts() {
+async function preCacheRecipientData() {
     try {
         const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
         const ldaResult = await _getStudentDataCore(ldaSelection);
-        recipientCountCache.set('lda', ldaResult.included.length);
+        recipientDataCache.set('lda', ldaResult);
 
         const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
         const masterResult = await _getStudentDataCore(masterSelection);
-        recipientCountCache.set('master', masterResult.included.length);
+        recipientDataCache.set('master', masterResult);
     } catch (error) {
         console.warn("Pre-caching failed. This may happen if sheets are not yet created. The add-in will function normally.", error);
     }
