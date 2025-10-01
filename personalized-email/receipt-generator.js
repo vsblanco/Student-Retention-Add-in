@@ -1,4 +1,4 @@
-// V-1.3 - 2025-10-01 - 6:04 PM EDT
+// V-1.5 - 2025-10-01 - 6:33 PM EDT
 import { getTodaysLdaSheetName } from './utils.js';
 
 /**
@@ -140,9 +140,10 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         doc.setFontSize(18);
         doc.text("Email Sending Receipt", pageWidth / 2, currentY + 40, { align: "center" });
         doc.setFontSize(10);
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, currentY + 55, { align: "center" });
+        doc.text(`Sent on: ${new Date().toLocaleString()}`, pageWidth / 2, currentY + 55, { align: "center" });
         currentY = 75;
 
+        // --- Summary Section ---
         doc.setFontSize(12);
         doc.text("Summary", margin, currentY);
         doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
@@ -150,8 +151,33 @@ export function generatePdfReceipt(payload, bodyTemplate) {
 
         doc.setFontSize(10);
         doc.text(`Total Emails Sent: ${payload.length}`, margin, currentY);
-        doc.text(`Sent From: ${payload[0]?.from || "N/A"}`, margin, currentY + 12);
-        currentY += 32;
+        currentY += 12;
+
+        const senderCounts = payload.reduce((acc, email) => {
+            const from = email.from || "N/A";
+            acc[from] = (acc[from] || 0) + 1;
+            return acc;
+        }, {});
+        
+        const uniqueSenders = Object.keys(senderCounts);
+
+        if (uniqueSenders.length === 1) {
+            doc.text(`Sent From: ${uniqueSenders[0]}`, margin, currentY);
+            currentY += 12;
+        } else {
+            doc.setFont(undefined, 'bold');
+            doc.text(`Sent From (Breakdown):`, margin, currentY);
+            doc.setFont(undefined, 'normal');
+            currentY += 12;
+
+            uniqueSenders.forEach(sender => {
+                const count = senderCounts[sender];
+                doc.text(`- ${sender}: ${count} email(s)`, margin + 10, currentY);
+                currentY += 12;
+            });
+        }
+        currentY += 20;
+
 
         // --- Message Body Section ---
         doc.setFontSize(12);
@@ -159,39 +185,47 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
         currentY += 20;
 
+        const containsParameters = /\{(\w+)\}/.test(bodyTemplate);
+
         // --- "Before" Template Container ---
         doc.setFontSize(10);
         doc.setFont(undefined, 'bold');
-        doc.text("Template Format:", margin, currentY);
+        const beforeTitle = containsParameters ? "Template Format:" : "Email Body:";
+        doc.text(beforeTitle, margin, currentY);
         currentY += 15;
         
         const container1StartY = currentY;
-        doc.setDrawColor(220, 220, 220); // Light grey border
+        doc.setDrawColor(220, 220, 220);
         doc.roundedRect(margin, container1StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
         renderHtmlInPdf(doc, bodyTemplate, {
             startX: margin + textPadding,
-            startY: container1StartY + textPadding + 2, // Start slightly inside
+            startY: container1StartY + textPadding + 2,
             maxWidth: contentWidth - (textPadding * 2),
             maxHeight: maxBodyContainerHeight - (textPadding * 2)
         });
         currentY = container1StartY + maxBodyContainerHeight + 15;
 
-        // --- "After" Example Container ---
-        doc.setFont(undefined, 'bold');
-        doc.text("Example:", margin, currentY);
-        currentY += 15;
+        // --- "After" Example Container (Conditional) ---
+        if (containsParameters) {
+            doc.setFont(undefined, 'bold');
+            doc.text("Example:", margin, currentY);
+            currentY += 15;
 
-        const container2StartY = currentY;
-        const randomStudentPayload = payload[Math.floor(Math.random() * payload.length)];
-        doc.setDrawColor(220, 220, 220);
-        doc.roundedRect(margin, container2StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
-        renderHtmlInPdf(doc, randomStudentPayload.body, {
-            startX: margin + textPadding,
-            startY: container2StartY + textPadding + 2,
-            maxWidth: contentWidth - (textPadding * 2),
-            maxHeight: maxBodyContainerHeight - (textPadding * 2)
-        });
-        currentY = container2StartY + maxBodyContainerHeight + 20;
+            const container2StartY = currentY;
+            const randomStudentPayload = payload[Math.floor(Math.random() * payload.length)];
+            doc.setDrawColor(220, 220, 220);
+            doc.roundedRect(margin, container2StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
+            renderHtmlInPdf(doc, randomStudentPayload.body, {
+                startX: margin + textPadding,
+                startY: container2StartY + textPadding + 2,
+                maxWidth: contentWidth - (textPadding * 2),
+                maxHeight: maxBodyContainerHeight - (textPadding * 2)
+            });
+            currentY = container2StartY + maxBodyContainerHeight + 20;
+        } else {
+             currentY += 5; // Add a smaller padding if the second box is omitted
+        }
+
 
         // --- Table of Recipients ---
         const tableColumn = ["#", "Recipient Email", "Subject"];
