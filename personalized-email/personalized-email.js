@@ -1,4 +1,4 @@
-// V-6.2 - 2025-09-30 - 6:53 PM EDT
+// V-6.3 - 2025-10-01 - 11:25 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -97,11 +97,28 @@ async function _getStudentDataCore(selection) {
             console.log(`Step 2: Fetching recipients from '${sheetName}' sheet.`);
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, format/fill/color");
+
+            // *** MODIFICATION START ***
+            // Use getCellProperties for robust, cell-by-cell color detection.
+            // This avoids the issue where loading format on a non-uniform range returns null.
+            const propertiesToLoad = {
+                format: {
+                    fill: {
+                        color: true
+                    }
+                }
+            };
+            const cellProperties = usedRange.getCellProperties(propertiesToLoad);
+            usedRange.load("values");
+            cellProperties.load("value"); // Load the 'value' of the getCellProperties result
+
             await context.sync();
-            console.log(`Successfully loaded '${sheetName}' sheet with values and formatting.`);
+            console.log(`Successfully loaded '${sheetName}' sheet with values and cell properties.`);
 
             const values = usedRange.values;
+            const formats = cellProperties.value; // This now holds a 2D array of format objects
+            // *** MODIFICATION END ***
+            
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
             const colIndices = {};
@@ -139,22 +156,22 @@ async function _getStudentDataCore(selection) {
                     }
                 }
 
-                // Fill Color exclusion
+                // *** MODIFICATION START ***
+                // Fill Color exclusion using the reliable data from getCellProperties
                 if (excludeFillColor && colIndices.Outreach !== -1) {
-                    let cellColor = '#FFFFFF'; // Default to white (no fill)
-                    if (usedRange.format.fill.color && usedRange.format.fill.color[i]) {
-                        cellColor = usedRange.format.fill.color[i][colIndices.Outreach];
-                    }
+                    // Safely access the specific cell's format from the loaded properties
+                    const cellFormat = formats[i] ? formats[i][colIndices.Outreach] : null;
+                    const cellColor = cellFormat ? cellFormat.format.fill.color : '#FFFFFF';
                     
-                    // Log the color for every student for debugging
                     console.log(`- Student: ${row[colIndices.StudentName] || 'Unknown Name'}, Outreach Color: ${cellColor}`);
 
-                    // The API may return '#000000' for "No Fill", which should also be ignored.
+                    // The API returns '#000000' for "No Fill" on some platforms. Both should be treated as no fill.
                     if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
                         console.log(`  ↳ EXCLUDING student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color.`);
                         continue;
                     }
                 }
+                // *** MODIFICATION END ***
                 
                 const studentName = row[colIndices.StudentName] ?? '';
                 const nameParts = getNameParts(studentName);
