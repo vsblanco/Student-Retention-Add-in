@@ -1,4 +1,4 @@
-<!-- V-5.0 - 2025-10-01 - 2:14 PM EDT -->
+<!-- V-5.1 - 2025-10-01 - 3:44 PM EDT -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -9,6 +9,10 @@
 
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     
     <!-- Quill WYSIWYG Editor-->
     <link href="quill.snow.css" rel="stylesheet">
@@ -378,6 +382,24 @@
             </div>
         </div>
         
+        <div id="send-success-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-130">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md text-center">
+                <svg class="mx-auto h-12 w-12 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 class="mt-4 text-lg font-semibold text-gray-800">Emails Sent Successfully!</h3>
+                <p id="send-success-message" class="mt-2 text-sm text-gray-600"></p>
+                <div class="mt-6 flex flex-col gap-3">
+                    <button id="download-receipt-button" class="w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors duration-200">
+                        Download PDF Receipt
+                    </button>
+                    <button id="close-success-modal-button" class="w-full bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-colors duration-200">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div id="recipient-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-120">
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
                 <h3 class="text-lg font-semibold text-gray-800 mb-4">Select Recipients</h3>
@@ -441,4 +463,3 @@
     </div>
 </body>
 </html>
-
