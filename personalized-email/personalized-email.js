@@ -1,4 +1,4 @@
-// V-6.5 - 2025-10-01 - 1:55 PM EDT
+// V-6.6 - 2025-10-01 - 2:14 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -99,8 +99,6 @@ async function _getStudentDataCore(selection) {
             const sheet = context.workbook.worksheets.getItem(sheetName);
             const usedRange = sheet.getUsedRange();
 
-            // *** MODIFICATION START ***
-            // Use getCellProperties for robust, cell-by-cell color detection.
             const propertiesToLoad = {
                 format: {
                     fill: {
@@ -108,7 +106,6 @@ async function _getStudentDataCore(selection) {
                     }
                 }
             };
-            // This queues the request. The result is accessed via .value after context.sync().
             const cellProperties = usedRange.getCellProperties(propertiesToLoad);
             usedRange.load("values");
             
@@ -116,9 +113,7 @@ async function _getStudentDataCore(selection) {
             console.log(`Successfully loaded '${sheetName}' sheet with values and cell properties.`);
 
             const values = usedRange.values;
-            // The result of getCellProperties is now in the .value property.
             const formats = cellProperties.value; 
-            // *** MODIFICATION END ***
             
             const headers = values[0].map(h => String(h ?? '').toLowerCase());
             
@@ -145,11 +140,10 @@ async function _getStudentDataCore(selection) {
 
             for (let i = 1; i < values.length; i++) {
                 const row = values[i];
-                if (!row) continue; // Defensive check for empty rows that might be in the usedRange
+                if (!row) continue; 
 
                 const studentIdentifier = row[colIndices.StudentIdentifier];
 
-                // DNC Tag exclusion
                 if (excludeDNC && colIndices.StudentIdentifier !== -1) {
                     if (studentIdentifier && dncStudentIdentifiers.has(String(studentIdentifier))) {
                         console.log(`Excluding student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because they are on the DNC list.`);
@@ -157,15 +151,12 @@ async function _getStudentDataCore(selection) {
                     }
                 }
 
-                // Fill Color exclusion using the reliable data from getCellProperties
                 if (excludeFillColor && colIndices.Outreach !== -1) {
-                    // Safely access the specific cell's format from the loaded properties
                     const cellFormat = formats[i] ? formats[i][colIndices.Outreach] : null;
                     const cellColor = cellFormat ? cellFormat.format.fill.color : '#FFFFFF';
                     
                     console.log(`- Student: ${row[colIndices.StudentName] || 'Unknown Name'}, Outreach Color: ${cellColor}`);
 
-                    // The API returns '#000000' for "No Fill" on some platforms. Both should be treated as no fill.
                     if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
                         console.log(`  ↳ EXCLUDING student (name: ${row[colIndices.StudentName]}, ID: ${studentIdentifier}) because their Outreach cell has a fill color.`);
                         continue;
@@ -255,11 +246,6 @@ Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         quill = new Quill('#editor-container', QUILL_EDITOR_CONFIG);
 
-        /**
-         * A wrapper around the core data fetching function that also handles UI updates
-         * like status messages. This should be used by UI elements that trigger a data load.
-         * @returns {Promise<Array>} A promise that resolves with the student data array.
-         */
         async function getStudentDataWithUI() {
             const status = document.getElementById('status');
             status.textContent = 'Fetching students...';
@@ -273,7 +259,6 @@ Office.onReady((info) => {
                 const message = error.userFacingMessage || (error.userFacing ? error.message : 'An error occurred while fetching data.');
                 status.textContent = message;
                 status.style.color = 'red';
-                // No need to log here as _getStudentDataCore already logs the detailed error
                 throw error;
             }
         }
@@ -306,9 +291,7 @@ Office.onReady((info) => {
             saveCustomParameters,
             populateParameterButtons,
             executeSend,
-            get fromPill() { return fromPill; },
             ccRecipients,
-            renderFromPills,
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
@@ -316,19 +299,13 @@ Office.onReady((info) => {
         };
 
         modalManager = new ModalManager(appContext);
-
-        document.getElementById("send-email-button").onclick = () => modalManager.showSendConfirmModal();
-        document.getElementById("create-connection-button").onclick = createConnection;
-        document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
         setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
         const subjectInput = document.getElementById('email-subject');
-        const fromInput = document.getElementById('email-from-input');
         
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
-        fromInput.addEventListener('focus', () => lastFocusedInput = fromInput);
         quill.on('selection-change', (range) => {
             if (range) lastFocusedInput = quill;
         });
@@ -422,7 +399,6 @@ async function populateParameterButtons() {
     }
 }
 
-
 function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
         const range = lastFocusedInput.getSelection(true);
@@ -502,7 +478,6 @@ async function createConnection() {
     });
 }
 
-
 function evaluateMapping(cellValue, mapping) {
     const cellStr = String(cellValue).trim().toLowerCase();
     const conditionStr = String(mapping.if).trim().toLowerCase();
@@ -575,7 +550,7 @@ async function executeSend() {
     status.textContent = `Sending ${studentDataCache.length} emails...`;
     status.style.color = 'gray';
 
-    const fromTemplate = fromPill.length > 0 ? fromPill[0] : '';
+    const fromTemplate = document.getElementById('email-from').value;
     const subjectTemplate = document.getElementById('email-subject').value;
     const bodyTemplate = quill.root.innerHTML;
 
@@ -661,7 +636,7 @@ function setupFromInput() {
     const container = document.getElementById('email-from-container');
     const input = document.getElementById('email-from-input');
     container.onclick = () => { input.focus(); lastFocusedInput = input; };
-    input.onfocus = () => lastFocusedInput = input;
+    input.onfocus = () => { lastFocusedInput = input; };
     input.onkeydown = (e) => {
         if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
             e.preventDefault();
@@ -676,7 +651,7 @@ function setupFromInput() {
 
 function addFromRecipient(text) {
     if (text) {
-        fromPill = [text]; // Replace existing "From" with the new one
+        fromPill = [text]; // Can only have one "From" address
         renderFromPills();
     }
 }
@@ -689,7 +664,10 @@ function removeFromRecipient(index) {
 function renderFromPills() {
     const container = document.getElementById('email-from-container');
     const input = document.getElementById('email-from-input');
+    const hiddenInput = document.getElementById('email-from');
+
     container.querySelectorAll('.pill').forEach(pill => pill.remove());
+    
     fromPill.forEach((recipient, index) => {
         const pill = document.createElement('span');
         pill.className = recipient.startsWith('{') && recipient.endsWith('}') ? 'pill param' : 'pill';
@@ -701,13 +679,18 @@ function renderFromPills() {
         pill.appendChild(removeBtn);
         container.insertBefore(pill, input);
     });
+
+    // Sync with the hidden input for modal.js
+    if (hiddenInput) {
+        hiddenInput.value = fromPill.length > 0 ? fromPill[0] : '';
+    }
 }
 
 function setupCcInput() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
     container.onclick = () => { input.focus(); lastFocusedInput = input; };
-    input.onfocus = () => lastFocusedInput = input;
+    input.onfocus = () => { lastFocusedInput = input; };
     input.onkeydown = (e) => {
         if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
             e.preventDefault();
@@ -748,3 +731,4 @@ function renderCCPills() {
         container.insertBefore(pill, input);
     });
 }
+
