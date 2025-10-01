@@ -1,4 +1,4 @@
-// V-6.4 - 2025-10-01 - 11:42 AM EDT
+// V-6.5 - 2025-10-01 - 1:55 PM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -7,6 +7,7 @@ let powerAutomateConnection = null;
 let studentDataCache = [];
 let lastFocusedInput = null;
 let quill; // To hold the editor instance
+let fromPill = [];
 let ccRecipients = [];
 let customParameters = [];
 let modalManager;
@@ -305,7 +306,9 @@ Office.onReady((info) => {
             saveCustomParameters,
             populateParameterButtons,
             executeSend,
+            get fromPill() { return fromPill; },
             ccRecipients,
+            renderFromPills,
             renderCCPills,
             get customParameters() { return customParameters; },
             get standardParameters() { return standardParameters; },
@@ -318,10 +321,11 @@ Office.onReady((info) => {
         document.getElementById("create-connection-button").onclick = createConnection;
         document.getElementById("select-students-button").onclick = () => modalManager.showRecipientModal();
         
+        setupFromInput();
         setupCcInput();
         setupExampleContextMenu();
         const subjectInput = document.getElementById('email-subject');
-        const fromInput = document.getElementById('email-from');
+        const fromInput = document.getElementById('email-from-input');
         
         subjectInput.addEventListener('focus', () => lastFocusedInput = subjectInput);
         fromInput.addEventListener('focus', () => lastFocusedInput = fromInput);
@@ -423,6 +427,8 @@ function insertParameter(param) {
     if (lastFocusedInput instanceof Quill) {
         const range = lastFocusedInput.getSelection(true);
         lastFocusedInput.insertText(range.index, param, 'user');
+    } else if (lastFocusedInput && lastFocusedInput.id === 'email-from-input') {
+        addFromRecipient(param);
     } else if (lastFocusedInput && lastFocusedInput.id === 'email-cc-input') {
         addCcRecipient(param);
     } else if (lastFocusedInput) {
@@ -569,7 +575,7 @@ async function executeSend() {
     status.textContent = `Sending ${studentDataCache.length} emails...`;
     status.style.color = 'gray';
 
-    const fromTemplate = document.getElementById('email-from').value;
+    const fromTemplate = fromPill.length > 0 ? fromPill[0] : '';
     const subjectTemplate = document.getElementById('email-subject').value;
     const bodyTemplate = quill.root.innerHTML;
 
@@ -651,6 +657,52 @@ async function saveTemplates(templates) {
     });
 }
 
+function setupFromInput() {
+    const container = document.getElementById('email-from-container');
+    const input = document.getElementById('email-from-input');
+    container.onclick = () => { input.focus(); lastFocusedInput = input; };
+    input.onfocus = () => lastFocusedInput = input;
+    input.onkeydown = (e) => {
+        if (e.key === ',' || e.key === 'Enter' || e.key === ';') {
+            e.preventDefault();
+            addFromRecipient(input.value.trim());
+            input.value = '';
+        } else if (e.key === 'Backspace' && input.value === '' && fromPill.length > 0) {
+            removeFromRecipient(0);
+        }
+    };
+    input.onblur = () => { addFromRecipient(input.value.trim()); input.value = ''; };
+}
+
+function addFromRecipient(text) {
+    if (text) {
+        fromPill = [text]; // Replace existing "From" with the new one
+        renderFromPills();
+    }
+}
+
+function removeFromRecipient(index) {
+    fromPill.splice(index, 1);
+    renderFromPills();
+}
+
+function renderFromPills() {
+    const container = document.getElementById('email-from-container');
+    const input = document.getElementById('email-from-input');
+    container.querySelectorAll('.pill').forEach(pill => pill.remove());
+    fromPill.forEach((recipient, index) => {
+        const pill = document.createElement('span');
+        pill.className = recipient.startsWith('{') && recipient.endsWith('}') ? 'pill param' : 'pill';
+        pill.textContent = recipient;
+        const removeBtn = document.createElement('span');
+        removeBtn.textContent = '×';
+        removeBtn.className = 'pill-remove';
+        removeBtn.onclick = (e) => { e.stopPropagation(); removeFromRecipient(index); };
+        pill.appendChild(removeBtn);
+        container.insertBefore(pill, input);
+    });
+}
+
 function setupCcInput() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
@@ -683,14 +735,14 @@ function removeCcRecipient(index) {
 function renderCCPills() {
     const container = document.getElementById('email-cc-container');
     const input = document.getElementById('email-cc-input');
-    container.querySelectorAll('.cc-pill').forEach(pill => pill.remove());
+    container.querySelectorAll('.pill').forEach(pill => pill.remove());
     ccRecipients.forEach((recipient, index) => {
         const pill = document.createElement('span');
-        pill.className = recipient.startsWith('{') && recipient.endsWith('}') ? 'cc-pill param' : 'cc-pill';
+        pill.className = recipient.startsWith('{') && recipient.endsWith('}') ? 'pill param' : 'pill';
         pill.textContent = recipient;
         const removeBtn = document.createElement('span');
         removeBtn.textContent = '×';
-        removeBtn.className = 'cc-pill-remove';
+        removeBtn.className = 'pill-remove';
         removeBtn.onclick = (e) => { e.stopPropagation(); removeCcRecipient(index); };
         pill.appendChild(removeBtn);
         container.insertBefore(pill, input);
