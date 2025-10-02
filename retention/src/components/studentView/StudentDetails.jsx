@@ -30,7 +30,7 @@ const DetailItem = ({ label, value }) => {
 function StudentDetails({ student }) {
   // --- STYLES ---
   const studentNameStyles = {
-    fontSize: '22px',Q
+    fontSize: '22px',
     fontWeight: '600',
     color: '#2c3e50',
     marginBottom: '15px',
