@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 10:43 AM | Version: 1.2.0
+// Timestamp: 2025-10-02 11:23 AM | Version: 1.3.0
 
 /**
  * Initializes the settings explorer modal, handling its opening, closing,
@@ -37,20 +37,34 @@ function initializeSettingsExplorerModal() {
     // --- Tree Building Logic ---
     const populateTree = () => {
         treeContainer.innerHTML = ''; // Clear previous content
-        const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEYS.APP);
+        
+        const allSettings = {};
+        let hasSettings = false;
 
-        if (settingsString) {
+        // Fetch each known setting key from constants.js
+        for (const key in CONSTANTS.SETTINGS_KEYS) {
+            const settingKey = CONSTANTS.SETTINGS_KEYS[key];
+            const settingsString = Office.context.document.settings.get(settingKey);
+            if (settingsString) {
+                try {
+                    allSettings[settingKey] = JSON.parse(settingsString);
+                    hasSettings = true;
+                } catch (e) {
+                    console.warn(`Could not parse setting for key "${settingKey}":`, e);
+                    allSettings[settingKey] = "[Error: Invalid JSON]";
+                }
+            }
+        }
+
+        if (hasSettings) {
             try {
-                const settingsObject = JSON.parse(settingsString);
-                // Create a root object for a cleaner top-level presentation
-                const rootData = { "studentRetentionSettings": settingsObject };
                 const rootUl = document.createElement('ul');
                 rootUl.className = 'settings-tree';
-                buildTree(rootData, rootUl, true); // Pass isRoot = true
+                buildTree(allSettings, rootUl);
                 treeContainer.appendChild(rootUl);
             } catch (error) {
-                console.error("Error parsing settings for explorer:", error);
-                treeContainer.innerHTML = `<div class="explorer-error">Error: Could not parse settings JSON.</div>`;
+                console.error("Error building settings tree:", error);
+                treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree.</div>`;
             }
         } else {
             treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
@@ -152,4 +166,3 @@ function initializeSettingsExplorerModal() {
         if (event.key === 'Escape' && explorerModal.style.display === 'flex') hideModal();
     });
 }
-
