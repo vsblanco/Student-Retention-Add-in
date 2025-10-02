@@ -1,4 +1,4 @@
-// V-7.1 - 2025-10-01 - 7:08 PM EDT
+// V-7.2 - 2025-10-02 - 9:54 AM EDT
 import { findColumnIndex, getTodaysLdaSheetName, getNameParts } from './utils.js';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, COLUMN_MAPPINGS, PARAMETER_BUTTON_STYLES } from './constants.js';
 import ModalManager from './modal.js';
@@ -16,6 +16,20 @@ let worksheetDataCache = {};
 let lastSentPayload = [];
 let recipientSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true, hasBeenSet: false };
 let recipientDataCache = new Map(); // Changed from recipientCountCache to store full data objects
+
+/**
+ * Validates if a string is a properly formatted email address.
+ * @param {string} email The email string to validate.
+ * @returns {boolean} True if the email is valid, false otherwise.
+ */
+function isValidEmail(email) {
+    if (typeof email !== 'string' || !email.trim()) {
+        return false;
+    }
+    // A common regex for email validation.
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+}
 
 /**
  * The core data fetching function. It reads data from the specified sheet,
@@ -106,6 +120,13 @@ async function _getStudentDataCore(selection) {
 
                 const studentIdentifier = row[colIndices.StudentIdentifier];
                 const studentNameForRow = row[colIndices.StudentName] || `ID: ${studentIdentifier || 'Unknown'}`;
+                const studentEmail = row[colIndices.StudentEmail] ?? '';
+
+                // ADDED: Exclude students with invalid email addresses first.
+                if (!isValidEmail(studentEmail)) {
+                    excludedStudents.push({ name: studentNameForRow, reason: 'Invalid Email' });
+                    continue;
+                }
 
                 if (excludeDNC && colIndices.StudentIdentifier !== -1) {
                     if (studentIdentifier && dncStudentIdentifiers.has(String(studentIdentifier))) {
@@ -127,7 +148,7 @@ async function _getStudentDataCore(selection) {
                 const nameParts = getNameParts(studentName);
                 const student = {
                     StudentName: studentName, FirstName: nameParts.first, LastName: nameParts.last,
-                    StudentEmail: row[colIndices.StudentEmail] ?? '', PersonalEmail: row[colIndices.PersonalEmail] ?? '',
+                    StudentEmail: studentEmail, PersonalEmail: row[colIndices.PersonalEmail] ?? '',
                     Grade: row[colIndices.Grade] ?? '', DaysOut: row[colIndices.DaysOut] ?? '', Assigned: row[colIndices.Assigned] ?? ''
                 };
 
@@ -755,4 +776,3 @@ async function preCacheRecipientData() {
         console.warn("Pre-caching failed. This may happen if sheets are not yet created. The add-in will function normally.", error);
     }
 }
-
