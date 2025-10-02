@@ -1,13 +1,17 @@
-// Timestamp: 2025-10-02 11:23 AM | Version: 1.3.0
+// Timestamp: 2025-10-02 11:27 AM | Version: 1.4.0
+
+Office.onReady((info) => {
+    if (info.host === Office.HostType.Excel) {
+        initializeSettingsExplorer();
+    }
+});
 
 /**
- * Initializes the settings explorer modal, handling its opening, closing,
- * and the rendering of the settings data into a modern tree view.
+ * Initializes the settings explorer page, handling the rendering of the 
+ * settings data into a modern tree view and the close button functionality.
  */
-function initializeSettingsExplorerModal() {
+function initializeSettingsExplorer() {
     // --- Get DOM Elements ---
-    const explorerModal = document.getElementById('settings-explorer-modal');
-    const openButton = document.getElementById('view-settings-button');
     const closeButton = document.getElementById('close-settings-explorer-button');
     const treeContainer = document.getElementById('settings-tree-container');
 
@@ -24,17 +28,9 @@ function initializeSettingsExplorerModal() {
         check: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
     };
 
-    // --- Modal Visibility ---
-    const showModal = () => {
-        populateTree();
-        explorerModal.style.display = 'flex';
-    };
-
-    const hideModal = () => {
-        explorerModal.style.display = 'none';
-    };
-
-    // --- Tree Building Logic ---
+    /**
+     * Fetches all settings from the workbook and renders them in the tree view.
+     */
     const populateTree = () => {
         treeContainer.innerHTML = ''; // Clear previous content
         
@@ -130,8 +126,6 @@ function initializeSettingsExplorerModal() {
 
                     copyButton.onclick = (e) => {
                         e.stopPropagation();
-                        // navigator.clipboard is a secure API, may not work in all environments without HTTPS.
-                        // However, it's the modern and correct way.
                         navigator.clipboard.writeText(value).then(() => {
                             copyButton.innerHTML = ICONS.check;
                             copyButton.classList.add('copied');
@@ -141,7 +135,6 @@ function initializeSettingsExplorerModal() {
                             }, 1500);
                         }).catch(err => {
                             console.error('Failed to copy text: ', err);
-                            // You could implement a fallback here if needed
                         });
                     };
 
@@ -155,14 +148,10 @@ function initializeSettingsExplorerModal() {
     };
 
     // --- Attach Event Listeners ---
-    openButton.onclick = showModal;
-    closeButton.onclick = hideModal;
+    // The messageParent API is the standard way to close a dialog in Office Add-ins.
+    // We pass a message (can be anything) to signal the host page to close this dialog.
+    closeButton.onclick = () => Office.context.ui.messageParent("close");
 
-    explorerModal.addEventListener('click', (event) => {
-        if (event.target === explorerModal) hideModal();
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && explorerModal.style.display === 'flex') hideModal();
-    });
+    // Initial population of the tree view
+    populateTree();
 }
