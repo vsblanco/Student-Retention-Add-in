@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 10:10 AM | Version: 1.3.0
+// Timestamp: 2025-10-02 10:25 AM | Version: 1.4.0
 let settings = {};
 
 Office.onReady((info) => {
@@ -15,6 +15,9 @@ Office.onReady((info) => {
         
         // Initialize the collapsible sections
         initializeAccordions();
+        
+        // Initialize the settings explorer modal
+        initializeSettingsExplorerModal();
     }
 });
 
