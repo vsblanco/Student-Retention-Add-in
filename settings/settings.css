@@ -1,3 +1,4 @@
+/* Timestamp: 2025-10-02 10:10 AM | Version: 1.1.0 */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
@@ -15,29 +16,77 @@ body {
 
 .section {
     background-color: #fff;
-    padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     margin-bottom: 20px;
+    overflow: hidden; /* Important for border-radius on collapsible content */
 }
 
 .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between; /* Positions title and actions apart */
+    padding: 20px;
     color: #111827;
-    margin-bottom: 24px;
     border-bottom: 1px solid #e5e7eb;
-    padding-bottom: 12px;
+    transition: background-color 0.2s, border-color 0.3s;
 }
 
-.section-header svg {
+.section-header.collapsible {
+    cursor: pointer;
+    user-select: none;
+}
+
+.section-header.collapsible:hover {
+    background-color: #f9fafb;
+}
+
+.section-header.expanded {
+    border-color: transparent;
+}
+
+.section-header-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-header-title svg {
     color: #4b5563;
 }
 
-.section-header h2 {
+.section-header-title h2 {
     margin: 0;
     font-size: 18px;
+}
+
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chevron-icon {
+    width: 20px;
+    height: 20px;
+    stroke: #6b7280;
+    transition: transform 0.3s ease-out;
+}
+
+.section-header.expanded .chevron-icon {
+    transform: rotate(90deg);
+}
+
+.section-content {
+    padding: 0 20px; /* Horizontal padding only when collapsed */
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease-in-out, padding 0.35s ease-in-out;
+}
+
+.section-content.expanded {
+    max-height: 1500px; /* Large value to accommodate any content */
+    padding: 20px; /* Full padding when expanded */
 }
 
 .setting-item {
@@ -46,6 +95,10 @@ body {
     align-items: center;
     justify-content: space-between;
 }
+.setting-item:last-of-type {
+    margin-bottom: 0;
+}
+
 
 .setting-item label {
     font-weight: 500;
@@ -59,6 +112,12 @@ body {
     margin-bottom: 20px;
     padding-left: 5px;
 }
+/* First description in a section */
+.section-content > .setting-description:first-child {
+    margin-top: 0;
+    margin-bottom: 24px;
+}
+
 
 input[type="number"],
 input[type="text"],
@@ -308,7 +367,6 @@ input:checked + .slider:before {
     font-size: 16px;
     font-weight: bold;
     line-height: 20px;
-    margin-left: auto; /* Push it to the right */
     transition: all 0.2s;
 }
 
