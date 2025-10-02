@@ -1,0 +1,34 @@
+<!-- Timestamp: 2025-10-02 11:27 AM | Version: 1.0.0 -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Settings Explorer</title>
+    <link rel="stylesheet" href="settings-explorer.css">
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <!-- ../ points to the parent settings folder to access constants.js -->
+    <script type="text/javascript" src="../constants.js"></script>
+    <script type="text/javascript" src="settings-explorer.js"></script>
+</head>
+<body>
+    <div class="explorer-container">
+        <div class="settings-explorer-header">
+            <h3>Workbook Settings Explorer</h3>
+            <!-- This button is now for closing the dialog/window, handled in JS -->
+            <button id="close-settings-explorer-button" class="icon-button" title="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+        <div class="explorer-content">
+            <p class="setting-description">
+                This is a read-only view of all settings saved in this workbook for the add-in.
+            </p>
+            <div id="settings-tree-container" class="settings-tree-container">
+                <!-- Tree will be generated here by settings-explorer.js -->
+            </div>
+        </div>
+    </div>
+</body>
+</html>
