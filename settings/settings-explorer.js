@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 02:32 PM | Version: 1.1.0
+// Timestamp: 2025-10-02 02:35 PM | Version: 1.2.0
 /**
  * This script handles the functionality for the "Workbook Settings Explorer" modal,
  * which provides a read-only, collapsible tree view of all the add-in's settings
@@ -7,7 +7,9 @@
 
 // A simple icon registry for consistency.
 const ICONS = {
-    chevronRight: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron-icon"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+    chevronRight: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="chevron-icon"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+    folder: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`,
+    file: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`
 };
 
 /**
@@ -90,10 +92,14 @@ function buildTree(obj, level = 0) {
             const isObject = value !== null && typeof value === 'object';
             const hasChildren = isObject && Object.keys(value).length > 0;
 
-            // Note: Removed the 'expanded' class here to make nodes collapsed by default.
             html += `<li class="tree-node ${hasChildren ? 'expandable' : ''}" style="--level: ${level};">`;
             html += `<div class="tree-node-content" tabindex="0">`;
+            
             html += `<span class="chevron-container">${hasChildren ? ICONS.chevronRight : ''}</span>`;
+            
+            const icon = hasChildren ? ICONS.folder : ICONS.file;
+            html += `<span class="icon-container">${icon}</span>`;
+
             html += `<span class="key">${key}:</span>`;
 
             if (!isObject) {
@@ -130,3 +136,4 @@ function formatValue(value) {
     }
     return value.toString();
 }
+
