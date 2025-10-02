@@ -1,5 +1,6 @@
-// Timestamp: 2025-10-02 12:17 PM | Version: 1.4.3
+// Timestamp: 2025-10-02 12:31 PM | Version: 1.4.4
 Office.onReady((info) => {
+    console.log("Office is ready. Host:", info.host);
     if (info.host === Office.HostType.Excel) {
         initializeSettingsExplorer();
     }
@@ -10,13 +11,14 @@ Office.onReady((info) => {
  * settings data into a modern tree view and the close button functionality.
  */
 function initializeSettingsExplorer() {
+    console.log("Initializing Settings Explorer...");
     // --- Get DOM Elements ---
     const closeButton = document.getElementById('close-settings-explorer-button');
     const treeContainer = document.getElementById('settings-tree-container');
 
     // --- SVG Icons for a richer UI ---
     const ICONS = {
-        chevron: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="tree-icon chevron"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+        chevron: `<svg xmlns="http://www.w.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="tree-icon chevron"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
         object: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon object"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`,
         array: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon array"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>`,
         string: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon string"><path d="M4 12h16M4 18h16M4 6h16"/></svg>`,
@@ -31,10 +33,12 @@ function initializeSettingsExplorer() {
      * Fetches all settings from the workbook and renders them in the tree view.
      */
     const populateTree = async () => {
+        console.log("Attempting to populate the settings tree...");
         treeContainer.innerHTML = ''; // Clear previous content
         
         try {
             await Excel.run(async (context) => {
+                console.log("Excel.run() context started.");
                 const allSettings = {};
                 let hasSettings = false;
                 
@@ -42,50 +46,65 @@ function initializeSettingsExplorer() {
                 const settingItems = {};
 
                 // 1. Get all setting items and queue up a 'load' command for their values.
-                // FIX: Using Object.values() provides a safer and more direct way to iterate
-                // over the setting keys defined in the CONSTANTS file.
-                for (const settingKey of Object.values(CONSTANTS.SETTINGS_KEYS)) {
+                console.log("Loading settings keys from CONSTANTS:", CONSTANTS.SETTINGS_KEYS);
+                const settingKeysToLoad = Object.values(CONSTANTS.SETTINGS_KEYS);
+                console.log(`Found ${settingKeysToLoad.length} setting keys to load.`);
+
+                for (const settingKey of settingKeysToLoad) {
+                    console.log(`- Queuing load for setting key: "${settingKey}"`);
                     const settingItem = workbookSettings.getItemOrNullObject(settingKey);
                     settingItem.load("value");
                     settingItems[settingKey] = settingItem;
                 }
                 
                 // 2. Sync to execute all the queued 'load' commands in one network call.
+                console.log("Executing context.sync() to fetch settings values...");
                 await context.sync();
+                console.log("context.sync() completed successfully.");
 
                 // 3. Now that values are loaded, process them.
+                console.log("Processing loaded settings...");
                 for (const settingKey in settingItems) {
                     if (Object.prototype.hasOwnProperty.call(settingItems, settingKey)) {
                         const settingItem = settingItems[settingKey];
                         if (settingItem.value) { 
+                            console.log(`Found value for setting key "${settingKey}".`);
                             const settingsString = settingItem.value;
                             try {
                                 allSettings[settingKey] = JSON.parse(settingsString);
                                 hasSettings = true;
+                                console.log(`  -> Successfully parsed JSON for "${settingKey}".`);
                             } catch (e) {
                                 console.warn(`Could not parse setting for key "${settingKey}":`, e);
                                 allSettings[settingKey] = "[Error: Invalid JSON]";
                                 hasSettings = true; // Still show the error in the UI
                             }
+                        } else {
+                            console.log(`No value found for setting key "${settingKey}". It may not be set yet.`);
                         }
                     }
                 }
 
+                console.log("Final compiled settings object:", allSettings);
+
                 if (hasSettings) {
+                    console.log("Settings found. Building tree view...");
                     const rootUl = document.createElement('ul');
                     rootUl.className = 'settings-tree';
                     buildTree(allSettings, rootUl);
                     treeContainer.appendChild(rootUl);
+                    console.log("Tree view built and appended to the DOM.");
                 } else {
+                    console.log("No settings were found in the workbook.");
                     treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
                 }
             });
         } catch (error) {
-            console.error("Error populating settings tree:", error);
+            console.error("Fatal error in populateTree:", error);
             if (error instanceof OfficeExtension.Error) {
                 console.error("Debug info: " + JSON.stringify(error.debugInfo));
             }
-            treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree.</div>`;
+            treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree. Check the console for details.</div>`;
         }
     };
 
@@ -170,10 +189,15 @@ function initializeSettingsExplorer() {
     };
 
     // --- Attach Event Listeners ---
+    console.log("Attaching event listener to close button.");
     // The messageParent API is the standard way to close a dialog in Office Add-ins.
     // We pass a message (can be anything) to signal the host page to close this dialog.
-    closeButton.onclick = () => Office.context.ui.messageParent("close");
+    closeButton.onclick = () => {
+        console.log("Close button clicked. Sending 'close' message to parent.");
+        Office.context.ui.messageParent("close");
+    };
 
     // Initial population of the tree view
     populateTree();
 }
+
