@@ -1,4 +1,4 @@
-/* Timestamp: 2025-10-02 10:35 AM | Version: 1.4.0 */
+/* Timestamp: 2025-10-02 10:37 AM | Version: 1.5.0 */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
@@ -243,7 +243,7 @@ input:checked + .slider {
 }
 
 input:focus + .slider {
-    box-show: 0 0 1px #2563eb;
+    box-shadow: 0 0 1px #2563eb;
 }
 
 input:checked + .slider:before {
@@ -425,7 +425,7 @@ input:checked + .slider:before {
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.6);
     display: none;
     align-items: center;
     justify-content: center;
@@ -477,42 +477,74 @@ input:checked + .slider:before {
     padding: 10px 16px;
 }
 
-/* Settings Explorer Modal Styles */
+/* --- Settings Explorer Modal Styles --- */
 .settings-explorer-modal-content {
-    max-width: 600px; /* Wider modal */
+    max-width: 600px;
     width: 95%;
+    padding: 0; /* Remove default padding */
+}
+
+.settings-explorer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.settings-explorer-header h3 {
+    margin: 0;
 }
 
 .settings-tree-container {
-    background-color: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    padding: 15px;
+    background-color: #ffffff;
+    padding: 15px 24px;
     height: 400px;
     overflow-y: auto;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: Menlo, Monaco, 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.6;
 }
 
 .settings-tree ul {
     list-style-type: none;
-    padding-left: 20px;
+    padding-left: 18px;
     margin: 0;
+    border-left: 1px solid #e5e7eb; /* Indentation guide line */
+}
+
+.settings-tree > ul {
+    padding-left: 0; /* No padding for the root */
+    border-left: none; /* No border for the root */
 }
 
 .settings-tree li {
     position: relative;
 }
 
-.settings-tree .node-header {
-    display: flex;
-    align-items: center;
+/* Hover effect for tree items */
+.settings-tree .node-header:hover {
+    background-color: #f9fafb;
+    border-radius: 4px;
 }
 
 
+.settings-tree .node-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+}
+
+.settings-tree .tree-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: #6b7280;
+}
+
 .settings-tree .node-key {
-    font-weight: bold;
+    font-weight: 500;
     color: #1e3a8a; /* A dark blue */
 }
 
@@ -543,15 +575,11 @@ input:checked + .slider:before {
     cursor: pointer;
 }
 
-.settings-tree .collapsible-node > .node-header .node-key::before {
-    content: '▶';
-    display: inline-block;
-    margin-right: 6px;
-    font-size: 10px;
+.settings-tree .collapsible-node > .node-header .tree-icon.chevron {
     transition: transform 0.2s;
 }
 
-.settings-tree .collapsible-node.expanded > .node-header .node-key::before {
+.settings-tree .collapsible-node.expanded > .node-header .tree-icon.chevron {
     transform: rotate(90deg);
 }
 

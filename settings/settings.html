@@ -1,4 +1,4 @@
-<!-- Timestamp: 2025-10-02 10:25 AM | Version: 1.4.0 -->
+<!-- Timestamp: 2025-10-02 10:37 AM | Version: 1.5.0 -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -141,15 +141,17 @@
     <!-- Settings Explorer Modal -->
     <div id="settings-explorer-modal" class="modal-overlay">
         <div class="modal-content settings-explorer-modal-content">
-            <h3>Workbook Settings Explorer</h3>
+            <div class="settings-explorer-header">
+                <h3>Workbook Settings Explorer</h3>
+                <button id="close-settings-explorer-button" class="icon-button" title="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
             <p class="setting-description" style="margin-top: 0.5rem; margin-bottom: 1rem;">
                 This is a read-only view of all settings saved in this workbook for the add-in.
             </p>
             <div id="settings-tree-container" class="settings-tree-container">
                 <!-- Tree will be generated here by settings-explorer.js -->
-            </div>
-            <div class="modal-actions">
-                <button id="close-settings-explorer-button" class="button-primary">Close</button>
             </div>
         </div>
     </div>
