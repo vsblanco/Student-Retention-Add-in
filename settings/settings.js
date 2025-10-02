@@ -1,167 +1,105 @@
+// Timestamp: 2025-10-02 10:07 AM | Version: 1.2.0
 let settings = {};
-const CONSTANTS = {
-    MASTER_LIST_SHEET: "Master List",
-    SETTINGS_KEY: "studentRetentionSettings"
-};
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         // Initialize with current settings and populate the UI
         loadSettingsAndPopulateUI();
 
-        // Add event listeners
-        document.getElementById("save-button").onclick = saveSettings;
-        document.getElementById("reset-button").onclick = resetSettings;
+        // Add event listeners for the main buttons
+        document.getElementById(CONSTANTS.DOM.IDS.saveButton).onclick = saveSettings;
+        document.getElementById(CONSTANTS.DOM.IDS.resetButton).onclick = resetSettings;
         
-        // --- Modal Event Listeners ---
-        const addUserModal = document.getElementById("add-user-modal");
-        const addUserButton = document.getElementById("add-user-button");
-        const cancelAddUserButton = document.getElementById("cancel-add-user-button");
-        const saveNewUserButton = document.getElementById("save-new-user-button");
-        const firstNameInput = document.getElementById("new-user-first-name");
-        const lastNameInput = document.getElementById("new-user-last-name");
-        const addUserStatus = document.getElementById("add-user-status");
-
-        const showModal = () => {
-            addUserStatus.textContent = '';
-            addUserStatus.className = 'status-message';
-            firstNameInput.value = '';
-            lastNameInput.value = '';
-            addUserModal.style.display = 'flex';
-            firstNameInput.focus();
-        };
-
-        const hideModal = () => {
-            addUserModal.style.display = 'none';
-        };
-
-        addUserButton.onclick = showModal;
-        cancelAddUserButton.onclick = hideModal;
-        // Also hide modal if user clicks the overlay background
-        addUserModal.addEventListener('click', (event) => {
-            if (event.target === addUserModal) {
-                hideModal();
-            }
-        });
-
-        saveNewUserButton.onclick = () => {
-            const firstName = firstNameInput.value.trim();
-            const lastName = lastNameInput.value.trim();
-
-            if (!firstName || !lastName) {
-                addUserStatus.textContent = "Both names are required.";
-                addUserStatus.className = 'status-message status-error visible';
-                return;
-            }
-
-            const formattedName = `${firstName} ${lastName}`;
-
-            if (settings.userProfile.userList.includes(formattedName)) {
-                addUserStatus.textContent = `User "${formattedName}" already exists.`;
-                addUserStatus.className = 'status-message status-error visible';
-                return;
-            }
-
-            settings.userProfile.userList.push(formattedName);
-            saveSettings(); // This will save and reload the UI
-            hideModal();
-        };
+        // Initialize the "Add User" modal functionality
+        initializeAddUserModal(settings, saveSettings);
     }
 });
 
+/**
+ * Resets the add-in settings to their default values by removing the settings key
+ * from the document and then reloading the UI.
+ */
 function resetSettings() {
-    // This function will remove the settings key from the document,
-    // then reload the UI which will populate it with the default values.
-    Office.context.document.settings.remove(CONSTANTS.SETTINGS_KEY);
+    Office.context.document.settings.remove(CONSTANTS.SETTINGS_KEYS.APP);
     Office.context.document.settings.saveAsync(function (asyncResult) {
-        const status = document.getElementById('status');
+        const status = document.getElementById(CONSTANTS.DOM.IDS.status);
         if (asyncResult.status == Office.AsyncResultStatus.Failed) {
-            console.log('Settings failed to reset. Error: ' + asyncResult.error.message);
+            console.error('Settings failed to reset. Error: ' + asyncResult.error.message);
             status.textContent = 'Error resetting settings.';
-            status.className = 'status-message status-error visible';
+            status.className = `${CONSTANTS.DOM.CLASSES.statusMessage} ${CONSTANTS.DOM.CLASSES.statusError} ${CONSTANTS.DOM.CLASSES.visible}`;
         } else {
             console.log('Settings reset successfully.');
             status.textContent = 'Settings have been reset to default.';
-            status.className = 'status-message status-success visible';
+            status.className = `${CONSTANTS.DOM.CLASSES.statusMessage} ${CONSTANTS.DOM.CLASSES.statusSuccess} ${CONSTANTS.DOM.CLASSES.visible}`;
             
-            // Reload the UI with default settings
+            // Reload the UI to apply the default settings
             loadSettingsAndPopulateUI();
         }
-        // Clear the message after a few seconds
+        // Clear the status message after a few seconds
         setTimeout(() => {
             status.textContent = '';
-            status.className = 'status-message';
+            status.className = CONSTANTS.DOM.CLASSES.statusMessage;
         }, 3000);
     });
 }
 
-
+/**
+ * Loads settings from the document, merges them with defaults to prevent errors,
+ * and populates all UI elements on the settings page.
+ */
 function loadSettingsAndPopulateUI() {
-    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
+    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEYS.APP);
     if (settingsString) {
         try {
-            settings = JSON.parse(settingsString);
+            // Merge saved settings with defaults to ensure all keys exist and handle future additions
+            const savedSettings = JSON.parse(settingsString);
+            settings = {
+                ...JSON.parse(JSON.stringify(CONSTANTS.DEFAULT_SETTINGS)), // Deep copy of defaults
+                ...savedSettings,
+                createlda: { ...CONSTANTS.DEFAULT_SETTINGS.createlda, ...(savedSettings.createlda || {}) },
+                userProfile: { ...CONSTANTS.DEFAULT_SETTINGS.userProfile, ...(savedSettings.userProfile || {}) },
+                taskpane: { ...CONSTANTS.DEFAULT_SETTINGS.taskpane, ...(savedSettings.taskpane || {}) }
+            };
         } catch (e) {
-            console.error("Error parsing settings:", e);
-            settings = {}; // Reset to avoid issues
+            console.error("Error parsing settings, reverting to defaults:", e);
+            settings = JSON.parse(JSON.stringify(CONSTANTS.DEFAULT_SETTINGS)); // Deep copy on error
         }
     } else {
-        // If no settings string, initialize with empty object
-        settings = {};
+        // If no settings exist, initialize with a deep copy of the defaults
+        settings = JSON.parse(JSON.stringify(CONSTANTS.DEFAULT_SETTINGS));
     }
     
-    // Ensure settings objects exist with defaults
-    if (!settings.createlda) {
-        settings.createlda = {
-            daysOutFilter: 6,
-            includeFailingList: true,
-            includeLdaTagFollowup: true, // New setting default
-            hideLeftoverColumns: true,
-            treatEmptyGradesAsZero: false,
-            ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
-        };
-    }
-    if (!settings.userProfile) {
-        settings.userProfile = {
-            name: Office.context.displayName || "",
-            userList: []
-        };
-    }
-    if (!settings.userProfile.userList) {
-        settings.userProfile.userList = [];
-    }
-    if (!settings.taskpane) {
-        settings.taskpane = {
-            smartNavigation: true // Default to true
-        };
-    }
-    
-    // Add current user to the list if not already present
-    const currentName = settings.userProfile.name || Office.context.displayName;
-    if (currentName && !settings.userProfile.userList.includes(currentName)) {
-        settings.userProfile.userList.push(currentName);
+    // Ensure userProfile object and userList array exist
+    settings.userProfile = settings.userProfile || { ...CONSTANTS.DEFAULT_SETTINGS.userProfile };
+    settings.userProfile.userList = settings.userProfile.userList || [];
+
+    // Set the current user's name and add them to the list if not already present
+    settings.userProfile.name = Office.context.displayName || "";
+    if (settings.userProfile.name && !settings.userProfile.userList.includes(settings.userProfile.name)) {
+        settings.userProfile.userList.push(settings.userProfile.name);
     }
 
-    // Populate UI for Task Pane settings
-    document.getElementById("smart-navigation-toggle").checked = settings.taskpane.smartNavigation !== false;
+    // --- Populate UI Elements ---
+    document.getElementById(CONSTANTS.DOM.IDS.smartNavigationToggle).checked = settings.taskpane.smartNavigation;
+    document.getElementById(CONSTANTS.DOM.IDS.daysOutFilter).value = settings.createlda.daysOutFilter;
+    document.getElementById(CONSTANTS.DOM.IDS.includeFailingList).checked = settings.createlda.includeFailingList;
+    document.getElementById(CONSTANTS.DOM.IDS.includeLdaTagFollowup).checked = settings.createlda.includeLdaTagFollowup;
+    document.getElementById(CONSTANTS.DOM.IDS.hideLeftoverColumns).checked = settings.createlda.hideLeftoverColumns;
+    document.getElementById(CONSTANTS.DOM.IDS.treatEmptyGradesAsZero).checked = settings.createlda.treatEmptyGradesAsZero;
 
-    // Populate UI for LDA Report settings
-    document.getElementById("days-out-filter").value = settings.createlda.daysOutFilter || 6;
-    document.getElementById("include-failing-list").checked = settings.createlda.includeFailingList !== false;
-    document.getElementById("include-lda-tag-followup").checked = settings.createlda.includeLdaTagFollowup !== false; // Populate new toggle
-    document.getElementById("hide-leftover-columns").checked = settings.createlda.hideLeftoverColumns !== false;
-    document.getElementById("treat-empty-grades-as-zero").checked = settings.createlda.treatEmptyGradesAsZero === true;
-
-    // Render the user list management UI
+    // Render the dynamic UI components
     renderUserList();
-    // Load and render the LDA column selector
     loadAndRenderLdaColumns();
 }
 
+/**
+ * Renders the list of users in the User Management section with interactive elements
+ * for editing and removing users.
+ */
 function renderUserList() {
-    const container = document.getElementById('user-list-container');
-    container.innerHTML = ''; // Clear existing list
-    const userList = (settings.userProfile && settings.userProfile.userList) || [];
+    const container = document.getElementById(CONSTANTS.DOM.IDS.userListContainer);
+    container.innerHTML = ''; // Clear existing list to prevent duplicates
+    const userList = settings.userProfile.userList || [];
 
     if (userList.length === 0) {
         container.innerHTML = '<p class="text-gray-500 text-sm">No users found. Add a user to get started.</p>';
@@ -170,69 +108,50 @@ function renderUserList() {
 
     userList.forEach(user => {
         const userItem = document.createElement('div');
-        userItem.className = 'user-item';
+        userItem.className = CONSTANTS.DOM.CLASSES.userItem;
 
         const nameContainer = document.createElement('div');
-        nameContainer.className = 'user-name-container';
+        nameContainer.className = CONSTANTS.DOM.CLASSES.userNameContainer;
 
         const nameDisplay = document.createElement('span');
         nameDisplay.textContent = user;
-        nameDisplay.className = 'user-name-display';
+        nameDisplay.className = CONSTANTS.DOM.CLASSES.userNameDisplay;
 
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.value = user;
-        nameInput.className = 'user-name-input hidden';
+        nameInput.className = `${CONSTANTS.DOM.CLASSES.userNameInput} ${CONSTANTS.DOM.CLASSES.hidden}`;
 
-        nameContainer.appendChild(nameDisplay);
-        nameContainer.appendChild(nameInput);
+        nameContainer.append(nameDisplay, nameInput);
 
         const actions = document.createElement('div');
-        actions.className = 'user-item-actions';
+        actions.className = CONSTANTS.DOM.CLASSES.userItemActions;
         
-        const editButton = document.createElement('button');
-        editButton.className = 'icon-button edit-button';
-        editButton.title = 'Edit User';
-        editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-        
-        const saveButton = document.createElement('button');
-        saveButton.className = 'icon-button save-button hidden';
-        saveButton.title = 'Save Changes';
-        saveButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-        
-        const cancelButton = document.createElement('button');
-        cancelButton.className = 'icon-button cancel-button hidden';
-        cancelButton.title = 'Cancel Edit';
-        cancelButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
-
-        const removeButton = document.createElement('button');
-        removeButton.className = 'icon-button remove-button';
-        removeButton.title = 'Remove User';
-        removeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+        // --- Create Action Buttons ---
+        const editButton = createIconButton('Edit User', 'edit-button', `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`);
+        const saveButton = createIconButton('Save Changes', 'save-button', `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`, true);
+        const cancelButton = createIconButton('Cancel Edit', 'cancel-button', `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`, true);
+        const removeButton = createIconButton('Remove User', 'remove-button', `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`);
         removeButton.disabled = userList.length <= 1;
 
-        editButton.onclick = () => {
-            nameDisplay.classList.add('hidden');
-            editButton.classList.add('hidden');
-            removeButton.classList.add('hidden');
-            
-            nameInput.classList.remove('hidden');
-            saveButton.classList.remove('hidden');
-            cancelButton.classList.remove('hidden');
-            nameInput.focus();
-            nameInput.select();
+        // --- Event Listeners for Edit Mode ---
+        const toggleEditMode = (isEditing) => {
+            nameDisplay.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, isEditing);
+            editButton.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, isEditing);
+            removeButton.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, isEditing);
+            nameInput.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, !isEditing);
+            saveButton.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, !isEditing);
+            cancelButton.classList.toggle(CONSTANTS.DOM.CLASSES.hidden, !isEditing);
+            if (isEditing) {
+                nameInput.focus();
+                nameInput.select();
+            }
         };
 
+        editButton.onclick = () => toggleEditMode(true);
         cancelButton.onclick = () => {
-            nameInput.classList.add('hidden');
-            saveButton.classList.add('hidden');
-            cancelButton.classList.add('hidden');
-
-            nameDisplay.classList.remove('hidden');
-            editButton.classList.remove('hidden');
-            removeButton.classList.remove('hidden');
-            
-            nameInput.value = user;
+            nameInput.value = user; // Reset input value
+            toggleEditMode(false);
         };
 
         saveButton.onclick = () => {
@@ -240,54 +159,71 @@ function renderUserList() {
             const newName = nameInput.value.trim();
 
             if (newName && newName !== oldName) {
-                const userList = settings.userProfile.userList;
-                if (userList.includes(newName)) {
+                if (settings.userProfile.userList.includes(newName)) {
                     console.error(`User "${newName}" already exists.`);
                     nameInput.style.borderColor = 'red';
                     setTimeout(() => { nameInput.style.borderColor = ''; }, 2000);
                     return;
                 }
-
-                const index = userList.indexOf(oldName);
+                const index = settings.userProfile.userList.indexOf(oldName);
                 if (index > -1) {
-                    userList[index] = newName;
+                    settings.userProfile.userList[index] = newName;
                     if (settings.userProfile.name === oldName) {
                         settings.userProfile.name = newName;
                     }
-                    saveSettings();
+                    saveSettings(); // This will re-render the list
                 }
             } else {
-                cancelButton.onclick();
+                toggleEditMode(false); // If name is empty or unchanged, just cancel
             }
         };
 
         nameInput.onkeydown = (event) => {
-            if (event.key === 'Enter') {
-                saveButton.onclick();
-            } else if (event.key === 'Escape') {
-                cancelButton.onclick();
-            }
+            if (event.key === 'Enter') saveButton.onclick();
+            else if (event.key === 'Escape') cancelButton.onclick();
         };
 
         removeButton.onclick = () => removeUser(user);
 
-        userItem.appendChild(nameContainer);
-        actions.appendChild(editButton);
-        actions.appendChild(saveButton);
-        actions.appendChild(cancelButton);
-        actions.appendChild(removeButton);
-        userItem.appendChild(actions);
+        actions.append(editButton, saveButton, cancelButton, removeButton);
+        userItem.append(nameContainer, actions);
         container.appendChild(userItem);
     });
 }
 
+/**
+ * Helper function to create an icon button for the user list actions.
+ * @param {string} title - The tooltip text for the button.
+ * @param {string} extraClass - An additional CSS class for the button.
+ * @param {string} innerHTML - The SVG icon for the button.
+ * @param {boolean} isHidden - Whether the button should be hidden initially.
+ * @returns {HTMLButtonElement} The created button element.
+ */
+function createIconButton(title, extraClass, innerHTML, isHidden = false) {
+    const button = document.createElement('button');
+    button.className = `${CONSTANTS.DOM.CLASSES.iconButton} ${extraClass}`;
+    if (isHidden) {
+        button.classList.add(CONSTANTS.DOM.CLASSES.hidden);
+    }
+    button.title = title;
+    button.innerHTML = innerHTML;
+    return button;
+}
+
+
+/**
+ * Removes a user from the settings and triggers a save and UI refresh.
+ * @param {string} nameToRemove - The name of the user to be removed.
+ */
 function removeUser(nameToRemove) {
     const userList = settings.userProfile.userList;
     if (userList.length <= 1) {
         console.warn("Cannot remove the last user.");
+        // Optionally, show a message to the user here.
         return;
     }
     settings.userProfile.userList = userList.filter(u => u !== nameToRemove);
+    // If the removed user was the 'active' one, select the first user in the list.
     if (settings.userProfile.name === nameToRemove) {
         settings.userProfile.name = settings.userProfile.userList[0] || "";
     }
@@ -295,14 +231,18 @@ function removeUser(nameToRemove) {
 }
 
 
+/**
+ * Asynchronously loads the header columns from the "Master List" sheet and renders them
+ * into the "Included" and "Available" columns lists for drag-and-drop management.
+ */
 async function loadAndRenderLdaColumns() {
-    const includedContainer = document.getElementById("included-columns");
-    const availableContainer = document.getElementById("available-columns");
-    const loader = document.getElementById("columns-loader");
+    const includedContainer = document.getElementById(CONSTANTS.DOM.IDS.includedColumns);
+    const availableContainer = document.getElementById(CONSTANTS.DOM.IDS.availableColumns);
+    const loader = document.getElementById(CONSTANTS.DOM.IDS.columnsLoader);
     
     try {
         await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.SHEET_NAMES.MASTER_LIST);
             const headerRange = sheet.getRange("1:1").getUsedRange(true);
             headerRange.load("values");
             await context.sync();
@@ -314,28 +254,28 @@ async function loadAndRenderLdaColumns() {
             const selectedColumns = settings.createlda.ldaColumns || [];
             const selectedSet = new Set(selectedColumns);
 
-            // Populate included columns in the saved order
+            // Populate included columns based on the saved order
             selectedColumns.forEach(header => {
                 if (allMasterColumns.includes(header)) {
                     includedContainer.appendChild(createColumnItem(header));
                 }
             });
 
-            // Populate available columns with the remaining items
+            // Populate available columns with all remaining (unselected) items
             allMasterColumns.forEach(header => {
                 if (!selectedSet.has(header)) {
                     availableContainer.appendChild(createColumnItem(header));
                 }
             });
             
-            loader.style.display = 'none';
+            loader.style.display = 'none'; // Hide loader on success
         });
 
-        // Initialize SortableJS on both lists
+        // Initialize SortableJS to enable drag-and-drop between the two lists
         const sharedSortableOptions = {
-            group: 'shared-columns', // set both lists to same group
+            group: 'shared-columns',
             animation: 150,
-            ghostClass: 'sortable-ghost'
+            ghostClass: CONSTANTS.DOM.CLASSES.sortableGhost
         };
         new Sortable(includedContainer, sharedSortableOptions);
         new Sortable(availableContainer, sharedSortableOptions);
@@ -345,58 +285,62 @@ async function loadAndRenderLdaColumns() {
         if (error instanceof OfficeExtension.Error) {
             console.error("Debug info:", JSON.stringify(error.debugInfo));
         }
-        loader.innerHTML = `<p class="error-message">Error: Could not load columns. Make sure a sheet named 'Master List' exists and has a header row.</p>`;
-        loader.classList.add('status-error', 'visible');
+        loader.innerHTML = `<p class="error-message">Error: Could not load columns. Make sure a sheet named '${CONSTANTS.SHEET_NAMES.MASTER_LIST}' exists and has a header row.</p>`;
+        loader.classList.add(CONSTANTS.DOM.CLASSES.statusError, CONSTANTS.DOM.CLASSES.visible);
     }
 }
 
+/**
+ * Creates a draggable column item element for the columns management section.
+ * @param {string} header - The text content for the column item.
+ * @returns {HTMLDivElement} The created column item element.
+ */
 function createColumnItem(header) {
     const colItem = document.createElement("div");
-    colItem.className = "column-item";
+    colItem.className = CONSTANTS.DOM.CLASSES.columnItem;
     colItem.textContent = header;
-    colItem.dataset.columnName = header;
+    colItem.dataset.columnName = header; // Store the name in a data attribute
     return colItem;
 }
 
-
+/**
+ * Gathers all current settings from the UI, updates the settings object,
+ * and saves it to the document.
+ */
 function saveSettings() {
-    // Note: The active user is no longer set from this pane.
-    // The user list is modified directly by the add/edit/remove functions.
+    // --- Gather Settings from UI ---
+    settings.taskpane.smartNavigation = document.getElementById(CONSTANTS.DOM.IDS.smartNavigationToggle).checked;
+    settings.createlda.daysOutFilter = parseInt(document.getElementById(CONSTANTS.DOM.IDS.daysOutFilter).value, 10) || 0;
+    settings.createlda.includeFailingList = document.getElementById(CONSTANTS.DOM.IDS.includeFailingList).checked;
+    settings.createlda.includeLdaTagFollowup = document.getElementById(CONSTANTS.DOM.IDS.includeLdaTagFollowup).checked;
+    settings.createlda.hideLeftoverColumns = document.getElementById(CONSTANTS.DOM.IDS.hideLeftoverColumns).checked;
+    settings.createlda.treatEmptyGradesAsZero = document.getElementById(CONSTANTS.DOM.IDS.treatEmptyGradesAsZero).checked;
 
-    // --- Task Pane ---
-    settings.taskpane.smartNavigation = document.getElementById("smart-navigation-toggle").checked;
-
-    // --- LDA Report ---
-    settings.createlda.daysOutFilter = parseInt(document.getElementById("days-out-filter").value, 10);
-    settings.createlda.includeFailingList = document.getElementById("include-failing-list").checked;
-    settings.createlda.includeLdaTagFollowup = document.getElementById("include-lda-tag-followup").checked; // Save new setting
-    settings.createlda.hideLeftoverColumns = document.getElementById("hide-leftover-columns").checked;
-    settings.createlda.treatEmptyGradesAsZero = document.getElementById("treat-empty-grades-as-zero").checked;
-
-    // Get selected columns from the "Included" list, preserving their order
-    const includedContainer = document.getElementById("included-columns");
-    const selectedItems = includedContainer.querySelectorAll(".column-item");
+    // Get the current order of columns from the "Included" list
+    const includedContainer = document.getElementById(CONSTANTS.DOM.IDS.includedColumns);
+    const selectedItems = includedContainer.querySelectorAll(`.${CONSTANTS.DOM.CLASSES.columnItem}`);
     settings.createlda.ldaColumns = Array.from(selectedItems).map(item => item.dataset.columnName);
 
-    // Save the updated settings object
-    Office.context.document.settings.set(CONSTANTS.SETTINGS_KEY, JSON.stringify(settings));
+    // --- Save to Document ---
+    Office.context.document.settings.set(CONSTANTS.SETTINGS_KEYS.APP, JSON.stringify(settings));
     Office.context.document.settings.saveAsync(function (asyncResult) {
-        const status = document.getElementById('status');
+        const status = document.getElementById(CONSTANTS.DOM.IDS.status);
         if (asyncResult.status == Office.AsyncResultStatus.Failed) {
-            console.log('Settings failed to save. Error: ' + asyncResult.error.message);
+            console.error('Settings failed to save. Error: ' + asyncResult.error.message);
             status.textContent = 'Error saving settings.';
-            status.className = 'status-message status-error visible';
+            status.className = `${CONSTANTS.DOM.CLASSES.statusMessage} ${CONSTANTS.DOM.CLASSES.statusError} ${CONSTANTS.DOM.CLASSES.visible}`;
         } else {
             console.log('Settings saved successfully.');
             status.textContent = 'Settings saved!';
-            status.className = 'status-message status-success visible';
-            // Reload UI to reflect all changes consistently
+            status.className = `${CONSTANTS.DOM.CLASSES.statusMessage} ${CONSTANTS.DOM.CLASSES.statusSuccess} ${CONSTANTS.DOM.CLASSES.visible}`;
+            // Reload the entire UI to ensure consistency after saving
             loadSettingsAndPopulateUI();
         }
-        // Clear the message after a few seconds
+        // Clear the status message after a few seconds
         setTimeout(() => {
             status.textContent = '';
-            status.className = 'status-message';
+            status.className = CONSTANTS.DOM.CLASSES.statusMessage;
         }, 3000);
     });
 }
+
