@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 11:36 AM | Version: 1.4.1
+// Timestamp: 2025-10-02 11:55 AM | Version: 1.4.2
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -39,20 +39,32 @@ function initializeSettingsExplorer() {
                 const allSettings = {};
                 let hasSettings = false;
                 
-                // It's safe to access Office.context.document.settings within Excel.run
-                const settings = Office.context.document.settings;
+                const workbookSettings = context.workbook.settings;
+                const settingItems = {};
 
-                // Fetch each known setting key from constants.js
+                // 1. Get all setting items and queue up a 'load' command for their values.
                 for (const key in CONSTANTS.SETTINGS_KEYS) {
                     const settingKey = CONSTANTS.SETTINGS_KEYS[key];
-                    const settingsString = settings.get(settingKey);
-                    if (settingsString) {
+                    const settingItem = workbookSettings.getItemOrNullObject(settingKey);
+                    settingItem.load("value");
+                    settingItems[settingKey] = settingItem;
+                }
+                
+                // 2. Sync to execute all the queued 'load' commands in one network call.
+                await context.sync();
+
+                // 3. Now that values are loaded, process them.
+                for (const settingKey in settingItems) {
+                    const settingItem = settingItems[settingKey];
+                    if (settingItem.value) { 
+                        const settingsString = settingItem.value;
                         try {
                             allSettings[settingKey] = JSON.parse(settingsString);
                             hasSettings = true;
                         } catch (e) {
                             console.warn(`Could not parse setting for key "${settingKey}":`, e);
                             allSettings[settingKey] = "[Error: Invalid JSON]";
+                            hasSettings = true; // Still show the error in the UI
                         }
                     }
                 }
@@ -68,6 +80,9 @@ function initializeSettingsExplorer() {
             });
         } catch (error) {
             console.error("Error populating settings tree:", error);
+            if (error instanceof OfficeExtension.Error) {
+                console.error("Debug info: " + JSON.stringify(error.debugInfo));
+            }
             treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree.</div>`;
         }
     };
