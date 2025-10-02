@@ -1,15 +1,16 @@
-// Timestamp: 2025-10-02 03:20 PM | Version: 1.0.0
+// Timestamp: 2025-10-02 04:22 PM | Version: 1.2.0
+import React from 'react';
+// The import path is updated to look inside the new folder.
+import StudentView from './components/studentView/StudentView.jsx';
 import './App.css';
 
 function App() {
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>Student Retention Settings</h1>
-        <p>This is the new settings page, powered by React!</p>
-      </header>
+      <StudentView />
     </div>
   );
 }
 
 export default App;
+
