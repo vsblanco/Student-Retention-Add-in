@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 10:07 AM | Version: 1.2.0
+// Timestamp: 2025-10-02 10:10 AM | Version: 1.3.0
 let settings = {};
 
 Office.onReady((info) => {
@@ -12,8 +12,54 @@ Office.onReady((info) => {
         
         // Initialize the "Add User" modal functionality
         initializeAddUserModal(settings, saveSettings);
+        
+        // Initialize the collapsible sections
+        initializeAccordions();
     }
 });
+
+/**
+ * Initializes the behavior for all collapsible sections on the page.
+ * Sections are collapsed by default and can be toggled by clicking the header.
+ */
+function initializeAccordions() {
+    document.querySelectorAll(".section-header.collapsible").forEach(header => {
+        const content = header.nextElementSibling;
+
+        // Set initial ARIA attributes for accessibility
+        header.setAttribute('aria-expanded', 'false');
+        if (content) {
+            const contentId = `section-content-${Math.random().toString(36).substr(2, 9)}`;
+            content.setAttribute('id', contentId);
+            header.setAttribute('aria-controls', contentId);
+        }
+
+        const toggleSection = () => {
+            const isExpanded = header.getAttribute('aria-expanded') === 'true';
+            header.setAttribute('aria-expanded', !isExpanded);
+            header.classList.toggle('expanded');
+            if (content) {
+                content.classList.toggle('expanded');
+            }
+        };
+
+        header.addEventListener('click', (e) => {
+            // Prevent the accordion from toggling if a button or other interactive element in the header is clicked.
+            if (e.target.closest('button, input, select, a')) {
+                return;
+            }
+            toggleSection();
+        });
+
+        header.addEventListener('keydown', (event) => {
+            // Allow toggling with Enter or Space key for accessibility
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleSection();
+            }
+        });
+    });
+}
 
 /**
  * Resets the add-in settings to their default values by removing the settings key
