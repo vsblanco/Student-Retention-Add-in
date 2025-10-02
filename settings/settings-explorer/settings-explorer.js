@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 12:43 PM | Version: 1.4.5
+// Timestamp: 2025-10-02 12:56 PM | Version: 1.4.6
 Office.onReady((info) => {
     console.log("Office is ready. Host:", info.host);
     if (info.host === Office.HostType.Excel) {
@@ -30,72 +30,64 @@ function initializeSettingsExplorer() {
     };
 
     /**
-     * Fetches all settings from the workbook and renders them in the tree view.
-     * This version fetches keys one by one for better debugging.
+     * Fetches ALL settings from the workbook, not just known ones, and renders them.
      */
     const populateTree = async () => {
-        console.log("Attempting to populate the settings tree with a one-by-one strategy...");
+        console.log("Attempting to populate tree with ALL settings from the workbook...");
         treeContainer.innerHTML = ''; // Clear previous content
+        
+        try {
+            await Excel.run(async (context) => {
+                console.log("Excel.run() context started.");
+                const allSettings = {};
+                
+                const workbookSettings = context.workbook.settings;
+                // Load the 'items' property to get all settings at once.
+                workbookSettings.load("items");
+                
+                console.log("Executing context.sync() to fetch all setting items...");
+                await context.sync();
+                console.log("context.sync() completed successfully.");
 
-        const allSettings = {};
-        let hasSettings = false;
-        const settingKeysToLoad = Object.values(CONSTANTS.SETTINGS_KEYS);
-        console.log(`Found ${settingKeysToLoad.length} setting keys to load individually.`);
+                const settingItems = workbookSettings.items;
+                console.log(`Found ${settingItems.length} total settings in the workbook.`);
 
-        for (const settingKey of settingKeysToLoad) {
-            console.log(`--- Processing key: "${settingKey}" ---`);
-            try {
-                await Excel.run(async (context) => {
-                    console.log(`  [Excel.run] for "${settingKey}" started.`);
-                    const settingItem = context.workbook.settings.getItemOrNullObject(settingKey);
-                    settingItem.load("value");
-                    
-                    console.log(`  Executing context.sync() for "${settingKey}"...`);
-                    await context.sync();
-                    console.log(`  context.sync() for "${settingKey}" completed.`);
-
-                    if (settingItem.value) {
-                        console.log(`  Value found for "${settingKey}".`);
-                        const settingsString = settingItem.value;
+                if (settingItems.length > 0) {
+                    for (const settingItem of settingItems) {
+                        const key = settingItem.key;
+                        const value = settingItem.value;
+                        console.log(`- Processing setting with key: "${key}"`);
                         try {
-                            allSettings[settingKey] = JSON.parse(settingsString);
-                            hasSettings = true;
-                            console.log(`  -> Successfully parsed JSON for "${settingKey}".`);
+                            allSettings[key] = JSON.parse(value);
+                            console.log(`  -> Successfully parsed JSON for "${key}".`);
                         } catch (e) {
-                            console.warn(`  Could not parse setting for key "${settingKey}":`, e);
-                            allSettings[settingKey] = "[Error: Invalid JSON]";
-                            hasSettings = true;
+                            console.warn(`  Could not parse setting for key "${key}". Displaying raw value. Error:`, e);
+                            // If it's not JSON, display the raw string value.
+                            allSettings[key] = value;
                         }
-                    } else {
-                        console.log(`  No value found for setting key "${settingKey}".`);
                     }
-                });
-            } catch (error) {
-                console.error(`Fatal error processing key "${settingKey}":`, error);
-                if (error instanceof OfficeExtension.Error) {
-                    console.error("  Debug info: " + JSON.stringify(error.debugInfo));
+
+                    console.log("Final compiled settings object:", allSettings);
+                    console.log("Building tree view...");
+                    const rootUl = document.createElement('ul');
+                    rootUl.className = 'settings-tree';
+                    buildTree(allSettings, rootUl);
+                    treeContainer.appendChild(rootUl);
+                    console.log("Tree view built and appended to the DOM.");
+
+                } else {
+                    console.log("No settings were found in the workbook.");
+                    treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
                 }
-                allSettings[settingKey] = `[Error: Failed to load this setting. See console.]`;
-                hasSettings = true; // Mark as having settings so we can display the error
+            });
+        } catch (error) {
+            console.error("Fatal error in populateTree:", error);
+            if (error instanceof OfficeExtension.Error) {
+                console.error("Debug info: " + JSON.stringify(error.debugInfo));
             }
-        }
-
-        console.log("--- All keys processed. ---");
-        console.log("Final compiled settings object:", allSettings);
-
-        if (hasSettings) {
-            console.log("Settings/errors found. Building tree view...");
-            const rootUl = document.createElement('ul');
-            rootUl.className = 'settings-tree';
-            buildTree(allSettings, rootUl);
-            treeContainer.appendChild(rootUl);
-            console.log("Tree view built and appended to the DOM.");
-        } else {
-            console.log("No settings were found in the workbook.");
-            treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
+            treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree. Check the console for details.</div>`;
         }
     };
-
 
     /**
      * Recursively builds the HTML for the settings tree.
@@ -146,7 +138,8 @@ function initializeSettingsExplorer() {
                     nodeHeader.appendChild(document.createTextNode(': '));
                     
                     const valueSpan = document.createElement('span');
-                    valueSpan.className = `node-value-${valueType}`;
+                    // Special handling for raw string values that failed to parse
+                    valueSpan.className = `node-value-${typeof value === 'string' ? 'string' : valueType}`;
                     valueSpan.textContent = value;
                     
                     const copyButton = document.createElement('button');
@@ -156,7 +149,9 @@ function initializeSettingsExplorer() {
 
                     copyButton.onclick = (e) => {
                         e.stopPropagation();
-                        navigator.clipboard.writeText(value).then(() => {
+                        // Make sure to copy even non-string values correctly
+                        const textToCopy = typeof value !== 'string' ? JSON.stringify(value) : value;
+                        navigator.clipboard.writeText(textToCopy).then(() => {
                             copyButton.innerHTML = ICONS.check;
                             copyButton.classList.add('copied');
                             setTimeout(() => {
@@ -189,3 +184,4 @@ function initializeSettingsExplorer() {
     // Initial population of the tree view
     populateTree();
 }
+

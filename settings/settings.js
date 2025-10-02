@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 11:27 AM | Version: 1.5.0
+// Timestamp: 2025-10-02 12:56 PM | Version: 1.5.2
 let settings = {};
 let settingsDialog = null; // Variable to hold the dialog object
 
