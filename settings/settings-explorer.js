@@ -1,18 +1,13 @@
-// Timestamp: 2025-10-02 12:56 PM | Version: 1.4.6
-Office.onReady((info) => {
-    console.log("Office is ready. Host:", info.host);
-    if (info.host === Office.HostType.Excel) {
-        initializeSettingsExplorer();
-    }
-});
+// Timestamp: 2025-10-02 10:43 AM | Version: 1.2.0
 
 /**
- * Initializes the settings explorer page, handling the rendering of the 
- * settings data into a modern tree view and the close button functionality.
+ * Initializes the settings explorer modal, handling its opening, closing,
+ * and the rendering of the settings data into a modern tree view.
  */
-function initializeSettingsExplorer() {
-    console.log("Initializing Settings Explorer...");
+function initializeSettingsExplorerModal() {
     // --- Get DOM Elements ---
+    const explorerModal = document.getElementById('settings-explorer-modal');
+    const openButton = document.getElementById('view-settings-button');
     const closeButton = document.getElementById('close-settings-explorer-button');
     const treeContainer = document.getElementById('settings-tree-container');
 
@@ -29,63 +24,36 @@ function initializeSettingsExplorer() {
         check: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
     };
 
-    /**
-     * Fetches ALL settings from the workbook, not just known ones, and renders them.
-     */
-    const populateTree = async () => {
-        console.log("Attempting to populate tree with ALL settings from the workbook...");
+    // --- Modal Visibility ---
+    const showModal = () => {
+        populateTree();
+        explorerModal.style.display = 'flex';
+    };
+
+    const hideModal = () => {
+        explorerModal.style.display = 'none';
+    };
+
+    // --- Tree Building Logic ---
+    const populateTree = () => {
         treeContainer.innerHTML = ''; // Clear previous content
-        
-        try {
-            await Excel.run(async (context) => {
-                console.log("Excel.run() context started.");
-                const allSettings = {};
-                
-                const workbookSettings = context.workbook.settings;
-                // Load the 'items' property to get all settings at once.
-                workbookSettings.load("items");
-                
-                console.log("Executing context.sync() to fetch all setting items...");
-                await context.sync();
-                console.log("context.sync() completed successfully.");
+        const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEYS.APP);
 
-                const settingItems = workbookSettings.items;
-                console.log(`Found ${settingItems.length} total settings in the workbook.`);
-
-                if (settingItems.length > 0) {
-                    for (const settingItem of settingItems) {
-                        const key = settingItem.key;
-                        const value = settingItem.value;
-                        console.log(`- Processing setting with key: "${key}"`);
-                        try {
-                            allSettings[key] = JSON.parse(value);
-                            console.log(`  -> Successfully parsed JSON for "${key}".`);
-                        } catch (e) {
-                            console.warn(`  Could not parse setting for key "${key}". Displaying raw value. Error:`, e);
-                            // If it's not JSON, display the raw string value.
-                            allSettings[key] = value;
-                        }
-                    }
-
-                    console.log("Final compiled settings object:", allSettings);
-                    console.log("Building tree view...");
-                    const rootUl = document.createElement('ul');
-                    rootUl.className = 'settings-tree';
-                    buildTree(allSettings, rootUl);
-                    treeContainer.appendChild(rootUl);
-                    console.log("Tree view built and appended to the DOM.");
-
-                } else {
-                    console.log("No settings were found in the workbook.");
-                    treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
-                }
-            });
-        } catch (error) {
-            console.error("Fatal error in populateTree:", error);
-            if (error instanceof OfficeExtension.Error) {
-                console.error("Debug info: " + JSON.stringify(error.debugInfo));
+        if (settingsString) {
+            try {
+                const settingsObject = JSON.parse(settingsString);
+                // Create a root object for a cleaner top-level presentation
+                const rootData = { "studentRetentionSettings": settingsObject };
+                const rootUl = document.createElement('ul');
+                rootUl.className = 'settings-tree';
+                buildTree(rootData, rootUl, true); // Pass isRoot = true
+                treeContainer.appendChild(rootUl);
+            } catch (error) {
+                console.error("Error parsing settings for explorer:", error);
+                treeContainer.innerHTML = `<div class="explorer-error">Error: Could not parse settings JSON.</div>`;
             }
-            treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree. Check the console for details.</div>`;
+        } else {
+            treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
         }
     };
 
@@ -138,8 +106,7 @@ function initializeSettingsExplorer() {
                     nodeHeader.appendChild(document.createTextNode(': '));
                     
                     const valueSpan = document.createElement('span');
-                    // Special handling for raw string values that failed to parse
-                    valueSpan.className = `node-value-${typeof value === 'string' ? 'string' : valueType}`;
+                    valueSpan.className = `node-value-${valueType}`;
                     valueSpan.textContent = value;
                     
                     const copyButton = document.createElement('button');
@@ -149,9 +116,9 @@ function initializeSettingsExplorer() {
 
                     copyButton.onclick = (e) => {
                         e.stopPropagation();
-                        // Make sure to copy even non-string values correctly
-                        const textToCopy = typeof value !== 'string' ? JSON.stringify(value) : value;
-                        navigator.clipboard.writeText(textToCopy).then(() => {
+                        // navigator.clipboard is a secure API, may not work in all environments without HTTPS.
+                        // However, it's the modern and correct way.
+                        navigator.clipboard.writeText(value).then(() => {
                             copyButton.innerHTML = ICONS.check;
                             copyButton.classList.add('copied');
                             setTimeout(() => {
@@ -160,6 +127,7 @@ function initializeSettingsExplorer() {
                             }, 1500);
                         }).catch(err => {
                             console.error('Failed to copy text: ', err);
+                            // You could implement a fallback here if needed
                         });
                     };
 
@@ -173,15 +141,14 @@ function initializeSettingsExplorer() {
     };
 
     // --- Attach Event Listeners ---
-    console.log("Attaching event listener to close button.");
-    // The messageParent API is the standard way to close a dialog in Office Add-ins.
-    // We pass a message (can be anything) to signal the host page to close this dialog.
-    closeButton.onclick = () => {
-        console.log("Close button clicked. Sending 'close' message to parent.");
-        Office.context.ui.messageParent("close");
-    };
+    openButton.onclick = showModal;
+    closeButton.onclick = hideModal;
 
-    // Initial population of the tree view
-    populateTree();
+    explorerModal.addEventListener('click', (event) => {
+        if (event.target === explorerModal) hideModal();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && explorerModal.style.display === 'flex') hideModal();
+    });
 }
-

@@ -1,10 +1,8 @@
-// Timestamp: 2025-10-02 11:23 AM | Version: 1.1.0
+// Timestamp: 2025-10-02 10:04 AM | Version: 1.0.0
 const CONSTANTS = {
     // Keys for Office.context.document.settings
     SETTINGS_KEYS: {
-        APP: "studentRetentionSettings",
-        EMAIL_TEMPLATES: "emailTemplates",
-        CUSTOM_PARAMS: "customParams"
+        APP: "studentRetentionSettings"
     },
     // Names of worksheets used in the add-in
     SHEET_NAMES: {
