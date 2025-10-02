@@ -1,4 +1,3 @@
-// Timestamp: 2025-10-02 11:04 AM | Version: 1.7.0
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     margin: 0;
@@ -477,55 +476,47 @@ input:checked + .slider:before {
     padding: 10px 16px;
 }
 
-/* --- Modern Settings Explorer Modal Styles --- */
+/* --- Settings Explorer Modal Styles --- */
 .settings-explorer-modal-content {
     max-width: 600px;
     width: 95%;
-    padding: 0;
+    padding: 0; /* Remove default padding */
     display: flex;
     flex-direction: column;
-    background-color: #f8f9fa; /* Light background for the modal */
-    border: 1px solid #dee2e6;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
 }
 
 .settings-explorer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 20px;
-    background-color: #ffffff;
-    border-bottom: 1px solid #dee2e6;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0;
 }
 
 .settings-explorer-header h3 {
     margin: 0;
-    font-size: 16px;
-    font-weight: 600;
 }
 
 .settings-tree-container {
     background-color: #ffffff;
-    padding: 10px;
+    padding: 15px 24px;
     height: 400px;
     overflow-y: auto;
-    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+    font-family: Menlo, Monaco, 'Courier New', monospace;
     font-size: 13px;
-    line-height: 1.7; /* Increased line height for spacing */
-    border-top: 1px solid #dee2e6;
+    line-height: 1.6;
 }
 
 .explorer-error, .explorer-empty {
-    color: #6c757d;
-    padding: 20px;
-    text-align: center;
+    color: #6b7280;
+    padding: 10px;
 }
 
 .settings-tree ul {
     position: relative;
     list-style-type: none;
-    padding-left: 20px;
+    padding-left: 22px;
     margin: 0;
 }
 
@@ -534,12 +525,13 @@ input:checked + .slider:before {
     content: '';
     position: absolute;
     top: 0;
-    left: 9px;
+    left: 8px;
     bottom: 0;
     width: 1px;
-    background: #e9ecef;
+    background: #e5e7eb;
 }
 
+/* Remove guide lines from the root UL */
 .settings-tree > ul {
     padding-left: 0;
 }
@@ -550,19 +542,37 @@ input:checked + .slider:before {
 .settings-tree li {
     position: relative;
 }
+/* Horizontal line connecting to vertical guide */
+.settings-tree li::before {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: -14px;
+    width: 14px;
+    height: 1px;
+    background: #e5e7eb;
+}
+.settings-tree > ul > li::before {
+    display: none;
+}
+/* Don't draw line past the last item in a list */
+.settings-tree li:last-child > ul::before {
+    height: 14px;
+}
+
 
 .settings-tree .node-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
-    border-radius: 5px;
+    padding: 3px 6px;
+    border-radius: 4px;
     transition: background-color 0.15s;
-    position: relative;
+    position: relative; /* For copy button positioning */
 }
 
 .settings-tree .node-header:hover {
-    background-color: #eef2ff; /* Light indigo on hover */
+    background-color: #f0f4f9;
 }
 
 .settings-tree .tree-icon {
@@ -571,42 +581,42 @@ input:checked + .slider:before {
     flex-shrink: 0;
 }
 
-/* Modern Icon Colors */
-.tree-icon.chevron { color: #6c757d; }
-.tree-icon.object { color: #4361ee; } /* Stronger blue */
-.tree-icon.array { color: #f72585; }  /* Vibrant pink */
-.tree-icon.string { color: #2a9d8f; } /* Teal */
-.tree-icon.number { color: #7209b7; } /* Purple */
-.tree-icon.boolean { color: #f48c06;} /* Orange */
-.tree-icon.null { color: #adb5bd; }   /* Lighter gray */
+/* Icon Colors */
+.tree-icon.chevron { color: #6b7280; }
+.tree-icon.object { color: #4f46e5; }
+.tree-icon.array { color: #db2777; }
+.tree-icon.string { color: #16a34a; }
+.tree-icon.number { color: #9333ea; }
+.tree-icon.boolean { color: #ea580c; }
+.tree-icon.null { color: #78716c; }
 
 .settings-tree .node-key {
     font-weight: 500;
-    color: #343a40; /* Darker key color */
+    color: #1e3a8a;
 }
 
 .settings-tree .node-array-count {
     font-weight: normal;
     font-style: italic;
-    color: #6c757d;
+    color: #6b7280;
     font-size: 0.9em;
-    margin-left: 6px;
+    margin-left: 8px;
 }
 
-/* Modern Value styling */
-.settings-tree .node-value-string { color: #2a9d8f; }
+/* Value styling */
+.settings-tree .node-value-string { color: #166534; }
 .settings-tree .node-value-string::before,
-.settings-tree .node-value-string::after { content: '"'; color: #a9d6d1; }
-.settings-tree .node-value-number { color: #7209b7; }
-.settings-tree .node-value-boolean { color: #f48c06; font-weight: 500; }
-.settings-tree .node-value-null { color: #adb5bd; font-style: italic; }
+.settings-tree .node-value-string::after { content: '"'; color: #16a34a; }
+.settings-tree .node-value-number { color: #991b1b; }
+.settings-tree .node-value-boolean { color: #7c2d12; font-weight: bold; }
+.settings-tree .node-value-null { color: #6b7280; font-style: italic; }
 
 .settings-tree .collapsible-node > .node-header {
     cursor: pointer;
 }
 
 .settings-tree .collapsible-node > .node-header .tree-icon.chevron {
-    transition: transform 0.2s ease-in-out;
+    transition: transform 0.2s;
 }
 
 .settings-tree .collapsible-node.expanded > .node-header .tree-icon.chevron {
@@ -621,23 +631,19 @@ input:checked + .slider:before {
     display: block;
 }
 
-/* Modern Copy button */
+/* Copy button appears on row hover */
 .settings-tree .node-header .copy-button {
     visibility: hidden;
     opacity: 0;
-    transition: opacity 0.15s, color 0.15s;
-    margin-left: auto;
+    transition: opacity 0.15s;
+    margin-left: auto; /* Push to the far right */
     padding: 2px;
-    color: #6c757d;
 }
 .settings-tree .node-header:hover .copy-button {
     visibility: visible;
     opacity: 1;
 }
-.settings-tree .node-header .copy-button:hover {
-    color: #343a40;
-}
 .copy-button.copied {
-    color: #28a745 !important; /* Green success color */
+    color: #16a34a;
 }
 
