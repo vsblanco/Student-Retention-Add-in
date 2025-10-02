@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 11:27 AM | Version: 1.4.0
+// Timestamp: 2025-10-02 11:36 AM | Version: 1.4.1
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -31,39 +31,44 @@ function initializeSettingsExplorer() {
     /**
      * Fetches all settings from the workbook and renders them in the tree view.
      */
-    const populateTree = () => {
+    const populateTree = async () => {
         treeContainer.innerHTML = ''; // Clear previous content
         
-        const allSettings = {};
-        let hasSettings = false;
+        try {
+            await Excel.run(async (context) => {
+                const allSettings = {};
+                let hasSettings = false;
+                
+                // It's safe to access Office.context.document.settings within Excel.run
+                const settings = Office.context.document.settings;
 
-        // Fetch each known setting key from constants.js
-        for (const key in CONSTANTS.SETTINGS_KEYS) {
-            const settingKey = CONSTANTS.SETTINGS_KEYS[key];
-            const settingsString = Office.context.document.settings.get(settingKey);
-            if (settingsString) {
-                try {
-                    allSettings[settingKey] = JSON.parse(settingsString);
-                    hasSettings = true;
-                } catch (e) {
-                    console.warn(`Could not parse setting for key "${settingKey}":`, e);
-                    allSettings[settingKey] = "[Error: Invalid JSON]";
+                // Fetch each known setting key from constants.js
+                for (const key in CONSTANTS.SETTINGS_KEYS) {
+                    const settingKey = CONSTANTS.SETTINGS_KEYS[key];
+                    const settingsString = settings.get(settingKey);
+                    if (settingsString) {
+                        try {
+                            allSettings[settingKey] = JSON.parse(settingsString);
+                            hasSettings = true;
+                        } catch (e) {
+                            console.warn(`Could not parse setting for key "${settingKey}":`, e);
+                            allSettings[settingKey] = "[Error: Invalid JSON]";
+                        }
+                    }
                 }
-            }
-        }
 
-        if (hasSettings) {
-            try {
-                const rootUl = document.createElement('ul');
-                rootUl.className = 'settings-tree';
-                buildTree(allSettings, rootUl);
-                treeContainer.appendChild(rootUl);
-            } catch (error) {
-                console.error("Error building settings tree:", error);
-                treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree.</div>`;
-            }
-        } else {
-            treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
+                if (hasSettings) {
+                    const rootUl = document.createElement('ul');
+                    rootUl.className = 'settings-tree';
+                    buildTree(allSettings, rootUl);
+                    treeContainer.appendChild(rootUl);
+                } else {
+                    treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
+                }
+            });
+        } catch (error) {
+            console.error("Error populating settings tree:", error);
+            treeContainer.innerHTML = `<div class="explorer-error">Error: Could not render the settings tree.</div>`;
         }
     };
 
@@ -155,3 +160,4 @@ function initializeSettingsExplorer() {
     // Initial population of the tree view
     populateTree();
 }
+
