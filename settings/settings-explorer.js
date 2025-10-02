@@ -1,8 +1,8 @@
-// Timestamp: 2025-10-02 10:37 AM | Version: 1.1.0
+// Timestamp: 2025-10-02 10:43 AM | Version: 1.2.0
 
 /**
  * Initializes the settings explorer modal, handling its opening, closing,
- * and the rendering of the settings data into a tree view.
+ * and the rendering of the settings data into a modern tree view.
  */
 function initializeSettingsExplorerModal() {
     // --- Get DOM Elements ---
@@ -11,11 +11,17 @@ function initializeSettingsExplorerModal() {
     const closeButton = document.getElementById('close-settings-explorer-button');
     const treeContainer = document.getElementById('settings-tree-container');
 
-    // --- SVG Icons ---
+    // --- SVG Icons for a richer UI ---
     const ICONS = {
-        chevron: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon chevron"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
-        folder: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`,
-        file: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`
+        chevron: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="tree-icon chevron"><polyline points="9 18 15 12 9 6"></polyline></svg>`,
+        object: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon object"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`,
+        array: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon array"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="8" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="16" y2="21"></line></svg>`,
+        string: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon string"><path d="M4 12h16M4 18h16M4 6h16"/></svg>`,
+        number: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon number"><line x1="5" y1="12" x2="19" y2="12"></line><line x1="12" y1="5" x2="12" y2="19"></line></svg>`,
+        boolean: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon boolean"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+        null: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tree-icon null"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>`,
+        copy: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`,
+        check: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
     };
 
     // --- Modal Visibility ---
@@ -29,10 +35,6 @@ function initializeSettingsExplorerModal() {
     };
 
     // --- Tree Building Logic ---
-
-    /**
-     * Fetches the latest settings and populates the tree view.
-     */
     const populateTree = () => {
         treeContainer.innerHTML = ''; // Clear previous content
         const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEYS.APP);
@@ -40,16 +42,18 @@ function initializeSettingsExplorerModal() {
         if (settingsString) {
             try {
                 const settingsObject = JSON.parse(settingsString);
+                // Create a root object for a cleaner top-level presentation
+                const rootData = { "studentRetentionSettings": settingsObject };
                 const rootUl = document.createElement('ul');
                 rootUl.className = 'settings-tree';
-                buildTree(settingsObject, rootUl);
+                buildTree(rootData, rootUl, true); // Pass isRoot = true
                 treeContainer.appendChild(rootUl);
             } catch (error) {
                 console.error("Error parsing settings for explorer:", error);
-                treeContainer.textContent = 'Error: Could not parse settings JSON.';
+                treeContainer.innerHTML = `<div class="explorer-error">Error: Could not parse settings JSON.</div>`;
             }
         } else {
-            treeContainer.textContent = 'No settings have been saved for this add-in yet.';
+            treeContainer.innerHTML = `<div class="explorer-empty">No settings have been saved for this add-in yet.</div>`;
         }
     };
 
@@ -72,36 +76,63 @@ function initializeSettingsExplorerModal() {
                 
                 if (value !== null && typeof value === 'object') {
                     // This is a collapsible node (object or array)
-                    li.className = 'collapsible-node';
-                    const childUl = document.createElement('ul');
+                    const isArray = Array.isArray(value);
+                    li.className = 'collapsible-node expanded'; // Expand by default
+                    nodeHeader.innerHTML = ICONS.chevron + (isArray ? ICONS.array : ICONS.object);
+                    nodeHeader.appendChild(keySpan);
                     
-                    // Add icons for folder/array
-                    nodeHeader.innerHTML = ICONS.chevron;
-                    nodeHeader.innerHTML += ICONS.folder;
+                    if (isArray) {
+                        const countSpan = document.createElement('span');
+                        countSpan.className = 'node-array-count';
+                        countSpan.textContent = `(${value.length} items)`;
+                        keySpan.appendChild(countSpan);
+                    }
 
-                    // Add click listener to the header to toggle collapse
+                    const childUl = document.createElement('ul');
+                    li.appendChild(nodeHeader);
+                    li.appendChild(childUl);
+                    
                     nodeHeader.addEventListener('click', (e) => {
-                        e.stopPropagation(); // prevent event bubbling
+                        e.stopPropagation();
                         li.classList.toggle('expanded');
                     });
                     
-                    nodeHeader.appendChild(keySpan);
-                    li.appendChild(nodeHeader);
-                    li.appendChild(childUl);
-
-                    // Recursively build the tree for the nested object/array
                     buildTree(value, childUl);
                 } else {
                     // This is a simple value node (leaf)
-                    nodeHeader.innerHTML = ICONS.file;
+                    const valueType = value === null ? 'null' : typeof value;
+                    nodeHeader.innerHTML = ICONS[valueType] || ICONS.string; // Fallback to string icon
                     nodeHeader.appendChild(keySpan);
                     nodeHeader.appendChild(document.createTextNode(': '));
                     
                     const valueSpan = document.createElement('span');
-                    const valueType = value === null ? 'null' : typeof value;
                     valueSpan.className = `node-value-${valueType}`;
                     valueSpan.textContent = value;
+                    
+                    const copyButton = document.createElement('button');
+                    copyButton.className = 'copy-button icon-button';
+                    copyButton.title = 'Copy value';
+                    copyButton.innerHTML = ICONS.copy;
+
+                    copyButton.onclick = (e) => {
+                        e.stopPropagation();
+                        // navigator.clipboard is a secure API, may not work in all environments without HTTPS.
+                        // However, it's the modern and correct way.
+                        navigator.clipboard.writeText(value).then(() => {
+                            copyButton.innerHTML = ICONS.check;
+                            copyButton.classList.add('copied');
+                            setTimeout(() => {
+                                copyButton.innerHTML = ICONS.copy;
+                                copyButton.classList.remove('copied');
+                            }, 1500);
+                        }).catch(err => {
+                            console.error('Failed to copy text: ', err);
+                            // You could implement a fallback here if needed
+                        });
+                    };
+
                     nodeHeader.appendChild(valueSpan);
+                    nodeHeader.appendChild(copyButton);
                     li.appendChild(nodeHeader);
                 }
                 parentElement.appendChild(li);
@@ -113,18 +144,12 @@ function initializeSettingsExplorerModal() {
     openButton.onclick = showModal;
     closeButton.onclick = hideModal;
 
-    // Hide the modal if the user clicks the dark overlay background
     explorerModal.addEventListener('click', (event) => {
-        if (event.target === explorerModal) {
-            hideModal();
-        }
+        if (event.target === explorerModal) hideModal();
     });
 
-    // Hide the modal if the user presses the Escape key
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && explorerModal.style.display === 'flex') {
-            hideModal();
-        }
+        if (event.key === 'Escape' && explorerModal.style.display === 'flex') hideModal();
     });
 }
 
