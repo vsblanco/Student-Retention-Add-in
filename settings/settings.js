@@ -1,6 +1,5 @@
-// Timestamp: 2025-10-02 12:56 PM | Version: 1.5.2
+// Timestamp: 2025-10-02 10:25 AM | Version: 1.4.0
 let settings = {};
-let settingsDialog = null; // Variable to hold the dialog object
 
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
@@ -10,41 +9,17 @@ Office.onReady((info) => {
         // Add event listeners for the main buttons
         document.getElementById(CONSTANTS.DOM.IDS.saveButton).onclick = saveSettings;
         document.getElementById(CONSTANTS.DOM.IDS.resetButton).onclick = resetSettings;
-        document.getElementById('view-settings-button').onclick = openSettingsExplorer;
         
         // Initialize the "Add User" modal functionality
         initializeAddUserModal(settings, saveSettings);
         
         // Initialize the collapsible sections
         initializeAccordions();
+        
+        // Initialize the settings explorer modal
+        initializeSettingsExplorerModal();
     }
 });
-
-/**
- * Opens the Settings Explorer in a new dialog window.
- */
-function openSettingsExplorer() {
-    // Construct the full URL for the dialog. Assumes it's hosted at the same domain.
-    const dialogUrl = new URL('settings-explorer/settings-explorer.html', window.location.href).href;
-
-    Office.context.ui.displayDialogAsync(dialogUrl, { height: 70, width: 50, displayInIframe: true }, 
-        function (asyncResult) {
-            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                console.error("Failed to open dialog: " + asyncResult.error.message);
-                return;
-            }
-            settingsDialog = asyncResult.value;
-            // Add a handler to receive messages from the dialog, specifically to close it.
-            settingsDialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
-                if (arg.message === "close" && settingsDialog) {
-                    settingsDialog.close();
-                    settingsDialog = null;
-                }
-            });
-        }
-    );
-}
-
 
 /**
  * Initializes the behavior for all collapsible sections on the page.
