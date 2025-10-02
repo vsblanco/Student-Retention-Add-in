@@ -1,5 +1,4 @@
-// Timestamp: 2025-10-02 11:55 AM | Version: 1.4.2
-
+// Timestamp: 2025-10-02 12:17 PM | Version: 1.4.3
 Office.onReady((info) => {
     if (info.host === Office.HostType.Excel) {
         initializeSettingsExplorer();
@@ -43,8 +42,9 @@ function initializeSettingsExplorer() {
                 const settingItems = {};
 
                 // 1. Get all setting items and queue up a 'load' command for their values.
-                for (const key in CONSTANTS.SETTINGS_KEYS) {
-                    const settingKey = CONSTANTS.SETTINGS_KEYS[key];
+                // FIX: Using Object.values() provides a safer and more direct way to iterate
+                // over the setting keys defined in the CONSTANTS file.
+                for (const settingKey of Object.values(CONSTANTS.SETTINGS_KEYS)) {
                     const settingItem = workbookSettings.getItemOrNullObject(settingKey);
                     settingItem.load("value");
                     settingItems[settingKey] = settingItem;
@@ -55,16 +55,18 @@ function initializeSettingsExplorer() {
 
                 // 3. Now that values are loaded, process them.
                 for (const settingKey in settingItems) {
-                    const settingItem = settingItems[settingKey];
-                    if (settingItem.value) { 
-                        const settingsString = settingItem.value;
-                        try {
-                            allSettings[settingKey] = JSON.parse(settingsString);
-                            hasSettings = true;
-                        } catch (e) {
-                            console.warn(`Could not parse setting for key "${settingKey}":`, e);
-                            allSettings[settingKey] = "[Error: Invalid JSON]";
-                            hasSettings = true; // Still show the error in the UI
+                    if (Object.prototype.hasOwnProperty.call(settingItems, settingKey)) {
+                        const settingItem = settingItems[settingKey];
+                        if (settingItem.value) { 
+                            const settingsString = settingItem.value;
+                            try {
+                                allSettings[settingKey] = JSON.parse(settingsString);
+                                hasSettings = true;
+                            } catch (e) {
+                                console.warn(`Could not parse setting for key "${settingKey}":`, e);
+                                allSettings[settingKey] = "[Error: Invalid JSON]";
+                                hasSettings = true; // Still show the error in the UI
+                            }
                         }
                     }
                 }
@@ -175,4 +177,3 @@ function initializeSettingsExplorer() {
     // Initial population of the tree view
     populateTree();
 }
-
