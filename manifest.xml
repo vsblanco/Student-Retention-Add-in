@@ -1,7 +1,8 @@
+<!-- Updated: 2025-10-02 10:45 AM | Version: 1.6.0.0 -->
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>1.5.0.0</Version>
+  <Version>1.6.0.0</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -154,38 +155,6 @@
                     <FunctionName>openCreateLdaDialog</FunctionName>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="AnalyticsButton">
-                  <Label resid="AnalyticsButton.Label"/>
-                  <Supertip>
-                    <Title resid="AnalyticsButton.Label"/>
-                    <Description resid="AnalyticsButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="AnalyticsIcon.16x16"/>
-                    <bt:Image size="32" resid="AnalyticsIcon.32x32"/>
-                    <bt:Image size="80" resid="AnalyticsIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>Analytics</TaskpaneId>
-                    <SourceLocation resid="Analytics.Url"/>
-                  </Action>
-                </Control>
-                <Control xsi:type="Button" id="RiskIndexButton">
-                  <Label resid="RiskIndexButton.Label"/>
-                  <Supertip>
-                    <Title resid="RiskIndexButton.Label"/>
-                    <Description resid="RiskIndexButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="RiskIndexIcon.16x16"/>
-                    <bt:Image size="32" resid="RiskIndexIcon.32x32"/>
-                    <bt:Image size="80" resid="RiskIndexIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>RiskIndex</TaskpaneId>
-                    <SourceLocation resid="RiskIndex.Url"/>
-                  </Action>
-                </Control>
                  <Control xsi:type="Button" id="PersonalizedEmailButton">
                   <Label resid="PersonalizedEmailButton.Label"/>
                   <Supertip>
@@ -246,12 +215,6 @@
         <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
         <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
         <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
-        <bt:Image id="AnalyticsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/analytics-icon.png"/>
-        <bt:Image id="AnalyticsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/analytics-icon.png"/>
-        <bt:Image id="AnalyticsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/analytics-icon.png"/>
-        <bt:Image id="RiskIndexIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/risk-index-icon.png"/>
-        <bt:Image id="RiskIndexIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/risk-index-icon.png"/>
-        <bt:Image id="RiskIndexIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/risk-index-icon.png"/>
         <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
         <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
         <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
@@ -274,8 +237,6 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/taskpane/taskpane.html"/>
         <bt:Url id="About.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/about/about.html"/>
         <bt:Url id="Settings.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/settings/settings.html"/>
-        <bt:Url id="Analytics.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/analytics/analytics.html"/>
-        <bt:Url id="RiskIndex.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/Risk-Index/risk-index.html"/>
         <bt:Url id="TransferData.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html"/>
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/commands/create-lda-dialog.html"/>
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
@@ -293,8 +254,6 @@
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
         <bt:String id="TransferDataButton.Label" DefaultValue="Transfer Data"/>
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
-        <bt:String id="AnalyticsButton.Label" DefaultValue="Analytics"/>
-        <bt:String id="RiskIndexButton.Label" DefaultValue="Risk Index"/>
         <bt:String id="AboutButton.Label" DefaultValue="About"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="ConnectionsButton.Label" DefaultValue="Connections"/>
@@ -306,8 +265,6 @@
         <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
         <bt:String id="TransferDataButton.Tooltip" DefaultValue="Copy student data to the clipboard in JSON format."/>
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
-        <bt:String id="AnalyticsButton.Tooltip" DefaultValue="Show analytics for the LDA reports."/>
-        <bt:String id="RiskIndexButton.Tooltip" DefaultValue="View and analyze student risk index formulas."/>
         <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="ConnectionsButton.Tooltip" DefaultValue="Manage student connections and relationships."/>
@@ -316,4 +273,3 @@
     </Resources>
   </VersionOverrides>
 </OfficeApp>
-
