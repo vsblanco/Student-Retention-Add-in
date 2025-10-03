@@ -73,10 +73,35 @@ function StudentView() {
         DaysOut: 0,
         Grade: "97%",
         LDA: "2024-05-20",
+        // History as an array of objects for test mode
         History: [
-          { date: "2024-01-15", action: "Advised", notes: "Discussed course selection." },
-          { date: "2024-03-10", action: "Follow-up", notes: "Checked on progress." }
+          {
+            timestamp: "2024-01-15",
+            comment: "Advised: Discussed course selection.",
+            studentId: "123456",
+            studentName: "Jane Doe",
+            createdBy: "Dr. Smith",
+            tag: "Outreach"
+          },
+          {
+            timestamp: "2024-01-15",
+            comment: "Left Voicemail",
+            studentId: "123456",
+            studentName: "Jane Doe",
+            createdBy: "Dr. Smith",
+            
+          },
+          {
+            timestamp: "2024-03-10",
+            comment: "Follow-up: Checked on progress.",
+            studentId: "123456",
+            studentName: "Jane Doe",
+            createdBy: "Dr. Smith",
+            tag: "Contacted"
+          }
         ]
+        // Optionally add an alias for testing alias logic:
+        // Notes: [...]
       };
       setSheetData({ status: 'success', data: { 1: testStudent }, message: '' });
       setActiveStudent(testStudent);
@@ -206,6 +231,33 @@ function StudentView() {
     transition: 'all 0.2s ease-in-out'
   });
 
+  // Helper to get the correct history as an array of objects from the activeStudent object
+  const getHistoryArray = (studentObj) => {
+    if (!studentObj) return [];
+    // If already an array, return as is
+    if (Array.isArray(studentObj.History)) return studentObj.History;
+    // If it's a string, parse it into objects (legacy/test mode)
+    if (typeof studentObj.History === 'string') {
+      // Example format: alternating lines of date and comment
+      const lines = studentObj.History.split('\n').map(l => l.trim()).filter(l => l !== '');
+      const entries = [];
+      for (let i = 0; i < lines.length; i += 2) {
+        entries.push({
+          timestamp: lines[i] || '',
+          comment: lines[i + 1] || '',
+          // Fill with empty/defaults for other fields
+          studentId: studentObj.ID || '',
+          studentName: studentObj.StudentName || '',
+          createdBy: studentObj.Assigned || '',
+          tag: '', // No tag in legacy/test mode
+        });
+      }
+      return entries;
+    }
+    // If missing or unknown format, return empty array
+    return [];
+  };
+
   // --- UPDATE: Centralized rendering logic based on sheetData.status ---
   if (sheetData.status !== 'success') {
     return <div style={messageContainerStyles}><p>{sheetData.message}</p></div>;
@@ -228,7 +280,9 @@ function StudentView() {
       </div>
       <div style={containerStyles}>
         {activeTab === 'details' && <StudentDetails student={activeStudent} />}
-        {activeTab === 'history' && <StudentHistory history={activeStudent.History} />}
+        {activeTab === 'history' && (
+          <StudentHistory history={getHistoryArray(activeStudent)} />
+        )}
       </div>
     </div>
   );
