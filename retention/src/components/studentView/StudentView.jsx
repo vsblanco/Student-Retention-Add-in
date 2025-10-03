@@ -58,8 +58,30 @@ function StudentView() {
   const [activeTab, setActiveTab] = useState('details');
   const isInitialLoad = useRef(true);
 
+  // --- TEST MODE: Provide a basic student object if not running in Office/Excel ---
+  useEffect(() => {
+    if (typeof window.Excel === "undefined") {
+      // Simulate a single student row for testing
+      const testStudent = {
+        StudentName: "Jane Doe",
+        ID: "123456",
+        Phone: "555-1234",
+        StudentEmail: "jane.doe@university.edu",
+        PersonalEmail: "jane.doe@gmail.com",
+        Assigned: "Dr. Smith",
+        History: [
+          { date: "2024-01-15", action: "Advised", notes: "Discussed course selection." },
+          { date: "2024-03-10", action: "Follow-up", notes: "Checked on progress." }
+        ]
+      };
+      setSheetData({ status: 'success', data: { 1: testStudent }, message: '' });
+      setActiveStudent(testStudent);
+    }
+  }, []);
+
   // Effect 1: Load the entire sheet data into memory ONCE.
   useEffect(() => {
+    if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
     const loadEntireSheet = async () => {
       try {
         await Excel.run(async (context) => {
@@ -102,6 +124,8 @@ function StudentView() {
 
   // Effect 2: Handle selection changes from Excel.
   useEffect(() => {
+    if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
+
     // Do not proceed if data isn't loaded successfully
     if (sheetData.status !== 'success') return;
 
@@ -193,7 +217,7 @@ function StudentView() {
 
   return (
     <div>
-      <StudentHeader /> 
+      <StudentHeader student={activeStudent} /> 
       <div style={tabContainerStyles}>
         <div style={getTabStyles('details')} onClick={() => setActiveTab('details')}>Details</div>
         <div style={getTabStyles('history')} onClick={() => setActiveTab('history')}>History</div>

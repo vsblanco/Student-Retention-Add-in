@@ -47,8 +47,6 @@ function StudentDetails({ student }) {
 
   return (
     <div>
-      <h2 style={studentNameStyles}>{studentName}</h2>
-      
       <div style={sectionStyles}>
         <DetailItem label="Student ID" value={student.ID} />
         <DetailItem label="Primary Phone" value={student.Phone} />
