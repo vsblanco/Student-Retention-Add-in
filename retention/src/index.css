@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* Timestamp: 2025-10-02 04:20 PM | Version: 1.0.0 */
 
