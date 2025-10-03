@@ -22,7 +22,11 @@ function StudentHeader({ student }) {
   let daysOutText = 'text-gray-800';
   let daysOutLabelText = 'text-gray-500';
   if (typeof daysOut === 'number') {
-    if (daysOut >= 14) {
+    if (daysOut === 0) {
+      daysOutBg = 'bg-green-300'; // Brighter green for 0 days out
+      daysOutText = 'text-black';
+      daysOutLabelText = 'text-black';
+    } else if (daysOut >= 14) {
       daysOutBg = 'bg-red-400';
       daysOutText = 'text-black';
       daysOutLabelText = 'text-black';
@@ -95,7 +99,9 @@ function StudentHeader({ student }) {
         <div className="flex space-x-2">
           <div className={`p-2 text-center rounded-lg ${daysOutBg} ${daysOutText} w-20`}>
             <div className="text-xl font-bold">{daysOut}</div>
-            <div className={`text-xs font-medium uppercase ${daysOutLabelText}`}>Days Out</div>
+            <div className={`text-xs font-medium uppercase ${daysOutLabelText}`}>
+              {daysOut === 0 ? 'Engaged' : daysOut === 1 ? 'Day Out' : 'Days Out'}
+            </div>
           </div>
           <div className={`p-2 text-center rounded-lg ${gradeBg} ${gradeText} w-20 transition-colors duration-150`}>
             <div className="text-xl font-bold">{gradeDisplay}</div>
@@ -108,4 +114,3 @@ function StudentHeader({ student }) {
 }
 
 export default StudentHeader;
- 

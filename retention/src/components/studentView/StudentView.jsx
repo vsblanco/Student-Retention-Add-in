@@ -66,9 +66,13 @@ function StudentView() {
         StudentName: "Jane Doe",
         ID: "123456",
         Phone: "555-1234",
+        OtherPhone: "555-5678",
         StudentEmail: "jane.doe@university.edu",
         PersonalEmail: "jane.doe@gmail.com",
         Assigned: "Dr. Smith",
+        DaysOut: 0,
+        Grade: "97%",
+        LDA: "2024-05-20",
         History: [
           { date: "2024-01-15", action: "Advised", notes: "Discussed course selection." },
           { date: "2024-03-10", action: "Follow-up", notes: "Checked on progress." }
