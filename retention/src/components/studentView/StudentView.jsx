@@ -1,7 +1,8 @@
-// Timestamp: 2025-10-02 05:29 PM | Version: 6.2.0
+// Timestamp: 2025-10-03 11:03 AM | Version: 6.3.0
 import React, { useState, useEffect, useRef } from 'react';
 import StudentDetails from './StudentDetails.jsx';
 import StudentHistory from './StudentHistory.jsx';
+import StudentHeader from './StudentHeader.jsx';
 
 // --- Alias mapping for flexible column names ---
 const COLUMN_ALIASES = {
@@ -14,7 +15,7 @@ const COLUMN_ALIASES = {
   // You can add more aliases for other columns here
 };
 
-// --- UPDATE: Create a reverse map that is agnostic to whitespace ---
+// --- Create a reverse map that is agnostic to whitespace ---
 const canonicalHeaderMap = {};
 // A helper function to normalize strings by removing spaces and making them lowercase
 const normalizeHeader = (str) => str.toLowerCase().replace(/\s/g, '');
@@ -36,7 +37,7 @@ const processRow = (rowData, headers) => {
   const studentInfo = {};
   headers.forEach((header, index) => {
     if (header && index < rowData.length) {
-      // --- UPDATE: Normalize the header from the sheet in the same way before looking it up ---
+      // --- Normalize the header from the sheet in the same way before looking it up ---
       const normalizedLookupKey = normalizeHeader(header);
       const canonicalHeader = canonicalHeaderMap[normalizedLookupKey] || header.trim();
       studentInfo[canonicalHeader] = rowData[index];
@@ -52,7 +53,8 @@ const processRow = (rowData, headers) => {
 
 function StudentView() {
   const [activeStudent, setActiveStudent] = useState(null);
-  const [allStudents, setAllStudents] = useState(null);
+  // --- UPDATE: Enhanced state to provide better user feedback ---
+  const [sheetData, setSheetData] = useState({ status: 'loading', data: null, message: 'Loading student data...' });
   const [activeTab, setActiveTab] = useState('details');
   const isInitialLoad = useRef(true);
 
@@ -67,7 +69,7 @@ function StudentView() {
           await context.sync();
 
           if (!usedRange.values || usedRange.values.length < 2) {
-            setAllStudents({}); // Set to empty object if no data
+            setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
             return;
           }
 
@@ -82,11 +84,16 @@ function StudentView() {
               studentDataMap[actualRowIndex] = studentInfo; 
             }
           }
-          setAllStudents(studentDataMap);
+
+          if (Object.keys(studentDataMap).length === 0) {
+              setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
+          } else {
+              setSheetData({ status: 'success', data: studentDataMap, message: '' });
+          }
         });
       } catch (error) {
         console.error("Error loading entire sheet:", error);
-        setAllStudents({});
+        setSheetData({ status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' });
       }
     };
 
@@ -95,9 +102,10 @@ function StudentView() {
 
   // Effect 2: Handle selection changes from Excel.
   useEffect(() => {
-    const syncUIToSheetSelection = async () => {
-      if (allStudents === null) return;
+    // Do not proceed if data isn't loaded successfully
+    if (sheetData.status !== 'success') return;
 
+    const syncUIToSheetSelection = async () => {
       try {
         await Excel.run(async (context) => {
           const range = context.workbook.getSelectedRange();
@@ -105,9 +113,10 @@ function StudentView() {
           await context.sync();
           
           const rowIndex = range.rowIndex;
-          setActiveStudent(allStudents[rowIndex] || null);
+          setActiveStudent(sheetData.data[rowIndex] || null);
         });
       } catch (error) {
+        // Ignore GeneralException which can occur if selection is invalid
         if (error.code !== "GeneralException") {
              console.error("Error in syncUIToSheetSelection:", error);
         }
@@ -120,6 +129,7 @@ function StudentView() {
         eventHandler = worksheet.onSelectionChanged.add(syncUIToSheetSelection);
         await context.sync();
         
+        // On initial load, manually trigger sync to reflect current selection
         if (isInitialLoad.current) {
           syncUIToSheetSelection();
           isInitialLoad.current = false;
@@ -134,7 +144,7 @@ function StudentView() {
         });
       }
     };
-  }, [allStudents]);
+  }, [sheetData]); // Depend on the entire sheetData object
 
   // --- STYLES ---
   const containerStyles = {
@@ -142,7 +152,7 @@ function StudentView() {
     fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
   };
 
-  const noStudentStyles = {
+  const messageContainerStyles = {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
@@ -168,13 +178,14 @@ function StudentView() {
     transition: 'all 0.2s ease-in-out'
   });
 
-  if (allStudents === null) {
-    return <div style={noStudentStyles}><p>Loading student data...</p></div>;
+  // --- UPDATE: Centralized rendering logic based on sheetData.status ---
+  if (sheetData.status !== 'success') {
+    return <div style={messageContainerStyles}><p>{sheetData.message}</p></div>;
   }
 
   if (!activeStudent) {
     return (
-      <div style={noStudentStyles}>
+      <div style={messageContainerStyles}>
         <p>Select a cell in a student's row to view their details.</p>
       </div>
     );
@@ -182,6 +193,7 @@ function StudentView() {
 
   return (
     <div>
+      <StudentHeader /> 
       <div style={tabContainerStyles}>
         <div style={getTabStyles('details')} onClick={() => setActiveTab('details')}>Details</div>
         <div style={getTabStyles('history')} onClick={() => setActiveTab('history')}>History</div>
@@ -195,4 +207,3 @@ function StudentView() {
 }
 
 export default StudentView;
-
