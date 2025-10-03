@@ -79,12 +79,24 @@ function StudentHeader({ student }) {
     gradeDisplay = `${parsedGrade}%`;
   }
   
+  // --- Gender-based avatar background ---
+  const gender = (safeStudent.Gender || '').toLowerCase();
+  const avatarBg =
+    gender === 'boy'
+      ? { background: '#1278FF', color: '#FFFFFF' } // light blue, dark text
+      : gender === 'girl'
+        ? { background: '#f9a8d4', color: '#FFFFFF' } // pink, dark pink text
+        : { background: '#6b7280', color: '#FFFFFF' };   // default gray, white text
+
   return (
     <div className="p-4 bg-white border-b border-gray-200">
       <div className="flex items-center justify-between space-x-4">
         {/* Left side: Avatar and Name */}
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold shrink-0 border-2">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0"
+            style={avatarBg}
+          >
             {initials}
           </div>
           <div>

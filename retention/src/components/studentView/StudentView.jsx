@@ -65,13 +65,14 @@ function StudentView() {
       const testStudent = {
         StudentName: "Jane Doe",
         ID: "123456",
+        Gender: "Boy",
         Phone: "555-1234",
         OtherPhone: "555-5678",
         StudentEmail: "jane.doe@university.edu",
         PersonalEmail: "jane.doe@gmail.com",
         Assigned: "Dr. Smith",
-        DaysOut: 0,
-        Grade: "97%",
+        DaysOut: 10,
+        Grade: "77%",
         LDA: "2024-05-20",
         // History as an array of objects for test mode
         History: [
@@ -199,7 +200,24 @@ function StudentView() {
     };
   }, [sheetData]); // Depend on the entire sheetData object
 
+  // --- Detect test mode (browser, not Excel) ---
+  const isTestMode = typeof window.Excel === "undefined";
+
   // --- STYLES ---
+  const outerContainerStyles = isTestMode
+    ? {
+        maxWidth: '400px',
+        minWidth: '320px',
+        margin: '0 auto',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+        background: '#fff',
+        minHeight: '100vh',
+        overflow: 'hidden'
+      }
+    : {};
+
   const containerStyles = {
     padding: '0 15px 15px 15px',
     fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
@@ -260,19 +278,25 @@ function StudentView() {
 
   // --- UPDATE: Centralized rendering logic based on sheetData.status ---
   if (sheetData.status !== 'success') {
-    return <div style={messageContainerStyles}><p>{sheetData.message}</p></div>;
+    return (
+      <div style={outerContainerStyles}>
+        <div style={messageContainerStyles}><p>{sheetData.message}</p></div>
+      </div>
+    );
   }
 
   if (!activeStudent) {
     return (
-      <div style={messageContainerStyles}>
-        <p>Select a cell in a student's row to view their details.</p>
+      <div style={outerContainerStyles}>
+        <div style={messageContainerStyles}>
+          <p>Select a cell in a student's row to view their details.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div style={outerContainerStyles}>
       <StudentHeader student={activeStudent} /> 
       <div style={tabContainerStyles}>
         <div style={getTabStyles('details')} onClick={() => setActiveTab('details')}>Details</div>

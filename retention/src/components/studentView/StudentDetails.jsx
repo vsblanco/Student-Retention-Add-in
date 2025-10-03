@@ -1,5 +1,5 @@
 // Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
-import React from 'react';
+import React, { useState } from 'react';
 
 // A small reusable component for displaying a single detail item.
 // This keeps our main component clean.
@@ -27,6 +27,69 @@ const DetailItem = ({ label, value }) => {
   );
 };
 
+// Utility for copy-to-clipboard
+const copyToClipboard = (text) => {
+  if (navigator && navigator.clipboard) {
+    navigator.clipboard.writeText(text);
+  }
+};
+
+const style = `
+.hover-bg:hover {
+  background: #e5e7eb;
+}
+`;
+
+function CopyField({ label, value, id }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!value) return;
+    copyToClipboard(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <>
+      {/* Inject the hover style once */}
+      <style>{style}</style>
+      <div
+        id={id}
+        style={{
+          padding: '0.5rem',
+          borderRadius: '0.5rem',
+          cursor: value ? 'pointer' : 'default',
+          position: 'relative',
+          transition: 'background 0.15s'
+        }}
+        className="hover-bg"
+        onClick={value ? handleCopy : undefined}
+      >
+        <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
+        <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>{value || 'N/A'}</p>
+        <span
+          className={`copy-feedback${copied ? '' : ' hidden'}`}
+          style={{
+            position: 'absolute',
+            right: '0.5rem',
+            top: '0.5rem',
+            fontSize: '0.75rem',
+            background: '#22c55e',
+            color: 'white',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '0.375rem',
+            display: copied ? 'inline' : 'none',
+            zIndex: 2
+          }}
+        >
+          Copied!
+        </span>
+      </div>
+    </>
+  );
+}
+
 function StudentDetails({ student }) {
   // --- STYLES ---
   const studentNameStyles = {
@@ -44,26 +107,54 @@ function StudentDetails({ student }) {
 
   // Check for both name variations from the student object
   const studentName = student["StudentName"] || student["Student Name"];
-
   return (
-    <div>
-      <div style={sectionStyles}>
-        <DetailItem label="Student ID" value={student.ID} />
-        <DetailItem label="Primary Phone" value={student.Phone} />
-        <DetailItem label="Other Phone" value={student.OtherPhone} />
-        <DetailItem label="Assigned" value={student.Assigned} />
-        <DetailItem label="Student Email" value={student.StudentEmail} />
-        <DetailItem label="Personal Email" value={student.PersonalEmail} />
+    <div
+      id="panel-details"
+      style={{
+        padding: '1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <CopyField
+          label="Student ID"
+          value={student.ID}
+          id="copy-student-id"
+        />
+        <CopyField
+          label="Primary Phone"
+          value={student.Phone}
+          id="copy-primary-phone"
+        />
+        <CopyField
+          label="Other Phone"
+          value={student.OtherPhone}
+          id="copy-other-phone"
+        />
+        <CopyField
+          label="Student Email"
+          value={student.StudentEmail}
+          id="copy-student-email"
+        />
+        <CopyField
+          label="Personal Email"
+          value={student.PersonalEmail}
+          id="copy-personal-email"
+        />
+        <div
+          style={{
+            padding: '0.5rem',
+            borderRadius: '0.5rem'
+          }}
+        >
+          <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last LDA</label>
+          <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
+            {student["LDA"] || 'N/A'}
+          </p>
+        </div>
       </div>
-
-      <div style={sectionStyles}>
-        <DetailItem label="Last LDA" value={student["LDA"]} />
-      </div>
-
-      {/* Placeholder for future actions */}
-      {/* <div id="actions-container">
-        <h3>Actions</h3>
-      </div> */}
     </div>
   );
 }
