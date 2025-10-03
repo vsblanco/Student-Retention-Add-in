@@ -2,7 +2,6 @@
 import React from 'react';
 // The import path is updated to look inside the new folder.
 import StudentView from './components/studentView/StudentView.jsx';
-import './App.css';
 
 function App() {
   return (
