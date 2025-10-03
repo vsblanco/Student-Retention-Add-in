@@ -1,4 +1,4 @@
-// filepath: retention/postcss.config.js
+// filepath: retention/postcss.config.cjs
 module.exports = {
   plugins: {
     '@tailwindcss/postcss': {},

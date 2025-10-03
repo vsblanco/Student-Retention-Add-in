@@ -192,16 +192,8 @@ function StudentView() {
   }
 
   return (
-    <div>
+    <div className='Header'>
       <StudentHeader /> 
-      <div style={tabContainerStyles}>
-        <div style={getTabStyles('details')} onClick={() => setActiveTab('details')}>Details</div>
-        <div style={getTabStyles('history')} onClick={() => setActiveTab('history')}>History</div>
-      </div>
-      <div style={containerStyles}>
-        {activeTab === 'details' && <StudentDetails student={activeStudent} />}
-        {activeTab === 'history' && <StudentHistory history={activeStudent.History} />}
-      </div>
     </div>
   );
 }
