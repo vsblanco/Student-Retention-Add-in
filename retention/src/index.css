@@ -1,3 +1,8 @@
+// 2025-10-03 v2
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Timestamp: 2025-10-02 04:20 PM | Version: 1.0.0 */
 
 /* Set a consistent box-sizing model for all elements */
