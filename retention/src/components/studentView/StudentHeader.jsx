@@ -24,7 +24,7 @@ function StudentHeader({ student }) {
       <div className="flex items-center justify-between space-x-4">
         {/* Left side: Avatar and Name */}
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold shrink-0">
+          <div className="w-12 h-12 rounded-full bg-gray-500 text-white flex items-center justify-center text-xl font-bold shrink-0 border-2 border-red-500">
             {initials}
           </div>
           <div>
