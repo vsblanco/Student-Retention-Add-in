@@ -2,8 +2,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import StudentView from './components/studentView/StudentView.jsx'
 import Taskpane from './components/utility/taskpane.jsx'
+import Ribbon from './components/utility/Ribbon.jsx'
 import './index.css'
 
 /*
@@ -11,44 +11,43 @@ import './index.css'
  * until the Office host (Excel) is ready before we try to render anything.
  */
 
-if (typeof window.Office === 'undefined') {
-  // Not running inside Office, render app for browser testing
+function renderApp(content) {
   const rootEl = document.getElementById('root');
   if (rootEl) {
-    ReactDOM.createRoot(rootEl).render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    );
+    ReactDOM.createRoot(rootEl).render(content);
   } else {
     document.body.innerHTML = '<h1 style="color:red">No #root element found</h1>';
   }
+}
+
+if (typeof window.Office === 'undefined') {
+  // Not running inside Office, render app for browser testing
+  renderApp(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
 } else {
   Office.onReady((info) => {
-    const rootEl = document.getElementById('root');
     if (info.host === Office.HostType.Excel) {
-      if (rootEl) {
-        ReactDOM.createRoot(rootEl).render(
-          <React.StrictMode>
-            <App />
-          </React.StrictMode>
-        );
-      }
+      renderApp(
+        <React.StrictMode>
+          <App />
+        </React.StrictMode>
+      );
     } else {
-      // Office.js loaded, but not inside Office client
-      if (rootEl) {
-        ReactDOM.createRoot(rootEl).render(
+      renderApp(
+        <>
+          <Ribbon />
           <Taskpane
             open={true}
             onClose={() => {}}
-            header={<div style={{ fontWeight: "bold", fontSize: "1.1rem", padding: "12px 16px" }}>Student Retention Add-in</div>}
+            header={<div>Student Retention Add-in</div>}
           >
             <App />
           </Taskpane>
-        );
-      } else {
-        document.body.innerHTML = '<h1 style="color:red">No #root element found</h1>';
-      }
+        </>
+      );
     }
   });
 }

@@ -31,7 +31,7 @@ const closeBtnStyle = {
   color: "#666",
 };
 
-export default function Taskpane({ open, onClose, header, children }) {
+export default function Taskpane({ open, onClose, header, children, height = "100vh" }) {
   const [width, setWidth] = useState(360);
   const resizing = useRef(false);
   const startX = useRef(0);
@@ -67,6 +67,7 @@ export default function Taskpane({ open, onClose, header, children }) {
       style={{
         ...taskpaneStyle,
         width: width + "px",
+        height, // use the height prop
         transform: open ? "translateX(0)" : "translateX(100%)",
         pointerEvents: open ? "auto" : "none",
         userSelect: resizing.current ? "none" : "auto",
@@ -99,7 +100,7 @@ export default function Taskpane({ open, onClose, header, children }) {
           minHeight: "40px",
         }}
       >
-        <div>{header}</div>
+        <div style={{ fontWeight: "bold" }}>{header}</div>
         <button style={closeBtnStyle} onClick={onClose} aria-label="Close taskpane">
           &times;
         </button>
