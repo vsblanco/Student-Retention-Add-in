@@ -1,7 +1,35 @@
 // Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
-import React from 'react';
+import React, { useState, useRef } from 'react';
+import InsertTagButton from './InsertTagButton';
+import Comment, { COMMENT_TAGS } from './Comment';
 
 function StudentHistory({ history }) {
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showNewComment, setShowNewComment] = useState(false);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [tagDropdownTarget, setTagDropdownTarget] = useState(null); // 'search' or 'comment'
+  const newCommentInputRef = useRef(null);
+
+  // Filter history by search term (case-insensitive, matches comment)
+  const filteredHistory = Array.isArray(history)
+    ? history.filter(
+        entry =>
+          !searchTerm ||
+          (entry.comment && entry.comment.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
+    : [];
+
+  // Use COMMENT_TAGS for InsertTagButton dropdowns
+  const TAG_OPTIONS = COMMENT_TAGS.map(tag => ({
+    label: tag.label,
+    title: tag.title || tag.label,
+    spanClass:
+      // Provide a default spanClass if not present in COMMENT_TAGS
+      tag.tagClass ||
+      "px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800"
+  }));
+
   if (!Array.isArray(history) || history.length === 0) {
     return (
       <div id="history-content">
@@ -15,42 +43,151 @@ function StudentHistory({ history }) {
   }
 
   return (
-    <div id="history-content">
-      <ul className="space-y-4">
-        {history.map((entry, index) => {
-          // Always use bg-gray-100 as the default background for comments (matches "No history found" style)
-          const bgClass =
-            entry.tag === "Contacted"
-              ? "bg-yellow-100"
-              : "bg-gray-200";
-          const tagClass =
-            entry.tag === "Contacted"
-              ? "px-2 py-0.5 font-semibold rounded-full bg-yellow-200 text-yellow-800"
-              : "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800";
-          return (
-            <li
-              key={index}
-              className={`p-3 rounded-lg shadow-sm relative ${bgClass}`}
-              data-row-index={entry.studentId || index}
+    <div>
+      {/* Animation keyframes for tag dropdown */}
+      <style>
+        {`
+          @keyframes tagFadeInRight {
+            from {
+              opacity: 0;
+              transform: translateX(-24px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+          .tag-anim {
+            opacity: 0;
+            animation: tagFadeInRight 0.45s cubic-bezier(0.4,0,0.2,1) forwards;
+          }
+        `}
+      </style>
+      {/* History Header */}
+      <div className="sticky-header pt-2 px-4 space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-bold text-gray-800">History</h3>
+          <div className="flex items-center space-x-2">
+            <button
+              id="search-history-button"
+              className="bg-gray-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-700"
+              onClick={() => setShowSearch(v => !v)}
+              aria-label="Search history"
             >
-              <p className="text-sm text-gray-800">{entry.comment}</p>
-              <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  {entry.tag && (
-                    <span className={tagClass}>
-                      {entry.tag}
-                    </span>
-                  )}
-                  <span className="font-medium">{entry.createdBy}</span>
-                </div>
-                <span>
-                  {entry.timestamp}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </button>
+            <button
+              id="add-comment-button"
+              className="bg-blue-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700"
+              onClick={() => setShowNewComment(v => !v)}
+              aria-label="Add comment"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="search-container"
+          className={`${showSearch ? '' : 'hidden'} space-y-2`}
+        >
+          <div id="tag-filter-container" className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-200">
+            <InsertTagButton
+              dropdownId="filter-tag-dropdown"
+              onTagClick={() => {}}
+              showDropdown={showTagDropdown}
+              setShowDropdown={setShowTagDropdown}
+              dropdownTarget={tagDropdownTarget}
+              setDropdownTarget={setTagDropdownTarget}
+              targetName="search"
+              dropdownClassName=""
+              dropdownStyle={{}}
+              tags={TAG_OPTIONS}
+            />
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              id="search-input"
+              className="w-full p-2 pl-8 border rounded-md"
+              placeholder="Search comments..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              autoFocus={showSearch}
+            />
+            <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <button
+              id="clear-search-button"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-700"
+              type="button"
+              onClick={() => setSearchTerm('')}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div
+          id="new-comment-section"
+          className={`p-4 bg-white border rounded-lg shadow-sm ${showNewComment ? '' : 'hidden'}`}
+        >
+          <div id="tag-pills-container" className="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
+            <InsertTagButton
+              dropdownId="tag-dropdown"
+              onTagClick={tag => {
+                // Insert tag at cursor position in textarea
+                const textarea = newCommentInputRef.current;
+                if (textarea) {
+                  const start = textarea.selectionStart;
+                  const end = textarea.selectionEnd;
+                  const value = textarea.value;
+                  const tagText = `[${tag}] `;
+                  textarea.value = value.slice(0, start) + tagText + value.slice(end);
+                  // Move cursor after inserted tag
+                  textarea.selectionStart = textarea.selectionEnd = start + tagText.length;
+                  textarea.focus();
+                }
+              }}
+              showDropdown={showTagDropdown}
+              setShowDropdown={setShowTagDropdown}
+              dropdownTarget={tagDropdownTarget}
+              setDropdownTarget={setTagDropdownTarget}
+              targetName="comment"
+              dropdownClassName="backdrop-blur bg-white/10"
+              dropdownStyle={{ top: '50%', transform: 'translateY(-50%)', left: '100%', marginLeft: '0.5rem' }}
+              tags={TAG_OPTIONS}
+            />
+          </div>
+          <textarea
+            id="new-comment-input"
+            ref={newCommentInputRef}
+            className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+            rows={3}
+            placeholder="Add a new comment..."
+          ></textarea>
+          <div className="flex justify-between items-center mt-2">
+            <span id="comment-status" className="text-sm text-green-600"></span>
+            <button id="submit-comment-button" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
+          </div>
+        </div>
+      </div>
+      {/* End History Header */}
+
+      <div id="history-content">
+        <ul className="space-y-4">
+          {filteredHistory.map((entry, index) => (
+            <Comment
+              key={index}
+              entry={entry}
+              searchTerm={searchTerm}
+              index={index}
+            />
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
