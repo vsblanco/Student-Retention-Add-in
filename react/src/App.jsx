@@ -2,11 +2,13 @@
 import React from 'react';
 // The import path is updated to look inside the new folder.
 import StudentView from './components/studentView/StudentView.jsx';
+import About from './components/about/About.jsx';
 
 function App() {
   return (
-    <div className="App">
+    <div className="App flex flex-row">
       <StudentView />
+      <About />
     </div>
   );
 }
