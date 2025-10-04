@@ -3,6 +3,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import StudentView from './components/studentView/StudentView.jsx'
+import Taskpane from './components/utility/taskpane.jsx'
 import './index.css'
 
 /*
@@ -37,9 +38,13 @@ if (typeof window.Office === 'undefined') {
       // Office.js loaded, but not inside Office client
       if (rootEl) {
         ReactDOM.createRoot(rootEl).render(
-          <>
+          <Taskpane
+            open={true}
+            onClose={() => {}}
+            header={<div style={{ fontWeight: "bold", fontSize: "1.1rem", padding: "12px 16px" }}>Student Retention Add-in</div>}
+          >
             <App />
-          </>
+          </Taskpane>
         );
       } else {
         document.body.innerHTML = '<h1 style="color:red">No #root element found</h1>';
