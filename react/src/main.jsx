@@ -38,7 +38,7 @@ if (typeof window.Office === 'undefined') {
       if (rootEl) {
         ReactDOM.createRoot(rootEl).render(
           <>
-            <StudentView />
+            <App />
           </>
         );
       } else {

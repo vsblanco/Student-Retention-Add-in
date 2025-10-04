@@ -1,19 +1,19 @@
-# About This Project
+# 🎓 About This Project
 
-This application helps track and improve student retention.
+This application helps track and improve student retention. 📈
 
-## Features
+## ✨ Features
 
-- View student statistics
-- Analyze retention trends
-- Export reports
+- 📊 View student statistics
+- 📉 Analyze retention trends
+- 📤 Export reports
 
-## Technologies Used
+## 🛠️ Technologies Used
 
-- React
-- Node.js
-- Markdown rendering
+- ⚛️ React
+- 🟩 Node.js
+- 📝 Markdown rendering
 
 ---
 
-For more information, visit our [GitHub repository](https://github.com/your-repo).
+For more information, visit our [GitHub repository](https://github.com/your-repo) 🌐.

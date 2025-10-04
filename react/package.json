@@ -4,12 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-  "dev": "vite --config config/vite.config.js",
-  "build": "vite build --config config/vite.config.js",
-  "lint": "eslint --config config/eslint.config.js .",
-  "preview": "vite preview --config config/vite.config.js"
+    "dev": "vite --config config/vite.config.js",
+    "build": "vite build --config config/vite.config.js",
+    "lint": "eslint --config config/eslint.config.js .",
+    "preview": "vite preview --config config/vite.config.js"
   },
   "dependencies": {
+    "github-markdown-css": "^5.8.1",
+    "marked": "^16.3.0",
+    "prop-types": "^15.8.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -19,7 +22,6 @@
     "@tailwindcss/vite": "^4.1.14",
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
-
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/ui": "^3.2.4",
     "autoprefixer": "^10.4.21",
