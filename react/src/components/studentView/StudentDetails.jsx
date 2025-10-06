@@ -1,5 +1,12 @@
 // Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
 import React, { useState } from 'react';
+import {
+  BadgeInfo,
+  Phone,
+  Mail,
+  CalendarDays
+} from 'lucide-react';
+import { formatExcelDate } from '../utility/Conversion';
 
 // A small reusable component for displaying a single detail item.
 // This keeps our main component clean.
@@ -40,7 +47,7 @@ const style = `
 }
 `;
 
-function CopyField({ label, value, id }) {
+function CopyField({ label, value, id, Icon }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -61,13 +68,19 @@ function CopyField({ label, value, id }) {
           borderRadius: '0.5rem',
           cursor: value ? 'pointer' : 'default',
           position: 'relative',
-          transition: 'background 0.15s'
+          transition: 'background 0.15s',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
         }}
         className="hover-bg"
         onClick={value ? handleCopy : undefined}
       >
-        <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
-        <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>{value || 'N/A'}</p>
+        {Icon && <Icon size={18} color="#6b7280" style={{ flexShrink: 0 }} />}
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
+          <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>{value || 'N/A'}</p>
+        </div>
         <span
           className={`copy-feedback${copied ? '' : ' hidden'}`}
           style={{
@@ -111,7 +124,7 @@ function StudentDetails({ student }) {
     <div
       id="panel-details"
       style={{
-        padding: '1rem',
+        padding: '1rem 1rem 1rem 0.25rem', // reduced left padding
         display: 'flex',
         flexDirection: 'column',
         gap: '1rem'
@@ -122,76 +135,52 @@ function StudentDetails({ student }) {
           label="Student ID"
           value={student.ID}
           id="copy-student-id"
+          Icon={BadgeInfo}
         />
         <CopyField
           label="Primary Phone"
           value={student.Phone}
           id="copy-primary-phone"
+          Icon={Phone}
         />
         <CopyField
           label="Other Phone"
           value={student.OtherPhone}
           id="copy-other-phone"
+          Icon={Phone}
         />
         <CopyField
           label="Student Email"
           value={student.StudentEmail}
           id="copy-student-email"
+          Icon={Mail}
         />
         <CopyField
           label="Personal Email"
           value={student.PersonalEmail}
           id="copy-personal-email"
+          Icon={Mail}
         />
         <div
           style={{
-            padding: '0.5rem',
-            borderRadius: '0.5rem'
+            padding: '0.5rem 0.rem 0.5rem 0.25rem', // reduced left padding
+            borderRadius: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
           }}
         >
-          <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last LDA</label>
-          <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
-            {formatLDA(student["LDA"])}
-          </p>
+          <CalendarDays size={18} color="#6b7280" style={{ flexShrink: 0 }} />
+          <div>
+            <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last LDA</label>
+            <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
+              {formatExcelDate(student["LDA"], "long")}
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
-}
-
-function formatLDA(lda) {
-  // Handle Excel serial date numbers (integers, e.g., 45000)
-  if (
-    (typeof lda === 'number' && Number.isFinite(lda)) ||
-    (typeof lda === 'string' && /^\d+$/.test(lda) && lda.length <= 5)
-  ) {
-    // Excel's epoch starts at 1899-12-30
-    const serial = typeof lda === 'number' ? lda : parseInt(lda, 10);
-    if (!isNaN(serial)) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const date = new Date(excelEpoch.getTime() + serial * 86400000);
-      return date.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    }
-  }
-  // Handle YYYYMMDD string
-  if (typeof lda === 'string' && /^\d{8}$/.test(lda)) {
-    const year = lda.slice(0, 4);
-    const month = lda.slice(4, 6);
-    const day = lda.slice(6, 8);
-    const date = new Date(`${year}-${month}-${day}`);
-    if (!isNaN(date)) {
-      return date.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    }
-  }
-  return lda || 'N/A';
 }
 
 export default StudentDetails;

@@ -4,13 +4,24 @@
 // Excel uses a date system where 1 corresponds to 1900-01-01
 // This function converts an Excel serial date to a JavaScript Date object
 
-export function formatExcelDate(serial) {
+export function formatExcelDate(serial, format = "default") {
   const excelEpoch = new Date(Date.UTC(1899, 11, 30));
   const days = Math.floor(Number(serial));
   const ms = Math.round((Number(serial) - days) * 24 * 60 * 60 * 1000);
   const date = new Date(excelEpoch.getTime() + days * 86400000 + ms);
 
-  // Format as mm/dd/yyyy H:MM AM/PM
+  if (isNaN(date.getTime())) return "N/A";
+
+  if (format === "long") {
+    // "Month Day, Year"
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }
+
+  // Default: mm/dd/yyyy H:MM AM/PM
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
   const yyyy = date.getFullYear();
