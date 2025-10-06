@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatExcelDate } from '../utility/Conversion';
 
 // Tag definitions for comments
 export const COMMENT_TAGS = [
@@ -26,18 +27,21 @@ export const COMMENT_TAGS = [
         label: "DNC - Phone",
         bgClass: "bg-red-200",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
+        pinned: true,
         priority: 4
       },
       {
         label: "DNC - Other Phone",
         bgClass: "bg-red-200",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
+        pinned: true,
         priority: 4
       },
       {
         label: "DNC - Email",
         bgClass: "bg-red-200",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
+        pinned: true,
         priority: 4
       }
     ]
@@ -238,15 +242,6 @@ function Comment({ entry, searchTerm, index }) {
     }
   }
 
-  // Format the timestamp (Excel serial date) as "Month Date, Year"
-  function formatExcelDate(serial) {
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const days = Math.floor(Number(serial));
-    const ms = Math.round((Number(serial) - days) * 24 * 60 * 60 * 1000);
-    const date = new Date(excelEpoch.getTime() + days * 86400000 + ms);
-    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-  }
-
   // Format timestamp if it's a number/string Excel serial
   let formattedTimestamp = entry.timestamp;
   if (!isNaN(entry.timestamp)) {
@@ -340,7 +335,7 @@ function Comment({ entry, searchTerm, index }) {
           </p>
           {isLong && (
             <button
-              className="text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
+              className="text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
               onClick={() => setExpanded(e => !e)}
               type="button"
             >

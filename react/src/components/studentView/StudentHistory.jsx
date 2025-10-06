@@ -42,13 +42,20 @@ function StudentHistory({ history }) {
     pinned: tag.pinned || false
   }));
 
-  // Helper to check if any tag in entry is pinned
+  // Helper to check if any tag or subtag in entry is pinned
   function isEntryPinned(entry) {
     if (!entry.tag) return false;
     const entryTags = entry.tag.split(',').map(t => t.trim());
     return entryTags.some(tagLabel => {
       const tagObj = COMMENT_TAGS.find(t => t.label === tagLabel);
-      return tagObj && tagObj.pinned;
+      if (tagObj) {
+        if (tagObj.pinned) return true;
+        // Check subtags if present
+        if (Array.isArray(tagObj.subtags)) {
+          return tagObj.subtags.some(subtag => subtag.pinned);
+        }
+      }
+      return false;
     });
   }
 

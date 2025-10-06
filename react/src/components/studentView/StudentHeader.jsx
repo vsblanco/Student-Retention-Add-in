@@ -1,5 +1,6 @@
 // Timestamp: 2025-10-03 12:20 PM | Version: 1.2.0
 import React from 'react';
+import { formatName } from '../utility/Conversion';
 
 // Helper function to get initials from a name string
 const getInitials = (name) => {
@@ -13,8 +14,10 @@ function StudentHeader({ student }) {
   // Use a fallback student object to prevent errors if the prop is null or undefined
   const safeStudent = student || {};
 
-  const studentName = safeStudent.StudentName || 'Select a Student';
-  const initials = getInitials(safeStudent.StudentName);
+  // Use formatName only if name is "Last, First"
+  const studentNameRaw = safeStudent.StudentName || 'Select a Student';
+  const studentName = studentNameRaw.includes(',') ? formatName(studentNameRaw) : studentNameRaw;
+  const initials = getInitials(studentName);
   const assignedTo = safeStudent.Assigned || 'Unassigned';
   const daysOut = safeStudent.DaysOut ?? '--'; // Using nullish coalescing to allow 0
   // Determine background color for Days Out
