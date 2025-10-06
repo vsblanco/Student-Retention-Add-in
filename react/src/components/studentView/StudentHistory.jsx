@@ -4,6 +4,18 @@ import InsertTagButton from './InsertTagButton';
 import Comment, { COMMENT_TAGS } from './Comment';
 
 function StudentHistory({ history }) {
+  // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
+  const normalizedHistory = Array.isArray(history)
+    ? history.map(entry => {
+        const normalized = {};
+        Object.keys(entry || {}).forEach(key => {
+          const normKey = String(key).toLowerCase().replace(/\s+/g, '');
+          normalized[normKey] = entry[key];
+        });
+        return normalized;
+      })
+    : [];
+
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewComment, setShowNewComment] = useState(false);
@@ -12,8 +24,8 @@ function StudentHistory({ history }) {
   const newCommentInputRef = useRef(null);
 
   // Filter history by search term (case-insensitive, matches comment)
-  const filteredHistory = Array.isArray(history)
-    ? history.filter(
+  const filteredHistory = Array.isArray(normalizedHistory)
+    ? normalizedHistory.filter(
         entry =>
           !searchTerm ||
           (entry.comment && entry.comment.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -25,12 +37,33 @@ function StudentHistory({ history }) {
     label: tag.label,
     title: tag.title || tag.label,
     spanClass:
-      // Provide a default spanClass if not present in COMMENT_TAGS
       tag.tagClass ||
-      "px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800"
+      "px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800",
+    pinned: tag.pinned || false
   }));
 
-  if (!Array.isArray(history) || history.length === 0) {
+  // Helper to check if any tag in entry is pinned
+  function isEntryPinned(entry) {
+    if (!entry.tag) return false;
+    const entryTags = entry.tag.split(',').map(t => t.trim());
+    return entryTags.some(tagLabel => {
+      const tagObj = COMMENT_TAGS.find(t => t.label === tagLabel);
+      return tagObj && tagObj.pinned;
+    });
+  }
+
+  // Split filteredHistory into pinned and unpinned, then sort unpinned by recency (reverse order)
+  const pinnedComments = [];
+  const unpinnedComments = [];
+  [...filteredHistory].forEach(entry => {
+    if (isEntryPinned(entry)) {
+      pinnedComments.push(entry);
+    } else {
+      unpinnedComments.push(entry);
+    }
+  });
+
+  if (!Array.isArray(normalizedHistory) || normalizedHistory.length === 0) {
     return (
       <div id="history-content">
         <ul className="space-y-4">
@@ -178,9 +211,19 @@ function StudentHistory({ history }) {
 
       <div id="history-content">
         <ul className="space-y-4">
-          {filteredHistory.map((entry, index) => (
+          {/* Pinned comments first (keep their original order) */}
+          {pinnedComments.map((entry, index) => (
             <Comment
-              key={index}
+              key={`pinned-${index}`}
+              entry={entry}
+              searchTerm={searchTerm}
+              index={index}
+            />
+          ))}
+          {/* Then unpinned comments, most recent first */}
+          {[...unpinnedComments].reverse().map((entry, index) => (
+            <Comment
+              key={`unpinned-${index}`}
               entry={entry}
               searchTerm={searchTerm}
               index={index}
@@ -193,4 +236,5 @@ function StudentHistory({ history }) {
 }
 
 export default StudentHistory;
+
 

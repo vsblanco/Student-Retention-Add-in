@@ -6,9 +6,7 @@ import About from './components/about/About.jsx';
 
 function App() {
   return (
-    <div className="App flex flex-row">
       <StudentView />
-    </div>
   );
 }
 

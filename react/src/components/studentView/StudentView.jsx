@@ -4,14 +4,21 @@ import StudentDetails from './StudentDetails.jsx';
 import StudentHistory from './StudentHistory.jsx';
 import StudentHeader from './StudentHeader.jsx';
 
+// --- Constant for Student History sheet name ---
+const STUDENT_HISTORY_SHEET = "Student History";
+
 // --- Alias mapping for flexible column names ---
 const COLUMN_ALIASES = {
   StudentName: ['Student Name', 'Student'],
-  ID: ['Student ID', 'Student Number'],
+  ID: ['Student ID', 'Student Number','Student identifier'],
+  Gender: ['Gender'],
   Phone: ['Phone Number', 'Contact'],
   StudentEmail: ['Email', 'Student Email'],
   PersonalEmail: ['Other Email'],
-  Assigned: ['Advisor']
+  Assigned: ['Advisor'],
+  Grade: ['Current Grade', 'Grade %', 'Grade'],
+  LDA: ['Last Date of Attendance', 'LDA'],
+  DaysOut: ['Days Out']
   // You can add more aliases for other columns here
 };
 
@@ -51,6 +58,17 @@ const processRow = (rowData, headers) => {
   return studentInfo;
 };
 
+// --- Helper to process history rows ---
+const processHistoryRows = (rows, headers) => {
+  return rows.map(row => {
+    const entry = {};
+    headers.forEach((header, idx) => {
+      entry[header] = row[idx];
+    });
+    return entry;
+  });
+};
+
 function StudentView() {
   const [activeStudent, setActiveStudent] = useState(null);
   // --- UPDATE: Enhanced state to provide better user feedback ---
@@ -79,7 +97,7 @@ function StudentView() {
           {
             timestamp: "2024-01-15",
             comment: "Advised: Discussed course selection.",
-            studentId: "123456",
+            ID: "123456",
             studentName: "Jane Doe",
             createdBy: "Dr. Smith",
             tag: "Outreach"
@@ -87,7 +105,7 @@ function StudentView() {
           {
             timestamp: "2024-01-15",
             comment: "Left Voicemail",
-            studentId: "123456",
+            ID: "123456",
             studentName: "Jane Doe",
             createdBy: "Dr. Smith",
             
@@ -95,7 +113,7 @@ function StudentView() {
           {
             timestamp: "2024-03-10",
             comment: "Follow-up: Checked on progress.",
-            studentId: "123456",
+            ID: "123456",
             studentName: "Jane Doe",
             createdBy: "Dr. Smith",
             tag: "Contacted"
@@ -115,32 +133,59 @@ function StudentView() {
     const loadEntireSheet = async () => {
       try {
         await Excel.run(async (context) => {
+          // --- Load student sheet ---
           const sheet = context.workbook.worksheets.getActiveWorksheet();
           const usedRange = sheet.getUsedRange(true);
           usedRange.load(["values", "rowIndex"]);
+          // --- Load history sheet by name using STUDENT_HISTORY_SHEET ---
+          const historySheet = context.workbook.worksheets.getItem(STUDENT_HISTORY_SHEET);
+          const historyRange = historySheet.getUsedRange(true);
+          historyRange.load(["values"]);
           await context.sync();
 
+          // --- Process history sheet ---
+          let historyMap = {};
+          if (historyRange.values && historyRange.values.length > 1) {
+            const historyHeaders = historyRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
+            const historyRows = historyRange.values.slice(1);
+            const processedHistory = processHistoryRows(historyRows, historyHeaders);
+            // Group by Student ID (case-insensitive)
+            processedHistory.forEach(entry => {
+              const id = entry["Student ID"] || entry["ID"] || entry["Student identifier"] || "";
+              if (!id) return;
+              const key = String(id).toLowerCase();
+              if (!historyMap[key]) historyMap[key] = [];
+              historyMap[key].push(entry);
+            });
+          }
+
+          // --- Process student sheet ---
           if (!usedRange.values || usedRange.values.length < 2) {
             setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
             return;
           }
-
           const headers = usedRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
           const studentDataMap = {};
           const startRowIndex = usedRange.rowIndex;
-          
           for (let i = 1; i < usedRange.values.length; i++) {
             const studentInfo = processRow(usedRange.values[i], headers);
             if (studentInfo) {
+              // --- Attach history if Student ID matches, else set empty array ---
+              const id = studentInfo.ID || "";
+              const key = String(id).toLowerCase();
+              if (id && historyMap[key]) {
+                studentInfo.History = historyMap[key];
+              } else {
+                studentInfo.History = [];
+              }
               const actualRowIndex = startRowIndex + i;
-              studentDataMap[actualRowIndex] = studentInfo; 
+              studentDataMap[actualRowIndex] = studentInfo;
             }
           }
-
           if (Object.keys(studentDataMap).length === 0) {
-              setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
+            setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
           } else {
-              setSheetData({ status: 'success', data: studentDataMap, message: '' });
+            setSheetData({ status: 'success', data: studentDataMap, message: '' });
           }
         });
       } catch (error) {
@@ -199,6 +244,13 @@ function StudentView() {
       }
     };
   }, [sheetData]); // Depend on the entire sheetData object
+
+  // Log payload only when activeStudent changes
+  useEffect(() => {
+    if (activeStudent) {
+      console.log('StudentHeader payload:', activeStudent);
+    }
+  }, [activeStudent]);
 
   // --- Detect test mode (browser, not Excel) ---
   const isTestMode = typeof window.Excel === "undefined";

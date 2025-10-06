@@ -151,12 +151,47 @@ function StudentDetails({ student }) {
         >
           <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last LDA</label>
           <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
-            {student["LDA"] || 'N/A'}
+            {formatLDA(student["LDA"])}
           </p>
         </div>
       </div>
     </div>
   );
+}
+
+function formatLDA(lda) {
+  // Handle Excel serial date numbers (integers, e.g., 45000)
+  if (
+    (typeof lda === 'number' && Number.isFinite(lda)) ||
+    (typeof lda === 'string' && /^\d+$/.test(lda) && lda.length <= 5)
+  ) {
+    // Excel's epoch starts at 1899-12-30
+    const serial = typeof lda === 'number' ? lda : parseInt(lda, 10);
+    if (!isNaN(serial)) {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const date = new Date(excelEpoch.getTime() + serial * 86400000);
+      return date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  }
+  // Handle YYYYMMDD string
+  if (typeof lda === 'string' && /^\d{8}$/.test(lda)) {
+    const year = lda.slice(0, 4);
+    const month = lda.slice(4, 6);
+    const day = lda.slice(6, 8);
+    const date = new Date(`${year}-${month}-${day}`);
+    if (!isNaN(date)) {
+      return date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  }
+  return lda || 'N/A';
 }
 
 export default StudentDetails;

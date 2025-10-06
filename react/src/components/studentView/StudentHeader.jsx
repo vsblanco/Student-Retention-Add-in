@@ -59,15 +59,17 @@ function StudentHeader({ student }) {
   let gradeTextLabel = 'text-gray-500';
   let gradeDisplay = grade;
   if (typeof parsedGrade === 'number' && !isNaN(parsedGrade)) {
-    if (parsedGrade >= 90) {
+    // Round to nearest integer
+    const roundedGrade = Math.round(parsedGrade);
+    if (roundedGrade >= 90) {
       gradeBg = 'bg-green-300';
       gradeText = 'text-black';
       gradeTextLabel = 'text-black';
-    } else if (parsedGrade >= 70) {
+    } else if (roundedGrade >= 70) {
       gradeBg = 'bg-green-200';
       gradeText = 'text-gray-800';
       gradeTextLabel = 'text-gray-500';
-    } else if (parsedGrade >= 60) {
+    } else if (roundedGrade >= 60) {
       gradeBg = 'bg-yellow-200';
       gradeText = 'text-gray-800';
       gradeTextLabel = 'text-gray-500';
@@ -76,16 +78,16 @@ function StudentHeader({ student }) {
       gradeText = 'text-black';
       gradeTextLabel = 'text-black';
     }
-    gradeDisplay = `${parsedGrade}%`;
+    gradeDisplay = `${roundedGrade}%`;
   }
   
   // --- Gender-based avatar background ---
   const gender = (safeStudent.Gender || '').toLowerCase();
   const avatarBg =
-    gender === 'boy'
+    gender === 'male'
       ? { background: '#1278FF', color: '#FFFFFF' } // light blue, dark text
-      : gender === 'girl'
-        ? { background: '#f9a8d4', color: '#FFFFFF' } // pink, dark pink text
+      : gender === 'female'
+        ? { background: '#ed72b5', color: '#FFFFFF' } // pink, dark pink text
         : { background: '#6b7280', color: '#FFFFFF' };   // default gray, white text
 
   return (
