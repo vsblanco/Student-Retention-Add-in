@@ -92,25 +92,34 @@ function StudentHeader({ student }) {
 
   return (
     <div className="p-4 bg-white border-b border-gray-200">
-      <div className="flex items-center justify-between space-x-4">
+      <div className="flex items-center justify-between space-x-4 min-w-0">
         {/* Left side: Avatar and Name */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 min-w-0">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0"
             style={avatarBg}
           >
             {initials}
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-gray-800 truncate">{studentName}</h2>
-            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block">
+          <div className="min-w-0">
+            <h2
+              className="text-lg font-bold text-gray-800 break-words"
+              style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden'
+              }}
+            >
+              {studentName}
+            </h2>
+            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block truncate max-w-[120px]">
               {assignedTo}
             </span>
           </div>
         </div>
-        
         {/* Right side: Stats */}
-        <div className="flex space-x-2">
+        <div className="flex space-x-2 flex-shrink-0">
           <div className={`p-2 text-center rounded-lg ${daysOutBg} ${daysOutText} w-20`}>
             <div className="text-xl font-bold">{daysOut}</div>
             <div className={`text-xs font-medium uppercase ${daysOutLabelText}`}>

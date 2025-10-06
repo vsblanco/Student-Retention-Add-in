@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 // Tag definitions for comments
 export const COMMENT_TAGS = [
@@ -11,7 +11,7 @@ export const COMMENT_TAGS = [
   {
     label: "Note",
     bgClass: "bg-gray-200",
-    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-200 text-gray-800",
+    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-700 text-gray-200",
     pinned: true,
     priority: 3
   },
@@ -57,7 +57,7 @@ export const COMMENT_TAGS = [
   {
     label: "Outreach",
     bgClass: "bg-gray-100",
-    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-200 text-gray-800",
+    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800",
     priority: 1
   },
   {
@@ -95,9 +95,11 @@ function findTagInfo(label) {
 
 function Comment({ entry, searchTerm, index }) {
   // Support multiple tags separated by commas
-  const tags = entry.tag
+  let tags = entry.tag
     ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
     : [];
+  // Remove "Comment" tags
+  tags = tags.filter(t => t !== "Comment");
 
   // Find tag info for all tags
   const tagInfos = tags.map(findTagInfo);
@@ -116,10 +118,8 @@ function Comment({ entry, searchTerm, index }) {
   });
   if (!tagInfo) tagInfo = tagInfos[0] || null;
 
-  // Log the priority for each comment
-  console.log("Comment tags:", tags, "Selected priority:", tagInfo && tagInfo.priority);
-
   // Determine background class from the highest priority tag
+  // If no tagInfo, use default
   const bgClass = tagInfo && tagInfo.bgClass ? tagInfo.bgClass : "bg-gray-200";
   const tagClass = tagInfo ? tagInfo.tagClass : "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800";
 
@@ -203,7 +203,29 @@ function Comment({ entry, searchTerm, index }) {
       if (lastIndex < entry.comment.length) {
         parts.push(entry.comment.slice(lastIndex));
       }
-      commentContent = parts.length > 0 ? parts : entry.comment;
+      // Highlight "Tomorrow", "next week", weekdays, and weekends in the resulting parts
+      const highlightLdaKeywords = part => {
+        if (typeof part !== "string") return part;
+        // Regex for "Tomorrow", "next week", weekdays, "weekend", "weekends" (case-insensitive)
+        const keywordRegex = /\b(Tomorrow|next week|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|weekend|weekends)\b/gi;
+        let keywordParts = [];
+        let lastIdx = 0;
+        let kwMatch;
+        while ((kwMatch = keywordRegex.exec(part)) !== null) {
+          if (kwMatch.index > lastIdx) {
+            keywordParts.push(part.slice(lastIdx, kwMatch.index));
+          }
+          keywordParts.push(
+            <b key={`lda-keyword-${kwMatch.index}`}>{kwMatch[0]}</b>
+          );
+          lastIdx = keywordRegex.lastIndex;
+        }
+        if (lastIdx < part.length) {
+          keywordParts.push(part.slice(lastIdx));
+        }
+        return keywordParts.length > 0 ? keywordParts : part;
+      };
+      commentContent = parts.flatMap(highlightLdaKeywords);
     } else if (searchTerm && entry.comment) {
       const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
       commentContent = entry.comment.split(regex).map((part, i) =>
@@ -231,6 +253,34 @@ function Comment({ entry, searchTerm, index }) {
     formattedTimestamp = formatExcelDate(entry.timestamp);
   }
 
+  // State for expanding/collapsing long comments and quotes
+  const [expanded, setExpanded] = useState(false);
+
+  // Ref and state for regular comment
+  const commentRef = React.useRef(null);
+  const [isLong, setIsLong] = useState(false);
+
+  // Ref and state for quote text
+  const quoteRef = React.useRef(null);
+  const [isQuoteLong, setIsQuoteLong] = useState(false);
+
+  React.useEffect(() => {
+    if (commentRef.current) {
+      const el = commentRef.current;
+      const style = window.getComputedStyle(el);
+      const lineHeight = parseFloat(style.lineHeight);
+      const lines = el.scrollHeight / lineHeight;
+      setIsLong(lines > 3.1);
+    }
+    if (quoteRef.current) {
+      const el = quoteRef.current;
+      const style = window.getComputedStyle(el);
+      const lineHeight = parseFloat(style.lineHeight);
+      const lines = el.scrollHeight / lineHeight;
+      setIsQuoteLong(lines > 3.1);
+    }
+  }, [entry.comment, commentContent, quoteText, expanded]);
+
   return (
     <li
       className={`p-3 rounded-lg shadow-sm relative ${bgClass}`}
@@ -241,17 +291,68 @@ function Comment({ entry, searchTerm, index }) {
           {beforeQuote}
           <blockquote className="relative bg-blue-50 border-l-4 border-blue-400 pl-6 pr-2 py-3 mb-2 rounded">
             <span className="absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">“</span>
-            <span className="text-base text-blue-900 font-serif">{quoteText}</span>
+            <span
+              ref={quoteRef}
+              className={`text-base text-blue-900 font-serif ${!expanded ? 'line-clamp-3' : ''}`}
+              style={
+                !expanded
+                  ? {
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
+                    }
+                  : {}
+              }
+            >
+              {quoteText}
+            </span>
             <span className="absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">”</span>
           </blockquote>
+          {isQuoteLong && (
+            <button
+              className="text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
+              onClick={() => setExpanded(e => !e)}
+              type="button"
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
           {afterQuote}
         </>
       ) : (
-        <p className="text-sm text-gray-800">{commentContent}</p>
+        <>
+          <p
+            ref={commentRef}
+            className={`text-sm text-gray-800 ${!expanded ? 'line-clamp-3' : ''}`}
+            style={
+              !expanded
+                ? {
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden'
+                  }
+                : {}
+            }
+          >
+            {commentContent}
+          </p>
+          {isLong && (
+            <button
+              className="text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
+              onClick={() => setExpanded(e => !e)}
+              type="button"
+            >
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </>
       )}
       <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
         <div className="flex items-center gap-2">
           {tags.length > 0 && tags.map((tag, idx) => {
+            // "Comment" tags already filtered out above
             const tagInfo = findTagInfo(tag);
             const tagClass = tagInfo
               ? tagInfo.tagClass

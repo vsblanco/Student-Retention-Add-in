@@ -94,6 +94,19 @@ function StudentHistory({ history }) {
             opacity: 0;
             animation: tagFadeInRight 0.45s cubic-bezier(0.4,0,0.2,1) forwards;
           }
+          @keyframes fadeInDrop {
+            from {
+              opacity: 0;
+              transform: translateY(-24px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .animate-fadein {
+            animation: fadeInDrop 0.4s cubic-bezier(0.4,0,0.2,1);
+          }
         `}
       </style>
       {/* History Header */}
@@ -165,9 +178,11 @@ function StudentHistory({ history }) {
 
         <div
           id="new-comment-section"
-          className={`p-4 bg-white border rounded-lg shadow-sm ${showNewComment ? '' : 'hidden'}`}
+          className={`relative p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 rounded-2xl shadow-xl transition-all duration-200 ${
+            showNewComment ? 'animate-fadein opacity-100' : 'hidden opacity-0'
+          }`}
         >
-          <div id="tag-pills-container" className="flex items-center gap-2 mb-2 flex-wrap min-h-[26px]">
+          <div id="tag-pills-container" className="flex items-center gap-2 mb-3 flex-wrap min-h-[32px]">
             <InsertTagButton
               dropdownId="tag-dropdown"
               onTagClick={tag => {
@@ -189,28 +204,38 @@ function StudentHistory({ history }) {
               dropdownTarget={tagDropdownTarget}
               setDropdownTarget={setTagDropdownTarget}
               targetName="comment"
-              dropdownClassName="backdrop-blur bg-white/10"
-              dropdownStyle={{ top: '50%', transform: 'translateY(-50%)', left: '100%', marginLeft: '0.5rem' }}
               tags={TAG_OPTIONS}
             />
           </div>
           <textarea
             id="new-comment-input"
             ref={newCommentInputRef}
-            className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-3 border border-gray-300 rounded-xl bg-white shadow-inner focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-150 text-base placeholder-gray-400 resize-vertical"
             rows={3}
             placeholder="Add a new comment..."
           ></textarea>
-          <div className="flex justify-between items-center mt-2">
+          <div className="flex justify-between items-center mt-4">
             <span id="comment-status" className="text-sm text-green-600"></span>
-            <button id="submit-comment-button" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400">Submit</button>
+            <button
+              id="submit-comment-button"
+              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-150 disabled:bg-gray-400 disabled:from-gray-400 disabled:to-gray-400"
+            >
+              Submit
+            </button>
           </div>
         </div>
       </div>
       {/* End History Header */}
 
-      <div id="history-content">
-        <ul className="space-y-4">
+      <div
+        id="history-content"
+        className="mt-4 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-inner"
+        style={{
+          // Header + paddings estimated at ~260px, adjust as needed for your layout
+          height: 'calc(100vh - 260px)'
+        }}
+      >
+        <ul className="space-y-4 p-4">
           {/* Pinned comments first (keep their original order) */}
           {pinnedComments.map((entry, index) => (
             <Comment
