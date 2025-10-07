@@ -1,7 +1,39 @@
-// Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
-import React, { useState, useRef } from 'react';
-import InsertTagButton from './InsertTagButton';
+import React, { useState } from 'react';
 import Comment, { COMMENT_TAGS } from './Comment';
+import NewComment from './NewComment';
+
+// Add styles constant
+const styles = `
+  @keyframes fadeInDrop {
+    from {
+      opacity: 0;
+      transform: translateY(-24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-fadein {
+    animation: fadeInDrop 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  /* See-through scrollbar styles */
+  #history-content {
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgba(0,0,0,0.15) rgba(0,0,0,0.03);
+  }
+  #history-content::-webkit-scrollbar {
+    width: 8px;
+    background: transparent;
+  }
+  #history-content::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.15);
+    border-radius: 8px;
+  }
+  #history-content::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.03);
+  }
+`;
 
 function StudentHistory({ history }) {
   // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
@@ -19,9 +51,6 @@ function StudentHistory({ history }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewComment, setShowNewComment] = useState(false);
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
-  const [tagDropdownTarget, setTagDropdownTarget] = useState(null); // 'search' or 'comment'
-  const newCommentInputRef = useRef(null);
 
   // Filter history by search term (case-insensitive, matches comment)
   const filteredHistory = Array.isArray(normalizedHistory)
@@ -31,16 +60,6 @@ function StudentHistory({ history }) {
           (entry.comment && entry.comment.toLowerCase().includes(searchTerm.toLowerCase()))
       )
     : [];
-
-  // Use COMMENT_TAGS for InsertTagButton dropdowns
-  const TAG_OPTIONS = COMMENT_TAGS.map(tag => ({
-    label: tag.label,
-    title: tag.title || tag.label,
-    spanClass:
-      tag.tagClass ||
-      "px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800",
-    pinned: tag.pinned || false
-  }));
 
   // Helper to check if any tag or subtag in entry is pinned
   function isEntryPinned(entry) {
@@ -84,56 +103,9 @@ function StudentHistory({ history }) {
 
   return (
     <div>
-      {/* Animation keyframes for tag dropdown */}
-      <style>
-        {`
-          @keyframes tagFadeInRight {
-            from {
-              opacity: 0;
-              transform: translateX(-24px);
-            }
-            to {
-              opacity: 1;
-              transform: translateX(0);
-            }
-          }
-          .tag-anim {
-            opacity: 0;
-            animation: tagFadeInRight 0.45s cubic-bezier(0.4,0,0.2,1) forwards;
-          }
-          @keyframes fadeInDrop {
-            from {
-              opacity: 0;
-              transform: translateY(-24px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-          .animate-fadein {
-            animation: fadeInDrop 0.4s cubic-bezier(0.4,0,0.2,1);
-          }
-          /* See-through scrollbar styles */
-          #history-content {
-            scrollbar-width: thin; /* Firefox */
-            scrollbar-color: rgba(0,0,0,0.15) rgba(0,0,0,0.03);
-          }
-          #history-content::-webkit-scrollbar {
-            width: 8px;
-            background: transparent;
-          }
-          #history-content::-webkit-scrollbar-thumb {
-            background: rgba(0,0,0,0.15);
-            border-radius: 8px;
-          }
-          #history-content::-webkit-scrollbar-track {
-            background: rgba(0,0,0,0.03);
-          }
-        `}
-      </style>
+      <style>{styles}</style>
       {/* History Header */}
-      <div className="sticky-header pt-2 px-4 space-y-4">
+      <div className="sticky-header space-y-4">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-800">History</h3>
           <div className="flex items-center space-x-2">
@@ -161,18 +133,7 @@ function StudentHistory({ history }) {
           className={`${showSearch ? '' : 'hidden'} space-y-2`}
         >
           <div id="tag-filter-container" className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-200">
-            <InsertTagButton
-              dropdownId="filter-tag-dropdown"
-              onTagClick={() => {}}
-              showDropdown={showTagDropdown}
-              setShowDropdown={setShowTagDropdown}
-              dropdownTarget={tagDropdownTarget}
-              setDropdownTarget={setTagDropdownTarget}
-              targetName="search"
-              dropdownClassName=""
-              dropdownStyle={{}}
-              tags={TAG_OPTIONS}
-            />
+            {/* Removed InsertTagButton for filtering history by tag */}
           </div>
           <div className="relative">
             <input
@@ -199,54 +160,11 @@ function StudentHistory({ history }) {
           </div>
         </div>
 
-        <div
-          id="new-comment-section"
-          className={`relative p-6 bg-gradient-to-br from-white via-gray-50 to-gray-100 border border-gray-200 rounded-2xl shadow-xl transition-all duration-200 ${
-            showNewComment ? 'animate-fadein opacity-100' : 'hidden opacity-0'
-          }`}
-        >
-          <div id="tag-pills-container" className="flex items-center gap-2 mb-3 flex-wrap min-h-[32px]">
-            <InsertTagButton
-              dropdownId="tag-dropdown"
-              onTagClick={tag => {
-                // Insert tag at cursor position in textarea
-                const textarea = newCommentInputRef.current;
-                if (textarea) {
-                  const start = textarea.selectionStart;
-                  const end = textarea.selectionEnd;
-                  const value = textarea.value;
-                  const tagText = `[${tag}] `;
-                  textarea.value = value.slice(0, start) + tagText + value.slice(end);
-                  // Move cursor after inserted tag
-                  textarea.selectionStart = textarea.selectionEnd = start + tagText.length;
-                  textarea.focus();
-                }
-              }}
-              showDropdown={showTagDropdown}
-              setShowDropdown={setShowTagDropdown}
-              dropdownTarget={tagDropdownTarget}
-              setDropdownTarget={setTagDropdownTarget}
-              targetName="comment"
-              tags={TAG_OPTIONS}
-            />
-          </div>
-          <textarea
-            id="new-comment-input"
-            ref={newCommentInputRef}
-            className="w-full p-3 border border-gray-300 rounded-xl bg-white shadow-inner focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-150 text-base placeholder-gray-400 resize-vertical"
-            rows={3}
-            placeholder="Add a new comment..."
-          ></textarea>
-          <div className="flex justify-between items-center mt-4">
-            <span id="comment-status" className="text-sm text-green-600"></span>
-            <button
-              id="submit-comment-button"
-              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-150 disabled:bg-gray-400 disabled:from-gray-400 disabled:to-gray-400"
-            >
-              Submit
-            </button>
-          </div>
-        </div>
+        {/* Move new comment box to NewComment component */}
+        <NewComment
+          show={showNewComment}
+          onClose={() => setShowNewComment(false)}
+        />
       </div>
       {/* End History Header */}
 
@@ -281,7 +199,6 @@ function StudentHistory({ history }) {
     </div>
   );
 }
-
 export default StudentHistory;
 
 
