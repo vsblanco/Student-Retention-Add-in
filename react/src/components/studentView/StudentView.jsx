@@ -1,11 +1,14 @@
-// Timestamp: 2025-10-03 11:03 AM | Version: 6.3.0
 import React, { useState, useEffect, useRef } from 'react';
 import StudentDetails from './StudentDetails.jsx';
 import StudentHistory from './StudentHistory.jsx';
 import StudentHeader from './StudentHeader.jsx';
+import ExampleStudent from '../utility/ExampleStudent.jsx';
+import StudentAssignments from './StudentAssignments.jsx';
+import { formatName } from '../utility/Conversion.jsx';
+import './StudentView.css';
 
-// --- Constant for Student History sheet name ---
 const STUDENT_HISTORY_SHEET = "Student History";
+const STUDENT_MISSING_ASSIGNMENT_SHEET = "Missing Assignments";
 
 // --- Alias mapping for flexible column names ---
 const COLUMN_ALIASES = {
@@ -18,7 +21,8 @@ const COLUMN_ALIASES = {
   Assigned: ['Advisor'],
   Grade: ['Current Grade', 'Grade %', 'Grade'],
   LDA: ['Last Date of Attendance', 'LDA'],
-  DaysOut: ['Days Out']
+  DaysOut: ['Days Out'],
+  Gradebook: ['Gradebook']
   // You can add more aliases for other columns here
 };
 
@@ -36,20 +40,65 @@ for (const canonicalName in COLUMN_ALIASES) {
   canonicalHeaderMap[normalizeHeader(canonicalName)] = canonicalName;
 }
 
+/**
+ * Extracts the URL from an Excel HYPERLINK formula string.
+ * e.g., '=HYPERLINK("https://link.com/gradebook", "Gradebook")' -> 'https://link.com/gradebook'
+ * @param {string} formula - The raw Excel formula string.
+ * @returns {string | null} The extracted URL or null.
+ */
+const extractHyperlink = (formula) => {
+  if (typeof formula !== 'string' || !formula.toUpperCase().startsWith('=HYPERLINK(')) {
+    return null;
+  }
+  const regex = /=HYPERLINK\s*\(\s*["']?([^,"']+)["']?\s*,\s*[^)]+\)/i;
+  const match = formula.match(regex);
+  
+  if (match && match[1]) {
+    let url = match[1].trim();
+    // In case the captured group still has quotes (depending on Excel's formula output)
+    if (url.startsWith('"') && url.endsWith('"')) {
+        url = url.substring(1, url.length - 1);
+    }
+    if (url.startsWith("'") && url.endsWith("'")) {
+        url = url.substring(1, url.length - 1);
+    }
+    return url;
+  }
+  
+  return null;
+};
+
 // Helper function to process a raw row of data against headers
-const processRow = (rowData, headers) => {
+const processRow = (rowData, headers, formulaRowData) => {
   if (!rowData || rowData.every(cell => cell === "")) {
     return null;
   }
+  
   const studentInfo = {};
+  let gradebookIndex = -1;
+
   headers.forEach((header, index) => {
     if (header && index < rowData.length) {
       // --- Normalize the header from the sheet in the same way before looking it up ---
       const normalizedLookupKey = normalizeHeader(header);
       const canonicalHeader = canonicalHeaderMap[normalizedLookupKey] || header.trim();
       studentInfo[canonicalHeader] = rowData[index];
+
+      // Check if this is the GradeBook column
+      if (canonicalHeader === 'Gradebook') {
+          gradebookIndex = index;
+      }
     }
   });
+
+  // --- NEW LOGIC: Extract GradeBook Hyperlink if available ---
+  if (gradebookIndex !== -1 && formulaRowData && gradebookIndex < formulaRowData.length) {
+      const formula = formulaRowData[gradebookIndex];
+      const link = extractHyperlink(formula);
+      if (link) {
+          studentInfo.Gradebook = link;
+      }
+  }
 
   // Now we only need to check for the one, standard "StudentName" key
   if (!studentInfo.StudentName || String(studentInfo.StudentName).trim() === "") {
@@ -76,72 +125,91 @@ function StudentView() {
   const [activeTab, setActiveTab] = useState('details');
   const isInitialLoad = useRef(true);
 
+  // --- Store student row indices for navigation ---
+  const [studentRowIndices, setStudentRowIndices] = useState([]);
+  const [currentRowIndex, setCurrentRowIndex] = useState(null);
+  const [pendingRowIdx, setPendingRowIdx] = useState(null); // index in cache for fast navigation
+  const [studentCache, setStudentCache] = useState([]); // ordered cache of students
+
+  // --- Store headers for column lookup ---
+  const [headers, setHeaders] = useState([]);
+  const [assignmentsMap, setAssignmentsMap] = useState({}); // { studentName: [assignments] }
+
+  // --- Helper to find the column index for StudentName based on stored headers ---
+  const getStudentNameColIdx = () => {
+    const studentNameCanonical = 'StudentName';
+    for (let i = 0; i < headers.length; i++) {
+        const normalizedLookupKey = normalizeHeader(headers[i]);
+        const canonicalHeader = canonicalHeaderMap[normalizedLookupKey] || headers[i].trim();
+        if (canonicalHeader === studentNameCanonical) {
+            return i;
+        }
+    }
+    // Default to the first column if not found (a guess)
+    return 0; 
+  };
+
+
   // --- TEST MODE: Provide a basic student object if not running in Office/Excel ---
   useEffect(() => {
     if (typeof window.Excel === "undefined") {
-      // Simulate a single student row for testing
-      const testStudent = {
-        StudentName: "Jane Doe",
-        ID: "123456",
-        Gender: "Boy",
-        Phone: "555-1234",
-        OtherPhone: "555-5678",
-        StudentEmail: "jane.doe@university.edu",
-        PersonalEmail: "jane.doe@gmail.com",
-        Assigned: "Dr. Smith",
-        DaysOut: 10,
-        Grade: "77%",
-        LDA: "2024-05-20",
-        // History as an array of objects for test mode
-        History: [
-          {
-            timestamp: "2024-01-15",
-            comment: "Advised: Discussed course selection.",
-            ID: "123456",
-            studentName: "Jane Doe",
-            createdBy: "Dr. Smith",
-            tag: "Outreach"
-          },
-          {
-            timestamp: "2024-01-15",
-            comment: "Left Voicemail",
-            ID: "123456",
-            studentName: "Jane Doe",
-            createdBy: "Dr. Smith",
-            
-          },
-          {
-            timestamp: "2024-03-10",
-            comment: "Follow-up: Checked on progress.",
-            ID: "123456",
-            studentName: "Jane Doe",
-            createdBy: "Dr. Smith",
-            tag: "Contacted"
-          }
-        ]
-        // Optionally add an alias for testing alias logic:
-        // Notes: [...]
-      };
-      setSheetData({ status: 'success', data: { 1: testStudent }, message: '' });
-      setActiveStudent(testStudent);
+      // Use imported ExampleStudent for testing
+      setSheetData({ status: 'success', data: { 1: ExampleStudent }, message: '' });
+      setActiveStudent(ExampleStudent);
     }
   }, []);
 
   // Effect 1: Load the entire sheet data into memory ONCE.
   useEffect(() => {
-    if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
+    if (typeof window.Excel === "undefined") return;
     const loadEntireSheet = async () => {
       try {
         await Excel.run(async (context) => {
           // --- Load student sheet ---
           const sheet = context.workbook.worksheets.getActiveWorksheet();
           const usedRange = sheet.getUsedRange(true);
-          usedRange.load(["values", "rowIndex"]);
+          usedRange.load(["values", "formulas", "rowIndex"]);
           // --- Load history sheet by name using STUDENT_HISTORY_SHEET ---
           const historySheet = context.workbook.worksheets.getItem(STUDENT_HISTORY_SHEET);
           const historyRange = historySheet.getUsedRange(true);
           historyRange.load(["values"]);
+          // --- Load assignments sheet ---
+          let assignmentsRange, assignmentsValues = [], assignmentsHeaders = [];
+          try {
+            const assignmentsSheet = context.workbook.worksheets.getItem(STUDENT_MISSING_ASSIGNMENT_SHEET);
+            assignmentsRange = assignmentsSheet.getUsedRange(true);
+            assignmentsRange.load(["values"]);
+          } catch (e) {
+            assignmentsRange = null;
+          }
           await context.sync();
+
+          // --- Process assignments sheet ---
+          let assignmentsMap = {};
+          if (assignmentsRange && assignmentsRange.values && assignmentsRange.values.length > 1) {
+            assignmentsHeaders = assignmentsRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
+            assignmentsValues = assignmentsRange.values.slice(1);
+            assignmentsValues.forEach(row => {
+              // Find student name column
+              const nameIdx = assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Student Name'));
+              if (nameIdx === -1) return;
+              const studentName = row[nameIdx];
+              if (!studentName) return;
+              // Build assignment object
+              const assignment = {
+                title: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Assignment Title'))] || '',
+                dueDate: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Due Date'))] || '',
+                score: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Score'))] || '',
+                submissionLink: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Submission Link'))] || '',
+                assignmentLink: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Assignment Link'))] || '',
+              };
+              if (!assignmentsMap[studentName]) assignmentsMap[studentName] = [];
+              assignmentsMap[studentName].push(assignment);
+            });
+            // Debug: log assignments map after processing
+            console.log('[DEBUG] assignmentsMap:', assignmentsMap);
+          }
+          setAssignmentsMap(assignmentsMap);
 
           // --- Process history sheet ---
           let historyMap = {};
@@ -165,10 +233,12 @@ function StudentView() {
             return;
           }
           const headers = usedRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
+          setHeaders(headers); // <-- Save headers for later use
           const studentDataMap = {};
           const startRowIndex = usedRange.rowIndex;
           for (let i = 1; i < usedRange.values.length; i++) {
-            const studentInfo = processRow(usedRange.values[i], headers);
+            // *** MODIFIED: Pass formulas for the current row ***
+            const studentInfo = processRow(usedRange.values[i], headers, usedRange.formulas[i]);
             if (studentInfo) {
               // --- Attach history if Student ID matches, else set empty array ---
               const id = studentInfo.ID || "";
@@ -182,6 +252,11 @@ function StudentView() {
               studentDataMap[actualRowIndex] = studentInfo;
             }
           }
+          // --- Store row indices for navigation ---
+          const indices = Object.keys(studentDataMap).map(idx => Number(idx));
+          setStudentRowIndices(indices);
+          // --- Build ordered cache ---
+          setStudentCache(indices.map(idx => studentDataMap[idx]));
           if (Object.keys(studentDataMap).length === 0) {
             setSheetData({ status: 'empty', data: {}, message: 'No student data found on this sheet.' });
           } else {
@@ -197,42 +272,44 @@ function StudentView() {
     loadEntireSheet();
   }, []);
 
+  // --- Store reference to Excel selection event handler for enable/disable ---
+  const selectionHandlerRef = useRef(null);
+  const selectionHandlerEnabledRef = useRef(true);
+
   // Effect 2: Handle selection changes from Excel.
   useEffect(() => {
     if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
-
-    // Do not proceed if data isn't loaded successfully
     if (sheetData.status !== 'success') return;
 
     const syncUIToSheetSelection = async () => {
+      if (!selectionHandlerEnabledRef.current) return; // Ignore if disabled
       try {
         await Excel.run(async (context) => {
           const range = context.workbook.getSelectedRange();
           range.load("rowIndex");
           await context.sync();
-          
           const rowIndex = range.rowIndex;
           setActiveStudent(sheetData.data[rowIndex] || null);
+          setCurrentRowIndex(rowIndex);
         });
       } catch (error) {
-        // Ignore GeneralException which can occur if selection is invalid
         if (error.code !== "GeneralException") {
-             console.error("Error in syncUIToSheetSelection:", error);
+          console.error("Error in syncUIToSheetSelection:", error);
         }
       }
     };
 
     let eventHandler;
     Excel.run(async (context) => {
-        const worksheet = context.workbook.worksheets.getActiveWorksheet();
-        eventHandler = worksheet.onSelectionChanged.add(syncUIToSheetSelection);
-        await context.sync();
-        
-        // On initial load, manually trigger sync to reflect current selection
-        if (isInitialLoad.current) {
-          syncUIToSheetSelection();
-          isInitialLoad.current = false;
-        }
+      const worksheet = context.workbook.worksheets.getActiveWorksheet();
+      eventHandler = worksheet.onSelectionChanged.add(syncUIToSheetSelection);
+      selectionHandlerRef.current = eventHandler;
+      selectionHandlerEnabledRef.current = true;
+      await context.sync();
+      if (isInitialLoad.current) {
+        syncUIToSheetSelection();
+        isInitialLoad.current = false;
+      }
     });
 
     return () => {
@@ -242,64 +319,198 @@ function StudentView() {
           await context.sync();
         });
       }
+      selectionHandlerRef.current = null;
+      selectionHandlerEnabledRef.current = true;
     };
-  }, [sheetData]); // Depend on the entire sheetData object
+  }, [sheetData]);
 
-  // Log payload only when activeStudent changes
+  // --- Keyboard navigation for up/down arrows (hold support) ---
   useEffect(() => {
-    if (activeStudent) {
+    if (typeof window.Excel === "undefined") return; // Only in Excel
+
+    let navTimer = null;
+    let lastDirection = null;
+    let isNavigating = false; // Prevent overlapping Excel.run calls
+
+    const NAV_INTERVAL = 250; // ms between moves when holding (increased for Excel)
+
+    const moveSelection = async (direction) => {
+      if (isNavigating) return;
+      isNavigating = true;
+      if (!studentRowIndices.length || currentRowIndex === null) {
+        isNavigating = false;
+        return;
+      }
+      const currentIdx = studentRowIndices.indexOf(currentRowIndex);
+      let nextIdx = currentIdx;
+      if (direction === "up") {
+        nextIdx = Math.max(0, currentIdx - 1);
+      } else if (direction === "down") {
+        nextIdx = Math.min(studentRowIndices.length - 1, currentIdx + 1);
+      }
+      const nextRowIndex = studentRowIndices[nextIdx];
+      if (nextRowIndex !== undefined && nextRowIndex !== currentRowIndex) {
+        selectionHandlerEnabledRef.current = false; // Disable selection event handler
+        await Excel.run(async (context) => {
+          const sheet = context.workbook.worksheets.getActiveWorksheet();
+          const nameColIdx = getStudentNameColIdx();
+          const range = sheet.getRangeByIndexes(nextRowIndex, nameColIdx, 1, 1);
+          range.select();
+          await context.sync();
+          setActiveStudent(sheetData.data[nextRowIndex] || null);
+          setCurrentRowIndex(nextRowIndex);
+        });
+        selectionHandlerEnabledRef.current = true; // Re-enable after navigation
+      }
+      isNavigating = false;
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.repeat && navTimer) return; // Already repeating
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        lastDirection = e.key === "ArrowUp" ? "up" : "down";
+        moveSelection(lastDirection);
+        // Start timer for hold
+        if (!navTimer) {
+          navTimer = setInterval(() => moveSelection(lastDirection), NAV_INTERVAL);
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if (navTimer) {
+          clearInterval(navTimer);
+          navTimer = null;
+        }
+        lastDirection = null;
+      }
+    };
+
+    const handleBlur = () => {
+      if (navTimer) {
+        clearInterval(navTimer);
+        navTimer = null;
+      }
+      lastDirection = null;
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      if (navTimer) clearInterval(navTimer);
+    };
+  }, [studentRowIndices, currentRowIndex, sheetData, headers]);
+
+  // --- Fast local navigation using cache, sync Excel selection after ---
+  useEffect(() => {
+    if (typeof window.Excel === "undefined") return; // Only in Excel
+
+    let navTimer = null;
+    let lastDirection = null;
+
+    const NAV_INTERVAL = 80; // Fast UI navigation
+
+    const moveLocalSelection = (direction) => {
+      if (!studentCache.length) return;
+      const idx = pendingRowIdx ?? studentRowIndices.indexOf(currentRowIndex);
+      let nextIdx = idx;
+      if (direction === "up") {
+        nextIdx = Math.max(0, idx - 1);
+      } else if (direction === "down") {
+        nextIdx = Math.min(studentCache.length - 1, idx + 1);
+      }
+      if (nextIdx !== idx) {
+        setPendingRowIdx(nextIdx);
+        setActiveStudent(studentCache[nextIdx]);
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.repeat && navTimer) return;
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        lastDirection = e.key === "ArrowUp" ? "up" : "down";
+        moveLocalSelection(lastDirection);
+        if (!navTimer) {
+          navTimer = setInterval(() => moveLocalSelection(lastDirection), NAV_INTERVAL);
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        if (navTimer) {
+          clearInterval(navTimer);
+          navTimer = null;
+        }
+        lastDirection = null;
+        // Sync Excel selection to UI
+        const idx = pendingRowIdx ?? studentRowIndices.indexOf(currentRowIndex);
+        if (idx !== null && idx !== undefined && idx !== studentRowIndices.indexOf(currentRowIndex)) {
+          const rowIdx = studentRowIndices[idx];
+          selectionHandlerEnabledRef.current = false; // Disable selection event handler
+          Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getActiveWorksheet();
+            const nameColIdx = getStudentNameColIdx();
+            const range = sheet.getRangeByIndexes(rowIdx, nameColIdx, 1, 1);
+            range.select();
+            await context.sync();
+            setCurrentRowIndex(rowIdx);
+          }).finally(() => {
+            selectionHandlerEnabledRef.current = true; // Re-enable after navigation
+          });
+        }
+        setPendingRowIdx(null);
+      }
+    };
+
+    const handleBlur = () => {
+      if (navTimer) {
+        clearInterval(navTimer);
+        navTimer = null;
+      }
+      lastDirection = null;
+      setPendingRowIdx(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+      if (navTimer) clearInterval(navTimer);
+    };
+  }, [studentCache, studentRowIndices, currentRowIndex, pendingRowIdx, headers]);
+
+  // When Excel selection changes, update currentRowIndex and clear pendingRowIdx
+  useEffect(() => {
+    if (activeStudent && studentCache.length) {
+      const idx = studentCache.findIndex(s => s === activeStudent);
+      if (idx !== -1) {
+        setCurrentRowIndex(studentRowIndices[idx]);
+        setPendingRowIdx(null);
+      }
+      // --- Log payload only when activeStudent changes ---
+      // This log now includes the GradeBookLink property!
       console.log('StudentHeader payload:', activeStudent);
     }
-  }, [activeStudent]);
-
+  }, [activeStudent, studentCache, studentRowIndices]);
+  
   // --- Detect test mode (browser, not Excel) ---
   const isTestMode = typeof window.Excel === "undefined";
 
   // --- STYLES ---
-  const outerContainerStyles = isTestMode
-    ? {
-        maxWidth: '400px',
-        minWidth: '320px',
-        margin: '0 auto',
-        border: '1px solid #e5e7eb',
-        borderRadius: '12px',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-        background: '#fff',
-        minHeight: '100vh',
-        overflow: 'hidden'
-      }
-    : {};
-
-  const containerStyles = {
-    padding: '0 15px 15px 15px',
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
-  };
-
-  const messageContainerStyles = {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '80vh',
-    color: '#7f8c8d',
-    textAlign: 'center',
-    padding: '15px'
-  };
-
-  const tabContainerStyles = {
-    display: 'flex',
-    borderBottom: '2px solid #e1e1e1',
-    marginBottom: '15px'
-  };
-
-  const getTabStyles = (tabName) => ({
-    padding: '10px 15px',
-    cursor: 'pointer',
-    borderBottom: activeTab === tabName ? '2px solid #2c3e50' : '2px solid transparent',
-    color: activeTab === tabName ? '#2c3e50' : '#7f8c8d',
-    fontWeight: activeTab === tabName ? '600' : '400',
-    marginRight: '10px',
-    transition: 'all 0.2s ease-in-out'
-  });
+  // All styles moved to CSS file
 
   // Helper to get the correct history as an array of objects from the activeStudent object
   const getHistoryArray = (studentObj) => {
@@ -331,33 +542,77 @@ function StudentView() {
   // --- UPDATE: Centralized rendering logic based on sheetData.status ---
   if (sheetData.status !== 'success') {
     return (
-      <div style={outerContainerStyles}>
-        <div style={messageContainerStyles}><p>{sheetData.message}</p></div>
+      <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+        <div className="studentview-message"><p>{sheetData.message}</p></div>
       </div>
     );
   }
 
   if (!activeStudent) {
     return (
-      <div style={outerContainerStyles}>
-        <div style={messageContainerStyles}>
+      <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+        <div className="studentview-message">
           <p>Select a cell in a student's row to view their details.</p>
         </div>
       </div>
     );
   }
 
+  // Helper to get assignments for the active student by name
+  const getAssignmentsForStudent = (studentObj) => {
+    if (!studentObj || !studentObj.StudentName) return [];
+    const convertedName = formatName(studentObj.StudentName);
+    // Try both converted and raw name for robustness
+    const assignments =
+      assignmentsMap[convertedName] ||
+      assignmentsMap[studentObj.StudentName] ||
+      [];
+    // Debug: log assignments for current student
+    console.log('[DEBUG] Assignments for', studentObj.StudentName, assignments);
+    return assignments;
+  };
+
+  // --- Attach Assignments to activeStudent payload ---
+  const activeStudentWithAssignments = activeStudent
+    ? { ...activeStudent, Assignments: getAssignmentsForStudent(activeStudent) || [] }
+    : null;
+
+  // Debug: log payload sent to StudentAssignments
+  if (activeTab === 'assignments' && activeStudentWithAssignments) {
+    console.log('[DEBUG] StudentAssignments payload:', activeStudentWithAssignments);
+  }
+
   return (
-    <div style={outerContainerStyles}>
-      <StudentHeader student={activeStudent} /> 
-      <div style={tabContainerStyles}>
-        <div style={getTabStyles('details')} onClick={() => setActiveTab('details')}>Details</div>
-        <div style={getTabStyles('history')} onClick={() => setActiveTab('history')}>History</div>
+    <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+      {/* activeStudent now contains GradeBookLink if a hyperlink formula was found */}
+      <StudentHeader student={activeStudentWithAssignments} /> 
+      <div className="studentview-tabs">
+        <div
+          className={`studentview-tab${activeTab === 'details' ? ' active' : ''}`}
+          onClick={() => setActiveTab('details')}
+        >
+          Details
+        </div>
+        <div
+          className={`studentview-tab${activeTab === 'history' ? ' active' : ''}`}
+          onClick={() => setActiveTab('history')}
+        >
+          History
+        </div>
+        <div
+          className={`studentview-tab${activeTab === 'assignments' ? ' active' : ''}`}
+          onClick={() => setActiveTab('assignments')}
+        >
+          Assignments
+        </div>
       </div>
-      <div style={containerStyles}>
-        {activeTab === 'details' && <StudentDetails student={activeStudent} />}
+      <div className="studentview-container">
+        {activeTab === 'details' && <StudentDetails student={activeStudentWithAssignments} />}
         {activeTab === 'history' && (
-          <StudentHistory history={getHistoryArray(activeStudent)} />
+          <StudentHistory history={getHistoryArray(activeStudentWithAssignments)} />
+        )}
+        {activeTab === 'assignments' && (
+          <StudentAssignments student={activeStudentWithAssignments} />
         )}
       </div>
     </div>

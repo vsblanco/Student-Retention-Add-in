@@ -1,0 +1,52 @@
+.studentview-outer {
+  /* Default mode styles */
+}
+
+.studentview-outer.testmode {
+  max-width: 400px;
+  min-width: 320px;
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  background: #fff;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.studentview-container {
+  padding: 0 15px 15px 15px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.studentview-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 80vh;
+  color: #7f8c8d;
+  text-align: center;
+  padding: 15px;
+}
+
+.studentview-tabs {
+  display: flex;
+  border-bottom: 2px solid #e1e1e1;
+  margin-bottom: 15px;
+}
+
+.studentview-tab {
+  padding: 10px 15px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  color: #7f8c8d;
+  font-weight: 400;
+  margin-right: 10px;
+  transition: all 0.2s ease-in-out;
+}
+
+.studentview-tab.active {
+  border-bottom: 2px solid #2c3e50;
+  color: #2c3e50;
+  font-weight: 600;
+}

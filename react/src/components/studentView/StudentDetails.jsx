@@ -1,7 +1,7 @@
 // Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
 import React, { useState } from 'react';
 import {
-  BadgeInfo,
+  IdCardLanyard,
   Phone,
   Mail,
   CalendarDays
@@ -71,33 +71,29 @@ function CopyField({ label, value, id, Icon }) {
           transition: 'background 0.15s',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem'
+          gap: '0.5rem',
+          overflow: 'hidden'
         }}
         className="hover-bg"
         onClick={value ? handleCopy : undefined}
       >
+        {/* Green overlay for copied feedback */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(34,197,94,0.25)', // green overlay
+            opacity: copied ? 1 : 0,
+            pointerEvents: 'none',
+            transition: 'opacity 0.7s ease'
+          }}
+        />
         {Icon && <Icon size={18} color="#6b7280" style={{ flexShrink: 0 }} />}
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
           <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>{value || 'N/A'}</p>
         </div>
-        <span
-          className={`copy-feedback${copied ? '' : ' hidden'}`}
-          style={{
-            position: 'absolute',
-            right: '0.5rem',
-            top: '0.5rem',
-            fontSize: '0.75rem',
-            background: '#22c55e',
-            color: 'white',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.375rem',
-            display: copied ? 'inline' : 'none',
-            zIndex: 2
-          }}
-        >
-          Copied!
-        </span>
+        {/* Removed Copied! text */}
       </div>
     </>
   );
@@ -135,7 +131,7 @@ function StudentDetails({ student }) {
           label="Student ID"
           value={student.ID}
           id="copy-student-id"
-          Icon={BadgeInfo}
+          Icon={IdCardLanyard}
         />
         <CopyField
           label="Primary Phone"
@@ -161,27 +157,17 @@ function StudentDetails({ student }) {
           id="copy-personal-email"
           Icon={Mail}
         />
-        <div
-          style={{
-            padding: '0.5rem 0.rem 0.5rem 0.25rem', // reduced left padding
-            borderRadius: '0.5rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem'
-          }}
-        >
-          <CalendarDays size={18} color="#6b7280" style={{ flexShrink: 0 }} />
-          <div>
-            <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>Last LDA</label>
-            <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
-              {formatExcelDate(student["LDA"], "long")}
-            </p>
-          </div>
-        </div>
+        <CopyField
+          label="Last LDA"
+          value={formatExcelDate(student["LDA"], "long")}
+          id="copy-last-lda"
+          Icon={CalendarDays}
+        />
       </div>
     </div>
   );
 }
+
 
 export default StudentDetails;
 

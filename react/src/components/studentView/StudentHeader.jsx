@@ -93,6 +93,24 @@ function StudentHeader({ student }) {
         ? { background: '#ed72b5', color: '#FFFFFF' } // pink, dark pink text
         : { background: '#6b7280', color: '#FFFFFF' };   // default gray, white text
 
+  const gradebookUrl = safeStudent.Gradebook;
+
+  // Helper to check if gradebookUrl is a valid URL
+  const isValidGradebookUrl = typeof gradebookUrl === "string" && /^https?:\/\/\S+$/i.test(gradebookUrl);
+
+  // --- Handler to open gradebook ---
+  const openGradebook = () => {
+    if (!isValidGradebookUrl) return;
+    console.log("Gradebook URL clicked:", gradebookUrl);
+    if (window.Office && window.Office.context && window.Office.context.ui && window.Office.context.ui.openBrowserWindow) {
+      window.Office.context.ui.openBrowserWindow(gradebookUrl);
+    } else {
+      window.open(gradebookUrl, '_blank');
+    }
+  };
+
+  const [showNoLink, setShowNoLink] = React.useState(false);
+
   return (
     <div className="p-4 bg-white border-b border-gray-200">
       <div className="flex items-center justify-between space-x-4 min-w-0">
@@ -129,10 +147,45 @@ function StudentHeader({ student }) {
               {daysOut === 0 ? 'Engaged' : daysOut === 1 ? 'Day Out' : 'Days Out'}
             </div>
           </div>
-          <div className={`p-2 text-center rounded-lg ${gradeBg} ${gradeText} w-20 transition-colors duration-150`}>
+          <button
+            type="button"
+            className={`p-2 text-center rounded-lg ${gradeBg} ${gradeText} w-20 transition-colors duration-150 border border-gray-300 hover:border-blue-400`}
+            style={{
+              outline: 'none',
+              position: 'relative',
+              cursor: isValidGradebookUrl ? 'pointer' : 'not-allowed'
+            }}
+            onClick={openGradebook}
+            disabled={!isValidGradebookUrl}
+            title={isValidGradebookUrl ? "Open Gradebook" : "No Gradebook link"}
+            onMouseEnter={() => { if (!isValidGradebookUrl) setShowNoLink(true); }}
+            onMouseLeave={() => setShowNoLink(false)}
+          >
             <div className="text-xl font-bold">{gradeDisplay}</div>
             <div className={`text-xs font-medium uppercase ${gradeTextLabel}`}>Grade</div>
-          </div>
+            {!isValidGradebookUrl && showNoLink && (
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  right: 2,
+                  background: '#f87171',
+                  color: '#fff',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                  fontWeight: 'bold',
+                  zIndex: 2,
+                  opacity: showNoLink ? 1 : 0,
+                  pointerEvents: 'none',
+                  transition: 'opacity 0.15s'
+                }}
+                aria-label="No gradebook link"
+              >
+                No Link
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </div>
