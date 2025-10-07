@@ -114,6 +114,22 @@ function StudentHistory({ history }) {
           .animate-fadein {
             animation: fadeInDrop 0.4s cubic-bezier(0.4,0,0.2,1);
           }
+          /* See-through scrollbar styles */
+          #history-content {
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: rgba(0,0,0,0.15) rgba(0,0,0,0.03);
+          }
+          #history-content::-webkit-scrollbar {
+            width: 8px;
+            background: transparent;
+          }
+          #history-content::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.15);
+            border-radius: 8px;
+          }
+          #history-content::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.03);
+          }
         `}
       </style>
       {/* History Header */}
@@ -238,7 +254,6 @@ function StudentHistory({ history }) {
         id="history-content"
         className="overflow-y-auto"
         style={{
-          // Header + paddings estimated at ~260px, adjust as needed for your layout
           height: 'calc(100vh - 260px)'
         }}
       >

@@ -1,6 +1,7 @@
 // Timestamp: 2025-10-03 12:20 PM | Version: 1.2.0
 import React from 'react';
 import { formatName } from '../utility/Conversion';
+import BounceAnimation from '../utility/BounceAnimation';
 
 // Helper function to get initials from a name string
 const getInitials = (name) => {
@@ -110,18 +111,27 @@ function StudentHeader({ student }) {
   };
 
   const [showNoLink, setShowNoLink] = React.useState(false);
+  const [bounce, setBounce] = React.useState(false);
 
   return (
     <div className="p-4 bg-white border-b border-gray-200">
+      {/* BounceAnimation injects bounce CSS */}
+      <BounceAnimation />
       <div className="flex items-center justify-between space-x-4 min-w-0">
         {/* Left side: Avatar and Name */}
         <div className="flex items-center space-x-4 min-w-0">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0"
+          <button
+            type="button"
+            className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0 focus:outline-none${bounce ? " bounce" : ""}`}
             style={avatarBg}
+            onClick={() => {
+              setBounce(true);
+              setTimeout(() => setBounce(false), 500);
+            }}
+            aria-label="Bounce avatar"
           >
             {initials}
-          </div>
+          </button>
           <div className="min-w-0">
             <h2
               className="text-lg font-bold text-gray-800 break-words"

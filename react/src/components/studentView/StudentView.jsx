@@ -6,6 +6,7 @@ import ExampleStudent from '../utility/ExampleStudent.jsx';
 import StudentAssignments from './StudentAssignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
 import './StudentView.css';
+import ContextMenu from '../utility/ContextMenu.jsx';
 
 const STUDENT_HISTORY_SHEET = "Student History";
 const STUDENT_MISSING_ASSIGNMENT_SHEET = "Missing Assignments";

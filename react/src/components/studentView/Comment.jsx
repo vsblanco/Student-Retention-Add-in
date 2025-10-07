@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { formatExcelDate } from '../utility/Conversion';
+import BounceAnimation from '../utility/BounceAnimation';
 
 // CSS class constants
 const liStyle = "p-3 rounded-lg shadow-sm relative";
@@ -295,6 +296,25 @@ function Comment({ entry, searchTerm, index }) {
   const quoteRef = React.useRef(null);
   const [isQuoteLong, setIsQuoteLong] = useState(false);
 
+  // Bounce state for each tag pill (array of booleans)
+  const [bounceTags, setBounceTags] = useState([]);
+
+  // Helper to trigger bounce for a tag index
+  const triggerBounce = idx => {
+    setBounceTags(prev => {
+      const arr = [...prev];
+      arr[idx] = true;
+      return arr;
+    });
+    setTimeout(() => {
+      setBounceTags(prev => {
+        const arr = [...prev];
+        arr[idx] = false;
+        return arr;
+      });
+    }, 500);
+  };
+
   React.useEffect(() => {
     if (commentRef.current) {
       const el = commentRef.current;
@@ -315,11 +335,32 @@ function Comment({ entry, searchTerm, index }) {
   // Determine border color from the highest priority tag
   const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-blue-300";
 
+  // Helper for LDA tag display
+  function renderTagLabel(tagInfo) {
+    if (
+      tagInfo &&
+      /^LDA\s+(.+)/i.test(tagInfo.label)
+    ) {
+      // Extract date part
+      const ldaDate = tagInfo.label.replace(/^LDA\s+/i, '').trim();
+      // Responsive: show only date on small screens or if container is too narrow
+      // Use CSS: hide "LDA" prefix on xs/sm screens
+      return (
+        <span className="lda-tag-label">
+          <span className="hidden sm:inline">LDA&nbsp;</span>
+          {ldaDate}
+        </span>
+      );
+    }
+    return tagInfo.label;
+  }
+
   return (
     <li
       className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
       data-row-index={entry.studentId || index}
     >
+      <BounceAnimation />
       {hasQuoteTag && quoteText ? (
         <>
           {beforeQuote}
@@ -394,10 +435,24 @@ function Comment({ entry, searchTerm, index }) {
             if (sortedTagInfos.length > 1 && tagInfo.label === "Outreach") {
               tagClass += " opacity-75";
             }
-            const tagLabel = tagInfo.label ? tagInfo.label : tags[idx];
+            // Use renderTagLabel for LDA tags
             return (
-              <span key={tagLabel + idx} className={tagClass}>
-                {tagLabel}
+              <span
+                key={tagInfo.label + idx}
+                className={`${tagClass}${bounceTags[idx] ? ' bounce' : ''}`}
+                style={{
+                  maxWidth: 90,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  userSelect: 'none' // prevent highlighting
+                }}
+                onClick={() => triggerBounce(idx)}
+                tabIndex={0}
+                aria-label={`Bounce ${tagInfo.label} tag`}
+              >
+                {renderTagLabel(tagInfo)}
               </span>
             );
           })}
