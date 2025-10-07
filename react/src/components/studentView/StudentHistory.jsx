@@ -236,13 +236,13 @@ function StudentHistory({ history }) {
 
       <div
         id="history-content"
-        className="mt-4 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-inner"
+        className="overflow-y-auto"
         style={{
           // Header + paddings estimated at ~260px, adjust as needed for your layout
           height: 'calc(100vh - 260px)'
         }}
       >
-        <ul className="space-y-4 p-4">
+        <ul className="space-y-4">
           {/* Pinned comments first (keep their original order) */}
           {pinnedComments.map((entry, index) => (
             <Comment

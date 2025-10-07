@@ -26,6 +26,16 @@ const COLUMN_ALIASES = {
   // You can add more aliases for other columns here
 };
 
+// --- Alias mapping for flexible column names in Missing Assignments sheet ---
+const COLUMN_ALIASES_ASSIGNMENTS = {
+  StudentName: ['Student Name', 'Student'],
+  title: ['Assignment Title', 'Title', 'Assignment'],
+  dueDate: ['Due Date', 'Deadline'],
+  score: ['Score', 'Points'],
+  submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
+  assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link']
+};
+
 // --- Create a reverse map that is agnostic to whitespace ---
 const canonicalHeaderMap = {};
 // A helper function to normalize strings by removing spaces and making them lowercase
@@ -38,6 +48,15 @@ for (const canonicalName in COLUMN_ALIASES) {
   });
   // Add the canonical name itself for direct matches
   canonicalHeaderMap[normalizeHeader(canonicalName)] = canonicalName;
+}
+
+// --- Create a reverse map for assignments sheet ---
+const canonicalAssignmentsHeaderMap = {};
+for (const canonicalName in COLUMN_ALIASES_ASSIGNMENTS) {
+  COLUMN_ALIASES_ASSIGNMENTS[canonicalName].forEach(alias => {
+    canonicalAssignmentsHeaderMap[normalizeHeader(alias)] = canonicalName;
+  });
+  canonicalAssignmentsHeaderMap[normalizeHeader(canonicalName)] = canonicalName;
 }
 
 /**
@@ -189,19 +208,28 @@ function StudentView() {
           if (assignmentsRange && assignmentsRange.values && assignmentsRange.values.length > 1) {
             assignmentsHeaders = assignmentsRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
             assignmentsValues = assignmentsRange.values.slice(1);
+
+            // Build header index map using COLUMN_ALIASES_ASSIGNMENTS
+            const headerIndexMap = {};
+            assignmentsHeaders.forEach((header, idx) => {
+              const normalized = normalizeHeader(header);
+              const canonical = canonicalAssignmentsHeaderMap[normalized];
+              if (canonical) headerIndexMap[canonical] = idx;
+            });
+
             assignmentsValues.forEach(row => {
-              // Find student name column
-              const nameIdx = assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Student Name'));
-              if (nameIdx === -1) return;
+              const nameIdx = headerIndexMap.StudentName;
+              if (nameIdx === undefined) return;
               const studentName = row[nameIdx];
               if (!studentName) return;
-              // Build assignment object
+              // Build assignment object using headerIndexMap
               const assignment = {
-                title: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Assignment Title'))] || '',
-                dueDate: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Due Date'))] || '',
-                score: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Score'))] || '',
-                submissionLink: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Submission Link'))] || '',
-                assignmentLink: row[assignmentsHeaders.findIndex(h => normalizeHeader(h) === normalizeHeader('Assignment Link'))] || '',
+                title: row[headerIndexMap.title] || '',
+                dueDate: row[headerIndexMap.dueDate] || '',
+                score: row[headerIndexMap.score] || '',
+                submissionLink: row[headerIndexMap.submissionLink] || '',
+                assignmentLink: row[headerIndexMap.assignmentLink] || '',
+                submission: row[headerIndexMap.submission] || false
               };
               if (!assignmentsMap[studentName]) assignmentsMap[studentName] = [];
               assignmentsMap[studentName].push(assignment);

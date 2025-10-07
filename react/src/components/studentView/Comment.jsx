@@ -1,74 +1,103 @@
 import React, { useState } from 'react';
 import { formatExcelDate } from '../utility/Conversion';
 
+// CSS class constants
+const liStyle = "p-3 rounded-lg shadow-sm relative";
+const borderLeftStyle = "border-l-4 pl-4";
+const tagPillStyle = "px-2 py-0.5 font-semibold rounded-full";
+const tagDefaultStyle = `${tagPillStyle} bg-blue-100 text-blue-800`;
+const plusPillStyle = `${tagPillStyle} bg-gray-300 text-gray-700 text-xs`;
+const createdByStyle = "font-medium";
+const tagsRowStyle = "flex items-center gap-2";
+const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center";
+const commentTextStyle = "text-sm text-gray-800";
+const commentClampStyle = "line-clamp-3";
+const quoteBlockStyle = "relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
+const quoteTextStyle = "text-base text-blue-900 font-serif";
+const quoteClampStyle = "line-clamp-3";
+const quoteMarkStyle = "absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none";
+const quoteMarkRightStyle = "absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none";
+const showMoreBtnStyle = "text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1";
+const showMoreBtnStyleAlt = "text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1";
+
 // Tag definitions for comments
 export const COMMENT_TAGS = [
   {
     label: "Urgent",
-    bgClass: "bg-red-100",
+    bgClass: "bg-red-50",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-100 text-red-800",
-    priority: 2
+    priority: 2,
+    borderColor: "border-red-400"
   },
   {
     label: "Note",
     bgClass: "bg-gray-200",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-700 text-gray-200",
     pinned: true,
-    priority: 3
+    priority: 3,
+    borderColor: "border-gray-400"
   },
   {
     label: "DNC",
-    bgClass: "bg-red-200",
+    bgClass: "bg-red-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
     pinned: true,
     priority: 4,
+    borderColor: "border-red-600",
     subtags: [
       {
         label: "DNC - Phone",
-        bgClass: "bg-red-200",
+        bgClass: "bg-red-100",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
-        priority: 4
+        priority: 4,
+        borderColor: "border-red-600"
       },
       {
         label: "DNC - Other Phone",
-        bgClass: "bg-red-200",
+        bgClass: "bg-red-100",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
-        priority: 4
+        priority: 4,
+        borderColor: "border-red-600"
       },
       {
         label: "DNC - Email",
         bgClass: "bg-red-200",
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
-        priority: 4
+        priority: 4,
+        borderColor: "border-red-600"
       }
     ]
   },
   {
     label: "LDA",
     bgClass: "bg-orange-100",
-    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-orange-100 text-orange-800",
-    priority: 3
+    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-orange-200 text-orange-800",
+    priority: 3,
+    borderColor: "border-orange-400"
   },
   {
     label: "Contacted",
     bgClass: "bg-yellow-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-yellow-200 text-yellow-800",
-    priority: 2
+    priority: 2,
+    borderColor: "border-yellow-400"
   },
   {
     label: "Outreach",
     bgClass: "bg-gray-100",
-    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800",
-    priority: 1
+    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-200 text-gray-800",
+    priority: 1,
+    borderColor: "border-gray-300"
   },
   {
     label: "Quote",
     bgClass: "bg-blue-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-50 text-blue-800",
-    priority: 2
+    priority: 2,
+    borderColor: "border-blue-400"
   }
 ];
 
@@ -107,6 +136,13 @@ function Comment({ entry, searchTerm, index }) {
 
   // Find tag info for all tags
   const tagInfos = tags.map(findTagInfo);
+
+  // Sort tags by descending priority
+  const sortedTagInfos = [...tagInfos].sort((a, b) => {
+    const pa = a?.priority ?? -Infinity;
+    const pb = b?.priority ?? -Infinity;
+    return pb - pa;
+  });
 
   // Determine which tag has the *highest* priority value (largest number)
   // If multiple tags have the same priority, prefer the first in the list
@@ -276,19 +312,22 @@ function Comment({ entry, searchTerm, index }) {
     }
   }, [entry.comment, commentContent, quoteText, expanded]);
 
+  // Determine border color from the highest priority tag
+  const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-blue-300";
+
   return (
     <li
-      className={`p-3 rounded-lg shadow-sm relative ${bgClass}`}
+      className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
       data-row-index={entry.studentId || index}
     >
       {hasQuoteTag && quoteText ? (
         <>
           {beforeQuote}
-          <blockquote className="relative bg-blue-50 border-l-4 border-blue-400 pl-6 pr-2 py-3 mb-2 rounded">
-            <span className="absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">“</span>
+          <blockquote className={quoteBlockStyle}>
+            <span className={quoteMarkStyle} aria-hidden="true">“</span>
             <span
               ref={quoteRef}
-              className={`text-base text-blue-900 font-serif ${!expanded ? 'line-clamp-3' : ''}`}
+              className={`${quoteTextStyle} ${!expanded ? quoteClampStyle : ""}`}
               style={
                 !expanded
                   ? {
@@ -302,11 +341,11 @@ function Comment({ entry, searchTerm, index }) {
             >
               {quoteText}
             </span>
-            <span className="absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">”</span>
+            <span className={quoteMarkRightStyle} aria-hidden="true">”</span>
           </blockquote>
           {isQuoteLong && (
             <button
-              className="text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
+              className={showMoreBtnStyle}
               onClick={() => setExpanded(e => !e)}
               type="button"
             >
@@ -319,7 +358,7 @@ function Comment({ entry, searchTerm, index }) {
         <>
           <p
             ref={commentRef}
-            className={`text-sm text-gray-800 ${!expanded ? 'line-clamp-3' : ''}`}
+            className={`${commentTextStyle} ${!expanded ? commentClampStyle : ""}`}
             style={
               !expanded
                 ? {
@@ -335,7 +374,7 @@ function Comment({ entry, searchTerm, index }) {
           </p>
           {isLong && (
             <button
-              className="text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1"
+              className={showMoreBtnStyleAlt}
               onClick={() => setExpanded(e => !e)}
               type="button"
             >
@@ -344,23 +383,30 @@ function Comment({ entry, searchTerm, index }) {
           )}
         </>
       )}
-      <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          {tags.length > 0 && tags.map((tag, idx) => {
-            // "Comment" tags already filtered out above
-            const tagInfo = findTagInfo(tag);
-            const tagClass = tagInfo
+      <div className={timestampRowStyle}>
+        <div className={tagsRowStyle}>
+          {sortedTagInfos.slice(0, 2).map((tagInfo, idx) => {
+            if (!tagInfo) return null;
+            let tagClass = tagInfo.tagClass
               ? tagInfo.tagClass
-              : "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800";
-            // For LDA subclass, display the full label (e.g., "LDA 10/3/25")
-            const tagLabel = tagInfo && tagInfo.label ? tagInfo.label : tag;
+              : tagDefaultStyle;
+            // If more than one tag and Outreach, set opacity
+            if (sortedTagInfos.length > 1 && tagInfo.label === "Outreach") {
+              tagClass += " opacity-75";
+            }
+            const tagLabel = tagInfo.label ? tagInfo.label : tags[idx];
             return (
-              <span key={tag + idx} className={tagClass}>
+              <span key={tagLabel + idx} className={tagClass}>
                 {tagLabel}
               </span>
             );
           })}
-          <span className="font-medium">{entry.createdBy}</span>
+          {sortedTagInfos.length > 2 && (
+            <span className={plusPillStyle}>
+              +{sortedTagInfos.length - 2}
+            </span>
+          )}
+          <span className={createdByStyle}>{entry.createdBy}</span>
         </div>
         <span>
           {formattedTimestamp}
