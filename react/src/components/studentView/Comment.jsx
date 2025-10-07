@@ -127,7 +127,7 @@ function findTagInfo(label) {
   return null;
 }
 
-function Comment({ entry, searchTerm, index }) {
+function Comment({ entry, searchTerm, index, onContextMenu }) {
   // Support multiple tags separated by commas
   let tags = entry.tag
     ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
@@ -359,6 +359,8 @@ function Comment({ entry, searchTerm, index }) {
     <li
       className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
       data-row-index={entry.studentId || index}
+      onContextMenu={onContextMenu}
+      style={{ position: 'relative' }}
     >
       <BounceAnimation />
       {hasQuoteTag && quoteText ? (
