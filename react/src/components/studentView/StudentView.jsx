@@ -6,6 +6,7 @@ import ExampleStudent from '../utility/ExampleStudent.jsx';
 import StudentAssignments from './StudentAssignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
 import { onSelectionChanged } from '../utility/ExcelAPI.jsx'; // <-- Import here
+import SSO from '../utility/SSO.jsx';
 import './StudentView.css';
 
 const STUDENT_HISTORY_SHEET = "Student History";
@@ -185,6 +186,7 @@ function StudentView() {
   // --- Store headers for column lookup ---
   const [headers, setHeaders] = useState([]);
   const [assignmentsMap, setAssignmentsMap] = useState({}); // { studentName: [assignments] }
+  const [userName, setUserName] = useState(null);
 
   // --- Helper to find the column index for StudentName based on stored headers ---
   const getStudentNameColIdx = () => {
@@ -468,6 +470,15 @@ function StudentView() {
   const activeStudentWithAssignments = activeStudent
     ? { ...activeStudent, Assignments: getAssignmentsForStudent(activeStudent) || [] }
     : null;
+
+  // Wait for userName before initializing StudentView
+  if (!userName) {
+    return (
+      <div className="studentview-outer">
+        <SSO onNameSelect={setUserName} />
+      </div>
+    );
+  }
 
   return (
     <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>

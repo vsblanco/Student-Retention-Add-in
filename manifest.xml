@@ -269,4 +269,8 @@
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
+  <WebApplicationInfo>
+    <Id>71f37f39-a330-413a-be61-0baa5ce03ea3</Id>
+    <Resource>api://71f37f39-a330-413a-be61-0baa5ce03ea3</Resource>
+  </WebApplicationInfo>
 </OfficeApp>
