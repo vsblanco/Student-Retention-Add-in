@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from './Comment';
 import NewComment from './NewComment';
+import { formatExcelDate } from '../utility/Conversion';
 
 // Add styles constant
 const styles = `
@@ -100,9 +101,13 @@ function StudentHistory({ history }) {
   // Add a new comment to history
   async function addCommentToHistory(comment) {
     // You can expand this to include more fields as needed
+    const now = new Date();
+    // Convert JS Date to Excel serial date
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const serial = (now - excelEpoch) / 86400000;
     const newEntry = {
       comment,
-      date: new Date().toISOString(),
+      timestamp: formatExcelDate(serial), // formatted timestamp
       // Add other fields if needed (e.g., author, tag)
     };
     setLocalHistory(prev => [...prev, newEntry]);
