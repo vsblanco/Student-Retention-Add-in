@@ -21,17 +21,17 @@ export function formatExcelDate(serial, format = "default") {
     });
   }
 
-  // Default: mm/dd/yyyy H:MM AM/PM
+  // Default: mm/dd/yy H:MM AM/PM
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const dd = String(date.getDate()).padStart(2, '0');
-  const yyyy = date.getFullYear();
+  const yy = String(date.getFullYear()).slice(-2);
   let hours = date.getHours();
   const minutes = String(date.getMinutes()).padStart(2, '0');
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12;
   hours = hours ? hours : 12; // 0 should be 12
 
-  return `${mm}/${dd}/${yyyy} ${hours}:${minutes} ${ampm}`;
+  return `${mm}/${dd}/${yy} ${hours}:${minutes} ${ampm}`;
 }
 
 // Converts "First Last" <-> "Last, First"
@@ -57,4 +57,4 @@ export function formatName(name) {
 
 // Usage example:
 // const date = formatExcelDate(44561); // Converts Excel date serial to JavaScript Date
-// console.log(date); // Outputs: "10/07/2025 12:00 AM" (depending on the input serial)
+// console.log(date); // Outputs: "10/07/25 12:00 AM" (depending on the input serial)

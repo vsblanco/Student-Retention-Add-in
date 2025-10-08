@@ -36,6 +36,15 @@ const COLUMN_ALIASES_ASSIGNMENTS = {
   assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link']
 };
 
+// --- Alias mapping for flexible column names in Student History sheet ---
+const COLUMN_ALIASES_HISTORY = {
+  timestamp: ['Timestamp', 'Date', 'Time', 'Created At'],
+  comment: ['Comment', 'Notes', 'History', 'Entry'],
+  createdBy: ['Created By', 'Author', 'Advisor'],
+  tag: ['Tag', 'Category', 'Type','Tags']
+  // Add more aliases as needed for history columns
+};
+
 // --- Create a reverse map that is agnostic to whitespace ---
 const canonicalHeaderMap = {};
 // A helper function to normalize strings by removing spaces and making them lowercase
@@ -110,7 +119,7 @@ const processRow = (rowData, headers, formulaRowData) => {
     }
   });
 
-  // --- NEW LOGIC: Extract GradeBook Hyperlink if available ---
+  // --- Extract GradeBook Hyperlink if available ---
   if (gradebookIndex !== -1 && formulaRowData && gradebookIndex < formulaRowData.length) {
       const formula = formulaRowData[gradebookIndex];
       const link = extractHyperlink(formula);
@@ -126,12 +135,34 @@ const processRow = (rowData, headers, formulaRowData) => {
   return studentInfo;
 };
 
-// --- Helper to process history rows ---
+// --- Helper to process history rows using COLUMN_ALIASES_HISTORY ---
 const processHistoryRows = (rows, headers) => {
+  // Build header index map using COLUMN_ALIASES_HISTORY
+  const headerIndexMap = {};
+  headers.forEach((header, idx) => {
+    const normalized = normalizeHeader(header);
+    const canonical = COLUMN_ALIASES_HISTORY[normalized] ? normalized : Object.keys(COLUMN_ALIASES_HISTORY).find(key =>
+      COLUMN_ALIASES_HISTORY[key].map(a => normalizeHeader(a)).includes(normalized)
+    );
+    if (canonical) {
+      // Use canonical name for mapping
+      const canonicalName = canonicalAssignmentsHeaderMap[normalized] || canonical;
+      headerIndexMap[canonicalName] = idx;
+    }
+  });
+
   return rows.map(row => {
     const entry = {};
+    // Map each canonical history field
+    Object.keys(COLUMN_ALIASES_HISTORY).forEach(canonical => {
+      const idx = headerIndexMap[canonical];
+      entry[canonical] = idx !== undefined ? row[idx] : '';
+    });
+    // Add any unmapped headers as fallback
     headers.forEach((header, idx) => {
-      entry[header] = row[idx];
+      if (!Object.values(headerIndexMap).includes(idx)) {
+        entry[header] = row[idx];
+      }
     });
     return entry;
   });
@@ -234,8 +265,6 @@ function StudentView() {
               if (!assignmentsMap[studentName]) assignmentsMap[studentName] = [];
               assignmentsMap[studentName].push(assignment);
             });
-            // Debug: log assignments map after processing
-            console.log('[DEBUG] assignmentsMap:', assignmentsMap);
           }
           setAssignmentsMap(assignmentsMap);
 
@@ -244,10 +273,16 @@ function StudentView() {
           if (historyRange.values && historyRange.values.length > 1) {
             const historyHeaders = historyRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
             const historyRows = historyRange.values.slice(1);
+            // *** MODIFIED: Use COLUMN_ALIASES_HISTORY for mapping ***
             const processedHistory = processHistoryRows(historyRows, historyHeaders);
             // Group by Student ID (case-insensitive)
             processedHistory.forEach(entry => {
-              const id = entry["Student ID"] || entry["ID"] || entry["Student identifier"] || "";
+              // Try to find ID using flexible mapping
+              const id =
+                entry["ID"] ||
+                entry["Student ID"] ||
+                entry["Student identifier"] ||
+                "";
               if (!id) return;
               const key = String(id).toLowerCase();
               if (!historyMap[key]) historyMap[key] = [];
@@ -529,7 +564,6 @@ function StudentView() {
         setPendingRowIdx(null);
       }
       // --- Log payload only when activeStudent changes ---
-      // This log now includes the GradeBookLink property!
       console.log('StudentHeader payload:', activeStudent);
     }
   }, [activeStudent, studentCache, studentRowIndices]);
@@ -557,7 +591,6 @@ function StudentView() {
           // Fill with empty/defaults for other fields
           studentId: studentObj.ID || '',
           studentName: studentObj.StudentName || '',
-          createdBy: studentObj.Assigned || '',
           tag: '', // No tag in legacy/test mode
         });
       }
@@ -595,8 +628,7 @@ function StudentView() {
       assignmentsMap[convertedName] ||
       assignmentsMap[studentObj.StudentName] ||
       [];
-    // Debug: log assignments for current student
-    console.log('[DEBUG] Assignments for', studentObj.StudentName, assignments);
+  
     return assignments;
   };
 
@@ -604,11 +636,6 @@ function StudentView() {
   const activeStudentWithAssignments = activeStudent
     ? { ...activeStudent, Assignments: getAssignmentsForStudent(activeStudent) || [] }
     : null;
-
-  // Debug: log payload sent to StudentAssignments
-  if (activeTab === 'assignments' && activeStudentWithAssignments) {
-    console.log('[DEBUG] StudentAssignments payload:', activeStudentWithAssignments);
-  }
 
   return (
     <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>

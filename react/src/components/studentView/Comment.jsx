@@ -8,7 +8,7 @@ const borderLeftStyle = "border-l-4 pl-4";
 const tagPillStyle = "px-2 py-0.5 font-semibold rounded-full";
 const tagDefaultStyle = `${tagPillStyle} bg-blue-100 text-blue-800`;
 const plusPillStyle = `${tagPillStyle} bg-gray-300 text-gray-700 text-xs`;
-const createdByStyle = "font-medium";
+const createdByStyle = "font-medium whitespace-nowrap";
 const tagsRowStyle = "flex items-center gap-2";
 const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center";
 const commentTextStyle = "text-sm text-gray-800";
@@ -134,7 +134,6 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
     : [];
   // Remove "Comment" tags
   tags = tags.filter(t => t !== "Comment");
-
   // Find tag info for all tags
   const tagInfos = tags.map(findTagInfo);
 
@@ -427,7 +426,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
         </>
       )}
       <div className={timestampRowStyle}>
-        <div className={tagsRowStyle}>
+        <div className={tagsRowStyle} style={{ flex: 1 }}>
           {sortedTagInfos.slice(0, 2).map((tagInfo, idx) => {
             if (!tagInfo) return null;
             let tagClass = tagInfo.tagClass
@@ -463,8 +462,11 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
               +{sortedTagInfos.length - 2}
             </span>
           )}
-          <span className={createdByStyle}>{entry.createdBy}</span>
         </div>
+        <span className={createdByStyle} style={{ marginLeft: 'auto' }}>
+          {entry.createdby ? entry.createdby : "Unknown"}
+        </span>
+        <span className="mx-2 text-gray-400">|</span>
         <span>
           {formattedTimestamp}
         </span>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from './Comment';
 import NewComment from './NewComment';
 
@@ -36,9 +36,17 @@ const styles = `
 `;
 
 function StudentHistory({ history }) {
+  // Local state for history to allow adding new comments
+  const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
+
+  // Sync localHistory with history prop if it changes
+  useEffect(() => {
+    setLocalHistory(Array.isArray(history) ? history : []);
+  }, [history]);
+
   // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
-  const normalizedHistory = Array.isArray(history)
-    ? history.map(entry => {
+  const normalizedHistory = Array.isArray(localHistory)
+    ? localHistory.map(entry => {
         const normalized = {};
         Object.keys(entry || {}).forEach(key => {
           const normKey = String(key).toLowerCase().replace(/\s+/g, '');
@@ -88,6 +96,18 @@ function StudentHistory({ history }) {
       unpinnedComments.push(entry);
     }
   });
+
+  // Add a new comment to history
+  async function addCommentToHistory(comment) {
+    // You can expand this to include more fields as needed
+    const newEntry = {
+      comment,
+      date: new Date().toISOString(),
+      // Add other fields if needed (e.g., author, tag)
+    };
+    setLocalHistory(prev => [...prev, newEntry]);
+    return true;
+  }
 
   if (!Array.isArray(normalizedHistory) || normalizedHistory.length === 0) {
     return (
@@ -164,6 +184,7 @@ function StudentHistory({ history }) {
         <NewComment
           show={showNewComment}
           onClose={() => setShowNewComment(false)}
+          addCommentToHistory={addCommentToHistory}
         />
       </div>
       {/* End History Header */}
@@ -172,7 +193,9 @@ function StudentHistory({ history }) {
         id="history-content"
         className="overflow-y-auto"
         style={{
-          height: 'calc(100vh - 260px)'
+          height: showNewComment || showSearch
+            ? 'calc(105vh - 460px)' // Adjusted height when either is visible
+            : 'calc(100vh - 260px)' // Default height
         }}
       >
         <ul className="space-y-4">

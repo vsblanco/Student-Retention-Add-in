@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 
 const styles = `
   @keyframes fadeInDrop {
@@ -17,8 +17,26 @@ const styles = `
   }
 `;
 
-function NewComment({ show, onClose }) {
+function NewComment({ show, onClose, addCommentToHistory }) {
   const newCommentInputRef = useRef(null);
+  const [status, setStatus] = useState('');
+
+  const handleSubmit = async () => {
+    const comment = newCommentInputRef.current.value.trim();
+    if (!comment) {
+      setStatus('Comment cannot be empty.');
+      return;
+    }
+    setStatus('Submitting...');
+    const success = await addCommentToHistory(comment);
+    if (success) {
+      setStatus('Comment added!');
+      newCommentInputRef.current.value = '';
+      if (onClose) onClose();
+    } else {
+      setStatus('Failed to add comment.');
+    }
+  };
 
   return (
     <>
@@ -37,10 +55,12 @@ function NewComment({ show, onClose }) {
           placeholder="Add a new comment..."
         ></textarea>
         <div className="flex justify-between items-center mt-4">
-          <span id="comment-status" className="text-sm text-green-600"></span>
+          <span id="comment-status" className="text-sm text-green-600">{status}</span>
           <button
             id="submit-comment-button"
             className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-150 disabled:bg-gray-400 disabled:from-gray-400 disabled:to-gray-400"
+            onClick={handleSubmit}
+            disabled={status === 'Submitting...'}
           >
             Submit
           </button>
