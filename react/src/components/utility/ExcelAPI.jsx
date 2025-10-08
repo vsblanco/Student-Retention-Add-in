@@ -13,6 +13,8 @@ export async function editRow(sheet, columnId, rowId, newData) {
     }
 
     try {
+        let changeVerified = false;
+        let errorMsg = "";
         await Excel.run(async (context) => {
             const worksheet = context.workbook.worksheets.getItem(sheet);
             const usedRange = worksheet.getUsedRange();
@@ -44,7 +46,23 @@ export async function editRow(sheet, columnId, rowId, newData) {
                 worksheet.getCell(rowIdx, colIdx).values = [[value]];
             }
             await context.sync();
+
+            // Double check
+            const verifyRange = worksheet.getRangeByIndexes(rowIdx, 0, 1, usedRange.columnCount);
+            verifyRange.load("values");
+            await context.sync();
+            const verifyValues = verifyRange.values[0];
+            changeVerified = Object.entries(newData).every(([colName, value]) => {
+                const colIdx = headers.indexOf(colName);
+                return colIdx !== -1 && verifyValues[colIdx] == value;
+            });
+            if (!changeVerified) {
+                errorMsg = "Double check failed: Row was not updated as expected.";
+            }
         });
+        if (!changeVerified) {
+            return { success: false, message: errorMsg };
+        }
         return { success: true, message: "Row updated successfully." };
     } catch (error) {
         return { success: false, message: error.message };
@@ -60,28 +78,56 @@ export async function editRow(sheet, columnId, rowId, newData) {
  */
 export async function insertRow(sheet, newData) {
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
+        console.log("insertRow: Invalid sheet parameter", sheet);
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
     }
     try {
+        let changeVerified = false;
+        let errorMsg = "";
         await Excel.run(async (context) => {
+            console.log("insertRow: Getting worksheet", sheet);
             const worksheet = context.workbook.worksheets.getItem(sheet);
             const usedRange = worksheet.getUsedRange();
             usedRange.load(["values", "columnCount", "rowCount"]);
             await context.sync();
 
+            console.log("insertRow: Loaded usedRange", usedRange.values);
             const headers = usedRange.values[0];
             const newRow = Array(usedRange.columnCount).fill("");
             for (const [colName, value] of Object.entries(newData)) {
                 const colIdx = headers.indexOf(colName);
+                console.log(`insertRow: Setting value for column '${colName}' at index ${colIdx}:`, value);
                 if (colIdx !== -1) {
                     newRow[colIdx] = value;
                 }
             }
+            console.log("insertRow: New row to insert", newRow);
             worksheet.getRangeByIndexes(usedRange.rowCount, 0, 1, usedRange.columnCount).values = [newRow];
             await context.sync();
+
+            // Double check
+            const verifyRange = worksheet.getRangeByIndexes(usedRange.rowCount, 0, 1, usedRange.columnCount);
+            verifyRange.load("values");
+            await context.sync();
+            const verifyValues = verifyRange.values[0];
+            console.log("insertRow: Verify inserted row values", verifyValues);
+            changeVerified = Object.entries(newData).every(([colName, value]) => {
+                const colIdx = headers.indexOf(colName);
+                return colIdx !== -1 && verifyValues[colIdx] == value;
+            });
+            if (!changeVerified) {
+                errorMsg = "Double check failed: Row was not inserted as expected.";
+                console.log("insertRow: Double check failed", errorMsg);
+            } else {
+                console.log("insertRow: Row inserted and verified successfully");
+            }
         });
+        if (!changeVerified) {
+            return { success: false, message: errorMsg };
+        }
         return { success: true, message: "Row inserted successfully." };
     } catch (error) {
+        console.log("insertRow: Exception occurred", error);
         return { success: false, message: error.message };
     }
 }
@@ -99,6 +145,8 @@ export async function deleteRow(sheet, columnId, rowId) {
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
     }
     try {
+        let changeVerified = false;
+        let errorMsg = "";
         await Excel.run(async (context) => {
             const worksheet = context.workbook.worksheets.getItem(sheet);
             const usedRange = worksheet.getUsedRange();
@@ -125,9 +173,35 @@ export async function deleteRow(sheet, columnId, rowId) {
 
             worksheet.getRangeByIndexes(rowIdx, 0, 1, usedRange.columnCount).delete(Excel.DeleteShiftDirection.up);
             await context.sync();
+
+            // Double check
+            const verifyRange = worksheet.getUsedRange();
+            verifyRange.load("values");
+            await context.sync();
+            changeVerified = verifyRange.values.slice(1).every(row => row[idColIdx] != rowId);
+            if (!changeVerified) {
+                errorMsg = "Double check failed: Row was not deleted as expected.";
+            }
         });
+        if (!changeVerified) {
+            return { success: false, message: errorMsg };
+        }
         return { success: true, message: "Row deleted successfully." };
     } catch (error) {
         return { success: false, message: error.message };
     }
 }
+
+/*
+Example usage for editRow:
+editRow("Students", "StudentID", 12345, { Name: "John Doe", Status: "Active" })
+  .then(result => console.log(result));
+
+Example usage for insertRow:
+insertRow("Students", { StudentID: 67890, Name: "Jane Smith", Status: "Inactive" })
+  .then(result => console.log(result));
+
+Example usage for deleteRow:
+deleteRow("Students", "StudentID", 12345)
+  .then(result => console.log(result));
+*/

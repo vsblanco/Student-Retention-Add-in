@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from './Comment';
 import NewComment from './NewComment';
 import { formatExcelDate } from '../utility/Conversion';
+import { insertRow } from '../utility/ExcelAPI'; // <-- import insertRow
 
 // Add styles constant
 const styles = `
@@ -60,6 +61,7 @@ function StudentHistory({ history }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewComment, setShowNewComment] = useState(false);
+  const [statusMsg, setStatusMsg] = useState(""); // <-- status message state
 
   // Filter history by search term (case-insensitive, matches comment)
   const filteredHistory = Array.isArray(normalizedHistory)
@@ -100,17 +102,25 @@ function StudentHistory({ history }) {
 
   // Add a new comment to history
   async function addCommentToHistory(comment) {
-    // You can expand this to include more fields as needed
     const now = new Date();
-    // Convert JS Date to Excel serial date
     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
     const serial = (now - excelEpoch) / 86400000;
     const newEntry = {
       comment,
-      timestamp: formatExcelDate(serial), // formatted timestamp
+      timestamp: formatExcelDate(serial),
       // Add other fields if needed (e.g., author, tag)
     };
+    const newRow = {
+      ['Student identifier']: localHistory.ID || "Unknown",
+      Student: localHistory.student || "Unknown",
+      Comment: comment,
+      Timestamp: formatExcelDate(serial),
+      // Add other fields if needed (e.g., Author, Tag)
+    };
     setLocalHistory(prev => [...prev, newEntry]);
+    const sheetName = "Student History"; // Change as appropriate
+    const result = await insertRow(sheetName, newRow);
+    setStatusMsg(result.message); // <-- set status message
     return true;
   }
 
@@ -191,6 +201,12 @@ function StudentHistory({ history }) {
           onClose={() => setShowNewComment(false)}
           addCommentToHistory={addCommentToHistory}
         />
+
+        {statusMsg && (
+          <div className="mb-2 text-sm text-blue-700 bg-blue-100 rounded px-3 py-2">
+            {statusMsg}
+          </div>
+        )}
       </div>
       {/* End History Header */}
 
