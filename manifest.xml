@@ -75,6 +75,22 @@
                     <SourceLocation resid="About.Url"/>
                   </Action>
                 </Control>
+                <Control xsi:type="Button" id="TestButton">
+                  <Label resid="TestButton.Label"/>
+                  <Supertip>
+                    <Title resid="TestButton.Label"/>
+                    <Description resid="TestButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SettingsIcon.16x16"/>
+                    <bt:Image size="32" resid="SettingsIcon.32x32"/>
+                    <bt:Image size="80" resid="SettingsIcon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Test</TaskpaneId>
+                    <SourceLocation resid="Test.Url"/>
+                  </Action>
+                </Control>
               </Group>
               <Group id="DataGroup">
                 <Label resid="DataGroup.Label"/>
@@ -239,6 +255,7 @@
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
         <bt:Url id="Connections.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/connections/connections.html"/>
         <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/personalized-email/personalized-email.html"/>
+        <bt:Url id="Test.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/test/test.html"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -255,6 +272,7 @@
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="ConnectionsButton.Label" DefaultValue="Connections"/>
         <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Personalized Email"/>
+        <bt:String id="TestButton.Label" DefaultValue="Test"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
@@ -266,6 +284,7 @@
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="ConnectionsButton.Tooltip" DefaultValue="Manage student connections and relationships."/>
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
+        <bt:String id="TestButton.Tooltip" DefaultValue="https://congenial-barnacle-g455qrwq69qvcvqqq-5173.app.github.dev/"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
