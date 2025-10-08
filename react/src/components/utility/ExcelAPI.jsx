@@ -192,6 +192,46 @@ export async function deleteRow(sheet, columnId, rowId) {
     }
 }
 
+/**
+ * Registers a callback for Excel worksheet selection changes.
+ * 
+ * @param {function} callback - Function to run when selection changes.
+ * @returns {Promise<{remove: function}>} - Returns an object with a remove() function to unregister the event.
+ */
+export async function onSelectionChanged(callback) {
+    if (typeof Excel === "undefined") {
+        throw new Error("Excel API not available.");
+    }
+    let eventHandler;
+    await Excel.run(async (context) => {
+        const worksheet = context.workbook.worksheets.getActiveWorksheet();
+        eventHandler = worksheet.onSelectionChanged.add(async (eventArgs) => {
+            try {
+                const range = worksheet.getRange(eventArgs.address);
+                range.load("values");
+                await context.sync();
+                callback({
+                    address: eventArgs.address,
+                    values: range.values,
+                });
+            } catch (err) {
+                console.error("onSelectionChanged callback error:", err);
+            }
+        });
+        await context.sync();
+    });
+    return {
+        remove: async () => {
+            if (eventHandler) {
+                await Excel.run(async (context) => {
+                    eventHandler.remove();
+                    await context.sync();
+                });
+            }
+        }
+    };
+}
+
 /*
 Example usage for editRow:
 editRow("Students", "StudentID", 12345, { Name: "John Doe", Status: "Active" })

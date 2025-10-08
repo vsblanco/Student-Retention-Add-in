@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from './Comment';
 import NewComment from './NewComment';
-import { formatExcelDate } from '../utility/Conversion';
-import { insertRow } from '../utility/ExcelAPI'; // <-- import insertRow
+import { formatExcelDate, normalizeKeys } from '../utility/Conversion';
+import { insertRow } from '../utility/ExcelAPI';
 
 // Add styles constant
 const styles = `
@@ -44,18 +44,12 @@ function StudentHistory({ history }) {
   // Sync localHistory with history prop if it changes
   useEffect(() => {
     setLocalHistory(Array.isArray(history) ? history : []);
+    setStatusMsg(""); // <-- clear status message when student changes
   }, [history]);
 
   // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
   const normalizedHistory = Array.isArray(localHistory)
-    ? localHistory.map(entry => {
-        const normalized = {};
-        Object.keys(entry || {}).forEach(key => {
-          const normKey = String(key).toLowerCase().replace(/\s+/g, '');
-          normalized[normKey] = entry[key];
-        });
-        return normalized;
-      })
+    ? localHistory.map(entry => normalizeKeys(entry || {}))
     : [];
 
   const [showSearch, setShowSearch] = useState(false);
@@ -111,8 +105,8 @@ function StudentHistory({ history }) {
       // Add other fields if needed (e.g., author, tag)
     };
     const newRow = {
-      ['Student identifier']: localHistory.ID || "Unknown",
-      Student: localHistory.student || "Unknown",
+      ['Student identifier']: "Unknown",
+      Student: "Unknown",
       Comment: comment,
       Timestamp: formatExcelDate(serial),
       // Add other fields if needed (e.g., Author, Tag)

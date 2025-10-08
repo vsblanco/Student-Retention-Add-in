@@ -5,6 +5,7 @@ import StudentHeader from './StudentHeader.jsx';
 import ExampleStudent from '../utility/ExampleStudent.jsx';
 import StudentAssignments from './StudentAssignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
+import { onSelectionChanged } from '../utility/ExcelAPI.jsx'; // <-- Import here
 import './StudentView.css';
 
 const STUDENT_HISTORY_SHEET = "Student History";
@@ -344,6 +345,8 @@ function StudentView() {
     if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
     if (sheetData.status !== 'success') return;
 
+    let eventHandlerObj = null;
+
     const syncUIToSheetSelection = async () => {
       if (!selectionHandlerEnabledRef.current) return; // Ignore if disabled
       try {
@@ -362,13 +365,13 @@ function StudentView() {
       }
     };
 
-    let eventHandler;
-    Excel.run(async (context) => {
-      const worksheet = context.workbook.worksheets.getActiveWorksheet();
-      eventHandler = worksheet.onSelectionChanged.add(syncUIToSheetSelection);
-      selectionHandlerRef.current = eventHandler;
+    // Use the ExcelAPI utility for selection change
+    onSelectionChanged(() => {
+      syncUIToSheetSelection();
+    }).then(obj => {
+      eventHandlerObj = obj;
+      selectionHandlerRef.current = obj;
       selectionHandlerEnabledRef.current = true;
-      await context.sync();
       if (isInitialLoad.current) {
         syncUIToSheetSelection();
         isInitialLoad.current = false;
@@ -376,184 +379,13 @@ function StudentView() {
     });
 
     return () => {
-      if (eventHandler) {
-        Excel.run(async (context) => {
-          eventHandler.remove();
-          await context.sync();
-        });
+      if (eventHandlerObj && eventHandlerObj.remove) {
+        eventHandlerObj.remove();
       }
       selectionHandlerRef.current = null;
       selectionHandlerEnabledRef.current = true;
     };
   }, [sheetData]);
-
-  // --- Keyboard navigation for up/down arrows (hold support) ---
-  useEffect(() => {
-    if (typeof window.Excel === "undefined") return; // Only in Excel
-
-    let navTimer = null;
-    let lastDirection = null;
-    let isNavigating = false; // Prevent overlapping Excel.run calls
-
-    const NAV_INTERVAL = 250; // ms between moves when holding (increased for Excel)
-
-    const moveSelection = async (direction) => {
-      if (isNavigating) return;
-      isNavigating = true;
-      if (!studentRowIndices.length || currentRowIndex === null) {
-        isNavigating = false;
-        return;
-      }
-      const currentIdx = studentRowIndices.indexOf(currentRowIndex);
-      let nextIdx = currentIdx;
-      if (direction === "up") {
-        nextIdx = Math.max(0, currentIdx - 1);
-      } else if (direction === "down") {
-        nextIdx = Math.min(studentRowIndices.length - 1, currentIdx + 1);
-      }
-      const nextRowIndex = studentRowIndices[nextIdx];
-      if (nextRowIndex !== undefined && nextRowIndex !== currentRowIndex) {
-        selectionHandlerEnabledRef.current = false; // Disable selection event handler
-        await Excel.run(async (context) => {
-          const sheet = context.workbook.worksheets.getActiveWorksheet();
-          const nameColIdx = getStudentNameColIdx();
-          const range = sheet.getRangeByIndexes(nextRowIndex, nameColIdx, 1, 1);
-          range.select();
-          await context.sync();
-          setActiveStudent(sheetData.data[nextRowIndex] || null);
-          setCurrentRowIndex(nextRowIndex);
-        });
-        selectionHandlerEnabledRef.current = true; // Re-enable after navigation
-      }
-      isNavigating = false;
-    };
-
-    const handleKeyDown = (e) => {
-      if (e.repeat && navTimer) return; // Already repeating
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        lastDirection = e.key === "ArrowUp" ? "up" : "down";
-        moveSelection(lastDirection);
-        // Start timer for hold
-        if (!navTimer) {
-          navTimer = setInterval(() => moveSelection(lastDirection), NAV_INTERVAL);
-        }
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        if (navTimer) {
-          clearInterval(navTimer);
-          navTimer = null;
-        }
-        lastDirection = null;
-      }
-    };
-
-    const handleBlur = () => {
-      if (navTimer) {
-        clearInterval(navTimer);
-        navTimer = null;
-      }
-      lastDirection = null;
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleBlur);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleBlur);
-      if (navTimer) clearInterval(navTimer);
-    };
-  }, [studentRowIndices, currentRowIndex, sheetData, headers]);
-
-  // --- Fast local navigation using cache, sync Excel selection after ---
-  useEffect(() => {
-    if (typeof window.Excel === "undefined") return; // Only in Excel
-
-    let navTimer = null;
-    let lastDirection = null;
-
-    const NAV_INTERVAL = 80; // Fast UI navigation
-
-    const moveLocalSelection = (direction) => {
-      if (!studentCache.length) return;
-      const idx = pendingRowIdx ?? studentRowIndices.indexOf(currentRowIndex);
-      let nextIdx = idx;
-      if (direction === "up") {
-        nextIdx = Math.max(0, idx - 1);
-      } else if (direction === "down") {
-        nextIdx = Math.min(studentCache.length - 1, idx + 1);
-      }
-      if (nextIdx !== idx) {
-        setPendingRowIdx(nextIdx);
-        setActiveStudent(studentCache[nextIdx]);
-      }
-    };
-
-    const handleKeyDown = (e) => {
-      if (e.repeat && navTimer) return;
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        lastDirection = e.key === "ArrowUp" ? "up" : "down";
-        moveLocalSelection(lastDirection);
-        if (!navTimer) {
-          navTimer = setInterval(() => moveLocalSelection(lastDirection), NAV_INTERVAL);
-        }
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        if (navTimer) {
-          clearInterval(navTimer);
-          navTimer = null;
-        }
-        lastDirection = null;
-        // Sync Excel selection to UI
-        const idx = pendingRowIdx ?? studentRowIndices.indexOf(currentRowIndex);
-        if (idx !== null && idx !== undefined && idx !== studentRowIndices.indexOf(currentRowIndex)) {
-          const rowIdx = studentRowIndices[idx];
-          selectionHandlerEnabledRef.current = false; // Disable selection event handler
-          Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const nameColIdx = getStudentNameColIdx();
-            const range = sheet.getRangeByIndexes(rowIdx, nameColIdx, 1, 1);
-            range.select();
-            await context.sync();
-            setCurrentRowIndex(rowIdx);
-          }).finally(() => {
-            selectionHandlerEnabledRef.current = true; // Re-enable after navigation
-          });
-        }
-        setPendingRowIdx(null);
-      }
-    };
-
-    const handleBlur = () => {
-      if (navTimer) {
-        clearInterval(navTimer);
-        navTimer = null;
-      }
-      lastDirection = null;
-      setPendingRowIdx(null);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleBlur);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleBlur);
-      if (navTimer) clearInterval(navTimer);
-    };
-  }, [studentCache, studentRowIndices, currentRowIndex, pendingRowIdx, headers]);
 
   // When Excel selection changes, update currentRowIndex and clear pendingRowIdx
   useEffect(() => {

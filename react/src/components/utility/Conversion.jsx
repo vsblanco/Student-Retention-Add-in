@@ -55,6 +55,22 @@ export function formatName(name) {
   return name;
 }
 
+/**
+ * Normalizes the keys of an object:
+ * - Converts keys to lowercase
+ * - Removes all whitespace
+ * Returns a new object.
+ */
+export function normalizeKeys(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const normalized = {};
+  Object.keys(obj).forEach(key => {
+    const normKey = String(key).toLowerCase().replace(/\s+/g, '');
+    normalized[normKey] = obj[key];
+  });
+  return normalized;
+}
+
 // Usage example:
 // const date = formatExcelDate(44561); // Converts Excel date serial to JavaScript Date
 // console.log(date); // Outputs: "10/07/25 12:00 AM" (depending on the input serial)
