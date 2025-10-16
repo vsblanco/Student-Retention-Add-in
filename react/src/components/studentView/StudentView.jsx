@@ -460,6 +460,7 @@ function StudentView() {
           studentId: studentObj.ID || '',
           studentName: studentObj.StudentName || '',
           tag: '', // No tag in legacy/test mode
+          
         });
       }
       return entries;
@@ -468,10 +469,19 @@ function StudentView() {
     return [];
   };
 
+  // Always show SSO first until userName is set
+  if (!userName) {
+    return (
+      <div className="studentview-outer">
+        <SSO onNameSelect={setUserName} />
+      </div>
+    );
+  }
+
   // --- UPDATE: Centralized rendering logic based on sheetData.status ---
   if (sheetData.status !== 'success') {
     return (
-      <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+      <div className="studentview-outer">
         <div className="studentview-message"><p>{sheetData.message}</p></div>
       </div>
     );
@@ -479,7 +489,7 @@ function StudentView() {
 
   if (!activeStudent) {
     return (
-      <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+      <div className="studentview-outer">
         <div className="studentview-message">
           <p>Select a cell in a student's row to view their details.</p>
         </div>
@@ -505,17 +515,11 @@ function StudentView() {
     ? { ...activeStudent, Assignments: getAssignmentsForStudent(activeStudent) || [] }
     : null;
 
-  // Wait for userName before initializing StudentView
-  if (!userName) {
-    return (
-      <div className="studentview-outer">
-        <SSO onNameSelect={setUserName} />
-      </div>
-    );
-  }
-
   return (
-    <div className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}>
+    <div
+      className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}
+      style={{ userSelect: "none" }}
+    >
       {/* activeStudent now contains GradeBookLink if a hyperlink formula was found */}
       <StudentHeader student={activeStudentWithAssignments} /> 
       <div className="studentview-tabs">
@@ -541,7 +545,10 @@ function StudentView() {
       <div className="studentview-container">
         {activeTab === 'details' && <StudentDetails student={activeStudentWithAssignments} />}
         {activeTab === 'history' && (
-          <StudentHistory history={getHistoryArray(activeStudentWithAssignments)} />
+          <StudentHistory
+            history={getHistoryArray(activeStudentWithAssignments)}
+            student={activeStudentWithAssignments}
+          />
         )}
         {activeTab === 'assignments' && (
           <StudentAssignments student={activeStudentWithAssignments} />

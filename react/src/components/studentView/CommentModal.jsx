@@ -3,7 +3,8 @@ import Modal from '../utility/Modal';
 import InsertTagButton from './InsertTagButton';
 import { highlightLdaKeywords } from './Comment';
 import { DNCModal, LDAModal } from './Tag.jsx';
-import { Pencil, ArrowLeft, Check, Trash2 } from 'lucide-react';
+import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 function CommentModal({
   isOpen,
@@ -46,15 +47,33 @@ function CommentModal({
   }, [isOpen, modalMode]);
 
   const handleSaveComment = async () => {
+    toast.success("Comment updated.", {
+      position: "bottom-left",
+      autoClose: 3000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: false,
+      theme: "light",
+      style: { fontSize: '1rem' }
+    });
     // Only close modal, do not call editRow
     onClose();
   };
 
   const handleDeleteComment = async () => {
-    if (window.confirm("Are you sure you want to delete this comment?")) {
-      // Only close modal, do not call editRow
-      onClose();
-    }
+    toast.success("Comment deleted.", {
+      position: "bottom-left",
+      autoClose: 3000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: false,
+      theme: "light",
+      style: { fontSize: '1rem' }
+    });
+    // Only close modal, do not call editRow
+    onClose();
   };
 
   const insertTagButtonTags = COMMENT_TAGS.map(tag => ({
@@ -159,7 +178,7 @@ function CommentModal({
                 marginLeft: 4,
                 background: 'transparent',
                 border: 'none',
-                color: '#888',
+                color: textColor || '#888', // use tag text color if available
                 cursor: 'pointer',
                 fontSize: '1em',
                 lineHeight: 1
@@ -182,7 +201,7 @@ function CommentModal({
         gap: 4,
         padding: '6px 10px',
         borderRadius: 9999,
-        border: '1px solid #dcdcdc',
+        border: '2px solid #cfcfcf',
         marginTop: 8,
         minHeight: 32,
         alignItems: 'center',
@@ -241,10 +260,66 @@ function CommentModal({
   );
 
   // --- Modal content ---
+  const [clipboardHover, setClipboardHover] = useState(false);
+
   const modalContentView = (
-    <div style={{ width: '100%' }}>
+    <div
+      style={{ width: '100%' }}
+      onClick={e => {
+        // Only close if NOT clicking edit or clipboard button
+        if (
+          e.target.closest('button[aria-label="Edit"]') ||
+          e.target.closest('button[aria-label="Copy comment"]')
+        ) {
+          return;
+        }
+        if (onClose) onClose();
+      }}
+    >
       {modalTagViewPills}
-      <div style={{ marginTop: 12, marginBottom: 12 }}>
+      <div
+        style={{ marginTop: 12, marginBottom: 12, position: 'relative' }}
+        onMouseEnter={() => setClipboardHover(true)}
+        onMouseLeave={() => setClipboardHover(false)}
+      >
+        {/* Clipboard icon */}
+        <button
+          type="button"
+          aria-label="Copy comment"
+          title="Copy comment"
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            background: clipboardHover ? '#e0e0e0' : '#e0f2fe',
+            border: 'none',
+            borderRadius: 6,
+            width: 32,
+            height: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: clipboardHover
+              ? '0 2px 8px rgba(2,132,199,0.12)'
+              : '0 1px 4px rgba(0,0,0,0.08)',
+            transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
+            opacity: clipboardHover ? 0.5 : 0,
+            zIndex: 2
+          }}
+          onClick={() => {
+            let textToCopy;
+            if (hasQuoteTag && quoteText) {
+              textToCopy = `${beforeQuote || ''}${quoteText}${afterQuote || ''}`;
+            } else {
+              textToCopy = entry.comment || '';
+            }
+            navigator.clipboard.writeText(textToCopy);
+          }}
+          // Remove onMouseEnter/onMouseLeave here, handled by parent div
+        >
+          <Clipboard size={18} />
+        </button>
         <div
           style={{
             fontSize: '1rem',
@@ -256,7 +331,8 @@ function CommentModal({
             paddingTop: 6,
             borderRadius: 8,
             background: 'transparent',
-            border: '1px solid #d5d5d5',
+            border: '1px solid #cfcfcf',
+            position: 'relative'
           }}
         >
           {hasQuoteTag && quoteText ? (
@@ -295,6 +371,7 @@ function CommentModal({
         <button
           type="button"
           onClick={() => setModalMode('edit')}
+          aria-label="Edit"
           style={{
             width: 36,
             height: 36,
@@ -309,7 +386,6 @@ function CommentModal({
             boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
             transition: 'background 0.15s, box-shadow 0.15s'
           }}
-          aria-label="Edit"
           onMouseEnter={e => {
             e.currentTarget.style.background = '#1e40af';
             e.currentTarget.style.boxShadow = '0 2px 8px rgba(37,99,235,0.15)';
@@ -349,7 +425,7 @@ function CommentModal({
           marginBottom: 12,
           padding: 8,
           borderRadius: 6,
-          border: '1px solid #cccccc',
+          border: '1px solid #cfcfcf',
           resize: 'vertical',
           boxSizing: 'border-box'
         }}

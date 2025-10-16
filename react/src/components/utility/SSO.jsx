@@ -1,5 +1,7 @@
 // 2025-10-08T23:40:56.531Z - v1.0.0
 import React, { useState } from "react";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 // Helper function to decode the JWT token
 function decodeJwt(token) {
@@ -50,14 +52,13 @@ export function useOfficeSSO() {
 }
 
 export default function SSO({ onNameSelect }) {
-  const [showName, setShowName] = useState(false);
-  const [loginStatus, setLoginStatus] = useState("");
   const { getAccessToken, error } = useOfficeSSO();
 
   const handleTestClick = () => {
-    setShowName(true);
+    const userName = "Victor Blanco";
+    toast.success(`Welcome back ${userName}`, { position: "bottom-center" });
     if (onNameSelect) {
-      onNameSelect("Victor Blanco");
+      onNameSelect(userName);
     }
   };
 
@@ -66,26 +67,25 @@ export default function SSO({ onNameSelect }) {
     if (accessToken) {
       // ✅ CORRECTED: Decode the token to get the user's name
       const userName = decodeJwt(accessToken);
-      setLoginStatus(`Logged in as: ${userName}`);
+      toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
       if (onNameSelect) {
         onNameSelect(userName);
       }
     } else {
-      setLoginStatus(`Login failed${error ? `: ${error}` : ""}`);
+      toast.error(`Login failed${error ? `: ${error}` : ""}`, { position: "bottom-center" });
     }
   };
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="flex space-x-2">
+    <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="mb-8 text-center">
+        <h1 className="text-2xl font-bold mb-2">Welcome!</h1>
+        <p className="text-lg text-gray-600">Please sign in to get started.</p>
+      </div>
+      {/* Microsoft SSO button */}
+      <div className="flex flex-col items-center mb-4 space-y-2 w-64">
         <button
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          onClick={handleTestClick}
-        >
-          Test
-        </button>
-        <button
-          className="px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-900 transition flex items-center space-x-2"
+          className="w-full px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-900 transition flex items-center justify-center space-x-2"
           onClick={handleSSOLogin}
         >
           <span>
@@ -98,9 +98,17 @@ export default function SSO({ onNameSelect }) {
           </span>
           <span>Microsoft SSO</span>
         </button>
+        {/* Test button below */}
+        <button
+          className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+          onClick={handleTestClick}
+        >
+          Debug User
+        </button>
       </div>
-      {showName && <div className="mt-4">Victor Blanco</div>}
-      {loginStatus && <div className="mt-4">{loginStatus}</div>}
+      {/* Removed old notification display */}
+      {/* {showName && <div className="mt-2">Victor Blanco</div>} */}
+      {/* {loginStatus && <div className="mt-2">{loginStatus}</div>} */}
     </div>
   );
 }

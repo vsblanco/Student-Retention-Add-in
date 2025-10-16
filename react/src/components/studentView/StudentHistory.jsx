@@ -76,7 +76,7 @@ function getMonthYearLabel(monthStr) {
   return `${monthNames[monthIdx]} ${year}`;
 }
 
-function StudentHistory({ history }) {
+function StudentHistory({ history, student }) {
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
 

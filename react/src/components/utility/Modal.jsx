@@ -4,7 +4,7 @@ const Modal = ({
   isOpen,
   onClose,
   children,
-  borderRadius = "16px",
+  borderRadius = "20px",
   className = "",
   padding,
   style,
@@ -29,12 +29,14 @@ const Modal = ({
         right: 0,
         bottom: 0,
         zIndex: 9999,
-        background: "rgba(0,0,0,0.3)",
+        background: "rgba(30,30,30,0.5)", // updated to dark gray, 50% opacity
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         width: "100vw",
         height: "100vh",
+        backdropFilter: "blur(2px) saturate(140%)",
+        WebkitBackdropFilter: "blur(2px) saturate(140%)",
         ...overlayStyle,
       }}
       onClick={handleOverlayClick}
@@ -43,15 +45,15 @@ const Modal = ({
       <div
         className="modal-container"
         style={{
-          width: "100%",
-          maxWidth: 400,
+          minWidth: 280,
+          maxWidth: 500,
           maxHeight: 400,
           borderRadius,
           padding,
           background: "rgba(255,255,255,0.7)",
           boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
-          backdropFilter: "blur(5px) saturate(140%)",
-          WebkitBackdropFilter: "blur(5px) saturate(140%)",
+          backdropFilter: "blur(15px) saturate(140%)",
+          WebkitBackdropFilter: "blur(15px) saturate(140%)",
           border: "1px solid rgba(255,255,255,0.18)",
           display: "flex",
           flexDirection: "column",

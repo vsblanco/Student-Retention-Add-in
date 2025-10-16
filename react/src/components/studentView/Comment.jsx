@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { formatExcelDate } from '../utility/Conversion';
 import BounceAnimation from '../utility/BounceAnimation';
 import CommentModal from './CommentModal'; // <-- import CommentModal
+import { toast } from 'react-toastify';
 
 // CSS class constants
 const liStyle = "p-3 rounded-lg shadow-sm relative";
@@ -29,7 +30,8 @@ export const COMMENT_TAGS = [
     bgClass: "bg-red-50",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-100 text-red-800",
     priority: 2,
-    borderColor: "border-red-400"
+    borderColor: "border-red-400",
+    about: 'Reserved for urgent attention',
   },
   {
     label: "Note",
@@ -37,7 +39,8 @@ export const COMMENT_TAGS = [
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-700 text-gray-200",
     pinned: true,
     priority: 3,
-    borderColor: "border-gray-400"
+    borderColor: "border-gray-400",
+    about: 'A pinned note for general information',
   },
   {
     label: "DNC",
@@ -46,6 +49,7 @@ export const COMMENT_TAGS = [
     pinned: true,
     priority: 4,
     borderColor: "border-red-600",
+    about: 'Student requested not to be contacted',
     subtags: [
       {
         label: "DNC - Phone",
@@ -53,7 +57,8 @@ export const COMMENT_TAGS = [
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
         priority: 4,
-        borderColor: "border-red-600"
+        borderColor: "border-red-600",
+        about: 'Student requested no phone contact'
       },
       {
         label: "DNC - Other Phone",
@@ -61,7 +66,8 @@ export const COMMENT_TAGS = [
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
         priority: 4,
-        borderColor: "border-red-600"
+        borderColor: "border-red-600",
+        about: 'Student requested no other phone contact'
       },
       {
         label: "DNC - Email",
@@ -69,7 +75,8 @@ export const COMMENT_TAGS = [
         tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-200 text-black",
         pinned: true,
         priority: 4,
-        borderColor: "border-red-600"
+        borderColor: "border-red-600",
+        about: 'Student requested no email contact'
       }
     ]
   },
@@ -78,28 +85,32 @@ export const COMMENT_TAGS = [
     bgClass: "bg-orange-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-orange-200 text-orange-800",
     priority: 3,
-    borderColor: "border-orange-400"
+    borderColor: "border-orange-400",
+    about: 'Student plans to submit LDA'
   },
   {
     label: "Contacted",
     bgClass: "bg-yellow-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-yellow-200 text-yellow-800",
     priority: 2,
-    borderColor: "border-yellow-400"
+    borderColor: "border-yellow-400",
+    about: 'Student gave a response'
   },
   {
     label: "Outreach",
     bgClass: "bg-gray-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-200 text-gray-800",
     priority: 1,
-    borderColor: "border-gray-300"
+    borderColor: "border-gray-300",
+    about: 'Sourced from the Outreach Column'
   },
   {
     label: "Quote",
     bgClass: "bg-blue-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-50 text-blue-800",
     priority: 2,
-    borderColor: "border-blue-400"
+    borderColor: "border-blue-400",
+    about: 'Contains quoted text'
   }
 ];
 
@@ -297,6 +308,22 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
     }, 500);
   };
 
+  // Show toast with tag about info
+  const showTagAbout = tagInfo => {
+    if (tagInfo && tagInfo.about) {
+      toast.info(tagInfo.about, {
+        position: "bottom-left",
+        autoClose: 2000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+        theme: "light",
+        style: { fontSize: '1rem' }
+      });
+    }
+  };
+
   React.useEffect(() => {
     if (commentRef.current) {
       const el = commentRef.current;
@@ -316,6 +343,19 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
 
   // Determine border color from the highest priority tag
   const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-blue-300";
+
+  // Map bgClass to a slightly darker hover color
+  const hoverBgMap = {
+    'bg-red-50': '#FFE5E5',
+    'bg-gray-200': '#D7DBDE',
+    'bg-red-100': '#FAD7D7',
+    'bg-orange-100': '#FFDEB8',
+    'bg-yellow-100': '#F7ECC1',
+    'bg-gray-100': '#EBEBEB',
+    'bg-blue-100': '#bfdbfe',
+    'bg-blue-50': '#EBEBEB',
+  };
+  const hoverBgColor = hoverBgMap[bgClass] || '#e0e7ff';
 
   // Helper for LDA tag display
   function renderTagLabel(tagInfo) {
@@ -343,11 +383,22 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
         className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
         data-row-index={entry.studentId || index}
         onContextMenu={onContextMenu}
-        style={{ position: 'relative' }}
-        onClick={() => setModalOpen(true)} // <-- open modal on click
+        style={{
+          position: 'relative',
+          transition: 'background 0.15s, box-shadow 0.15s'
+        }}
+        onClick={() => setModalOpen(true)}
         tabIndex={0}
         role="button"
         aria-label="Open comment modal"
+        onMouseEnter={e => {
+          e.currentTarget.style.background = hoverBgColor;
+          e.currentTarget.style.boxShadow = '0 4px 16px rgba(59,130,246,0.10)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = '';
+          e.currentTarget.style.boxShadow = '';
+        }}
       >
         <BounceAnimation />
         {hasQuoteTag && quoteText ? (
@@ -364,24 +415,16 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
                         display: '-webkit-box',
                         WebkitLineClamp: 3,
                         WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        userSelect: 'none'
                       }
-                    : {}
+                    : { userSelect: 'none' }
                 }
               >
                 {quoteText}
               </span>
               <span className={quoteMarkRightStyle} aria-hidden="true">”</span>
             </blockquote>
-            {isQuoteLong && (
-              <button
-                className={showMoreBtnStyle}
-                onClick={() => setExpanded(e => !e)}
-                type="button"
-              >
-                {expanded ? 'Show less' : 'Show more'}
-              </button>
-            )}
             {afterQuote}
           </>
         ) : (
@@ -395,22 +438,14 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
                       display: '-webkit-box',
                       WebkitLineClamp: 3,
                       WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      userSelect: 'none'
                     }
-                  : {}
+                  : { userSelect: 'none' }
               }
             >
               {commentContent}
             </p>
-            {isLong && (
-              <button
-                className={showMoreBtnStyleAlt}
-                onClick={() => setExpanded(e => !e)}
-                type="button"
-              >
-                {expanded ? 'Show less' : 'Show more'}
-              </button>
-            )}
           </>
         )}
         <div className={timestampRowStyle}>
@@ -437,7 +472,11 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
                     cursor: 'pointer',
                     userSelect: 'none' // prevent highlighting
                   }}
-                  onClick={() => triggerBounce(idx)}
+                  onClick={e => {
+                    e.stopPropagation(); // Prevent opening modal
+                    triggerBounce(idx);
+                    showTagAbout(tagInfo);
+                  }}
                   tabIndex={0}
                   aria-label={`Bounce ${tagInfo.label} tag`}
                 >
