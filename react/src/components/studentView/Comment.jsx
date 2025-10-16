@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import { formatExcelDate } from '../utility/Conversion';
 import BounceAnimation from '../utility/BounceAnimation';
-import Modal from '../utility/Modal'; // Add this import
-import InsertTagButton from './InsertTagButton'; // <-- import InsertTagButton
+import CommentModal from './CommentModal'; // <-- import CommentModal
 
 // CSS class constants
-const liStyle = "comment-li p-3 rounded-lg shadow-sm relative transition-colors";
+const liStyle = "p-3 rounded-lg shadow-sm relative";
 const borderLeftStyle = "border-l-4 pl-4";
 const tagPillStyle = "px-2 py-0.5 font-semibold rounded-full";
-const tagDefaultStyle = `${tagPillStyle} bg-gray-100 text-gray-800`;
-const plusPillStyle = `${tagPillStyle} bg-gray-200 text-gray-700 text-xs`;
+const tagDefaultStyle = `${tagPillStyle} bg-blue-100 text-blue-800`;
+const plusPillStyle = `${tagPillStyle} bg-gray-300 text-gray-700 text-xs`;
 const createdByStyle = "font-medium whitespace-nowrap";
 const tagsRowStyle = "flex items-center gap-2";
-const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t flex justify-between items-center";
+const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center";
 const commentTextStyle = "text-sm text-gray-800";
 const commentClampStyle = "line-clamp-3";
 const quoteBlockStyle = "relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
@@ -162,8 +161,8 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
 
   // Determine background class from the highest priority tag
   // If no tagInfo, use default
-  const bgClass = tagInfo && tagInfo.bgClass ? tagInfo.bgClass : "bg-gray-100";
-  const tagClass = tagInfo ? tagInfo.tagClass : "px-2 py-0.5 font-semibold rounded-full bg-gray-100 text-gray-800";
+  const bgClass = tagInfo && tagInfo.bgClass ? tagInfo.bgClass : "bg-gray-200";
+  const tagClass = tagInfo ? tagInfo.tagClass : "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800";
 
   // Check if Quote tag is present
   const hasQuoteTag = tags.includes("Quote");
@@ -302,93 +301,6 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('view'); // 'view' or 'edit'
-
-  // Textarea state for editing comment in modal
-  const [modalComment, setModalComment] = useState(entry.comment || "");
-
-  // Modal tag container object: { tagLabel: true }
-  const [modalTagContainer, setModalTagContainer] = useState({});
-
-  // State for delete confirmation in edit mode
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  // Prefill modalTagContainer and comment when modal opens or entry changes
-  React.useEffect(() => {
-    setModalComment(entry.comment || "");
-    let tags = entry.tag
-      ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
-      : [];
-    tags = tags.filter(t => t !== "Comment");
-    const tagObj = {};
-    tags.forEach(t => { tagObj[t] = true; });
-    setModalTagContainer(tagObj);
-    setModalMode('view'); // Always start in view mode
-  }, [entry.comment, entry.tag, modalOpen]);
-
-  // Reset confirmDelete when modal or mode changes
-  React.useEffect(() => {
-    setConfirmDelete(false);
-  }, [modalOpen, modalMode]);
-
-  // Handler for opening modal
-  const handleOpenModal = () => setModalOpen(true);
-  const handleCloseModal = () => setModalOpen(false);
-
-  // Handler for saving edited comment and tags
-  const handleSaveComment = async () => {
-    if (onEditComment) {
-      // Join tags for saving
-      const newTagString = Object.keys(modalTagContainer).join(', ');
-      const success = await onEditComment(
-        { ...entry, tag: newTagString },
-        modalComment
-      );
-      if (success) setModalOpen(false);
-    } else {
-      setModalOpen(false);
-    }
-  };
-
-  // Handler for deleting comment (implement your logic here)
-  const handleDeleteComment = async () => {
-    // Example: call a prop or show a confirmation dialog
-    if (window.confirm("Are you sure you want to delete this comment?")) {
-      if (typeof onEditComment === 'function') {
-        await onEditComment({ ...entry, deleted: true }, null); // Or your delete logic
-      }
-      setModalOpen(false);
-    }
-  };
-
-  // State for InsertTagButton dropdown
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
-  const [dropdownTarget, setDropdownTarget] = useState(null);
-
-  // Example tags for InsertTagButton (use COMMENT_TAGS for demo)
-  const insertTagButtonTags = COMMENT_TAGS.map(tag => ({
-    label: tag.label,
-    spanClass: tag.tagClass,
-    title: tag.label
-  }));
-
-  // Handler for tag click (add tag to container)
-  const handleInsertTag = tagLabel => {
-    setModalTagContainer(prev => ({
-      ...prev,
-      [tagLabel]: true
-    }));
-    setShowTagDropdown(false);
-  };
-
-  // Handler for removing a tag pill
-  const handleRemoveTag = tagLabel => {
-    setModalTagContainer(prev => {
-      const newObj = { ...prev };
-      delete newObj[tagLabel];
-      return newObj;
-    });
-  };
 
   // Helper to trigger bounce for a tag index
   const triggerBounce = idx => {
@@ -424,7 +336,7 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
   }, [entry.comment, commentContent, quoteText, expanded]);
 
   // Determine border color from the highest priority tag
-  const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-gray-300";
+  const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-blue-300";
 
   // Helper for LDA tag display
   function renderTagLabel(tagInfo) {
@@ -446,391 +358,17 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
     return tagInfo.label;
   }
 
-  // --- Tag pills rendering (all tags inside one pill-shaped outline box) ---
-  const modalTagPillStyle = "px-1 py-0.5 text-xs font-semibold rounded-full";
-  const modalTagDefaultStyle = `${modalTagPillStyle} bg-gray-100 text-gray-800`;
-  const modalPlusPillStyle = `${modalTagPillStyle} bg-gray-200 text-gray-700 text-xs`;
-
-  const modalTagPills = (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 4,
-        padding: '6px 10px',
-        borderRadius: 9999,
-        border: '1px solid #cfcfcf',
-        marginTop: 8,
-        minHeight: 32,
-        alignItems: 'center',
-        width: '100%',
-        boxSizing: 'border-box',
-        maxWidth: '100%',
-      }}
-    >
-      {Object.keys(modalTagContainer).map((tagLabel, idx) => {
-        const tagInfo = findTagInfo(tagLabel);
-        let tagClass = tagInfo?.tagClass
-          ? tagInfo.tagClass.replace(/px-2|py-0\.5|text-[^\s]+/g, '')
-          : "";
-        tagClass = `${modalTagPillStyle} ${tagClass} ${tagInfo?.bgClass || ""} ${tagInfo?.textClass || ""}`;
-
-        // Extract text color from tagClass (e.g., text-red-800)
-        let textColor;
-        if (tagInfo?.tagClass) {
-          const match = tagInfo.tagClass.match(/text-([a-z]+-\d{3,4}|[a-z]+)/);
-          if (match) {
-            // Map Tailwind color to CSS color
-            const tailwindToCss = {
-              'text-red-800': '#991b1b',
-              'text-gray-800': '#1f2937',
-              'text-gray-200': '#e5e7eb',
-              'text-black': '#000',
-              'text-orange-800': '#9a3412',
-              'text-yellow-800': '#854d0e',
-              'text-blue-800': '#1e40af',
-              'text-blue-900': '#1e3a8a',
-              // Add more mappings as needed
-            };
-            textColor = tailwindToCss[match[0]] || undefined;
-          }
-        }
-
-        return (
-          <span
-            key={tagLabel}
-            className={tagClass}
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: '0.8em',
-              padding: '2px 6px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: tagInfo?.bgClass ? undefined : undefined,
-              borderRadius: 9999,
-              marginRight: 2,
-              color: textColor, // <-- ensure correct text color
-            }}
-          >
-            {tagLabel}
-            <button
-              type="button"
-              aria-label={`Remove ${tagLabel}`}
-              onClick={() => handleRemoveTag(tagLabel)}
-              style={{
-                marginLeft: 4,
-                background: 'transparent',
-                border: 'none',
-                color: '#888',
-                cursor: 'pointer',
-                fontSize: '1em',
-                lineHeight: 1
-              }}
-            >
-              ×
-            </button>
-          </span>
-        );
-      })}
-    </div>
-  );
-
-  // --- Modal tag pills for view mode (not editable) ---
-  const modalTagViewPills = (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 4,
-        padding: '6px 10px',
-        borderRadius: 9999,
-        border: '1px solid #dcdcdc',
-        marginTop: 8,
-        minHeight: 32,
-        alignItems: 'center',
-        width: '100%',
-        boxSizing: 'border-box',
-        maxWidth: '100%',
-        background: 'transparent',
-      }}
-    >
-      {Object.keys(modalTagContainer).map((tagLabel, idx) => {
-        const tagInfo = findTagInfo(tagLabel);
-        let tagClass = tagInfo?.tagClass
-          ? tagInfo.tagClass.replace(/px-2|py-0\.5|text-[^\s]+/g, '')
-          : "";
-        tagClass = `${modalTagPillStyle} ${tagClass} ${tagInfo?.bgClass || ""} ${tagInfo?.textClass || ""}`;
-
-        // Extract text color from tagClass (e.g., text-red-800)
-        let textColor;
-        if (tagInfo?.tagClass) {
-          const match = tagInfo.tagClass.match(/text-([a-z]+-\d{3,4}|[a-z]+)/);
-          if (match) {
-            const tailwindToCss = {
-              'text-red-800': '#991b1b',
-              'text-gray-800': '#1f2937',
-              'text-gray-200': '#e5e7eb',
-              'text-black': '#000',
-              'text-orange-800': '#9a3412',
-              'text-yellow-800': '#854d0e',
-              'text-blue-800': '#1e40af',
-              'text-blue-900': '#1e3a8a',
-              // Add more mappings as needed
-            };
-            textColor = tailwindToCss[match[0]] || undefined;
-          }
-        }
-
-        return (
-          <span
-            key={tagLabel}
-            className={tagClass}
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontSize: '0.8em',
-              padding: '2px 6px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              background: tagInfo?.bgClass ? undefined : undefined,
-              borderRadius: 9999,
-              marginRight: 2,
-              color: textColor, // <-- ensure correct text color
-            }}
-          >
-            {tagLabel}
-          </span>
-        );
-      })}
-    </div>
-  );
-
-  // --- Modal content ---
-  const modalContentView = (
-    <div style={{ width: '100%' }}>
-      {/* Tags (view only) */}
-      {modalTagViewPills}
-      {/* Comment (view only) */}
-      <div style={{ marginTop: 12, marginBottom: 12 }}>
-        <div
-          style={{
-            fontSize: '1rem',
-            color: '#222',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            minHeight: 60,
-            paddingLeft: 16,
-            paddingTop: 6, // <-- add top padding
-            borderRadius: 8,
-            background: 'transparent',
-            border: '1px solid #d5d5d5',
-          }}
-        >
-          {/* Use quote rendering logic in view mode */}
-          {hasQuoteTag && quoteText ? (
-            <>
-              {beforeQuote}
-              <blockquote className={quoteBlockStyle} style={{ marginLeft: 0 }}>
-                <span className={quoteMarkStyle} aria-hidden="true">“</span>
-                <span className={quoteTextStyle}>
-                  {quoteText}
-                </span>
-                <span className={quoteMarkRightStyle} aria-hidden="true">”</span>
-              </blockquote>
-              {afterQuote}
-            </>
-          ) : (
-            <span>
-              {entry.comment}
-            </span>
-          )}
-        </div>
-      </div>
-      {/* Bottom row: created by and timestamp (bottom left), Edit button (bottom right) */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 8,
-        width: '100%',
-      }}>
-        <div style={{ color: '#666', fontSize: '0.95em', paddingLeft: 4 }}>
-          <span>
-            {entry.createdby ? entry.createdby : "Unknown"}
-          </span>
-          <span style={{ margin: '0 8px', color: '#bbb' }}>|</span>
-          <span>
-            {!isNaN(entry.timestamp) ? formatExcelDate(entry.timestamp) : entry.timestamp}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setModalMode('edit')}
-          style={{
-            padding: '6px 16px',
-            borderRadius: 6,
-            background: '#2563eb',
-            color: 'white',
-            fontWeight: 500,
-            border: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          Edit
-        </button>
-      </div>
-    </div>
-  );
-
-  const modalContentEdit = (
-    <div style={{ width: '100%' }}>
-      {/* InsertTagButton above outline pill box */}
-      <InsertTagButton
-        dropdownId="modal-insert-tag-dropdown"
-        onTagClick={handleInsertTag}
-        showDropdown={showTagDropdown}
-        setShowDropdown={setShowTagDropdown}
-        dropdownTarget={dropdownTarget}
-        setDropdownTarget={setDropdownTarget}
-        targetName="modal-comment"
-        tags={insertTagButtonTags}
-      />
-      {/* Modal tag pills below InsertTagButton, above textarea */}
-      {modalTagPills}
-      {/* Textarea for editing comment */}
-      <textarea
-        value={modalComment}
-        onChange={e => setModalComment(e.target.value)}
-        style={{
-          width: '100%',
-          minHeight: 80,
-          fontSize: '1rem',
-          marginBottom: 12,
-          padding: 8,
-          borderRadius: 6,
-          border: '1px solid #cccccc',
-          resize: 'vertical',
-          boxSizing: 'border-box'
-        }}
-        placeholder="Edit comment..."
-      />
-      {/* Update, Cancel, and Delete buttons */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 16,
-        width: '100%',
-        gap: 8
-      }}>
-        <button
-          type="button"
-          onClick={() => setConfirmDelete(true)}
-          style={{
-            padding: '6px 16px',
-            borderRadius: 6,
-            background: confirmDelete ? '#fee2e2' : '#ef4444',
-            color: confirmDelete ? '#b91c1c' : 'white',
-            fontWeight: 500,
-            border: 'none',
-            cursor: 'pointer'
-          }}
-          disabled={confirmDelete}
-        >
-          {confirmDelete ? 'Delete...' : 'Delete'}
-        </button>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirmDelete) setConfirmDelete(false);
-              else setModalMode('view');
-            }}
-            style={{
-              padding: '6px 16px',
-              borderRadius: 6,
-              background: confirmDelete ? '#fee2e2' : '#e5e7eb',
-              color: confirmDelete ? '#b91c1c' : '#222',
-              fontWeight: 500,
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            {confirmDelete ? 'Cancel Delete' : 'Cancel'}
-          </button>
-          <button
-            type="button"
-            onClick={confirmDelete ? handleDeleteComment : handleSaveComment}
-            disabled={
-              confirmDelete
-                ? false
-                : modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-            }
-            style={{
-              padding: '6px 16px',
-              borderRadius: 6,
-              background: confirmDelete
-                ? '#ef4444'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
-                  ? '#d1d5db'
-                  : '#2563eb',
-              color: confirmDelete
-                ? 'white'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
-                  ? '#888'
-                  : 'white',
-              fontWeight: 500,
-              border: 'none',
-              cursor: confirmDelete
-                ? 'pointer'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
-                  ? 'not-allowed'
-                  : 'pointer',
-              opacity: confirmDelete
-                ? 1
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                ) ? 0.7 : 1
-            }}
-          >
-            {confirmDelete ? 'Confirm Delete' : 'Update'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <>
-      <style>
-        {`
-          .comment-li:hover {
-            filter: brightness(0.95);
-          }
-        `}
-      </style>
       <li
         className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
         data-row-index={entry.studentId || index}
         onContextMenu={onContextMenu}
-        style={{ position: 'relative', cursor: 'pointer' }}
+        style={{ position: 'relative' }}
+        onClick={() => setModalOpen(true)} // <-- open modal on click
         tabIndex={0}
+        role="button"
         aria-label="Open comment modal"
-        onClick={handleOpenModal} // Add this line
       >
         <BounceAnimation />
         {hasQuoteTag && quoteText ? (
@@ -896,34 +434,10 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
             )}
           </>
         )}
-        <div
-          className={`${timestampRowStyle} ${borderColorClass}`}
-          style={{
-            borderTopWidth: '1px',
-            borderTopStyle: 'solid',
-            borderTopColor:
-              borderColorClass === "border-red-400" ? "rgba(248,113,113,0.5)"
-              : borderColorClass === "border-gray-400" ? "rgba(156,163,175,0.5)"
-              : borderColorClass === "border-red-600" ? "rgba(220,38,38,0.5)"
-              : borderColorClass === "border-orange-400" ? "rgba(251,146,60,0.5)"
-              : borderColorClass === "border-yellow-400" ? "rgba(250,204,21,0.5)"
-              : borderColorClass === "border-gray-300" ? "rgba(209,213,219,0.5)"
-              : borderColorClass === "border-blue-400" ? "rgba(96,165,250,0.5)"
-              : undefined
-          }}
-        >
+        <div className={timestampRowStyle}>
           <div className={tagsRowStyle} style={{ flex: 1 }}>
             {sortedTagInfos.slice(0, 2).map((tagInfo, idx) => {
               if (!tagInfo) return null;
-              // Hide Outreach tag if any other tag has higher priority
-              if (
-                tagInfo.label === "Outreach" &&
-                sortedTagInfos.some(
-                  t => t && t.label !== "Outreach" && (t.priority ?? -Infinity) > (tagInfo.priority ?? -Infinity)
-                )
-              ) {
-                return null;
-              }
               let tagClass = tagInfo.tagClass
                 ? tagInfo.tagClass
                 : tagDefaultStyle;
@@ -942,7 +456,7 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     cursor: 'pointer',
-                    userSelect: 'none'
+                    userSelect: 'none' // prevent highlighting
                   }}
                   onClick={() => triggerBounce(idx)}
                   tabIndex={0}
@@ -967,14 +481,19 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
           </span>
         </div>
       </li>
-      <Modal
+      <CommentModal
         isOpen={modalOpen}
-        onClose={handleCloseModal}
-        padding="12px"
-        style={{ minHeight: 200, width: '100%' }}
-      >
-        {modalMode === 'view' ? modalContentView : modalContentEdit}
-      </Modal>
+        onClose={() => setModalOpen(false)}
+        entry={entry}
+        onEditComment={onEditComment}
+        COMMENT_TAGS={COMMENT_TAGS}
+        findTagInfo={findTagInfo}
+        hasQuoteTag={hasQuoteTag}
+        quoteText={quoteText}
+        beforeQuote={beforeQuote}
+        afterQuote={afterQuote}
+        formatExcelDate={formatExcelDate}
+      />
     </>
   );
 }
