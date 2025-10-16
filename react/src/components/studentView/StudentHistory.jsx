@@ -3,6 +3,7 @@ import Comment, { COMMENT_TAGS } from './Comment';
 import NewComment from './NewComment';
 import { formatExcelDate, normalizeKeys } from '../utility/Conversion';
 import { insertRow } from '../utility/ExcelAPI';
+import { Folder, FolderOpen } from 'lucide-react';
 
 // Add styles constant
 const styles = `
@@ -36,6 +37,44 @@ const styles = `
     background: rgba(0,0,0,0.03);
   }
 `;
+
+function getMonthFromTimestamp(ts) {
+  // Try to parse Excel date or ISO string
+  if (!ts) return null;
+  // If ts is a number, treat as Excel serial
+  if (!isNaN(ts)) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelEpoch.getTime() + ts * 86400000);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+  // If ts is ISO string
+  const date = new Date(ts);
+  if (!isNaN(date.getTime())) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function getCurrentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getMonthYearLabel(monthStr) {
+  // monthStr: "YYYY-MM"
+  const [year, month] = monthStr.split('-');
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const monthIdx = parseInt(month, 10) - 1;
+  if (parseInt(year, 10) === currentYear) {
+    return monthNames[monthIdx];
+  }
+  return `${monthNames[monthIdx]} ${year}`;
+}
 
 function StudentHistory({ history }) {
   // Local state for history to allow adding new comments
@@ -71,12 +110,20 @@ function StudentHistory({ history }) {
     if (!entry.tag) return false;
     const entryTags = entry.tag.split(',').map(t => t.trim());
     return entryTags.some(tagLabel => {
+      // Check top-level tags
       const tagObj = COMMENT_TAGS.find(t => t.label === tagLabel);
       if (tagObj) {
         if (tagObj.pinned) return true;
-        // Check subtags if present
+        // Check subtags for pinned
         if (Array.isArray(tagObj.subtags)) {
-          return tagObj.subtags.some(subtag => subtag.pinned);
+          if (tagObj.subtags.some(subtag => subtag.pinned)) return true;
+        }
+      }
+      // Check if tagLabel matches any subtag label directly and is pinned
+      for (const tag of COMMENT_TAGS) {
+        if (Array.isArray(tag.subtags)) {
+          const subtagObj = tag.subtags.find(subtag => subtag.label === tagLabel);
+          if (subtagObj && subtagObj.pinned) return true;
         }
       }
       return false;
@@ -84,15 +131,8 @@ function StudentHistory({ history }) {
   }
 
   // Split filteredHistory into pinned and unpinned, then sort unpinned by recency (reverse order)
-  const pinnedComments = [];
-  const unpinnedComments = [];
-  [...filteredHistory].forEach(entry => {
-    if (isEntryPinned(entry)) {
-      pinnedComments.push(entry);
-    } else {
-      unpinnedComments.push(entry);
-    }
-  });
+  const pinnedComments = filteredHistory.filter(isEntryPinned);
+  const unpinnedComments = filteredHistory.filter(entry => !isEntryPinned(entry));
 
   // Add a new comment to history
   async function addCommentToHistory(comment) {
@@ -128,6 +168,50 @@ function StudentHistory({ history }) {
         </ul>
       </div>
     );
+  }
+
+  // Group comments by month
+  const monthGroups = {};
+  const currentMonth = getCurrentMonth();
+  const currentMonthComments = [];
+  filteredHistory.forEach(entry => {
+    const month = getMonthFromTimestamp(entry.timestamp);
+    if (month === currentMonth) {
+      currentMonthComments.push(entry);
+    } else if (month) {
+      if (!monthGroups[month]) monthGroups[month] = [];
+      monthGroups[month].push(entry);
+    }
+  });
+
+  // Sort months descending (most recent first)
+  const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+
+  // Collapsed state for folders
+  const [collapsedFolders, setCollapsedFolders] = useState(() =>
+    Object.fromEntries(sortedMonths.map(month => [month, true]))
+  );
+
+  // Update collapsedFolders if months change
+  useEffect(() => {
+    setCollapsedFolders(prev => {
+      const newState = { ...prev };
+      sortedMonths.forEach(month => {
+        if (!(month in newState)) newState[month] = true;
+      });
+      // Remove months no longer present
+      Object.keys(newState).forEach(month => {
+        if (!sortedMonths.includes(month)) delete newState[month];
+      });
+      return newState;
+    });
+  }, [sortedMonths.join(',')]);
+
+  function toggleFolder(month) {
+    setCollapsedFolders(prev => ({
+      ...prev,
+      [month]: !prev[month]
+    }));
   }
 
   return (
@@ -209,12 +293,12 @@ function StudentHistory({ history }) {
         className="overflow-y-auto"
         style={{
           height: showNewComment || showSearch
-            ? 'calc(105vh - 460px)' // Adjusted height when either is visible
-            : 'calc(100vh - 260px)' // Default height
+            ? 'calc(105vh - 460px)'
+            : 'calc(100vh - 260px)'
         }}
       >
         <ul className="space-y-4">
-          {/* Pinned comments first (keep their original order) */}
+          {/* Pinned comments first (regardless of timestamp) */}
           {pinnedComments.map((entry, index) => (
             <Comment
               key={`pinned-${index}`}
@@ -223,14 +307,50 @@ function StudentHistory({ history }) {
               index={index}
             />
           ))}
-          {/* Then unpinned comments, most recent first */}
-          {[...unpinnedComments].reverse().map((entry, index) => (
+          {/* Current month comments (not in a folder, only unpinned) */}
+          {[...currentMonthComments].filter(entry => !isEntryPinned(entry)).reverse().map((entry, idx) => (
             <Comment
-              key={`unpinned-${index}`}
+              key={`currentmonth-${idx}`}
               entry={entry}
               searchTerm={searchTerm}
-              index={index}
+              index={idx}
             />
+          ))}
+          {/* Previous months in collapsible folders (only unpinned) */}
+          {sortedMonths.map(month => (
+            <li key={month} className="bg-gray-50 rounded-lg shadow-sm p-2">
+              <div
+                className="flex items-center font-semibold text-gray-700 mb-2 cursor-pointer select-none"
+                onClick={() => toggleFolder(month)}
+                style={{ userSelect: 'none' }}
+                aria-label={collapsedFolders[month] ? "Expand" : "Collapse"}
+                tabIndex={0}
+                role="button"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') toggleFolder(month);
+                }}
+              >
+                <span className="mr-2 text-gray-500" style={{ fontSize: '1.2em', lineHeight: '1' }}>
+                  {collapsedFolders[month]
+                    ? <Folder size={20} strokeWidth={2} />
+                    : <FolderOpen size={20} strokeWidth={2} />
+                  }
+                </span>
+                {getMonthYearLabel(month)}
+              </div>
+              {!collapsedFolders[month] && (
+                <ul className="space-y-2">
+                  {[...monthGroups[month]].filter(entry => !isEntryPinned(entry)).reverse().map((entry, idx) => (
+                    <Comment
+                      key={`month-${month}-${idx}`}
+                      entry={entry}
+                      searchTerm={searchTerm}
+                      index={idx}
+                    />
+                  ))}
+                </ul>
+              )}
+            </li>
           ))}
         </ul>
       </div>

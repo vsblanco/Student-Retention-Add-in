@@ -81,7 +81,8 @@ export async function transferData(event) {
                 gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
                 daysOut: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut),
                 lastLda: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.lastLda),
-                grade: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade)
+                grade: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade),
+                primaryPhone: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone) // Added
             };
 
             const dataToCopy = [];
@@ -119,6 +120,10 @@ export async function transferData(event) {
                 }
                 if (colIndices.grade !== -1 && rowValues[colIndices.grade]) {
                     rowData.Grade = rowValues[colIndices.grade];
+                    hasData = true;
+                }
+                if (colIndices.primaryPhone !== -1 && rowValues[colIndices.primaryPhone]) {
+                    rowData.PrimaryPhone = rowValues[colIndices.primaryPhone];
                     hasData = true;
                 }
 

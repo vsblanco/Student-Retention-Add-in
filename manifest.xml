@@ -21,6 +21,11 @@
     <RequestedWidth>450</RequestedWidth>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
+  <Requirements>
+  <Sets DefaultMinVersion="1.3">
+    <Set Name="IdentityAPI" MinVersion="1.3"/>
+  </Sets>
+</Requirements>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Workbook">
@@ -255,7 +260,7 @@
         <bt:Url id="WelcomeDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/welcome-dialog.html"/>
         <bt:Url id="Connections.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/connections/connections.html"/>
         <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/personalized-email/personalized-email.html"/>
-        <bt:Url id="Test.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/test/test.html"/>
+        <bt:Url id="Test.Url" DefaultValue="https://congenial-barnacle-g455qrwq69qvcvqqq-5173.app.github.dev/"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -284,12 +289,13 @@
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="ConnectionsButton.Tooltip" DefaultValue="Manage student connections and relationships."/>
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
-        <bt:String id="TestButton.Tooltip" DefaultValue="https://congenial-barnacle-g455qrwq69qvcvqqq-5173.app.github.dev/"/>
+        <bt:String id="TestButton.Tooltip" DefaultValue="Developer Environment"/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
   <WebApplicationInfo>
     <Id>71f37f39-a330-413a-be61-0baa5ce03ea3</Id>
     <Resource>api://71f37f39-a330-413a-be61-0baa5ce03ea3</Resource>
+    <Authority>https://login.microsoftonline.com/common</Authority>
   </WebApplicationInfo>
 </OfficeApp>

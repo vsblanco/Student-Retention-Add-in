@@ -18,13 +18,16 @@ const COLUMN_ALIASES = {
   ID: ['Student ID', 'Student Number','Student identifier'],
   Gender: ['Gender'],
   Phone: ['Phone Number', 'Contact'],
+  OtherPhone: ['Other Phone', 'Alt Phone'],
   StudentEmail: ['Email', 'Student Email'],
   PersonalEmail: ['Other Email'],
   Assigned: ['Advisor'],
   Grade: ['Current Grade', 'Grade %', 'Grade'],
   LDA: ['Last Date of Attendance', 'LDA'],
   DaysOut: ['Days Out'],
-  Gradebook: ['Gradebook']
+  Gradebook: ['Gradebook'],
+  MissingAssignments: ['Missing Assignments', 'Missing'],
+  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
   // You can add more aliases for other columns here
 };
 
@@ -202,6 +205,19 @@ function StudentView() {
     return 0; 
   };
 
+  // --- General helper to find the column index by canonical name or alias ---
+  const getColIdx = (colName) => {
+    // Get all possible aliases for the column, including the canonical name
+    const aliases = COLUMN_ALIASES[colName] ? [colName, ...COLUMN_ALIASES[colName]] : [colName];
+    const normalizedAliases = aliases.map(a => normalizeHeader(a));
+    for (let i = 0; i < headers.length; i++) {
+      const normalized = normalizeHeader(headers[i]);
+      if (normalizedAliases.includes(normalized)) {
+        return i;
+      }
+    }
+    return -1;
+  };
 
   // --- TEST MODE: Provide a basic student object if not running in Office/Excel ---
   useEffect(() => {
@@ -354,11 +370,29 @@ function StudentView() {
       try {
         await Excel.run(async (context) => {
           const range = context.workbook.getSelectedRange();
-          range.load("rowIndex");
+          range.load(["rowIndex", "columnIndex"]);
           await context.sync();
           const rowIndex = range.rowIndex;
+          const colIndex = range.columnIndex;
           setActiveStudent(sheetData.data[rowIndex] || null);
           setCurrentRowIndex(rowIndex);
+
+          // --- Auto navigation: Outreach -> History, Missing Assignments -> Assignments, Phone/OtherPhone -> History ---
+          const outreachIdx = getColIdx('Outreach');
+          const missingAssignmentsIdx = getColIdx('Missing Assignments');
+          const phoneIdx = getColIdx('Phone');
+          const otherPhoneIdx = getColIdx('OtherPhone');
+          if (
+            (outreachIdx !== -1 && colIndex === outreachIdx) ||
+            (phoneIdx !== -1 && colIndex === phoneIdx) ||
+            (otherPhoneIdx !== -1 && colIndex === otherPhoneIdx)
+          ) {
+            setActiveTab('history');
+          } else if (missingAssignmentsIdx !== -1 && colIndex === missingAssignmentsIdx) {
+            setActiveTab('assignments');
+          } else {
+            setActiveTab('details');
+          }
         });
       } catch (error) {
         if (error.code !== "GeneralException") {

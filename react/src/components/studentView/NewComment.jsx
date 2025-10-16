@@ -17,9 +17,15 @@ const styles = `
   }
 `;
 
-function NewComment({ show, onClose, addCommentToHistory }) {
+function NewComment({ show, onClose, addCommentToHistory, initialComment = "" }) {
   const newCommentInputRef = useRef(null);
   const [status, setStatus] = useState('');
+
+  React.useEffect(() => {
+    if (newCommentInputRef.current) {
+      newCommentInputRef.current.value = initialComment;
+    }
+  }, [initialComment, show]);
 
   const handleSubmit = async () => {
     const comment = newCommentInputRef.current.value.trim();

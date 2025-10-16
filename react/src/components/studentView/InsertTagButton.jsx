@@ -1,114 +1,143 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-const tagAnimDelays = ['0ms', '60ms', '120ms', '180ms', '240ms'];
+// =======================
+// TagPill Component
+// =======================
+export const TagPill = ({ label, spanClass }) => (
+  <span className={`relative px-2 py-1 rounded-full ${spanClass}`}>
+    <span className="relative z-10">{label}</span>
+  </span>
+);
 
-const dropdownBaseStyle = {
-  position: 'absolute',
-  left: '60px',
-  top: '-5px',
-  width: '500px',
-  minWidth: '180px',
-  height: '50px',
-  boxShadow: '0 8px 24px 0 rgb(0 0 0 / 0.08)',
-};
+// =======================
+// TagButton Component
+// =======================
+export const TagButton = ({ tag, onClick }) => (
+  <a
+    href="#"
+    className={`px-3 py-2 text-sm text-gray-700 rounded-md flex items-center hover:brightness-95 ${tag.spanClass}`}
+    title={tag.title}
+    onClick={e => {
+      e.preventDefault();
+      onClick(tag.label);
+    }}
+  >
+    <TagPill label={tag.label} spanClass={tag.spanClass} />
+  </a>
+);
 
-function injectScrollbarStyles() {
-  if (typeof document !== "undefined" && !document.getElementById("custom-scrollbar-style")) {
-    const style = document.createElement("style");
-    style.id = "custom-scrollbar-style";
-    style.innerHTML = `
-      .glass-dropdown {
-        border-radius: 1.5rem !important;
-        overflow-x: auto;
-        max-width: 80%;
-        scrollbar-width: none;
-      }
-      .glass-dropdown::-webkit-scrollbar {
-        height: 10px;
-        background: transparent;
-      }
-      .glass-dropdown:hover {
-        scrollbar-width: thin;
-        overflow-x: scroll;
-      }
-      .glass-dropdown:hover::-webkit-scrollbar {
-        height: 10px;
-        background: #f3f4f6;
-      }
-      .glass-dropdown::-webkit-scrollbar-thumb {
-        background: linear-gradient(90deg, #cbd5e1 0%, #94a3b8 100%);
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        border: 2px solid #f3f4f6;
-        transition: background 0.2s;
-      }
-      .glass-dropdown:hover::-webkit-scrollbar-thumb {
-        background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
-      }
-      .glass-dropdown::-webkit-scrollbar-track {
-        background: #f3f4f6;
-        border-radius: 10px;
-      }
-      .glass-dropdown:not(:hover)::-webkit-scrollbar-thumb {
-        background: transparent;
-      }
-      .tag-pills-container {
-        flex: 1 1 0%;
-        height: 100%;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-}
-
-function TagDropdown({ show, onTagClick, id, style = {}, className = '', tags = [] }) {
-  const pillsContainerRef = useRef(null);
+// =======================
+// TagDropdownModal Component
+// =======================
+export const TagDropdownModal = ({
+  show,
+  onTagClick,
+  id,
+  tags,
+  anchorRef,
+  onClose
+}) => {
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 220 });
+  const dropdownRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const [fade, setFade] = useState(false);
 
   useEffect(() => {
-    injectScrollbarStyles();
-  }, []);
+    if (show) {
+      setVisible(true);
+      // Trigger fade-in after mount
+      setTimeout(() => setFade(true), 10);
+    } else {
+      setFade(false);
+      // Delay unmount for fade-out
+      const timeout = setTimeout(() => setVisible(false), 180);
+      return () => clearTimeout(timeout);
+    }
+  }, [show]);
 
-  const combinedStyle = {
-    ...dropdownBaseStyle,
-    ...(id === 'filter-tag-dropdown' ? { background: 'transparent' } : {}),
-    ...style
-  };
+  useEffect(() => {
+    if (show && anchorRef.current) {
+      const r = anchorRef.current.getBoundingClientRect();
+      setPos({
+        top: r.bottom + window.scrollY + 4,
+        left: r.left + window.scrollX,
+        width: r.width || 220,
+      });
+    }
+  }, [show, anchorRef]);
 
-  return (
+  // Click-away handler
+  useEffect(() => {
+    if (!show) return;
+    function handleClick(e) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target) &&
+        anchorRef.current &&
+        !anchorRef.current.contains(e.target)
+      ) {
+        onClose?.();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [show, onClose, anchorRef]);
+
+  if (!visible) return null;
+
+  return createPortal(
     <div
+      ref={dropdownRef}
       id={id}
-      className={`glass-dropdown rounded-lg z-20 p-2 transition-all duration-300 flex flex-row gap-0.5 items-center justify-center ${
-        show
-          ? 'opacity-100 pointer-events-auto'
-          : 'opacity-0 pointer-events-none'
-      } ${className}${id === 'filter-tag-dropdown' ? ' bg-transparent' : ' bg-gray-200/90'}`}
-      style={combinedStyle}
-      ref={pillsContainerRef}
+      className={`glass-dropdown rounded-lg flex flex-col gap-1 items-stretch bg-gray-200/90 transition-opacity duration-180 ${fade ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      style={{
+        position: 'absolute',
+        minWidth: '120px',
+        maxHeight: '260px',
+        boxShadow: '0 8px 24px 0 rgb(0 0 0 / 0.08)',
+        overflowY: 'auto',
+        borderRadius: '1rem',
+        padding: '0.5rem 0',
+        zIndex: 9999,
+        ...pos,
+      }}
     >
-      {tags.map((tag, i) => (
-        <a
-          key={tag.label}
-          href="#"
-          className="px-1 py-0 text-sm text-gray-700 rounded-md transition-all duration-200 group tag-anim h-full"
-          title={tag.title}
-          style={{
-            animationDelay: show ? tagAnimDelays[i % tagAnimDelays.length] : '0ms'
-          }}
-          onClick={e => {
-            e.preventDefault();
-            onTagClick(tag.label);
-          }}
-        >
-          <span className={tag.spanClass}>
-            {tag.label}
-          </span>
-        </a>
+      <style>
+        {`
+          .glass-dropdown {
+            scrollbar-width: none;
+          }
+          .glass-dropdown:hover {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0,0,0,0.1) transparent;
+          }
+          .glass-dropdown::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+          }
+          .glass-dropdown:hover::-webkit-scrollbar {
+            width: 6px;
+            background: transparent;
+          }
+          .glass-dropdown::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.1);
+            border-radius: 8px;
+          }
+        `}
+      </style>
+      {tags.map(tag => (
+        <TagButton key={tag.label} tag={tag} onClick={onTagClick} />
       ))}
-    </div>
+    </div>,
+    document.body
   );
-}
+};
 
-function InsertTagButton({
+// =======================
+// Main InsertTagButton
+// =======================
+const InsertTagButton = ({
   dropdownId,
   onTagClick,
   showDropdown,
@@ -116,18 +145,17 @@ function InsertTagButton({
   dropdownTarget,
   setDropdownTarget,
   targetName,
-  dropdownClassName = '',
-  dropdownStyle = {},
-  tags = []
-}) {
-  const containerRef = useRef(null);
+  tags
+}) => {
+  const buttonRef = useRef(null);
 
   return (
-    <div className="relative w-full" ref={containerRef}>
+    <div className="relative w-full">
       <button
+        ref={buttonRef}
         id={`${dropdownId}-button`}
         type="button"
-        className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-2700 hover:bg-gray-300 transition-colors"
+        className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300"
         onClick={() => {
           setShowDropdown(v => !v);
           setDropdownTarget(targetName);
@@ -137,16 +165,16 @@ function InsertTagButton({
       >
         Insert Tag
       </button>
-      <TagDropdown
+      <TagDropdownModal
         show={showDropdown && dropdownTarget === targetName}
         onTagClick={onTagClick}
         id={dropdownId}
-        className={dropdownClassName}
-        style={dropdownStyle}
         tags={tags}
+        anchorRef={buttonRef}
+        onClose={() => setShowDropdown(false)}
       />
     </div>
   );
-}
+};
 
 export default InsertTagButton;
