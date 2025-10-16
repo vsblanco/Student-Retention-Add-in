@@ -8,6 +8,7 @@
  * @returns {Promise<{success: boolean, message: string}>}
  */
 export async function editRow(sheet, columnId, rowId, newData) {
+    console.log("editRow called with:", { sheet, columnId, rowId, newData });
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
     }
@@ -77,6 +78,7 @@ export async function editRow(sheet, columnId, rowId, newData) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 export async function insertRow(sheet, newData) {
+    console.log("insertRow called with:", { sheet, newData });
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
         console.log("insertRow: Invalid sheet parameter", sheet);
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
@@ -141,6 +143,7 @@ export async function insertRow(sheet, newData) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 export async function deleteRow(sheet, columnId, rowId) {
+    console.log("deleteRow called with:", { sheet, columnId, rowId });
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
     }
@@ -199,6 +202,7 @@ export async function deleteRow(sheet, columnId, rowId) {
  * @returns {Promise<{remove: function}>} - Returns an object with a remove() function to unregister the event.
  */
 export async function onSelectionChanged(callback) {
+    console.log("onSelectionChanged called with:", { callback });
     if (typeof Excel === "undefined") {
         throw new Error("Excel API not available.");
     }

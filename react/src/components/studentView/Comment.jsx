@@ -128,7 +128,7 @@ function findTagInfo(label) {
   return null;
 }
 
-function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
+function Comment({ entry, searchTerm, index, onContextMenu }) {
   // Support multiple tags separated by commas
   let tags = entry.tag
     ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
@@ -245,28 +245,7 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
         parts.push(entry.comment.slice(lastIndex));
       }
       // Highlight "Tomorrow", "next week", weekdays, and weekends in the resulting parts
-      const highlightLdaKeywords = part => {
-        if (typeof part !== "string") return part;
-        // Regex for "Tomorrow", "next week", weekdays, "weekend", "weekends" (case-insensitive)
-        const keywordRegex = /\b(Tomorrow|next week|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|weekend|weekends)\b/gi;
-        let keywordParts = [];
-        let lastIdx = 0;
-        let kwMatch;
-        while ((kwMatch = keywordRegex.exec(part)) !== null) {
-          if (kwMatch.index > lastIdx) {
-            keywordParts.push(part.slice(lastIdx, kwMatch.index));
-          }
-          keywordParts.push(
-            <b key={`lda-keyword-${kwMatch.index}`}>{kwMatch[0]}</b>
-          );
-          lastIdx = keywordRegex.lastIndex;
-        }
-        if (lastIdx < part.length) {
-          keywordParts.push(part.slice(lastIdx));
-        }
-        return keywordParts.length > 0 ? keywordParts : part;
-      };
-      commentContent = parts.flatMap(highlightLdaKeywords);
+      commentContent = parts.flatMap(part => highlightLdaKeywords(part));
     } else if (searchTerm && entry.comment) {
       const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
       commentContent = entry.comment.split(regex).map((part, i) =>
@@ -485,7 +464,6 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         entry={entry}
-        onEditComment={onEditComment}
         COMMENT_TAGS={COMMENT_TAGS}
         findTagInfo={findTagInfo}
         hasQuoteTag={hasQuoteTag}
@@ -496,6 +474,28 @@ function Comment({ entry, searchTerm, index, onContextMenu, onEditComment }) {
       />
     </>
   );
+}
+
+// Helper to highlight LDA keywords (exported for reuse)
+export function highlightLdaKeywords(part) {
+  if (typeof part !== "string") return part;
+  const keywordRegex = /\b(Tomorrow|next week|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|weekend|weekends)\b/gi;
+  let keywordParts = [];
+  let lastIdx = 0;
+  let kwMatch;
+  while ((kwMatch = keywordRegex.exec(part)) !== null) {
+    if (kwMatch.index > lastIdx) {
+      keywordParts.push(part.slice(lastIdx, kwMatch.index));
+    }
+    keywordParts.push(
+      <b key={`lda-keyword-${kwMatch.index}`}>{kwMatch[0]}</b>
+    );
+    lastIdx = keywordRegex.lastIndex;
+  }
+  if (lastIdx < part.length) {
+    keywordParts.push(part.slice(lastIdx));
+  }
+  return keywordParts.length > 0 ? keywordParts : part;
 }
 
 export default Comment;

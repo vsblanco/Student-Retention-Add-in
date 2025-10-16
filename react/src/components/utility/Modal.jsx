@@ -44,7 +44,7 @@ const Modal = ({
         className="modal-container"
         style={{
           width: "100%",
-          maxWidth: 600,
+          maxWidth: 400,
           maxHeight: 400,
           borderRadius,
           padding,

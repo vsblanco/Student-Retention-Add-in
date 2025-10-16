@@ -36,7 +36,8 @@ export const TagDropdownModal = ({
   id,
   tags,
   anchorRef,
-  onClose
+  onClose,
+  forceClose = false // new prop, default false
 }) => {
   const [pos, setPos] = useState({ top: 0, left: 0, width: 220 });
   const dropdownRef = useRef(null);
@@ -48,13 +49,16 @@ export const TagDropdownModal = ({
       setVisible(true);
       // Trigger fade-in after mount
       setTimeout(() => setFade(true), 10);
+    } else if (forceClose) {
+      setFade(false);
+      setVisible(false); // immediately hide, no animation
     } else {
       setFade(false);
       // Delay unmount for fade-out
       const timeout = setTimeout(() => setVisible(false), 180);
       return () => clearTimeout(timeout);
     }
-  }, [show]);
+  }, [show, forceClose]);
 
   useEffect(() => {
     if (show && anchorRef.current) {
@@ -145,7 +149,8 @@ const InsertTagButton = ({
   dropdownTarget,
   setDropdownTarget,
   targetName,
-  tags
+  tags,
+  forceCloseDropdown = false // new prop, default false
 }) => {
   const buttonRef = useRef(null);
 
@@ -172,6 +177,7 @@ const InsertTagButton = ({
         tags={tags}
         anchorRef={buttonRef}
         onClose={() => setShowDropdown(false)}
+        forceClose={forceCloseDropdown}
       />
     </div>
   );

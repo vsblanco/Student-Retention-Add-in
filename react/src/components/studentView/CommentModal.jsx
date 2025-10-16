@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../utility/Modal';
 import InsertTagButton from './InsertTagButton';
+import { highlightLdaKeywords } from './Comment';
+import { DNCModal, LDAModal } from './Tag.jsx';
+import { Pencil, ArrowLeft, Check, Trash2 } from 'lucide-react';
 
 function CommentModal({
   isOpen,
   onClose,
   entry,
-  onEditComment,
   COMMENT_TAGS,
   findTagInfo,
   hasQuoteTag,
   quoteText,
   beforeQuote,
   afterQuote,
-  formatExcelDate
+  formatExcelDate,
+
 }) {
   // Modal state and logic moved from Comment.jsx
   const [modalMode, setModalMode] = useState('view');
@@ -22,6 +25,9 @@ function CommentModal({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [dropdownTarget, setDropdownTarget] = useState(null);
+  const [showDNCModal, setShowDNCModal] = useState(false);
+  const [pendingDncTag, setPendingDncTag] = useState(null);
+  const [showLDAModal, setShowLDAModal] = useState(false);
 
   useEffect(() => {
     setModalComment(entry.comment || "");
@@ -40,23 +46,13 @@ function CommentModal({
   }, [isOpen, modalMode]);
 
   const handleSaveComment = async () => {
-    if (onEditComment) {
-      const newTagString = Object.keys(modalTagContainer).join(', ');
-      const success = await onEditComment(
-        { ...entry, tag: newTagString },
-        modalComment
-      );
-      if (success) onClose();
-    } else {
-      onClose();
-    }
+    // Only close modal, do not call editRow
+    onClose();
   };
 
   const handleDeleteComment = async () => {
     if (window.confirm("Are you sure you want to delete this comment?")) {
-      if (typeof onEditComment === 'function') {
-        await onEditComment({ ...entry, deleted: true }, null);
-      }
+      // Only close modal, do not call editRow
       onClose();
     }
   };
@@ -68,6 +64,17 @@ function CommentModal({
   }));
 
   const handleInsertTag = tagLabel => {
+    if (tagLabel === "DNC") {
+      setShowTagDropdown(false); // Close dropdown before opening DNC modal
+      setShowDNCModal(true);
+      setPendingDncTag(true); // mark that we're waiting for DNCModal
+      return;
+    }
+    if (tagLabel === "LDA") {
+      setShowTagDropdown(false);
+      setShowLDAModal(true);
+      return;
+    }
     setModalTagContainer(prev => ({
       ...prev,
       [tagLabel]: true
@@ -265,9 +272,7 @@ function CommentModal({
               {afterQuote}
             </>
           ) : (
-            <span>
-              {entry.comment}
-            </span>
+            highlightLdaKeywords(entry.comment)
           )}
         </div>
       </div>
@@ -291,16 +296,30 @@ function CommentModal({
           type="button"
           onClick={() => setModalMode('edit')}
           style={{
-            padding: '6px 16px',
-            borderRadius: 6,
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
             background: '#2563eb',
             color: 'white',
-            fontWeight: 500,
             border: 'none',
-            cursor: 'pointer'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            transition: 'background 0.15s, box-shadow 0.15s'
+          }}
+          aria-label="Edit"
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#1e40af';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(37,99,235,0.15)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = '#2563eb';
+            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
           }}
         >
-          Edit
+          <Pencil size={20} />
         </button>
       </div>
     </div>
@@ -317,6 +336,7 @@ function CommentModal({
         setDropdownTarget={setDropdownTarget}
         targetName="modal-comment"
         tags={insertTagButtonTags}
+        forceCloseDropdown={showDNCModal}
       />
       {modalTagPills}
       <textarea
@@ -345,38 +365,67 @@ function CommentModal({
       }}>
         <button
           type="button"
-          onClick={() => setConfirmDelete(true)}
+          onClick={() => setConfirmDelete(confirmDelete ? false : true)}
           style={{
-            padding: '6px 16px',
-            borderRadius: 6,
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
             background: confirmDelete ? '#fee2e2' : '#ef4444',
             color: confirmDelete ? '#b91c1c' : 'white',
-            fontWeight: 500,
             border: 'none',
-            cursor: 'pointer'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            transition: 'background 0.15s, box-shadow 0.15s'
           }}
-          disabled={confirmDelete}
+          disabled={false}
+          aria-label={confirmDelete ? "Cancel Delete" : "Delete"}
+          title={confirmDelete ? "Cancel Delete" : "Delete"}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = confirmDelete ? '#fecaca' : '#dc2626';
+            e.currentTarget.style.boxShadow = confirmDelete
+              ? '0 2px 8px rgba(220,38,38,0.10)'
+              : '0 2px 8px rgba(220,38,38,0.15)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = confirmDelete ? '#fee2e2' : '#ef4444';
+            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+          }}
         >
-          {confirmDelete ? 'Delete...' : 'Delete'}
+          <Trash2 size={20} />
         </button>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
-            onClick={() => {
-              if (confirmDelete) setConfirmDelete(false);
-              else setModalMode('view');
-            }}
+            onClick={() => setModalMode('view')}
             style={{
-              padding: '6px 16px',
-              borderRadius: 6,
-              background: confirmDelete ? '#fee2e2' : '#e5e7eb',
-              color: confirmDelete ? '#b91c1c' : '#222',
-              fontWeight: 500,
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: '#e5e7eb',
+              color: '#222',
               border: 'none',
-              cursor: 'pointer'
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              transition: 'background 0.15s, box-shadow 0.15s'
+            }}
+            aria-label="Back"
+            title="Back"
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#d1d5db';
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(31,41,55,0.12)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#e5e7eb';
+              e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
             }}
           >
-            {confirmDelete ? 'Cancel Delete' : 'Cancel'}
+            <ArrowLeft size={20} />
           </button>
           <button
             type="button"
@@ -388,8 +437,9 @@ function CommentModal({
                   Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
             }
             style={{
-              padding: '6px 16px',
-              borderRadius: 6,
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
               background: confirmDelete
                 ? '#ef4444'
                 : (
@@ -408,6 +458,9 @@ function CommentModal({
                   : 'white',
               fontWeight: 500,
               border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: confirmDelete
                 ? 'pointer'
                 : (
@@ -421,25 +474,86 @@ function CommentModal({
                 : (
                   modalComment === (entry.comment || "") &&
                   Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                ) ? 0.7 : 1
+                ) ? 0.7 : 1,
+              transition: 'background 0.15s, box-shadow 0.15s'
+            }}
+            aria-label={confirmDelete ? 'Confirm Delete' : 'Update'}
+            title={confirmDelete ? 'Confirm Delete' : 'Update'}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = confirmDelete ? '#dc2626' : '#1e40af';
+              e.currentTarget.style.boxShadow = confirmDelete
+                ? '0 2px 8px rgba(220,38,38,0.15)'
+                : '0 2px 8px rgba(37,99,235,0.15)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = confirmDelete
+                ? '#ef4444'
+                : (
+                  modalComment === (entry.comment || "") &&
+                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
+                )
+                  ? '#d1d5db'
+                  : '#2563eb';
+              e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
             }}
           >
-            {confirmDelete ? 'Confirm Delete' : 'Update'}
+            <Check size={20} />
           </button>
         </div>
       </div>
     </div>
   );
 
+  // DNCModal callback
+  const handleDncSelect = (dncString) => {
+    setShowDNCModal(false);
+    setPendingDncTag(false);
+    if (dncString) {
+      setModalTagContainer(prev => ({
+        ...prev,
+        [dncString]: true
+      }));
+      setShowTagDropdown(false);
+    }
+  };
+
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      padding="12px"
-      style={{ minHeight: 200, width: '100%' }}
-    >
-      {modalMode === 'view' ? modalContentView : modalContentEdit}
-    </Modal>
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        padding="12px"
+        style={{ minHeight: 200, width: '100%' }}
+      >
+        {modalMode === 'view' ? modalContentView : modalContentEdit}
+      </Modal>
+      {showDNCModal && (
+        <DNCModal
+          isOpen={showDNCModal}
+          onClose={() => { setShowDNCModal(false); setPendingDncTag(false); }}
+          phone={entry.phone}
+          otherPhone={entry.otherPhone}
+          email={entry.email}
+          onSelect={handleDncSelect}
+        />
+      )}
+      {showLDAModal && (
+        <LDAModal
+          isOpen={showLDAModal}
+          onClose={() => setShowLDAModal(false)}
+          keywords={entry.ldaKeywords || []}
+          onSelect={kw => {
+            setShowLDAModal(false);
+            if (kw) {
+              setModalTagContainer(prev => ({
+                ...prev,
+                [kw]: true
+              }));
+            }
+          }}
+        />
+      )}
+    </>
   );
 }
 
