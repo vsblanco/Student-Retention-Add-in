@@ -9,6 +9,8 @@ import SSO from '../utility/SSO.jsx';
 import { getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
 import './StudentView.css';
 import { loadCache } from '../utility/Cache.jsx';
+import { insertRow } from '../utility/ExcelAPI.jsx';
+import { Sheets } from '../utility/ColumnMapping.jsx';
 
 // Replace the previous OUTREACH_TRIGGERS array with a normalized, deduplicated, sorted list
 const OUTREACH_TRIGGERS = [
@@ -42,13 +44,21 @@ const isOutreachTrigger = (text) => {
   return OUTREACH_TRIGGERS_LOWER.some(trigger => lower.includes(trigger));
 };
 
-// Lightweight, safe stub for adding an outreach comment.
-// TODO: implement using the Office comments API when target host & API level is known.
-function addOutreachComment(commentText) {
+// Lightweight, safe implementation that logs the outreach by inserting a row
+// into the History sheet (uses Sheets.HISTORY).
+// Non-blocking from callers — callers may call without awaiting.
+async function addOutreachComment(commentText) {
+  if (!commentText) return;
   try {
-    console.log('Outreach:', commentText);
-  } catch (_) {
-    // swallow non-fatal logging errors
+    await insertRow(Sheets.HISTORY, {
+      Comment: String(commentText),
+      Timestamp: new Date().toISOString(),
+      CreatedBy: 'Student Retention Add-in',
+      Tag: 'Outreach',
+    });
+  } catch (err) {
+    // fallback to console logging if insert fails
+    try { console.error('Outreach insert failed:', err); } catch (_) {}
   }
 }
 
@@ -297,27 +307,6 @@ function StudentView() {
   // Detect test mode (browser, not Excel)
   const isTestMode = typeof window.Excel === "undefined";
 
-  // Helper to get the correct history as an array of objects from the activeStudent object
-  const getHistoryArray = (studentObj) => {
-    if (!studentObj) return [];
-    if (Array.isArray(studentObj.History)) return studentObj.History;
-    if (typeof studentObj.History === 'string') {
-      const lines = studentObj.History.split('\n').map(l => l.trim()).filter(Boolean);
-      const entries = [];
-      for (let i = 0; i < lines.length; i += 2) {
-        entries.push({
-          timestamp: lines[i] || '',
-          comment: lines[i + 1] || '',
-          studentId: studentObj.ID || '',
-          studentName: studentObj.StudentName || '',
-          tag: ''
-        });
-      }
-      return entries;
-    }
-    return [];
-  };
-
   // Always show SSO first until userName is set
   if (!userName) {
     return (
@@ -345,29 +334,13 @@ function StudentView() {
       </div>
     );
   }
-
-  // Helper to get assignments for the active student by name
-  const getAssignmentsForStudent = (studentObj) => {
-    if (!studentObj || !studentObj.StudentName) return [];
-    const convertedName = formatName(studentObj.StudentName);
-    const assignments =
-      assignmentsMap[convertedName] ||
-      assignmentsMap[studentObj.StudentName] ||
-      [];
-    return assignments;
-  };
-
-  // Attach Assignments to activeStudent payload
-  const activeStudentWithAssignments = activeStudent
-    ? { ...activeStudent, Assignments: getAssignmentsForStudent(activeStudent) || [] }
-    : null;
-
+   
   return (
     <div
       className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}
       style={{ userSelect: "none" }}
     >
-      <StudentHeader student={activeStudentWithAssignments} />
+      <StudentHeader student={activeStudent} />
       <div className="studentview-tabs">
         <div
           className={`studentview-tab${activeTab === 'details' ? ' active' : ''}`}
@@ -389,15 +362,15 @@ function StudentView() {
         </div>
       </div>
       <div className="studentview-container">
-        {activeTab === 'details' && <StudentDetails student={activeStudentWithAssignments} />}
+        {activeTab === 'details' && <StudentDetails student={activeStudent} />}
         {activeTab === 'history' && (
           <StudentHistory
-            history={getHistoryArray(activeStudentWithAssignments)}
-            student={activeStudentWithAssignments}
+            history={activeStudent}
+            student={activeStudent}
           />
         )}
         {activeTab === 'assignments' && (
-          <StudentAssignments student={activeStudentWithAssignments} />
+          <StudentAssignments student={activeStudent} />
         )}
       </div>
     </div>

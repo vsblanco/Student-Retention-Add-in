@@ -35,6 +35,7 @@ export const COLUMN_ALIASES_HISTORY = {
   timestamp: ['Timestamp', 'Date', 'Time', 'Created At'],
   comment: ['Comment', 'Notes', 'History', 'Entry'],
   createdBy: ['Created By', 'Author', 'Advisor'],
-  tag: ['Tag', 'Category', 'Type','Tags']
+  tag: ['Tag', 'Category', 'Type','Tags'],
+  StudentID: ['Student ID', 'Student Number','Student identifier']
   // Add more aliases as needed for history columns
 };
