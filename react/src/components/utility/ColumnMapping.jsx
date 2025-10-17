@@ -1,0 +1,40 @@
+export const Sheets = {
+  HISTORY: "Student History",
+  MISSING_ASSIGNMENT: "Missing Assignments"
+};
+
+export const COLUMN_ALIASES = {
+  StudentName: ['Student Name', 'Student'],
+  ID: ['Student ID', 'Student Number','Student identifier'],
+  Gender: ['Gender'],
+  Phone: ['Phone Number', 'Contact'],
+  OtherPhone: ['Other Phone', 'Alt Phone'],
+  StudentEmail: ['Email', 'Student Email'],
+  PersonalEmail: ['Other Email'],
+  Assigned: ['Advisor'],
+  ExpectedStartDate: ['Expected Start Date', 'Start Date','ExpStartDate'],
+  Grade: ['Current Grade', 'Grade %', 'Grade'],
+  LDA: ['Last Date of Attendance', 'LDA'],
+  DaysOut: ['Days Out'],
+  Gradebook: ['Gradebook'],
+  MissingAssignments: ['Missing Assignments', 'Missing'],
+  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
+  // You can add more aliases for other columns here
+};
+
+export const COLUMN_ALIASES_ASSIGNMENTS = {
+  StudentName: ['Student Name', 'Student'],
+  title: ['Assignment Title', 'Title', 'Assignment'],
+  dueDate: ['Due Date', 'Deadline'],
+  score: ['Score', 'Points'],
+  submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
+  assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link']
+};
+
+export const COLUMN_ALIASES_HISTORY = {
+  timestamp: ['Timestamp', 'Date', 'Time', 'Created At'],
+  comment: ['Comment', 'Notes', 'History', 'Entry'],
+  createdBy: ['Created By', 'Author', 'Advisor'],
+  tag: ['Tag', 'Category', 'Type','Tags']
+  // Add more aliases as needed for history columns
+};

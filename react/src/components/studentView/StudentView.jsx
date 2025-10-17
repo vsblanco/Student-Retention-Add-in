@@ -7,49 +7,8 @@ import StudentAssignments from './StudentAssignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
 import { onSelectionChanged } from '../utility/ExcelAPI.jsx'; // <-- Import here
 import SSO from '../utility/SSO.jsx';
+import { COLUMN_ALIASES, COLUMN_ALIASES_ASSIGNMENTS, COLUMN_ALIASES_HISTORY, Sheets } from '../utility/ColumnMapping.jsx';
 import './StudentView.css';
-
-const STUDENT_HISTORY_SHEET = "Student History";
-const STUDENT_MISSING_ASSIGNMENT_SHEET = "Missing Assignments";
-
-// --- Alias mapping for flexible column names ---
-const COLUMN_ALIASES = {
-  StudentName: ['Student Name', 'Student'],
-  ID: ['Student ID', 'Student Number','Student identifier'],
-  Gender: ['Gender'],
-  Phone: ['Phone Number', 'Contact'],
-  OtherPhone: ['Other Phone', 'Alt Phone'],
-  StudentEmail: ['Email', 'Student Email'],
-  PersonalEmail: ['Other Email'],
-  Assigned: ['Advisor'],
-  ExpectedStartDate: ['Expected Start Date', 'Start Date','ExpStartDate'],
-  Grade: ['Current Grade', 'Grade %', 'Grade'],
-  LDA: ['Last Date of Attendance', 'LDA'],
-  DaysOut: ['Days Out'],
-  Gradebook: ['Gradebook'],
-  MissingAssignments: ['Missing Assignments', 'Missing'],
-  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
-  // You can add more aliases for other columns here
-};
-
-// --- Alias mapping for flexible column names in Missing Assignments sheet ---
-const COLUMN_ALIASES_ASSIGNMENTS = {
-  StudentName: ['Student Name', 'Student'],
-  title: ['Assignment Title', 'Title', 'Assignment'],
-  dueDate: ['Due Date', 'Deadline'],
-  score: ['Score', 'Points'],
-  submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
-  assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link']
-};
-
-// --- Alias mapping for flexible column names in Student History sheet ---
-const COLUMN_ALIASES_HISTORY = {
-  timestamp: ['Timestamp', 'Date', 'Time', 'Created At'],
-  comment: ['Comment', 'Notes', 'History', 'Entry'],
-  createdBy: ['Created By', 'Author', 'Advisor'],
-  tag: ['Tag', 'Category', 'Type','Tags']
-  // Add more aliases as needed for history columns
-};
 
 // --- Create a reverse map that is agnostic to whitespace ---
 const canonicalHeaderMap = {};
@@ -240,13 +199,13 @@ function StudentView() {
           const usedRange = sheet.getUsedRange(true);
           usedRange.load(["values", "formulas", "rowIndex"]);
           // --- Load history sheet by name using STUDENT_HISTORY_SHEET ---
-          const historySheet = context.workbook.worksheets.getItem(STUDENT_HISTORY_SHEET);
+          const historySheet = context.workbook.worksheets.getItem(Sheets.HISTORY);
           const historyRange = historySheet.getUsedRange(true);
           historyRange.load(["values"]);
           // --- Load assignments sheet ---
           let assignmentsRange, assignmentsValues = [], assignmentsHeaders = [];
           try {
-            const assignmentsSheet = context.workbook.worksheets.getItem(STUDENT_MISSING_ASSIGNMENT_SHEET);
+            const assignmentsSheet = context.workbook.worksheets.getItem(Sheets.MISSING_ASSIGNMENT);
             assignmentsRange = assignmentsSheet.getUsedRange(true);
             assignmentsRange.load(["values"]);
           } catch (e) {
