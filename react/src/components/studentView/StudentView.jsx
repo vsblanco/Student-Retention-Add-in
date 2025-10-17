@@ -44,64 +44,26 @@ const isOutreachTrigger = (text) => {
 
 // Lightweight, safe stub for adding an outreach comment.
 // TODO: implement using the Office comments API when target host & API level is known.
-async function addOutreachComment(rowIndex, commentText) {
-  if (typeof window.Excel === "undefined") return;
+function addOutreachComment(commentText) {
   try {
-    await Excel.run(async (context) => {
-      const sheet = context.workbook.worksheets.getActiveWorksheet();
-      const headerRange = sheet.getRange("1:1").getUsedRange(true);
-      headerRange.load("values");
-      await context.sync();
-      const headersRow = headerRange.values && headerRange.values[0] ? headerRange.values[0] : [];
-      const outreachColIndex = getCanonicalColIdx(headersRow, 'Outreach');
-      if (outreachColIndex === -1) return;
-      // Best-effort: do not throw if comments API is unavailable.
-      // This is intentionally minimal to avoid hard dependency on a specific Excel API surface.
-      // Implement a full comments write when the environment/API version is certain.
-      try {
-        // eslint-disable-next-line no-unused-vars
-        const cell = sheet.getRangeByIndexes(rowIndex, outreachColIndex, 1, 1);
-        // safe no-op here; keep for future implementation
-      } catch (e) {
-        // swallow - non-critical
-      }
-    });
-  } catch (err) {
-    // swallow non-fatal errors to avoid disrupting UI handlers
+    console.log('Outreach:', commentText);
+  } catch (_) {
+    // swallow non-fatal logging errors
   }
 }
 
-async function applyContactedHighlight(rowIndex) {
+async function highlightRow(rowIndex, startCol, colCount, color = 'yellow') {
   if (typeof window.Excel === "undefined") return;
+  if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
   try {
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
-      const headerRange = sheet.getRange("1:1").getUsedRange(true);
-      headerRange.load("values");
-      await context.sync();
-
-      const headersRow = headerRange.values && headerRange.values[0] ? headerRange.values[0] : [];
-      const studentNameColIndex = getCanonicalColIdx(headersRow, 'StudentName');
-      const outreachColIndex = getCanonicalColIdx(headersRow, 'Outreach');
-
-      if (studentNameColIndex === -1 || outreachColIndex === -1) {
-        return;
-      }
-
-      const outreachCell = sheet.getRangeByIndexes(rowIndex, outreachColIndex, 1, 1);
-      outreachCell.load("values");
-      await context.sync();
-      const outreachValue = String((outreachCell.values && outreachCell.values[0] && outreachCell.values[0][0]) || '');
-
-      if (!isOutreachTrigger(outreachValue)) return;
-
-      const startCol = Math.min(studentNameColIndex, outreachColIndex);
-      const colCount = Math.abs(studentNameColIndex - outreachColIndex) + 1;
       const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
-      highlightRange.format.fill.color = "yellow";
+      highlightRange.format.fill.color = color;
       await context.sync();
     });
   } catch (_) {
+    // swallow errors
   }
 }
 
@@ -204,9 +166,14 @@ function StudentView() {
           if (studentId && studentName) {
             const effectiveUser = sessionCommentUserRef.current || userName || window.localStorage.getItem('ssoUserName') || 'Unknown';
             // keep addOutreachComment non-blocking
-            addOutreachComment(rowIndex, newValue).catch(() => {});
+            addOutreachComment(newValue);
             if (isOutreachTrigger(newValue)) {
-              await applyContactedHighlight(rowIndex);
+              await highlightRow(
+                rowIndex,
+                Math.min(studentNameColIndex, outreachColIndex),
+                Math.abs(studentNameColIndex - outreachColIndex) + 1,
+                'yellow'
+              );
             }
           }
         }
