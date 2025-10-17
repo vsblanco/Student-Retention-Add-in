@@ -10,17 +10,213 @@ import { getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
 import './StudentView.css';
 import { loadCache } from '../utility/Cache.jsx';
 
+// Replace the previous OUTREACH_TRIGGERS array with a normalized, deduplicated, sorted list
+const OUTREACH_TRIGGERS = [
+  "hung up",
+  "hanged up",
+  "promise",
+  "requested",
+  "up to date",
+  "will catch up",
+  "will come",
+  "will complete",
+  "will engage",
+  "will pass",
+  "will submit",
+  "will work",
+  "will be in class",
+  "waiting for instructor",
+  "waiting for professor",
+  "waiting for teacher",
+  "waiting on instructor",
+  "waiting on professor",
+  "waiting on teacher"
+];
+
+// Precompute lowercase triggers for faster, case-insensitive checks
+const OUTREACH_TRIGGERS_LOWER = OUTREACH_TRIGGERS.map(t => t.toLowerCase());
+
+const isOutreachTrigger = (text) => {
+  if (!text || typeof text !== 'string') return false;
+  const lower = text.toLowerCase();
+  return OUTREACH_TRIGGERS_LOWER.some(trigger => lower.includes(trigger));
+};
+
+// Lightweight, safe stub for adding an outreach comment.
+// TODO: implement using the Office comments API when target host & API level is known.
+async function addOutreachComment(rowIndex, commentText) {
+  if (typeof window.Excel === "undefined") return;
+  try {
+    await Excel.run(async (context) => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+      const headerRange = sheet.getRange("1:1").getUsedRange(true);
+      headerRange.load("values");
+      await context.sync();
+      const headersRow = headerRange.values && headerRange.values[0] ? headerRange.values[0] : [];
+      const outreachColIndex = getCanonicalColIdx(headersRow, 'Outreach');
+      if (outreachColIndex === -1) return;
+      // Best-effort: do not throw if comments API is unavailable.
+      // This is intentionally minimal to avoid hard dependency on a specific Excel API surface.
+      // Implement a full comments write when the environment/API version is certain.
+      try {
+        // eslint-disable-next-line no-unused-vars
+        const cell = sheet.getRangeByIndexes(rowIndex, outreachColIndex, 1, 1);
+        // safe no-op here; keep for future implementation
+      } catch (e) {
+        // swallow - non-critical
+      }
+    });
+  } catch (err) {
+    // swallow non-fatal errors to avoid disrupting UI handlers
+  }
+}
+
+async function applyContactedHighlight(rowIndex) {
+  if (typeof window.Excel === "undefined") return;
+  try {
+    await Excel.run(async (context) => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+      const headerRange = sheet.getRange("1:1").getUsedRange(true);
+      headerRange.load("values");
+      await context.sync();
+
+      const headersRow = headerRange.values && headerRange.values[0] ? headerRange.values[0] : [];
+      const studentNameColIndex = getCanonicalColIdx(headersRow, 'StudentName');
+      const outreachColIndex = getCanonicalColIdx(headersRow, 'Outreach');
+
+      if (studentNameColIndex === -1 || outreachColIndex === -1) {
+        return;
+      }
+
+      const outreachCell = sheet.getRangeByIndexes(rowIndex, outreachColIndex, 1, 1);
+      outreachCell.load("values");
+      await context.sync();
+      const outreachValue = String((outreachCell.values && outreachCell.values[0] && outreachCell.values[0][0]) || '');
+
+      if (!isOutreachTrigger(outreachValue)) return;
+
+      const startCol = Math.min(studentNameColIndex, outreachColIndex);
+      const colCount = Math.abs(studentNameColIndex - outreachColIndex) + 1;
+      const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
+      highlightRange.format.fill.color = "yellow";
+      await context.sync();
+    });
+  } catch (_) {
+  }
+}
+
 function StudentView() {
   const [activeStudent, setActiveStudent] = useState(null);
-  // keep minimal UI state
   const [sheetData, setSheetData] = useState({ status: 'loading', data: null, message: 'Loading student data...' });
   const [activeTab, setActiveTab] = useState('details');
   const isInitialLoad = useRef(true);
-
-  // keep headers and assignments map only
   const [headers, setHeaders] = useState([]);
   const [assignmentsMap, setAssignmentsMap] = useState({});
   const [userName, setUserName] = useState(null);
+
+  // use a ref to keep the current session user available to async handlers
+  const sessionCommentUserRef = useRef(null);
+
+  // Initialize userName from cache/SSO on mount
+  useEffect(() => {
+    try {
+      const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
+      if (cached) {
+        setUserName(cached);
+        sessionCommentUserRef.current = cached;
+        return;
+      }
+      if (window.SSO && typeof window.SSO.getUserName === 'function') {
+        const n = window.SSO.getUserName();
+        if (n) {
+          setUserName(n);
+          sessionCommentUserRef.current = n;
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }, []);
+
+  // Persist userName and keep sessionCommentUserRef in sync
+  useEffect(() => {
+    if (!userName) return;
+    try { window.localStorage.setItem('ssoUserName', userName); } catch (_) {}
+    sessionCommentUserRef.current = userName;
+  }, [userName]);
+
+  // Error handler
+  const errorHandler = (error) => {
+    console.error("onWorksheetChanged error:", error);
+  };
+
+  const isHandlerRunning = useRef(false);
+
+  // Use a stable handler that reads sessionCommentUserRef to avoid stale closures
+  async function onWorksheetChanged(eventArgs) {
+    if (typeof window.Excel === "undefined") return;
+    if (!eventArgs || !eventArgs.address) return;
+    if (isHandlerRunning.current) return;
+    isHandlerRunning.current = true;
+    try {
+      await Excel.run(async (context) => {
+        if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
+          return;
+        }
+
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const changedRange = sheet.getRange(eventArgs.address);
+        changedRange.load("rowIndex, columnIndex, rowCount, columnCount, values");
+        const headerRange = sheet.getRange("1:1").getUsedRange(true);
+        headerRange.load("values, columnCount");
+        await context.sync();
+
+        if (!headerRange || !headerRange.values || !headerRange.values[0]) return;
+        const headersRow = headerRange.values[0];
+        const outreachColIndex = getCanonicalColIdx(headersRow, 'Outreach');
+
+        if (outreachColIndex === -1 || changedRange.rowIndex === 0) return;
+
+        const outreachColumnAffected = changedRange.columnIndex <= outreachColIndex && (changedRange.columnIndex + changedRange.columnCount - 1) >= outreachColIndex;
+        if (!outreachColumnAffected) return;
+
+        const studentInfoRange = sheet.getRangeByIndexes(
+          changedRange.rowIndex, 0,
+          changedRange.rowCount, headerRange.columnCount
+        );
+        studentInfoRange.load("values");
+        await context.sync();
+        const allRowValues = studentInfoRange.values || [];
+
+        const studentIdColIndex = getCanonicalColIdx(headersRow, 'ID');
+        const studentNameColIndex = getCanonicalColIdx(headersRow, 'StudentName');
+
+        if (studentIdColIndex === -1 || studentNameColIndex === -1) return;
+
+        for (let i = 0; i < changedRange.rowCount; i++) {
+          const currentRow = allRowValues[i] || [];
+          const newValueRaw = currentRow[outreachColIndex];
+          const newValue = (newValueRaw !== undefined && newValueRaw !== null) ? String(newValueRaw).trim() : "";
+          if (!newValue) continue;
+
+          const studentId = currentRow[studentIdColIndex];
+          const studentName = currentRow[studentNameColIndex];
+          const rowIndex = changedRange.rowIndex + i;
+
+          if (studentId && studentName) {
+            const effectiveUser = sessionCommentUserRef.current || userName || window.localStorage.getItem('ssoUserName') || 'Unknown';
+            // keep addOutreachComment non-blocking
+            addOutreachComment(rowIndex, newValue).catch(() => {});
+            if (isOutreachTrigger(newValue)) {
+              await applyContactedHighlight(rowIndex);
+            }
+          }
+        }
+      });
+    } catch (error) {
+      errorHandler(error);
+    } finally {
+      isHandlerRunning.current = false;
+    }
+  }
 
   // Effect: Load sheet cache (Excel or test-mode) once
   useEffect(() => {
@@ -30,17 +226,14 @@ function StudentView() {
       try {
         const res = await loadCache();
         if (!mounted) return;
-        // res should contain: status, data, message, headers, assignmentsMap
         setSheetData({ status: res.status || 'success', data: res.data || {}, message: res.message || '' });
         setHeaders(res.headers || []);
         setAssignmentsMap(res.assignmentsMap || {});
-        // Optionally set an initial active student in test-mode
         if (res.status === 'success' && (!window.Excel || Object.keys(res.data || {}).length === 1)) {
           const firstKey = Object.keys(res.data || [])[0];
           if (firstKey) setActiveStudent(res.data[firstKey]);
         }
       } catch (err) {
-        console.error('Cache load error', err);
         if (!mounted) return;
         setSheetData({ status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' });
       }
@@ -51,10 +244,12 @@ function StudentView() {
 
   // Keep selection handler ref for cleanup
   const selectionHandlerRef = useRef(null);
+  const worksheetHandlerRef = useRef(null);
+  const isHandlerAttached = useRef(false);
 
   // Effect: Handle selection changes from Excel.
   useEffect(() => {
-    if (typeof window.Excel === "undefined") return; // Skip Excel logic in test mode
+    if (typeof window.Excel === "undefined") return;
     if (sheetData.status !== 'success') return;
 
     let eventHandlerObj = null;
@@ -69,7 +264,6 @@ function StudentView() {
           const colIndex = range.columnIndex;
           setActiveStudent(sheetData.data[rowIndex] || null);
 
-          // Auto navigation: Outreach/Phone -> History, Missing Assignments -> Assignments
           const outreachIdx = getCanonicalColIdx(headers, 'Outreach');
           const missingAssignmentsIdx = getCanonicalColIdx(headers, 'Missing Assignments');
           const phoneIdx = getCanonicalColIdx(headers, 'Phone');
@@ -104,11 +298,32 @@ function StudentView() {
       }
     });
 
+    // Attach worksheet changed handler once
+    if (!isHandlerAttached.current) {
+      Excel.run(async (context) => {
+        try {
+          const sheet = context.workbook.worksheets.getActiveWorksheet();
+          const handler = sheet.onChanged.add(onWorksheetChanged);
+          worksheetHandlerRef.current = handler;
+          isHandlerAttached.current = true;
+        } catch (err) {
+          // ignore attach errors
+        }
+      }).catch(() => {});
+    }
+
     return () => {
       if (eventHandlerObj && eventHandlerObj.remove) {
-        eventHandlerObj.remove();
+        try { eventHandlerObj.remove(); } catch (_) {}
       }
       selectionHandlerRef.current = null;
+      if (isHandlerAttached.current && worksheetHandlerRef.current && worksheetHandlerRef.current.remove) {
+        try {
+          worksheetHandlerRef.current.remove();
+        } catch (_) {}
+        isHandlerAttached.current = false;
+      }
+      worksheetHandlerRef.current = null;
     };
   }, [sheetData, headers]);
 

@@ -202,7 +202,7 @@ export async function deleteRow(sheet, columnId, rowId) {
  * @returns {Promise<{remove: function}>} - Returns an object with a remove() function to unregister the event.
  */
 export async function onSelectionChanged(callback) {
-    console.log("onSelectionChanged called with:", { callback });
+
     if (typeof Excel === "undefined") {
         throw new Error("Excel API not available.");
     }

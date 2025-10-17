@@ -1640,8 +1640,6 @@ async function applyContactedHighlight(rowIndex) {
 }
 
 async function onWorksheetChanged(eventArgs) {
-    // This function combines the logic from the old, working version 
-    // with the user-prompting feature of the new version.
     await Excel.run(async (context) => {
         if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
             return;
