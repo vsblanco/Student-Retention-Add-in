@@ -22,6 +22,7 @@ const COLUMN_ALIASES = {
   StudentEmail: ['Email', 'Student Email'],
   PersonalEmail: ['Other Email'],
   Assigned: ['Advisor'],
+  ExpectedStartDate: ['Expected Start Date', 'Start Date','ExpStartDate'],
   Grade: ['Current Grade', 'Grade %', 'Grade'],
   LDA: ['Last Date of Attendance', 'LDA'],
   DaysOut: ['Days Out'],

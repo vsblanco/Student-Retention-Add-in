@@ -97,6 +97,37 @@ function StudentHeader({ student }) {
 
   const gradebookUrl = safeStudent.Gradebook;
 
+  // Helper to determine if a student is "new" based on ExpectedStartDate.
+  // Returns true if ExpectedStartDate (or common variants) is a valid date and is within the past 31 days.
+  const IsStudentNew = (studentObj) => {
+    if (!studentObj) return false;
+    // Accept several possible property names
+    const dateVal =
+      studentObj.ExpectedStartDate ??
+      studentObj.expectedStartDate ??
+      studentObj.ExpectedStart ??
+      studentObj.startDate;
+    if (!dateVal) return false;
+    const parsed = Date.parse(dateVal);
+    if (isNaN(parsed)) return false;
+    const now = Date.now();
+    const msInDay = 1000 * 60 * 60 * 24;
+    const daysOld = Math.floor((now - parsed) / msInDay);
+    // Consider "new" if started within the last 31 days (0..31)
+    return daysOld >= 0 && daysOld <= 31;
+  };
+
+  // Determine if the student should show the "NEW" tag.
+  // Use ExpectedStartDate-based detection first, fall back to explicit flags.
+  const isNew =
+    IsStudentNew(safeStudent) ||
+    !!(
+      safeStudent.IsNew === true ||
+      safeStudent.isNew === true ||
+      safeStudent.New === true ||
+      safeStudent.newStudent === true
+    );
+  
   // Helper to check if gradebookUrl is a valid URL
   const isValidGradebookUrl = typeof gradebookUrl === "string" && /^https?:\/\/\S+$/i.test(gradebookUrl);
 
@@ -124,15 +155,40 @@ function StudentHeader({ student }) {
         <div className="flex items-center space-x-4 min-w-0">
           <button
             type="button"
-            className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0 focus:outline-none${bounce ? " bounce" : ""}`}
+            className={`relative w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0 focus:outline-none${bounce ? " bounce" : ""}`}
             style={avatarBg}
             onClick={() => {
               setBounce(true);
               setTimeout(() => setBounce(false), 500);
             }}
             aria-label="Bounce avatar"
+            title={isNew ? "New student" : undefined}
           >
             {initials}
+            {isNew && (
+              <span
+                aria-label="New student"
+                role="status"
+                title="New student"
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  right: 0,
+                  transform: 'translate(25%, 25%)',
+                  background: '#10B981', // emerald-500
+                  color: '#ffffff',
+                  borderRadius: 9999,
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  fontWeight: 700,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                  pointerEvents: 'none',
+                  lineHeight: 1
+                }}
+              >
+                NEW
+              </span>
+            )}
           </button>
           <div className="min-w-0">
             <h2
