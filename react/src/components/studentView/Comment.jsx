@@ -349,7 +349,6 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
       // Log only when rounded width changes to keep logs meaningful, include comment index
       if (prevWidthRef.current !== w) {
         prevWidthRef.current = w;
-        console.log(`[Comment #${index}] container width: ${w}px`);
       }
     };
 
