@@ -22,6 +22,8 @@ function CommentModal({
   // Modal state and logic moved from Comment.jsx
   const [modalMode, setModalMode] = useState('view');
   const [modalComment, setModalComment] = useState(entry.comment || "");
+  // saved comment shown in view mode (finalized when Update is clicked)
+  const [modalSavedComment, setModalSavedComment] = useState(entry.comment || "");
   const [modalTagContainer, setModalTagContainer] = useState({});
   // Temporary edit container used only while in edit mode.
   const [editTagContainer, setEditTagContainer] = useState({});
@@ -40,6 +42,7 @@ function CommentModal({
 
   useEffect(() => {
     setModalComment(entry.comment || "");
+    setModalSavedComment(entry.comment || "");
     let tags = entry.tag
       ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
       : [];
@@ -56,15 +59,19 @@ function CommentModal({
   useEffect(() => {
     if (modalMode === 'edit') {
       setEditTagContainer(modalTagContainer || {});
+      // start editing from the saved comment
+      setModalComment(modalSavedComment || "");
     }
-  }, [modalMode, modalTagContainer]);
+  }, [modalMode, modalTagContainer, modalSavedComment]);
 
   // When returning to view mode without saving, discard tentative edits
   useEffect(() => {
     if (modalMode === 'view') {
       setEditTagContainer(modalTagContainer || {});
+      // ensure view shows the saved comment
+      setModalComment(modalSavedComment || "");
     }
-  }, [modalMode, modalTagContainer]);
+  }, [modalMode, modalTagContainer, modalSavedComment]);
 
   useEffect(() => {
     setConfirmDelete(false);
@@ -73,6 +80,8 @@ function CommentModal({
   const handleSaveComment = async () => {
     // Finalize edit tags into saved tags and switch back to view mode (do not close)
     setModalTagContainer(editTagContainer);
+    // finalize the edited text so view mode shows it
+    setModalSavedComment(modalComment);
     toast.success("Comment updated.", {
       position: "bottom-left",
       autoClose: 3000,
@@ -344,11 +353,10 @@ function CommentModal({
             if (hasQuoteTag && quoteText) {
               textToCopy = `${beforeQuote || ''}${quoteText}${afterQuote || ''}`;
             } else {
-              textToCopy = entry.comment || '';
+              textToCopy = modalSavedComment || '';
             }
             navigator.clipboard.writeText(textToCopy);
           }}
-          // Remove onMouseEnter/onMouseLeave here, handled by parent div
         >
           <Clipboard size={18} />
         </button>
@@ -380,7 +388,7 @@ function CommentModal({
               {afterQuote}
             </>
           ) : (
-            highlightLdaKeywords(entry.comment)
+            highlightLdaKeywords(modalSavedComment)
           )}
         </div>
       </div>

@@ -2,6 +2,7 @@
 import React from 'react';
 import { formatName } from '../utility/Conversion';
 import BounceAnimation from '../utility/BounceAnimation';
+import DaysOutModal from './DaysOutModal';
 
 // Helper function to get initials from a name string
 const getInitials = (name) => {
@@ -111,6 +112,7 @@ function StudentHeader({ student }) {
   };
 
   const [showNoLink, setShowNoLink] = React.useState(false);
+  const [showDaysModal, setShowDaysModal] = React.useState(false);
   const [bounce, setBounce] = React.useState(false);
 
   return (
@@ -151,12 +153,18 @@ function StudentHeader({ student }) {
         </div>
         {/* Right side: Stats */}
         <div className="flex space-x-2 flex-shrink-0">
-          <div className={`p-2 text-center rounded-lg ${daysOutBg} ${daysOutText} w-20`}>
+          <button
+            type="button"
+            className={`p-2 text-center rounded-lg ${daysOutBg} ${daysOutText} w-20 focus:outline-none`}
+            onClick={() => setShowDaysModal(true)}
+            aria-label="Show days out details"
+            title="Show days out details"
+          >
             <div className="text-xl font-bold">{daysOut}</div>
             <div className={`text-xs font-medium uppercase ${daysOutLabelText}`}>
               {daysOut === 0 ? 'Engaged' : daysOut === 1 ? 'Day Out' : 'Days Out'}
             </div>
-          </div>
+          </button>
           <button
             type="button"
             className={`p-2 text-center rounded-lg ${gradeBg} ${gradeText} w-20 transition-colors duration-150 border border-gray-300 hover:border-blue-400`}
@@ -198,6 +206,13 @@ function StudentHeader({ student }) {
           </button>
         </div>
       </div>
+
+      {/* Days Out Modal */}
+      <DaysOutModal
+        isOpen={showDaysModal}
+        onClose={() => setShowDaysModal(false)}
+        daysOut={typeof daysOut === 'number' ? daysOut : (Number.isFinite(Number(daysOut)) ? Number(daysOut) : null)}
+      />
     </div>
   );
 }
