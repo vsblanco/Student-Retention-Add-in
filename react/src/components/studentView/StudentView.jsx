@@ -392,7 +392,7 @@ function StudentView() {
         setPendingRowIdx(null);
       }
       // --- Log payload only when activeStudent changes ---
-      console.log('StudentHeader payload:', activeStudent);
+      //console.log('StudentHeader payload:', activeStudent);
     }
   }, [activeStudent, studentCache, studentRowIndices]);
   

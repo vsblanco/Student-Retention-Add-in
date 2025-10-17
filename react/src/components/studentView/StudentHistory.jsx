@@ -80,21 +80,25 @@ function StudentHistory({ history, student }) {
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
 
+  // UI state (declare early so hooks order is stable)
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showNewComment, setShowNewComment] = useState(false);
+  const [statusMsg, setStatusMsg] = useState(""); // <-- status message state
+
+  // Collapsed state for folders — initialize from computed months below (stable hook call)
+  const [collapsedFolders, setCollapsedFolders] = useState({});
+
   // Sync localHistory with history prop if it changes
   useEffect(() => {
     setLocalHistory(Array.isArray(history) ? history : []);
-    setStatusMsg(""); // <-- clear status message when student changes
+    setStatusMsg(""); // clear status message when student changes
   }, [history]);
 
   // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
   const normalizedHistory = Array.isArray(localHistory)
     ? localHistory.map(entry => normalizeKeys(entry || {}))
     : [];
-
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showNewComment, setShowNewComment] = useState(false);
-  const [statusMsg, setStatusMsg] = useState(""); // <-- status message state
 
   // Filter history by search term (case-insensitive, matches comment)
   const filteredHistory = Array.isArray(normalizedHistory)
@@ -134,6 +138,45 @@ function StudentHistory({ history, student }) {
   const pinnedComments = filteredHistory.filter(isEntryPinned);
   const unpinnedComments = filteredHistory.filter(entry => !isEntryPinned(entry));
 
+  // Group comments by month
+  const monthGroups = {};
+  const currentMonth = getCurrentMonth();
+  const currentMonthComments = [];
+  filteredHistory.forEach(entry => {
+    const month = getMonthFromTimestamp(entry.timestamp);
+    if (month === currentMonth) {
+      currentMonthComments.push(entry);
+    } else if (month) {
+      if (!monthGroups[month]) monthGroups[month] = [];
+      monthGroups[month].push(entry);
+    }
+  });
+
+  // Sort months descending (most recent first)
+  const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+
+  // Ensure collapsedFolders has an entry for each month (this effect runs every time months change)
+  useEffect(() => {
+    setCollapsedFolders(prev => {
+      const newState = { ...prev };
+      sortedMonths.forEach(month => {
+        if (!(month in newState)) newState[month] = true;
+      });
+      // Remove months no longer present
+      Object.keys(newState).forEach(month => {
+        if (!sortedMonths.includes(month)) delete newState[month];
+      });
+      return newState;
+    });
+  }, [sortedMonths.join(',')]);
+
+  function toggleFolder(month) {
+    setCollapsedFolders(prev => ({
+      ...prev,
+      [month]: !prev[month]
+    }));
+  }
+
   // Add a new comment to history
   async function addCommentToHistory(comment) {
     const now = new Date();
@@ -154,7 +197,7 @@ function StudentHistory({ history, student }) {
     setLocalHistory(prev => [...prev, newEntry]);
     const sheetName = "Student History"; // Change as appropriate
     const result = await insertRow(sheetName, newRow);
-    setStatusMsg(result.message); // <-- set status message
+    setStatusMsg(result.message); // set status message
     return true;
   }
 
@@ -168,50 +211,6 @@ function StudentHistory({ history, student }) {
         </ul>
       </div>
     );
-  }
-
-  // Group comments by month
-  const monthGroups = {};
-  const currentMonth = getCurrentMonth();
-  const currentMonthComments = [];
-  filteredHistory.forEach(entry => {
-    const month = getMonthFromTimestamp(entry.timestamp);
-    if (month === currentMonth) {
-      currentMonthComments.push(entry);
-    } else if (month) {
-      if (!monthGroups[month]) monthGroups[month] = [];
-      monthGroups[month].push(entry);
-    }
-  });
-
-  // Sort months descending (most recent first)
-  const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
-
-  // Collapsed state for folders
-  const [collapsedFolders, setCollapsedFolders] = useState(() =>
-    Object.fromEntries(sortedMonths.map(month => [month, true]))
-  );
-
-  // Update collapsedFolders if months change
-  useEffect(() => {
-    setCollapsedFolders(prev => {
-      const newState = { ...prev };
-      sortedMonths.forEach(month => {
-        if (!(month in newState)) newState[month] = true;
-      });
-      // Remove months no longer present
-      Object.keys(newState).forEach(month => {
-        if (!sortedMonths.includes(month)) delete newState[month];
-      });
-      return newState;
-    });
-  }, [sortedMonths.join(',')]);
-
-  function toggleFolder(month) {
-    setCollapsedFolders(prev => ({
-      ...prev,
-      [month]: !prev[month]
-    }));
   }
 
   return (
