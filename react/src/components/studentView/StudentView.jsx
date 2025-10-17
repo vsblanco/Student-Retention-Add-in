@@ -5,61 +5,33 @@ import StudentHeader from './StudentHeader.jsx';
 import ExampleStudent from '../utility/ExampleStudent.jsx';
 import StudentAssignments from './StudentAssignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
-import { onSelectionChanged } from '../utility/ExcelAPI.jsx'; // <-- Import here
+import { onSelectionChanged } from '../utility/ExcelAPI.jsx';
 import SSO from '../utility/SSO.jsx';
 import { COLUMN_ALIASES, COLUMN_ALIASES_ASSIGNMENTS, COLUMN_ALIASES_HISTORY, Sheets } from '../utility/ColumnMapping.jsx';
+import { normalizeHeader, canonicalHeaderMap, canonicalAssignmentsHeaderMap, canonicalHistoryHeaderMap, getCanonicalName, getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
 import './StudentView.css';
 
-// --- Create a reverse map that is agnostic to whitespace ---
-const canonicalHeaderMap = {};
-// A helper function to normalize strings by removing spaces and making them lowercase
-const normalizeHeader = (str) => str.toLowerCase().replace(/\s/g, '');
+// Extracts URL from Excel HYPERLINK formula or returns plain URL if provided
+function extractHyperlink(formulaOrValue) {
+  if (!formulaOrValue) return null;
+  if (typeof formulaOrValue !== 'string') return null;
+  const value = formulaOrValue.trim();
 
-for (const canonicalName in COLUMN_ALIASES) {
-  // Add the nicknames
-  COLUMN_ALIASES[canonicalName].forEach(alias => {
-    canonicalHeaderMap[normalizeHeader(alias)] = canonicalName;
-  });
-  // Add the canonical name itself for direct matches
-  canonicalHeaderMap[normalizeHeader(canonicalName)] = canonicalName;
-}
-
-// --- Create a reverse map for assignments sheet ---
-const canonicalAssignmentsHeaderMap = {};
-for (const canonicalName in COLUMN_ALIASES_ASSIGNMENTS) {
-  COLUMN_ALIASES_ASSIGNMENTS[canonicalName].forEach(alias => {
-    canonicalAssignmentsHeaderMap[normalizeHeader(alias)] = canonicalName;
-  });
-  canonicalAssignmentsHeaderMap[normalizeHeader(canonicalName)] = canonicalName;
-}
-
-/**
- * Extracts the URL from an Excel HYPERLINK formula string.
- * e.g., '=HYPERLINK("https://link.com/gradebook", "Gradebook")' -> 'https://link.com/gradebook'
- * @param {string} formula - The raw Excel formula string.
- * @returns {string | null} The extracted URL or null.
- */
-const extractHyperlink = (formula) => {
-  if (typeof formula !== 'string' || !formula.toUpperCase().startsWith('=HYPERLINK(')) {
-    return null;
-  }
-  const regex = /=HYPERLINK\s*\(\s*["']?([^,"']+)["']?\s*,\s*[^)]+\)/i;
-  const match = formula.match(regex);
-  
+  // If it's a HYPERLINK formula, try to capture the first argument (the URL)
+  // Examples: =HYPERLINK("https://...","Text") or =HYPERLINK('https://...','Text')
+  const hyperlinkRegex = /=\s*HYPERLINK\s*\(\s*["']?([^"',)]+)["']?\s*,/i;
+  const match = value.match(hyperlinkRegex);
   if (match && match[1]) {
-    let url = match[1].trim();
-    // In case the captured group still has quotes (depending on Excel's formula output)
-    if (url.startsWith('"') && url.endsWith('"')) {
-        url = url.substring(1, url.length - 1);
-    }
-    if (url.startsWith("'") && url.endsWith("'")) {
-        url = url.substring(1, url.length - 1);
-    }
-    return url;
+    return match[1].trim();
   }
-  
+
+  // If it's a plain URL, return it
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
   return null;
-};
+}
 
 // Helper function to process a raw row of data against headers
 const processRow = (rowData, headers, formulaRowData) => {
@@ -74,7 +46,7 @@ const processRow = (rowData, headers, formulaRowData) => {
     if (header && index < rowData.length) {
       // --- Normalize the header from the sheet in the same way before looking it up ---
       const normalizedLookupKey = normalizeHeader(header);
-      const canonicalHeader = canonicalHeaderMap[normalizedLookupKey] || header.trim();
+      const canonicalHeader = getCanonicalName(canonicalHeaderMap, header);
       studentInfo[canonicalHeader] = rowData[index];
 
       // Check if this is the GradeBook column
@@ -100,34 +72,17 @@ const processRow = (rowData, headers, formulaRowData) => {
   return studentInfo;
 };
 
-// --- Helper to process history rows using COLUMN_ALIASES_HISTORY ---
-const processHistoryRows = (rows, headers) => {
-  // Build header index map using COLUMN_ALIASES_HISTORY
+// --- Helper: generic row processor using a provided canonical header map ---
+const processRowsWithCanonicalMap = (rows, headers, canonicalMap) => {
   const headerIndexMap = {};
   headers.forEach((header, idx) => {
-    const normalized = normalizeHeader(header);
-    const canonical = COLUMN_ALIASES_HISTORY[normalized] ? normalized : Object.keys(COLUMN_ALIASES_HISTORY).find(key =>
-      COLUMN_ALIASES_HISTORY[key].map(a => normalizeHeader(a)).includes(normalized)
-    );
-    if (canonical) {
-      // Use canonical name for mapping
-      const canonicalName = canonicalAssignmentsHeaderMap[normalized] || canonical;
-      headerIndexMap[canonicalName] = idx;
-    }
+    const canonical = getCanonicalName(canonicalMap, header);
+    if (canonical) headerIndexMap[canonical] = idx;
   });
-
   return rows.map(row => {
     const entry = {};
-    // Map each canonical history field
-    Object.keys(COLUMN_ALIASES_HISTORY).forEach(canonical => {
-      const idx = headerIndexMap[canonical];
-      entry[canonical] = idx !== undefined ? row[idx] : '';
-    });
-    // Add any unmapped headers as fallback
-    headers.forEach((header, idx) => {
-      if (!Object.values(headerIndexMap).includes(idx)) {
-        entry[header] = row[idx];
-      }
+    Object.entries(headerIndexMap).forEach(([canonical, idx]) => {
+      entry[canonical] = row[idx];
     });
     return entry;
   });
@@ -150,34 +105,6 @@ function StudentView() {
   const [headers, setHeaders] = useState([]);
   const [assignmentsMap, setAssignmentsMap] = useState({}); // { studentName: [assignments] }
   const [userName, setUserName] = useState(null);
-
-  // --- Helper to find the column index for StudentName based on stored headers ---
-  const getStudentNameColIdx = () => {
-    const studentNameCanonical = 'StudentName';
-    for (let i = 0; i < headers.length; i++) {
-        const normalizedLookupKey = normalizeHeader(headers[i]);
-        const canonicalHeader = canonicalHeaderMap[normalizedLookupKey] || headers[i].trim();
-        if (canonicalHeader === studentNameCanonical) {
-            return i;
-        }
-    }
-    // Default to the first column if not found (a guess)
-    return 0; 
-  };
-
-  // --- General helper to find the column index by canonical name or alias ---
-  const getColIdx = (colName) => {
-    // Get all possible aliases for the column, including the canonical name
-    const aliases = COLUMN_ALIASES[colName] ? [colName, ...COLUMN_ALIASES[colName]] : [colName];
-    const normalizedAliases = aliases.map(a => normalizeHeader(a));
-    for (let i = 0; i < headers.length; i++) {
-      const normalized = normalizeHeader(headers[i]);
-      if (normalizedAliases.includes(normalized)) {
-        return i;
-      }
-    }
-    return -1;
-  };
 
   // --- TEST MODE: Provide a basic student object if not running in Office/Excel ---
   useEffect(() => {
@@ -223,7 +150,7 @@ function StudentView() {
             const headerIndexMap = {};
             assignmentsHeaders.forEach((header, idx) => {
               const normalized = normalizeHeader(header);
-              const canonical = canonicalAssignmentsHeaderMap[normalized];
+              const canonical = getCanonicalName(canonicalAssignmentsHeaderMap, header);
               if (canonical) headerIndexMap[canonical] = idx;
             });
 
@@ -253,7 +180,7 @@ function StudentView() {
             const historyHeaders = historyRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
             const historyRows = historyRange.values.slice(1);
             // *** MODIFIED: Use COLUMN_ALIASES_HISTORY for mapping ***
-            const processedHistory = processHistoryRows(historyRows, historyHeaders);
+            const processedHistory = processRowsWithCanonicalMap(historyRows, historyHeaders, canonicalHistoryHeaderMap);
             // Group by Student ID (case-insensitive)
             processedHistory.forEach(entry => {
               // Try to find ID using flexible mapping
@@ -338,10 +265,10 @@ function StudentView() {
           setCurrentRowIndex(rowIndex);
 
           // --- Auto navigation: Outreach -> History, Missing Assignments -> Assignments, Phone/OtherPhone -> History ---
-          const outreachIdx = getColIdx('Outreach');
-          const missingAssignmentsIdx = getColIdx('Missing Assignments');
-          const phoneIdx = getColIdx('Phone');
-          const otherPhoneIdx = getColIdx('OtherPhone');
+          const outreachIdx = getCanonicalColIdx(headers, 'Outreach');
+          const missingAssignmentsIdx = getCanonicalColIdx(headers, 'Missing Assignments');
+          const phoneIdx = getCanonicalColIdx(headers, 'Phone');
+          const otherPhoneIdx = getCanonicalColIdx(headers, 'OtherPhone');
           if (
             (outreachIdx !== -1 && colIndex === outreachIdx) ||
             (phoneIdx !== -1 && colIndex === phoneIdx) ||
@@ -405,27 +332,21 @@ function StudentView() {
   // Helper to get the correct history as an array of objects from the activeStudent object
   const getHistoryArray = (studentObj) => {
     if (!studentObj) return [];
-    // If already an array, return as is
     if (Array.isArray(studentObj.History)) return studentObj.History;
-    // If it's a string, parse it into objects (legacy/test mode)
     if (typeof studentObj.History === 'string') {
-      // Example format: alternating lines of date and comment
-      const lines = studentObj.History.split('\n').map(l => l.trim()).filter(l => l !== '');
+      const lines = studentObj.History.split('\n').map(l => l.trim()).filter(Boolean);
       const entries = [];
       for (let i = 0; i < lines.length; i += 2) {
         entries.push({
           timestamp: lines[i] || '',
           comment: lines[i + 1] || '',
-          // Fill with empty/defaults for other fields
           studentId: studentObj.ID || '',
           studentName: studentObj.StudentName || '',
-          tag: '', // No tag in legacy/test mode
-          
+          tag: ''
         });
       }
       return entries;
     }
-    // If missing or unknown format, return empty array
     return [];
   };
 
