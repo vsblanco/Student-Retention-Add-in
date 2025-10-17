@@ -9,9 +9,9 @@ const liStyle = "p-3 rounded-lg shadow-sm relative";
 const borderLeftStyle = "border-l-4 pl-4";
 const tagPillStyle = "px-2 py-0.5 font-semibold rounded-full";
 const tagDefaultStyle = `${tagPillStyle} bg-blue-100 text-blue-800`;
-const plusPillStyle = `${tagPillStyle} bg-gray-300 text-gray-700 text-xs`;
+const plusPillStyle = `${tagPillStyle} bg-white text-gray-700 text-xs opacity-50`;
 const createdByStyle = "font-medium whitespace-nowrap";
-const tagsRowStyle = "flex items-center gap-2";
+const tagsRowStyle = "flex items-center gap-1";
 const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center";
 const commentTextStyle = "text-sm text-gray-800";
 const commentClampStyle = "line-clamp-3";
@@ -275,6 +275,30 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
     formattedTimestamp = formatExcelDate(entry.timestamp);
   }
 
+  // New helper: produce a date-only string (prefer Excel serial -> JS Date if numeric)
+  const getDateOnlyString = () => {
+    if (entry.timestamp == null) return formattedTimestamp;
+    // If numeric Excel serial, convert to JS date
+    if (!isNaN(entry.timestamp)) {
+      try {
+        // Excel's epoch: 1899-12-30 (approx). For simplicity we use this base.
+        const excelSerial = Number(entry.timestamp);
+        const excelEpoch = new Date(1899, 11, 30);
+        const jsDate = new Date(excelEpoch.getTime() + excelSerial * 86400000);
+        return jsDate.toLocaleDateString();
+      } catch (e) {
+        // fallback to formatted string
+      }
+    }
+    // Try to extract a common date pattern (MM/DD/YYYY or M/D/YY etc.)
+    const dateMatch = String(formattedTimestamp).match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/);
+    if (dateMatch) return dateMatch[0];
+    // Fallback: strip time portions like " at 3:00 PM" or after comma
+    return String(formattedTimestamp).split(' at ')[0].split(',')[0];
+  };
+
+  const formattedTimestampDateOnly = getDateOnlyString();
+
   // State for expanding/collapsing long comments and quotes
   const [expanded, setExpanded] = useState(false);
 
@@ -291,6 +315,72 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
+
+  // Ref for the tags container to decide how many pills we can show
+  const tagsContainerRef = React.useRef(null);
+  // Ref for the root comment <li> so we measure the whole comment container width
+  const rootRef = React.useRef(null);
+
+  // Max number of visible tag pills (1 for narrow, 2 for normal)
+  const [maxPills, setMaxPills] = useState(2);
+
+  // Keep previous width to log only when it actually changes
+  const prevWidthRef = React.useRef(null);
+
+  // Observe container size and switch pill count based on whole comment width
+  React.useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+
+    // Helper that applies measurement and logging based on the full comment container
+    const applyWidth = (rawWidth) => {
+      const w = Math.round(rawWidth || el.offsetWidth || el.clientWidth || 0);
+
+      // Estimate how many pills can fit using the whole comment width.
+      // Reserve space for created-by, timestamp and paddings then divide by approximated pill width.
+      const RESERVED_SPACE = 150; // adjust if createdBy/timestamp layout changes
+      const PILL_APPROX_WIDTH = 92; // approx per-tag pill width
+      const available = Math.max(0, w - RESERVED_SPACE);
+      const fitCount = Math.max(1, Math.floor(available / PILL_APPROX_WIDTH));
+      const newMaxPills = Math.min(2, fitCount); // cap to 1..2
+
+      setMaxPills(newMaxPills);
+
+      // Log only when rounded width changes to keep logs meaningful, include comment index
+      if (prevWidthRef.current !== w) {
+        prevWidthRef.current = w;
+        console.log(`[Comment #${index}] container width: ${w}px`);
+      }
+    };
+
+    // ResizeObserver callback prefers entry.contentRect when available
+    const update = (entries) => {
+      if (entries && entries.length) {
+        const e = entries[0];
+        const w = e.contentRect ? e.contentRect.width : e.target.getBoundingClientRect().width;
+        applyWidth(w);
+      } else {
+        // fallback (called on initial run or window resize fallback)
+        const rect = el.getBoundingClientRect();
+        applyWidth(rect.width);
+      }
+    };
+
+    // Initial measurement
+    update();
+
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    } else {
+      window.addEventListener('resize', update);
+    }
+    return () => {
+      if (ro) ro.disconnect();
+      else window.removeEventListener('resize', update);
+    };
+  }, [index]);
 
   // Helper to trigger bounce for a tag index
   const triggerBounce = idx => {
@@ -380,6 +470,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
   return (
     <>
       <li
+        ref={rootRef}
         className={`${liStyle} ${bgClass} ${borderLeftStyle} ${borderColorClass}`}
         data-row-index={entry.studentId || index}
         onContextMenu={onContextMenu}
@@ -449,44 +540,45 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
           </>
         )}
         <div className={timestampRowStyle}>
-          <div className={tagsRowStyle} style={{ flex: 1 }}>
-            {sortedTagInfos.slice(0, 2).map((tagInfo, idx) => {
-              if (!tagInfo) return null;
-              let tagClass = tagInfo.tagClass
-                ? tagInfo.tagClass
-                : tagDefaultStyle;
-              // If more than one tag and Outreach, set opacity
-              if (sortedTagInfos.length > 1 && tagInfo.label === "Outreach") {
-                tagClass += " opacity-75";
-              }
-              // Use renderTagLabel for LDA tags
-              return (
-                <span
-                  key={tagInfo.label + idx}
-                  className={`${tagClass}${bounceTags[idx] ? ' bounce' : ''}`}
-                  style={{
-                    maxWidth: 90,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    userSelect: 'none' // prevent highlighting
-                  }}
-                  onClick={e => {
-                    e.stopPropagation(); // Prevent opening modal
-                    triggerBounce(idx);
-                    showTagAbout(tagInfo);
-                  }}
-                  tabIndex={0}
-                  aria-label={`Bounce ${tagInfo.label} tag`}
-                >
-                  {renderTagLabel(tagInfo)}
-                </span>
-              );
-            })}
-            {sortedTagInfos.length > 2 && (
+          {/* attach the ref to the real tags container so we measure a visible box */}
+          <div ref={tagsContainerRef} className={tagsRowStyle} style={{ flex: 1 }}>
+            {sortedTagInfos.slice(0, maxPills).map((tagInfo, idx) => {
+               if (!tagInfo) return null;
+               let tagClass = tagInfo.tagClass
+                 ? tagInfo.tagClass
+                 : tagDefaultStyle;
+               // If more than one tag and Outreach, set opacity
+               if (sortedTagInfos.length > 1 && tagInfo.label === "Outreach") {
+                 tagClass += " opacity-75";
+               }
+               // Use renderTagLabel for LDA tags
+               return (
+                 <span
+                   key={tagInfo.label + idx}
+                   className={`${tagClass}${bounceTags[idx] ? ' bounce' : ''}`}
+                   style={{
+                     maxWidth: 90,
+                     overflow: 'hidden',
+                     textOverflow: 'ellipsis',
+                     whiteSpace: 'nowrap',
+                     cursor: 'pointer',
+                     userSelect: 'none' // prevent highlighting
+                   }}
+                   onClick={e => {
+                     e.stopPropagation(); // Prevent opening modal
+                     triggerBounce(idx);
+                     showTagAbout(tagInfo);
+                   }}
+                   tabIndex={0}
+                   aria-label={`Bounce ${tagInfo.label} tag`}
+                 >
+                   {renderTagLabel(tagInfo)}
+                 </span>
+               );
+             })}
+            {sortedTagInfos.length > maxPills && (
               <span className={plusPillStyle}>
-                +{sortedTagInfos.length - 2}
+                +{sortedTagInfos.length - maxPills}
               </span>
             )}
           </div>
@@ -495,7 +587,8 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
           </span>
           <span className="mx-2 text-gray-400">|</span>
           <span>
-            {formattedTimestamp}
+            {/* Show date-only when we've reduced visible pills to 1, otherwise full timestamp */}
+            {maxPills === 1 ? formattedTimestampDateOnly : formattedTimestamp}
           </span>
         </div>
       </li>
