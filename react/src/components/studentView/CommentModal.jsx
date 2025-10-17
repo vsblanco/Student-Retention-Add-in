@@ -17,7 +17,7 @@ function CommentModal({
   beforeQuote,
   afterQuote,
   formatExcelDate,
-
+  quoteStyles = {},
 }) {
   // Modal state and logic moved from Comment.jsx
   const [modalMode, setModalMode] = useState('view');
@@ -29,6 +29,12 @@ function CommentModal({
   const [showDNCModal, setShowDNCModal] = useState(false);
   const [pendingDncTag, setPendingDncTag] = useState(null);
   const [showLDAModal, setShowLDAModal] = useState(false);
+
+  // Ensure modal has class strings for quote elements (use passed-in styles with fallbacks)
+  const blockClass = quoteStyles.block || "relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
+  const textClass = quoteStyles.text || "text-base text-blue-900 font-serif";
+  const markLeftClass = quoteStyles.markLeft || "absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none";
+  const markRightClass = quoteStyles.markRight || "absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none";
 
   useEffect(() => {
     setModalComment(entry.comment || "");
@@ -338,12 +344,12 @@ function CommentModal({
           {hasQuoteTag && quoteText ? (
             <>
               {beforeQuote}
-              <blockquote className="relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded" style={{ marginLeft: 0 }}>
-                <span className="absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">“</span>
-                <span className="text-base text-blue-900 font-serif">
+              <blockquote className={blockClass} style={{ marginLeft: 0 }}>
+                <span className={markLeftClass} aria-hidden="true">“</span>
+                <span className={textClass}>
                   {quoteText}
                 </span>
-                <span className="absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none" aria-hidden="true">”</span>
+                <span className={markRightClass} aria-hidden="true">”</span>
               </blockquote>
               {afterQuote}
             </>

@@ -47,7 +47,7 @@ const Modal = ({
         style={{
           minWidth: 280,
           maxWidth: 500,
-          maxHeight: 400,
+          maxHeight: 500,
           borderRadius,
           padding,
           background: "rgba(255,255,255,0.7)",

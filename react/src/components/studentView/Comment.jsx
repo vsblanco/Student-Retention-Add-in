@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatExcelDate } from '../utility/Conversion';
+import { formatExcelDate, formatName } from '../utility/Conversion';
 import BounceAnimation from '../utility/BounceAnimation';
 import CommentModal from './CommentModal'; // <-- import CommentModal
 import { toast } from 'react-toastify';
@@ -8,18 +8,18 @@ import { toast } from 'react-toastify';
 const liStyle = "p-3 rounded-lg shadow-sm relative";
 const borderLeftStyle = "border-l-4 pl-4";
 const tagPillStyle = "px-2 py-0.5 font-semibold rounded-full";
-const tagDefaultStyle = `${tagPillStyle} bg-blue-100 text-blue-800`;
+const tagDefaultStyle = `${tagPillStyle} bg-gray-100 text-gray-800`;
 const plusPillStyle = `${tagPillStyle} bg-white text-gray-700 text-xs opacity-50`;
 const createdByStyle = "font-medium whitespace-nowrap";
 const tagsRowStyle = "flex items-center gap-1";
 const timestampRowStyle = "text-xs text-gray-500 mt-2 pt-2 border-t border-gray-200 flex justify-between items-center";
 const commentTextStyle = "text-sm text-gray-800";
 const commentClampStyle = "line-clamp-3";
-const quoteBlockStyle = "relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
-const quoteTextStyle = "text-base text-blue-900 font-serif";
+const quoteBlockStyle = "relative bg-gray-100 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
+const quoteTextStyle = "text-sm text-gray-600 font-serif";
 const quoteClampStyle = "line-clamp-3";
-const quoteMarkStyle = "absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none";
-const quoteMarkRightStyle = "absolute right-2 bottom-2 text-4xl text-blue-200 leading-none select-none";
+const quoteMarkStyle = "absolute left-2 top-2 text-4xl text-gray-400 leading-none select-none";
+const quoteMarkRightStyle = "absolute right-2 bottom-2 text-4xl text-gray-400 leading-none select-none";
 const showMoreBtnStyle = "text-xs text-gray-600 mt-1 rounded bg-gray-100 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1";
 const showMoreBtnStyleAlt = "text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-opacity-0 hover:bg-opacity-100 transition duration-150 px-2 py-1";
 
@@ -106,7 +106,7 @@ export const COMMENT_TAGS = [
   },
   {
     label: "Quote",
-    bgClass: "bg-blue-100",
+    bgClass: "bg-gray-100",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-blue-50 text-blue-800",
     priority: 2,
     borderColor: "border-blue-400",
@@ -172,7 +172,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
 
   // Determine background class from the highest priority tag
   // If no tagInfo, use default
-  const bgClass = tagInfo && tagInfo.bgClass ? tagInfo.bgClass : "bg-gray-200";
+  const bgClass = tagInfo && tagInfo.bgClass ? tagInfo.bgClass : "bg-gray-100";
   const tagClass = tagInfo ? tagInfo.tagClass : "px-2 py-0.5 font-semibold rounded-full bg-blue-100 text-blue-800";
 
   // Check if Quote tag is present
@@ -432,7 +432,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
   }, [entry.comment, commentContent, quoteText, expanded]);
 
   // Determine border color from the highest priority tag
-  const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-blue-300";
+  const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-gray-300";
 
   // Map bgClass to a slightly darker hover color
   const hoverBgMap = {
@@ -515,7 +515,13 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
                 {quoteText}
               </span>
               <span className={quoteMarkRightStyle} aria-hidden="true">”</span>
+
+              {/* Moved attribution inside the quote container but outside the actual quoted text */}
+              <div className={`${quoteTextStyle} mt-1 text-right`}>
+                - {formatName(entry.studentName || entry.student || entry.createdby) || 'Unknown'}
+              </div>
             </blockquote>
+
             {afterQuote}
           </>
         ) : (
@@ -583,7 +589,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
             )}
           </div>
           <span className={createdByStyle} style={{ marginLeft: 'auto' }}>
-            {entry.createdby ? entry.createdby : "Unknown"}
+            {entry.createdby ? formatName(entry.createdby) : "Unknown"}
           </span>
           <span className="mx-2 text-gray-400">|</span>
           <span>
@@ -603,6 +609,12 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
         beforeQuote={beforeQuote}
         afterQuote={afterQuote}
         formatExcelDate={formatExcelDate}
+        quoteStyles={{
+          block: quoteBlockStyle,
+          text: quoteTextStyle,
+          markLeft: quoteMarkStyle,
+          markRight: quoteMarkRightStyle
+        }}
       />
     </>
   );
