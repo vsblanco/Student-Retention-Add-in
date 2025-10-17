@@ -23,6 +23,8 @@ function CommentModal({
   const [modalMode, setModalMode] = useState('view');
   const [modalComment, setModalComment] = useState(entry.comment || "");
   const [modalTagContainer, setModalTagContainer] = useState({});
+  // Temporary edit container used only while in edit mode.
+  const [editTagContainer, setEditTagContainer] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [dropdownTarget, setDropdownTarget] = useState(null);
@@ -44,15 +46,33 @@ function CommentModal({
     tags = tags.filter(t => t !== "Comment");
     const tagObj = {};
     tags.forEach(t => { tagObj[t] = true; });
+    // initialize both saved and edit containers from the entry
     setModalTagContainer(tagObj);
+    setEditTagContainer(tagObj);
     setModalMode('view');
   }, [entry.comment, entry.tag, isOpen]);
+
+  // When entering edit mode, ensure edit container is a copy of the saved tags
+  useEffect(() => {
+    if (modalMode === 'edit') {
+      setEditTagContainer(modalTagContainer || {});
+    }
+  }, [modalMode, modalTagContainer]);
+
+  // When returning to view mode without saving, discard tentative edits
+  useEffect(() => {
+    if (modalMode === 'view') {
+      setEditTagContainer(modalTagContainer || {});
+    }
+  }, [modalMode, modalTagContainer]);
 
   useEffect(() => {
     setConfirmDelete(false);
   }, [isOpen, modalMode]);
 
   const handleSaveComment = async () => {
+    // Finalize edit tags into saved tags and switch back to view mode (do not close)
+    setModalTagContainer(editTagContainer);
     toast.success("Comment updated.", {
       position: "bottom-left",
       autoClose: 3000,
@@ -63,8 +83,8 @@ function CommentModal({
       theme: "light",
       style: { fontSize: '1rem' }
     });
-    // Only close modal, do not call editRow
-    onClose();
+    // Switch back to view mode so the newly saved tags appear in the view
+    setModalMode('view');
   };
 
   const handleDeleteComment = async () => {
@@ -100,7 +120,8 @@ function CommentModal({
       setShowLDAModal(true);
       return;
     }
-    setModalTagContainer(prev => ({
+    // Only mutate the edit container so changes are tentative until Update is clicked
+    setEditTagContainer(prev => ({
       ...prev,
       [tagLabel]: true
     }));
@@ -108,7 +129,8 @@ function CommentModal({
   };
 
   const handleRemoveTag = tagLabel => {
-    setModalTagContainer(prev => {
+    // Remove from the edit container only
+    setEditTagContainer(prev => {
       const newObj = { ...prev };
       delete newObj[tagLabel];
       return newObj;
@@ -134,7 +156,7 @@ function CommentModal({
         maxWidth: '100%',
       }}
     >
-      {Object.keys(modalTagContainer).map((tagLabel, idx) => {
+      {Object.keys(editTagContainer).map((tagLabel, idx) => {
         const tagInfo = findTagInfo(tagLabel);
         let tagClass = tagInfo?.tagClass
           ? tagInfo.tagClass.replace(/px-2|py-0\.5|text-[^\s]+/g, '')
@@ -264,6 +286,10 @@ function CommentModal({
       })}
     </div>
   );
+
+  // helper to compare tag containers
+  const tagKeys = obj => Object.keys(obj || {}).sort().join(', ');
+  const noTagChanges = tagKeys(editTagContainer) === tagKeys(modalTagContainer);
 
   // --- Modal content ---
   const [clipboardHover, setClipboardHover] = useState(false);
@@ -420,7 +446,7 @@ function CommentModal({
         tags={insertTagButtonTags}
         forceCloseDropdown={showDNCModal}
       />
-      {Object.keys(modalTagContainer).length > 0 && modalTagPills}
+      {Object.keys(editTagContainer).length > 0 && modalTagPills}
       <textarea
         value={modalComment}
         onChange={e => setModalComment(e.target.value)}
@@ -481,7 +507,11 @@ function CommentModal({
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
-            onClick={() => setModalMode('view')}
+            onClick={() => {
+              // Discard edits and return to view mode
+              setEditTagContainer(modalTagContainer || {});
+              setModalMode('view');
+            }}
             style={{
               width: 36,
               height: 36,
@@ -515,8 +545,7 @@ function CommentModal({
             disabled={
               confirmDelete
                 ? false
-                : modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
+                : (modalComment === (entry.comment || "") && noTagChanges)
             }
             style={{
               width: 36,
@@ -524,18 +553,12 @@ function CommentModal({
               borderRadius: '50%',
               background: confirmDelete
                 ? '#ef4444'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
+                : (modalComment === (entry.comment || "") && noTagChanges)
                   ? '#d1d5db'
                   : '#2563eb',
               color: confirmDelete
                 ? 'white'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
+                : (modalComment === (entry.comment || "") && noTagChanges)
                   ? '#888'
                   : 'white',
               fontWeight: 500,
@@ -545,18 +568,8 @@ function CommentModal({
               justifyContent: 'center',
               cursor: confirmDelete
                 ? 'pointer'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
-                  ? 'not-allowed'
-                  : 'pointer',
-              opacity: confirmDelete
-                ? 1
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                ) ? 0.7 : 1,
+                : (modalComment === (entry.comment || "") && noTagChanges ? 'not-allowed' : 'pointer'),
+              opacity: confirmDelete ? 1 : (modalComment === (entry.comment || "") && noTagChanges ? 0.7 : 1),
               transition: 'background 0.15s, box-shadow 0.15s'
             }}
             aria-label={confirmDelete ? 'Confirm Delete' : 'Update'}
@@ -570,28 +583,26 @@ function CommentModal({
             onMouseLeave={e => {
               e.currentTarget.style.background = confirmDelete
                 ? '#ef4444'
-                : (
-                  modalComment === (entry.comment || "") &&
-                  Object.keys(modalTagContainer).join(', ') === (entry.tag || "").split(',').map(t => t.trim()).filter(Boolean).filter(t => t !== "Comment").join(', ')
-                )
-                  ? '#d1d5db'
-                  : '#2563eb';
+                : (modalComment === (entry.comment || "") && noTagChanges)
+                ? '#d1d5db'
+                : '#2563eb';
               e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
             }}
           >
             <Check size={20} />
           </button>
-        </div>
-      </div>
-    </div>
-  );
+         </div>
+       </div>
+     </div>
+   );
 
   // DNCModal callback
   const handleDncSelect = (dncString) => {
     setShowDNCModal(false);
     setPendingDncTag(false);
     if (dncString) {
-      setModalTagContainer(prev => ({
+      // Add to the edit container so the tag is tentative and will be discarded on cancel
+      setEditTagContainer(prev => ({
         ...prev,
         [dncString]: true
       }));
@@ -627,7 +638,8 @@ function CommentModal({
           onSelect={kw => {
             setShowLDAModal(false);
             if (kw) {
-              setModalTagContainer(prev => ({
+              // Add to the edit container so the tag is tentative and will be discarded on cancel
+              setEditTagContainer(prev => ({
                 ...prev,
                 [kw]: true
               }));
