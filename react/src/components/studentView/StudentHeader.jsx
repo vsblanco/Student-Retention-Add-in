@@ -117,6 +117,26 @@ function StudentHeader({ student }) {
     return daysOld >= 0 && daysOld <= 31;
   };
 
+  // Compute a user-friendly formatted ExpectedStartDate (Month Day, Year) for the tooltip.
+  const expectedStartRaw =
+    safeStudent.ExpectedStartDate ??
+    safeStudent.expectedStartDate ??
+    safeStudent.ExpectedStart ??
+    safeStudent.startDate ??
+    null;
+  let expectedStartDisplay = null;
+  if (expectedStartRaw) {
+    const parsed = Date.parse(expectedStartRaw);
+    if (!isNaN(parsed)) {
+      const d = new Date(parsed);
+      expectedStartDisplay = d.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      }); // "October 17, 2025"
+    }
+  }
+  
   // Determine if the student should show the "NEW" tag.
   // Use ExpectedStartDate-based detection first, fall back to explicit flags.
   const isNew =
@@ -162,14 +182,16 @@ function StudentHeader({ student }) {
               setTimeout(() => setBounce(false), 500);
             }}
             aria-label="Bounce avatar"
-            title={isNew ? "New student" : undefined}
+            // Only show a generic title on the avatar if there is no expected start date.
+            title={isNew && !expectedStartDisplay ? "New student" : undefined}
           >
             {initials}
             {isNew && (
               <span
-                aria-label="New student"
+                aria-label={`New student${expectedStartDisplay ? `: ${expectedStartDisplay}` : ''}`}
                 role="status"
-                title="New student"
+                title={expectedStartDisplay || 'New student'}
+                // Allow the badge itself to receive pointer events so its title is shown on hover.
                 style={{
                   position: 'absolute',
                   bottom: 0,
@@ -182,14 +204,16 @@ function StudentHeader({ student }) {
                   padding: '2px 6px',
                   fontWeight: 700,
                   boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
-                  pointerEvents: 'none',
-                  lineHeight: 1
+                  pointerEvents: 'auto',
+                  lineHeight: 1,
+                  zIndex: 10
                 }}
-              >
-                NEW
-              </span>
-            )}
-          </button>
+                tabIndex={0}
+               >
+                 NEW
+               </span>
+             )}
+           </button>
           <div className="min-w-0">
             <h2
               className="text-lg font-bold text-gray-800 break-words"

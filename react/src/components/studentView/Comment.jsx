@@ -589,7 +589,7 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
             )}
           </div>
           <span className={createdByStyle} style={{ marginLeft: 'auto' }}>
-            {entry.createdby ? formatName(entry.createdby) : "Unknown"}
+            {entry.createdby ? entry.createdby : "Unknown"}
           </span>
           <span className="mx-2 text-gray-400">|</span>
           <span>
