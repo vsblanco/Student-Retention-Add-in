@@ -282,7 +282,7 @@ function CommentModal({
         if (onClose) onClose();
       }}
     >
-      {modalTagViewPills}
+      {Object.keys(modalTagContainer).length > 0 && modalTagViewPills}
       <div
         style={{ marginTop: 12, marginBottom: 12, position: 'relative' }}
         onMouseEnter={() => setClipboardHover(true)}
@@ -420,7 +420,7 @@ function CommentModal({
         tags={insertTagButtonTags}
         forceCloseDropdown={showDNCModal}
       />
-      {modalTagPills}
+      {Object.keys(modalTagContainer).length > 0 && modalTagPills}
       <textarea
         value={modalComment}
         onChange={e => setModalComment(e.target.value)}
