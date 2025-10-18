@@ -5,7 +5,7 @@ import { highlightLdaKeywords } from '../Parts/Comment.jsx';
 import { DNCModal, LDAModal } from '../Tag.jsx';
 import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { deleteComment } from '../../utility/EditStudentHistory.jsx';
+import { deleteComment, editComment } from '../../utility/EditStudentHistory.jsx';
 
 function CommentModal({
   isOpen,
@@ -93,6 +93,24 @@ function CommentModal({
       timestamp: entry.timestamp
     };
     console.log('Updated comment entry:', newCommentEntry);
+
+    // send update to shared edit implementation
+    try {
+      await editComment(entry.commentid, newCommentEntry);
+    } catch (err) {
+      try { console.error('Edit comment failed:', err); } catch (_) {}
+      toast.error("Failed to save comment.", {
+        position: "bottom-left",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+        theme: "light",
+        style: { fontSize: '1rem' }
+      });
+      return;
+    }
 
     toast.success("Comment updated.", {
       position: "bottom-left",
