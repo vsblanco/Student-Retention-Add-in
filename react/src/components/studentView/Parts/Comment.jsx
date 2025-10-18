@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { formatExcelDate, formatName } from '../../utility/Conversion';
 import BounceAnimation from '../../utility/BounceAnimation';
-import CommentModal from '../../Modal/CommentModal';// <-- import CommentModal
+import CommentModal from '../Modal/CommentModal';
 import { toast } from 'react-toastify';
 
 // CSS class constants
