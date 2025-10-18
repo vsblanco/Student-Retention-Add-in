@@ -74,9 +74,9 @@ export async function addComment(commentText, tag, createdBy = null, studentId =
 }
 
 // Edit an existing history row (rowId can be whatever identifier ExcelAPI expects)
-export async function editComment(rowId, updates) {
+export async function editComment(commentid, updates) {
   // forwards to ExcelAPI.editRow
-  return editRow(rowId, updates);
+  return editRow(Sheets.HISTORY, "commentID", commentid, updates);
 }
 
 // Delete a history row by commentID (numeric or string)

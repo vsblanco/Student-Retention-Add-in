@@ -83,6 +83,17 @@ function CommentModal({
     setModalTagContainer(editTagContainer);
     // finalize the edited text so view mode shows it
     setModalSavedComment(modalComment);
+
+    // Log the new comment entry object when Update is pressed
+    const newCommentEntry = {
+      commentid: entry.commentid,
+      comment: modalComment,
+      tag: Object.keys(editTagContainer).join(', '),
+      createdby: entry.createdby,
+      timestamp: entry.timestamp
+    };
+    console.log('Updated comment entry:', newCommentEntry);
+
     toast.success("Comment updated.", {
       position: "bottom-left",
       autoClose: 3000,
