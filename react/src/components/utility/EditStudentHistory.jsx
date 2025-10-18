@@ -80,18 +80,18 @@ export async function editComment(rowId, updates) {
 }
 
 // Delete a history row by commentID (numeric or string)
-export async function deleteComment(commentID, createdBy = null, studentId = null, studentName = null) {
+export async function deleteComment(commentID, createdBy = null) {
   if (commentID === null || commentID === undefined) return;
 
   const userName = checkSSO(createdBy);
 
   try {
     // attempt to delete the row — forward the commentID to ExcelAPI.deleteRow
-    const result = await deleteRow(commentID);
+    const result = await deleteRow(Sheets.HISTORY, "commentID", commentID);
 
     // Log who performed the deletion (no insertRow audit)
     try {
-      console.log(`${userName} deleted comment ${String(commentID)} for ${studentName ? String(studentName) : 'Unknown Student'}`);
+      console.log(`${userName} deleted comment ${String(commentID)} : 'Unknown Student'}`);
     } catch (_) {}
 
     return result;

@@ -5,6 +5,7 @@ import { highlightLdaKeywords } from '../Parts/Comment.jsx';
 import { DNCModal, LDAModal } from '../Tag.jsx';
 import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { deleteComment } from '../../utility/EditStudentHistory.jsx';
 
 function CommentModal({
   isOpen,
@@ -97,18 +98,37 @@ function CommentModal({
   };
 
   const handleDeleteComment = async () => {
-    toast.success("Comment deleted.", {
-      position: "bottom-left",
-      autoClose: 3000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: false,
-      draggable: false,
-      theme: "light",
-      style: { fontSize: '1rem' }
-    });
-    // Only close modal, do not call editRow
-    onClose();
+    try {
+      // call shared delete implementation with the entry's commentID
+      console.log(`Deleting comment with ID: ${entry.commentid}`);
+      await deleteComment(entry.commentid);
+
+      toast.success("Comment deleted.", {
+        position: "bottom-left",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+        theme: "light",
+        style: { fontSize: '1rem' }
+      });
+      // close the modal after successful delete
+      onClose();
+    } catch (err) {
+      // report failure but keep modal open for retry/cancellation
+      try { console.error('Delete comment failed:', err); } catch (_) {}
+      toast.error("Failed to delete comment.", {
+        position: "bottom-left",
+        autoClose: 3000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: false,
+        theme: "light",
+        style: { fontSize: '1rem' }
+      });
+    }
   };
 
   const insertTagButtonTags = COMMENT_TAGS.map(tag => ({
