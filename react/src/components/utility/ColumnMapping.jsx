@@ -8,6 +8,7 @@ export const COLUMN_ALIASES = {
   ID: ['Student ID', 'Student Number','Student identifier'],
   Gender: ['Gender'],
   Phone: ['Phone Number', 'Contact'],
+  CreatedBy: ['Created By', 'Author', 'Advisor'],
   OtherPhone: ['Other Phone', 'Alt Phone'],
   StudentEmail: ['Email', 'Student Email'],
   PersonalEmail: ['Other Email'],
