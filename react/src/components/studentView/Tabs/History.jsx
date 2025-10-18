@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from '../Parts/Comment';
 import NewComment from '../Modal/NewCommentModal';
 import { formatExcelDate, normalizeKeys } from '../../utility/Conversion';
-import { insertRow, editRow } from '../../utility/ExcelAPI'; // <-- import editRow here
+import { /* insertRow, editRow, */ } from '../../utility/ExcelAPI'; // removed direct insert/edit usage
+import { addComment } from '../StudentView'; // use shared addComment implementation
 import { Folder, FolderOpen } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 // Add styles constant
 const styles = `
@@ -84,7 +86,7 @@ function StudentHistory({ history, student }) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewComment, setShowNewComment] = useState(false);
-  const [statusMsg, setStatusMsg] = useState(""); // <-- status message state
+  // status message removed in favor of react-toastify toasts
 
   // Collapsed state for folders — initialize from computed months below (stable hook call)
   const [collapsedFolders, setCollapsedFolders] = useState({});
@@ -92,7 +94,7 @@ function StudentHistory({ history, student }) {
   // Sync localHistory with history prop if it changes
   useEffect(() => {
     setLocalHistory(Array.isArray(history) ? history : []);
-    setStatusMsg(""); // clear status message when student changes
+    // clear/leave toasts as-is when student changes
   }, [history]);
 
   // Normalize all keys in each history entry to lowercase and trimmed (e.g., "Student Name" -> "studentname")
@@ -177,28 +179,26 @@ function StudentHistory({ history, student }) {
     }));
   }
 
-  // Add a new comment to history
+  // Wrapper that delegates to the shared addComment (from StudentView)
+  // Keeps UI responsive by updating localHistory immediately; addComment handles the actual sheet insert.
   async function addCommentToHistory(comment) {
-    const now = new Date();
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const serial = (now - excelEpoch) / 86400000;
-    const newEntry = {
-      comment,
-      timestamp: formatExcelDate(serial),
-      // Add other fields if needed (e.g., author, tag)
-    };
-    const newRow = {
-      ['Student identifier']: "Unknown",
-      Student: "Unknown",
-      Comment: comment,
-      Timestamp: formatExcelDate(serial),
-      // Add other fields if needed (e.g., Author, Tag)
-    };
-    setLocalHistory(prev => [...prev, newEntry]);
-    const sheetName = "Student History"; // Change as appropriate
-    const result = await insertRow(sheetName, newRow);
-    setStatusMsg(result.message); // set status message
-    return true;
+    if (!comment) return false;
+    try {
+      // Update UI immediately
+      const newEntry = { comment, timestamp: new Date().toISOString() };
+      setLocalHistory(prev => [...prev, newEntry]);
+
+      // Try to provide student id/name to addComment if available
+      const studentId = (student && (student.ID ?? student.Id ?? student.id)) ?? null;
+      const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
+      // Call shared addComment (non-blocking); tag/createdBy left to defaults unless NewComment supplies them.
+      await addComment(String(comment), undefined, undefined, studentId, studentName);
+      toast.success('Comment saved');
+      return true;
+    } catch (err) {
+      toast.error('Failed to save comment');
+      return false;
+    }
   }
 
   if (!Array.isArray(normalizedHistory) || normalizedHistory.length === 0) {
@@ -245,7 +245,7 @@ function StudentHistory({ history, student }) {
           className={`${showSearch ? '' : 'hidden'} space-y-2`}
         >
           <div id="tag-filter-container" className="flex flex-wrap items-center gap-2 pb-2 border-b border-gray-200">
-            {/* Removed InsertTagButton for filtering history by tag */}
+           
           </div>
           <div className="relative">
             <input
@@ -279,11 +279,7 @@ function StudentHistory({ history, student }) {
           addCommentToHistory={addCommentToHistory}
         />
 
-        {statusMsg && (
-          <div className="mb-2 text-sm text-blue-700 bg-blue-100 rounded px-3 py-2">
-            {statusMsg}
-          </div>
-        )}
+        {/* status toasts are handled by the app-level ToastContainer in App.jsx */}
       </div>
       {/* End History Header */}
 

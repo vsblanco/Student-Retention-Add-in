@@ -12,7 +12,10 @@ function App() {
     <>
       <StudentView />
       <ToastContainer
+      position="bottom-left"
+      pauseOnFocusLoss={false}
       transition={Slide}
+      limit={3}
        />
     </>
   );

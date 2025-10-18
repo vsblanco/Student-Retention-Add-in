@@ -68,15 +68,33 @@ function formatTimestamp(date = new Date()) {
 // Lightweight, safe implementation that logs the outreach by inserting a row
 // into the History sheet (uses Sheets.HISTORY).
 // Non-blocking from callers — callers may call without awaiting.
-async function addComment(commentText, tag, createdBy = 'Unknown', studentId = null, studentName = null) {
+export async function addComment(commentText, tag, createdBy = null, studentId = null, studentName = null) {
   if (!commentText) return;
+  // Resolve effective creator: explicit parameter > SSO utility > localStorage > 'Unknown'
+  let userName = createdBy;
+  try {
+    if (!userName) {
+      // prefer imported SSO helper if available
+      if (SSO && typeof SSO.getUserName === 'function') {
+        userName = SSO.getUserName();
+      }
+      // fallback to localStorage keys used elsewhere in the app
+      if (!userName && typeof window !== 'undefined') {
+        userName = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
+      }
+    }
+  } catch (_) {
+    // ignore resolution errors
+  }
+  if (!userName) userName = 'Unknown';
+
   try {
     await insertRow(Sheets.HISTORY, {
       ID: studentId !== null && studentId !== undefined ? studentId : 0,
       Student: studentName ? String(studentName) : 'Unknown Student',
       Comment: String(commentText),
       Timestamp: formatTimestamp(new Date()),
-      CreatedBy: String(createdBy),
+      CreatedBy: String(userName),
       Tag: tag,
     });
   } catch (err) {
