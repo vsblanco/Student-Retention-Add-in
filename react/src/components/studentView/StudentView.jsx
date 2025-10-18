@@ -44,21 +44,44 @@ const isOutreachTrigger = (text) => {
   return OUTREACH_TRIGGERS_LOWER.some(trigger => lower.includes(trigger));
 };
 
+// helper: format date as "MM/DD/YY HH:MM AM/PM"
+function formatTimestamp(date = new Date()) {
+  try {
+    const d = new Date(date);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const yy = String(d.getFullYear() % 100).padStart(2, '0');
+
+    let hours = d.getHours();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    const hh = String(hours).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+
+    return `${mm}/${dd}/${yy} ${hh}:${mins} ${ampm}`;
+  } catch (_) {
+    return String(date);
+  }
+}
+
 // Lightweight, safe implementation that logs the outreach by inserting a row
 // into the History sheet (uses Sheets.HISTORY).
 // Non-blocking from callers — callers may call without awaiting.
-async function addOutreachComment(commentText) {
+async function addComment(commentText, tag, createdBy = 'Unknown', studentId = null, studentName = null) {
   if (!commentText) return;
   try {
     await insertRow(Sheets.HISTORY, {
+      ID: studentId !== null && studentId !== undefined ? studentId : 0,
+      Student: studentName ? String(studentName) : 'Unknown Student',
       Comment: String(commentText),
-      Timestamp: new Date().toISOString(),
-      CreatedBy: 'Student Retention Add-in',
-      Tag: 'Outreach',
+      Timestamp: formatTimestamp(new Date()),
+      CreatedBy: String(createdBy),
+      Tag: tag,
     });
   } catch (err) {
     // fallback to console logging if insert fails
-    try { console.error('Outreach insert failed:', err); } catch (_) {}
+    try { console.error('Comment insert failed:', err); } catch (_) {}
   }
 }
 
@@ -194,15 +217,19 @@ function StudentView() {
 
           if (studentId && studentName) {
             const effectiveUser = sessionCommentUserRef.current || userName || window.localStorage.getItem('ssoUserName') || 'Unknown';
-            // keep addOutreachComment non-blocking
-            addOutreachComment(newValue);
+            // If the comment text matches a trigger, tag as 'Contacted' and highlight the row.
             if (isOutreachTrigger(newValue)) {
+              // keep addComment non-blocking
+              addComment(newValue, 'Contacted', effectiveUser, studentId, studentName);
               await highlightRow(
                 rowIndex,
                 Math.min(studentNameColIndex, outreachColIndex),
                 Math.abs(studentNameColIndex - outreachColIndex) + 1,
                 'yellow'
               );
+            } else {
+              // non-trigger outreach entries get the 'Outreach' tag
+              addComment(newValue, 'Outreach', effectiveUser, studentId, studentName);
             }
           }
         }
