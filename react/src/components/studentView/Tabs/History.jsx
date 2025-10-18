@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import Comment, { COMMENT_TAGS } from './Comment';
-import NewComment from './NewComment';
-import { formatExcelDate, normalizeKeys } from '../utility/Conversion';
-import { insertRow, editRow } from '../utility/ExcelAPI'; // <-- import editRow here
+import Comment, { COMMENT_TAGS } from '../Parts/Comment';
+import NewComment from '../Modal/NewCommentModal';
+import { formatExcelDate, normalizeKeys } from '../../utility/Conversion';
+import { insertRow, editRow } from '../../utility/ExcelAPI'; // <-- import editRow here
 import { Folder, FolderOpen } from 'lucide-react';
 
 // Add styles constant

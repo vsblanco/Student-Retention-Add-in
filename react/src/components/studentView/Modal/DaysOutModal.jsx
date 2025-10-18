@@ -1,5 +1,5 @@
 import React from 'react';
-import Modal from '../utility/Modal';
+import Modal from '../../utility/Modal';
 
 const DaysOutModal = ({ isOpen, onClose, daysOut }) => {
   const numeric = typeof daysOut === 'number' && !isNaN(daysOut);

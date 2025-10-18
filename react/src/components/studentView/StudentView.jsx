@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import StudentDetails from './StudentDetails.jsx';
-import StudentHistory from './StudentHistory.jsx';
+import StudentDetails from './Tabs/Details.jsx';
+import StudentHistory from './Tabs/History.jsx';
 import StudentHeader from './StudentHeader.jsx';
-import StudentAssignments from './StudentAssignments.jsx';
+import StudentAssignments from './Tabs/Assignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
 import { onSelectionChanged } from '../utility/ExcelAPI.jsx';
 import SSO from '../utility/SSO.jsx';
 import { getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
-import './StudentView.css';
+import './Styling/StudentView.css';
 import { loadCache } from '../utility/Cache.jsx';
 import { insertRow } from '../utility/ExcelAPI.jsx';
 import { Sheets } from '../utility/ColumnMapping.jsx';

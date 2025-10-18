@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Modal from '../utility/Modal';
-import InsertTagButton from './InsertTagButton';
-import { highlightLdaKeywords } from './Comment';
-import { DNCModal, LDAModal } from './Tag.jsx';
+import Modal from '../../utility/Modal.jsx';
+import InsertTagButton from '../Parts/InsertTagButton.jsx';
+import { highlightLdaKeywords } from '../Comment.jsx';
+import { DNCModal, LDAModal } from '../Tag.jsx';
 import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
 import { toast } from 'react-toastify';
 

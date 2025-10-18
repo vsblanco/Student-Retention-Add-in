@@ -6,7 +6,7 @@ import {
   Mail,
   CalendarDays
 } from 'lucide-react';
-import { formatExcelDate } from '../utility/Conversion';
+import { formatExcelDate } from '../../utility/Conversion';
 
 // A small reusable component for displaying a single detail item.
 // This keeps our main component clean.

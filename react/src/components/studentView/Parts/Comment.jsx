@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { formatExcelDate, formatName } from '../utility/Conversion';
-import BounceAnimation from '../utility/BounceAnimation';
-import CommentModal from './CommentModal'; // <-- import CommentModal
+import { formatExcelDate, formatName } from '../../utility/Conversion';
+import BounceAnimation from '../../utility/BounceAnimation';
+import CommentModal from '../../Modal/CommentModal';// <-- import CommentModal
 import { toast } from 'react-toastify';
 
 // CSS class constants
@@ -26,12 +26,20 @@ const showMoreBtnStyleAlt = "text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-o
 // Tag definitions for comments
 export const COMMENT_TAGS = [
   {
-    label: "Urgent",
+    label: "Warning",
     bgClass: "bg-red-50",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-100 text-red-800",
     priority: 2,
     borderColor: "border-red-400",
     about: 'Reserved for urgent attention',
+  },
+    {
+    label: "Withdrawn",
+    bgClass: "bg-red-50",
+    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-700 text-gray-100",
+    priority: 2,
+    borderColor: "border-red-400",
+    about: 'Student has withdrawn from the program',
   },
   {
     label: "Note",
