@@ -219,17 +219,26 @@ function StudentView() {
             const effectiveUser = sessionCommentUserRef.current || userName || window.localStorage.getItem('ssoUserName') || 'Unknown';
             // If the comment text matches a trigger, tag as 'Contacted' and highlight the row.
             if (isOutreachTrigger(newValue)) {
-              // keep addComment non-blocking
-              addComment(newValue, 'Contacted', effectiveUser, studentId, studentName);
-              await highlightRow(
-                rowIndex,
-                Math.min(studentNameColIndex, outreachColIndex),
-                Math.abs(studentNameColIndex - outreachColIndex) + 1,
-                'yellow'
-              );
+              // await the comment insert, then highlight, then refresh cache
+              try {
+                await addComment(newValue, 'Contacted', effectiveUser, studentId, studentName);
+              } catch (_) { /* ignore insert errors */ }
+              try {
+                await highlightRow(
+                  rowIndex,
+                  Math.min(studentNameColIndex, outreachColIndex),
+                  Math.abs(studentNameColIndex - outreachColIndex) + 1,
+                  'yellow'
+                );
+              } catch (_) { /* ignore highlight errors */ }
+              // refresh the cached data to reflect the new comment
+              await refreshCache();
             } else {
-              // non-trigger outreach entries get the 'Outreach' tag
-              addComment(newValue, 'Outreach', effectiveUser, studentId, studentName);
+              // await insert then refresh so UI updates
+              try {
+                await addComment(newValue, 'Outreach', effectiveUser, studentId, studentName);
+                await refreshCache();
+              } catch (_) { /* ignore errors */ }
             }
           }
         }
@@ -238,6 +247,35 @@ function StudentView() {
       errorHandler(error);
     } finally {
       isHandlerRunning.current = false;
+    }
+  }
+
+  // Add: refreshCache updates sheet data and ensures the current active student object
+  // is replaced with the fresh one from the cache (causes StudentHistory to rerender).
+  async function refreshCache() {
+    try {
+      const res = await loadCache();
+      setSheetData({ status: res.status || 'success', data: res.data || {}, message: res.message || '' });
+      setHeaders(res.headers || []);
+      setAssignmentsMap(res.assignmentsMap || {});
+
+      // If we have an active student, try to find the fresh object in the new cache and re-set it.
+      if (res.status === 'success' && activeStudent) {
+        const currentId = activeStudent.ID ?? activeStudent.Id ?? activeStudent.id;
+        if (currentId !== undefined && currentId !== null) {
+          const dataObj = res.data || {};
+          // search through values (keys may be row indexes)
+          const fresh = Object.values(dataObj).find(s => {
+            if (!s) return false;
+            return (s.ID == currentId || s.Id == currentId || s.id == currentId);
+          });
+          if (fresh) {
+            setActiveStudentWithLog(fresh, 'refreshCache');
+          }
+        }
+      }
+    } catch (err) {
+      // swallow errors silently — existing code prefers non-blocking behavior
     }
   }
 
