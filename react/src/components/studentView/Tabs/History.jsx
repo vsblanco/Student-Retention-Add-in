@@ -184,10 +184,6 @@ function StudentHistory({ history, student }) {
   async function addCommentToHistory(comment) {
     if (!comment) return false;
     try {
-      // Update UI immediately
-      const newEntry = { comment, timestamp: new Date().toISOString() };
-      setLocalHistory(prev => [...prev, newEntry]);
-
       // Try to provide student id/name to addComment if available
       const studentId = (student && (student.ID ?? student.Id ?? student.id)) ?? null;
       const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
