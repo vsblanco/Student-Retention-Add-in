@@ -1,8 +1,8 @@
 // Timestamp: 2025-10-03 12:20 PM | Version: 1.2.0
 import React from 'react';
-import { formatName } from '../utility/Conversion';
-import BounceAnimation from '../utility/BounceAnimation';
-import DaysOutModal from './Modal/DaysOutModal';
+import { formatName } from '../../utility/Conversion';
+import BounceAnimation from '../../utility/BounceAnimation';
+import DaysOutModal from '../Modal/DaysOutModal';
 
 // Helper function to get initials from a name string
 const getInitials = (name) => {

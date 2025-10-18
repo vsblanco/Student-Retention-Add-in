@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory from './Tabs/History.jsx';
-import StudentHeader from './StudentHeader.jsx';
+import StudentHeader from './Parts/Header.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { formatName } from '../utility/Conversion.jsx';
 import { onSelectionChanged } from '../utility/ExcelAPI.jsx';
