@@ -147,7 +147,10 @@ function StudentHeader({ student }) {
       safeStudent.New === true ||
       safeStudent.newStudent === true
     );
-  
+
+  // --- NEW: determine if the student is on Hold (string "Yes", case-insensitive) ---
+  const isHold = String(safeStudent.Hold ?? safeStudent.hold ?? '').toLowerCase() === 'yes';
+
   // Helper to check if gradebookUrl is a valid URL
   const isValidGradebookUrl = typeof gradebookUrl === "string" && /^https?:\/\/\S+$/i.test(gradebookUrl);
 
@@ -213,6 +216,32 @@ function StudentHeader({ student }) {
                  NEW
                </span>
              )}
+            {isHold && (
+              <span
+                aria-label="Hold"
+                role="status"
+                title="Hold"
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  transform: 'translate(-25%, 25%)',
+                  background: '#ef4444', // red-500
+                  color: '#ffffff',
+                  borderRadius: 9999,
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  fontWeight: 700,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                  pointerEvents: 'auto',
+                  lineHeight: 1,
+                  zIndex: 10
+                }}
+                tabIndex={0}
+              >
+                HOLD
+              </span>
+            )}
            </button>
           <div className="min-w-0">
             <h2

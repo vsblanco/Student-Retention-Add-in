@@ -89,6 +89,25 @@ function StudentView() {
   // use a ref to keep the current session user available to async handlers
   const sessionCommentUserRef = useRef(null);
 
+  // Keep last source used when setting activeStudent so we can log once in an effect
+  const lastSetSourceRef = useRef(null);
+  function setActiveStudentWithLog(student, source = 'unknown') {
+    lastSetSourceRef.current = source;
+    setActiveStudent(student);
+  }
+
+  // Log activeStudent once when it actually changes (avoids render-time and StrictMode duplicates)
+  useEffect(() => {
+    try {
+      if (activeStudent) {
+        console.log(`activeStudent (source: ${lastSetSourceRef.current || 'unknown'}):`, activeStudent);
+      } else {
+        console.log(`activeStudent cleared (source: ${lastSetSourceRef.current || 'unknown'})`);
+      }
+    } catch (_) {}
+    lastSetSourceRef.current = null;
+  }, [activeStudent]);
+
   // Initialize userName from cache/SSO on mount
   useEffect(() => {
     try {
@@ -208,7 +227,8 @@ function StudentView() {
         setAssignmentsMap(res.assignmentsMap || {});
         if (res.status === 'success' && (!window.Excel || Object.keys(res.data || {}).length === 1)) {
           const firstKey = Object.keys(res.data || [])[0];
-          if (firstKey) setActiveStudent(res.data[firstKey]);
+          if (firstKey)
+            setActiveStudentWithLog(res.data[firstKey], 'initialLoad');
         }
       } catch (err) {
         if (!mounted) return;
@@ -239,7 +259,7 @@ function StudentView() {
           await context.sync();
           const rowIndex = range.rowIndex;
           const colIndex = range.columnIndex;
-          setActiveStudent(sheetData.data[rowIndex] || null);
+          setActiveStudentWithLog(sheetData.data[rowIndex] || null, 'selection');
 
           const outreachIdx = getCanonicalColIdx(headers, 'Outreach');
           const missingAssignmentsIdx = getCanonicalColIdx(headers, 'Missing Assignments');
@@ -365,7 +385,7 @@ function StudentView() {
         {activeTab === 'details' && <StudentDetails student={activeStudent} />}
         {activeTab === 'history' && (
           <StudentHistory
-            history={activeStudent}
+            history={activeStudent && (activeStudent.History || activeStudent.history || [])}
             student={activeStudent}
           />
         )}

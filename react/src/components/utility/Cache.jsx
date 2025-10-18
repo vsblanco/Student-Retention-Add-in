@@ -1,7 +1,6 @@
 import ExampleStudent from './ExampleStudent.jsx';
 import { normalizeHeader, getCanonicalName, canonicalHeaderMap } from './CanonicalMap.jsx'; // <-- added canonicalHeaderMap
-import { canonicalAssignmentsHeaderMap, canonicalHistoryHeaderMap } from './CanonicalMap.jsx';
-import { Sheets } from './ColumnMapping.jsx';
+import { Sheets, COLUMN_ALIASES_HISTORY, COLUMN_ALIASES_ASSIGNMENTS } from './ColumnMapping.jsx';
 
 // Helper: extract Hyperlink from Excel HYPERLINK formula or plain URL
 function extractHyperlink(formulaOrValue) {
@@ -69,6 +68,25 @@ const processRowsWithCanonicalMap = (rows, headers, canonicalMap) => {
   });
 };
 
+// add: resilient logger to increase visibility across environments
+function safeLog(...args) {
+	// try normal console
+	try {
+		if (typeof console !== 'undefined' && typeof console.log === 'function') {
+			console.log(...args);
+		}
+	} catch (e) { /* swallow */ }
+
+	// also try posting to parent frame (useful if running inside a webview or iframe)
+	try {
+		if (typeof window !== 'undefined' && window.parent && window !== window.parent && typeof window.parent.postMessage === 'function') {
+			try {
+				window.parent.postMessage({ source: 'StudentRetentionAddin', log: args }, '*');
+			} catch (e) { /* swallow */ }
+		}
+	} catch (_) { /* swallow */ }
+}
+
 // Public: loadCache - loads sheets (Excel) or returns test-mode ExampleStudent
 export async function loadCache() {
   // Test / browser mode
@@ -108,53 +126,120 @@ export async function loadCache() {
 
       await context.sync();
 
-      // --- Process assignments sheet ---
+      // --- Process assignments sheet (use COLUMN_ALIASES_ASSIGNMENTS for column selection) ---
       let assignmentsMap = {};
       if (assignmentsRange && assignmentsRange.values && assignmentsRange.values.length > 1) {
         const assignmentsHeaders = assignmentsRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
-        const assignmentsValues = assignmentsRange.values.slice(1);
+        const assignmentsRows = assignmentsRange.values.slice(1);
 
+        // Build headerIndexMap: canonicalKey -> column index (use COLUMN_ALIASES_ASSIGNMENTS)
         const headerIndexMap = {};
         assignmentsHeaders.forEach((header, idx) => {
-          const canonical = getCanonicalName(canonicalAssignmentsHeaderMap, header);
-          if (canonical) headerIndexMap[canonical] = idx;
+          if (!header) return;
+          const hLower = String(header).trim().toLowerCase();
+          Object.entries(COLUMN_ALIASES_ASSIGNMENTS).forEach(([canonical, aliases]) => {
+            const aliasList = Array.isArray(aliases) ? aliases : [aliases];
+            const matches = aliasList.concat([canonical]).some(a => a && String(a).trim().toLowerCase() === hLower);
+            if (matches) headerIndexMap[canonical] = idx;
+          });
         });
 
-        assignmentsValues.forEach(row => {
-          const nameIdx = headerIndexMap.StudentName;
-          if (nameIdx === undefined) return;
-          const studentName = row[nameIdx];
-          if (!studentName) return;
-          const assignment = {
-            title: row[headerIndexMap.title] || '',
-            dueDate: row[headerIndexMap.dueDate] || '',
-            score: row[headerIndexMap.score] || '',
-            submissionLink: row[headerIndexMap.submissionLink] || '',
-            assignmentLink: row[headerIndexMap.assignmentLink] || '',
-            submission: row[headerIndexMap.submission] || false
-          };
-          if (!assignmentsMap[studentName]) assignmentsMap[studentName] = [];
-          assignmentsMap[studentName].push(assignment);
+        // Helper: find first property in entry whose key matches predicate (case-insensitive)
+        const findEntryProp = (entry, predicate) => {
+          for (const k of Object.keys(entry)) {
+            if (predicate(k) && entry[k] !== undefined && entry[k] !== null && String(entry[k]).trim() !== '') {
+              return entry[k];
+            }
+          }
+          return null;
+        };
+
+        // Build processed assignment rows using headerIndexMap so only desired columns are included
+        assignmentsRows.forEach(row => {
+          const entry = {};
+          Object.entries(headerIndexMap).forEach(([canonical, idx]) => {
+            entry[canonical] = row[idx];
+          });
+
+          // ensure a default Submission flag for testing (don't overwrite existing value)
+          if (entry.Submission === undefined) entry.Submission = false;
+          if (entry.submission === undefined) entry.submission = false;
+
+          // Locate student name (any key containing 'name'), id (keys containing 'id' or 'identifier'),
+          // and gradebook (exact canonical 'Gradebook' or keys containing 'gradebook')
+          const nameVal = findEntryProp(entry, k => k.toLowerCase().includes('name'));
+          const idVal = findEntryProp(entry, k => k.toLowerCase().includes('id') || k.toLowerCase().includes('identifier'));
+          const gradebookVal = (entry.Gradebook && String(entry.Gradebook).trim() !== '') ? entry.Gradebook : findEntryProp(entry, k => k.toLowerCase().includes('gradebook'));
+
+          if (!nameVal && !idVal && !gradebookVal) return; // nothing to group by
+
+          // push under Gradebook key if available (use string form)
+          if (gradebookVal) {
+            const gbKey = String(gradebookVal);
+            if (!assignmentsMap[gbKey]) assignmentsMap[gbKey] = [];
+            assignmentsMap[gbKey].push(entry);
+          }
+
+          // push under StudentName key if available
+          if (nameVal) {
+            if (!assignmentsMap[nameVal]) assignmentsMap[nameVal] = [];
+            assignmentsMap[nameVal].push(entry);
+          }
+
+          // push under ID key if available
+          if (idVal !== null && idVal !== undefined) {
+            const idKey = String(idVal);
+            if (!assignmentsMap[idKey]) assignmentsMap[idKey] = [];
+            assignmentsMap[idKey].push(entry);
+          }
         });
       }
 
-      // --- Process history sheet ---
+      // --- Process history sheet (using COLUMN_ALIASES_HISTORY to decide which columns to include) ---
       let historyMap = {};
       if (historyRange.values && historyRange.values.length > 1) {
         const historyHeaders = historyRange.values[0].map(h => (typeof h === 'string' ? h.trim() : h));
         const historyRows = historyRange.values.slice(1);
-        const processedHistory = processRowsWithCanonicalMap(historyRows, historyHeaders, canonicalHistoryHeaderMap);
-        processedHistory.forEach(entry => {
+
+        // Build headerIndexMap: canonicalKey -> column index
+        const headerIndexMap = {};
+        historyHeaders.forEach((header, idx) => {
+          if (!header) return;
+          const hLower = String(header).trim().toLowerCase();
+          Object.entries(COLUMN_ALIASES_HISTORY).forEach(([canonical, aliases]) => {
+            // allow aliases to be array or single string
+            const aliasList = Array.isArray(aliases) ? aliases : [aliases];
+            // check aliases and also the canonical name itself
+            const matches = aliasList.concat([canonical]).some(a => a && String(a).trim().toLowerCase() === hLower);
+            if (matches) headerIndexMap[canonical] = idx;
+          });
+        });
+
+        // Build processed history rows using headerIndexMap so only desired columns are included
+        historyRows.forEach(row => {
+          const entry = {};
+          Object.entries(headerIndexMap).forEach(([canonical, idx]) => {
+            entry[canonical] = row[idx];
+          });
+
           const id =
-            entry["ID"] ||
-            entry["Student ID"] ||
-            entry["Student identifier"] ||
+            entry.StudentID ||
+            entry.ID ||
+            entry['Student ID'] ||
+            entry['Student identifier'] ||
             "";
           if (!id) return;
           const key = String(id).toLowerCase();
           if (!historyMap[key]) historyMap[key] = [];
           historyMap[key].push(entry);
         });
+
+        // Log the built historyMap keys (counts) for debugging
+        try {
+          safeLog('Built historyMap keys:', Object.keys(historyMap).length);
+        } catch (e) {
+          /* ignore logging errors */
+        }
       }
 
       // --- Process student sheet ---
@@ -182,6 +267,43 @@ export async function loadCache() {
             studentInfo.History = historyMap[key];
           } else {
             studentInfo.History = [];
+          }
+          // Attach assignments for this student (prefer Gradebook, then StudentName, then ID, fallback to case-insensitive name)
+          // prefer exact Gradebook match first, then exact StudentName, then ID, then case-insensitive name
+          try {
+            let assignmentsForStudent = [];
+            // 1) Gradebook match
+            const gradebookKey = studentInfo.Gradebook ? String(studentInfo.Gradebook) : "";
+            if (gradebookKey && assignmentsMap[gradebookKey]) {
+              assignmentsForStudent = assignmentsMap[gradebookKey];
+            } else {
+              // 2) exact StudentName
+              const nameKey = studentInfo.StudentName || "";
+              if (nameKey && assignmentsMap[nameKey]) {
+                assignmentsForStudent = assignmentsMap[nameKey];
+              // 3) exact ID
+              } else if (id && assignmentsMap[id]) {
+                assignmentsForStudent = assignmentsMap[id];
+              } else if (nameKey) {
+                // 4) case-insensitive name match
+                const lowerName = String(nameKey).trim().toLowerCase();
+                for (const k of Object.keys(assignmentsMap)) {
+                  if (String(k).trim().toLowerCase() === lowerName) {
+                    assignmentsForStudent = assignmentsMap[k];
+                    break;
+                  }
+                }
+              }
+            }
+            studentInfo.Assignments = Array.isArray(assignmentsForStudent) ? assignmentsForStudent : [];
+          } catch (e) {
+            studentInfo.Assignments = [];
+          }
+          // Log this student's history array for debugging
+          try {
+            //safeLog('History for', studentInfo.StudentName || id, studentInfo.History);
+          } catch (e) {
+            /* ignore logging errors */
           }
           const actualRowIndex = startRowIndex + i;
           studentDataMap[actualRowIndex] = studentInfo;
