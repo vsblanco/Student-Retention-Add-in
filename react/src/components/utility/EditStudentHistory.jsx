@@ -1,5 +1,7 @@
 // Import ExcelAPI functions and expose small wrappers for use elsewhere.
-import { insertRow, editRow, deleteRow, Sheets, formatTimestamp } from './ExcelAPI';
+import { insertRow, editRow, deleteRow } from './ExcelAPI';
+import { formatTimestamp } from './Conversion';
+import { Sheets } from './ColumnMapping';
 
 // Lightweight, safe implementation that logs the outreach by inserting a row
 // into the History sheet (uses Sheets.HISTORY).

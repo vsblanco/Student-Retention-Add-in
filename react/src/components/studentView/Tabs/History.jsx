@@ -3,7 +3,7 @@ import Comment, { COMMENT_TAGS } from '../Parts/Comment';
 import NewComment from '../Modal/NewCommentModal';
 import { formatExcelDate, normalizeKeys } from '../../utility/Conversion';
 import { /* insertRow, editRow, */ } from '../../utility/ExcelAPI'; // removed direct insert/edit usage
-import { addComment } from '../StudentView'; // use shared addComment implementation
+import { addComment } from '../../utility/EditStudentHistory';
 import { Folder, FolderOpen } from 'lucide-react';
 import { toast } from 'react-toastify';
 
