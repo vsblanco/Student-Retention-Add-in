@@ -51,22 +51,26 @@ function generateCommentID(StudentID = null, Timestamp = null, Tag = null) {
 		datePart = `${yy}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 	}
 
-	// last 4 digits derived from Tag (map to char codes then take last 4 digits, pad to 4)
-	let tagDigits = '';
+	// last 4 digits derived from Tag (use random 4 digits when Tag not provided)
+	let tagLast4 = '';
 	try {
-		const t = Tag !== null && Tag !== undefined ? String(Tag) : '';
-		tagDigits = t.split('').map(c => String(c.charCodeAt(0))).join('').replace(/\D/g, '');
+		if (Tag === null || Tag === undefined || String(Tag).trim() === '') {
+			// use random 4 digits when no tag provided
+			const rnd = Math.floor(Math.random() * 10000);
+			tagLast4 = String(rnd).padStart(4, '0');
+		} else {
+			const t = String(Tag);
+			const tagDigits = t.split('').map(c => String(c.charCodeAt(0))).join('').replace(/\D/g, '');
+			tagLast4 = tagDigits.slice(-4);
+			if (!tagLast4) tagLast4 = '0000';
+			else if (tagLast4.length < 4) tagLast4 = tagLast4.padStart(4, '0');
+		}
 	} catch (_) {
-		tagDigits = '';
+		const rnd = Math.floor(Math.random() * 10000);
+		tagLast4 = String(rnd).padStart(4, '0');
 	}
-	let tagLast4 = tagDigits.slice(-4);
-	if (!tagLast4) tagLast4 = '0000';
-	else if (tagLast4.length < 4) tagLast4 = tagLast4.padStart(4, '0');
 
 	// final ID: studentLast4 + YYMMDD + tagLast4
-  console.log(Tag)
-  console.log(tagLast4)
-  console.log(tagDigits)
 	return `${studentLast4}${datePart}${tagLast4}`;
 }
 

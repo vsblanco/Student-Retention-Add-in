@@ -4,14 +4,13 @@ import StudentHistory from './Tabs/History.jsx';
 import StudentHeader from './Parts/Header.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { addComment } from '../utility/EditStudentHistory.jsx';
-import { onSelectionChanged } from '../utility/ExcelAPI.jsx';
+import { onSelectionChanged, highlightRow } from '../utility/ExcelAPI.jsx';
 import SSO from '../utility/SSO.jsx';
 import { getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
 import './Styling/StudentView.css';
 import { loadCache } from '../utility/Cache.jsx';
 
-
-// Replace the previous OUTREACH_TRIGGERS array with a normalized, deduplicated, sorted list
+// Outreach trigger phrases (case-insensitive substring match)
 const OUTREACH_TRIGGERS = [
   "hung up",
   "hanged up",
@@ -43,54 +42,6 @@ const isOutreachTrigger = (text) => {
   return OUTREACH_TRIGGERS_LOWER.some(trigger => lower.includes(trigger));
 };
 
-async function highlightRow(rowIndex, startCol, colCount, color = 'yellow') {
-  if (typeof window.Excel === "undefined") return;
-  if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
-  try {
-    await Excel.run(async (context) => {
-      const sheet = context.workbook.worksheets.getActiveWorksheet();
-      const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
-      highlightRange.format.fill.color = color;
-      await context.sync();
-    });
-  } catch (_) {
-    // swallow errors
-  }
-}
-
-// Add a simple refresh subscription API so other scripts can call refreshData()
-// and subscribed components get the new cache payload.
-const _refreshSubscribers = new Set();
-
-export async function refreshData() {
-  try {
-    const res = await loadCache();
-    for (const cb of Array.from(_refreshSubscribers)) {
-      try { cb(res); } catch (_) { /* swallow subscriber errors */ }
-    }
-    return res;
-  } catch (err) {
-    // notify subscribers of an error state
-    const errPayload = { status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' };
-    for (const cb of Array.from(_refreshSubscribers)) {
-      try { cb(errPayload); } catch (_) {}
-    }
-    throw err;
-  }
-}
-
-export function onRefresh(cb) {
-  _refreshSubscribers.add(cb);
-  return () => { _refreshSubscribers.delete(cb); };
-}
-
-// expose for non-module consumers on window
-try {
-  if (typeof window !== 'undefined' && !window.refreshStudentViewData) {
-    window.refreshStudentViewData = refreshData;
-  }
-} catch (_) {}
-
 function StudentView() {
   const [activeStudent, setActiveStudent] = useState(null);
   const [sheetData, setSheetData] = useState({ status: 'loading', data: null, message: 'Loading student data...' });
@@ -98,69 +49,88 @@ function StudentView() {
   const isInitialLoad = useRef(true);
   const [headers, setHeaders] = useState([]);
   const [assignmentsMap, setAssignmentsMap] = useState({});
-  const [userName, setUserName] = useState(null);
+  // renamed for clarity: currentUserName holds the logged-in user name
+  const [currentUserName, setCurrentUserName] = useState(null);
 
   // use a ref to keep the current session user available to async handlers
-  const sessionCommentUserRef = useRef(null);
+  // renamed for clarity: sessionUserRef holds the in-session user fallback for async handlers
+  const sessionUserRef = useRef(null);
 
   // Keep last source used when setting activeStudent so we can log once in an effect
-  const lastSetSourceRef = useRef(null);
-  function setActiveStudentWithLog(student, source = 'unknown') {
-    lastSetSourceRef.current = source;
+  // renamed for clarity
+  const lastSelectionSourceRef = useRef(null);
+  function setSelectedStudentWithSource(student, source = 'unknown') {
+    lastSelectionSourceRef.current = source;
     setActiveStudent(student);
   }
+
+  // Prevent duplicate logs for the same student+source (React StrictMode and multiple setters can cause repeated effects)
+  // renamed for clarity
+  const lastLoggedSelectionRef = useRef({ key: null, source: null });
 
   // Log activeStudent once when it actually changes (avoids render-time and StrictMode duplicates)
   useEffect(() => {
     try {
-      if (activeStudent) {
-        console.log(`activeStudent (source: ${lastSetSourceRef.current || 'unknown'}):`, activeStudent);
+      // compute a small stable key for deduplication
+      const key = activeStudent
+        ? (activeStudent.ID || activeStudent.id || activeStudent.StudentId || activeStudent.StudentID || JSON.stringify(activeStudent))
+        : '<<null>>';
+      const source = lastSelectionSourceRef.current || 'unknown';
+      // if we've already logged this exact key+source recently, skip logging
+      if (lastLoggedSelectionRef.current.key === key && lastLoggedSelectionRef.current.source === source) {
+        // nothing to do
       } else {
-        console.log(`activeStudent cleared (source: ${lastSetSourceRef.current || 'unknown'})`);
+        if (activeStudent) {
+          console.log(`activeStudent (source: ${source}):`, activeStudent);
+        } else {
+          console.log(`activeStudent cleared (source: ${source})`);
+        }
+        lastLoggedSelectionRef.current = { key, source };
       }
     } catch (_) {}
-    lastSetSourceRef.current = null;
+    lastSelectionSourceRef.current = null;
   }, [activeStudent]);
 
-  // Initialize userName from cache/SSO on mount
+  // Initialize currentUserName from cache/SSO on mount
   useEffect(() => {
     try {
       const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
       if (cached) {
-        setUserName(cached);
-        sessionCommentUserRef.current = cached;
+        setCurrentUserName(cached);
+        sessionUserRef.current = cached;
         return;
       }
       if (window.SSO && typeof window.SSO.getUserName === 'function') {
         const n = window.SSO.getUserName();
         if (n) {
-          setUserName(n);
-          sessionCommentUserRef.current = n;
+          setCurrentUserName(n);
+          sessionUserRef.current = n;
         }
       }
     } catch (_) { /* ignore */ }
   }, []);
 
-  // Persist userName and keep sessionCommentUserRef in sync
+  // Persist currentUserName and keep sessionUserRef in sync
   useEffect(() => {
-    if (!userName) return;
-    try { window.localStorage.setItem('ssoUserName', userName); } catch (_) {}
-    sessionCommentUserRef.current = userName;
-  }, [userName]);
+    if (!currentUserName) return;
+    try { window.localStorage.setItem('ssoUserName', currentUserName); } catch (_) {}
+    sessionUserRef.current = currentUserName;
+  }, [currentUserName]);
 
   // Error handler
   const errorHandler = (error) => {
     console.error("onWorksheetChanged error:", error);
   };
 
-  const isHandlerRunning = useRef(false);
+  // renamed to clarify this flag guards the worksheet-change handler
+  const isWorksheetHandlerRunning = useRef(false);
 
-  // Use a stable handler that reads sessionCommentUserRef to avoid stale closures
+  // Use a stable handler that reads sessionUserRef to avoid stale closures
   async function onWorksheetChanged(eventArgs) {
     if (typeof window.Excel === "undefined") return;
     if (!eventArgs || !eventArgs.address) return;
-    if (isHandlerRunning.current) return;
-    isHandlerRunning.current = true;
+    if (isWorksheetHandlerRunning.current) return;
+    isWorksheetHandlerRunning.current = true;
     try {
       await Excel.run(async (context) => {
         if (eventArgs.source !== Excel.EventSource.local || (eventArgs.changeType !== "CellEdited" && eventArgs.changeType !== "RangeEdited")) {
@@ -207,7 +177,7 @@ function StudentView() {
           const rowIndex = changedRange.rowIndex + i;
 
           if (studentId && studentName) {
-            const effectiveUser = sessionCommentUserRef.current || userName || window.localStorage.getItem('ssoUserName') || 'Unknown';
+            const effectiveUser = sessionUserRef.current || currentUserName || window.localStorage.getItem('ssoUserName') || 'Unknown';
             // If the comment text matches a trigger, tag as 'Contacted' and highlight the row.
             if (isOutreachTrigger(newValue)) {
               // await the comment insert, then highlight
@@ -234,15 +204,15 @@ function StudentView() {
     } catch (error) {
       errorHandler(error);
     } finally {
-      isHandlerRunning.current = false;
+      isWorksheetHandlerRunning.current = false;
     }
   }
 
   // Effect: Load sheet cache (Excel or test-mode) once
   useEffect(() => {
     let mounted = true;
-    // subscription handler that updates component state when refreshData notifies
-    const handler = (res) => {
+
+    const applyResult = (res) => {
       if (!mounted) return;
       setSheetData({ status: res.status || 'success', data: res.data || {}, message: res.message || '' });
       setHeaders(res.headers || []);
@@ -250,16 +220,18 @@ function StudentView() {
       if (res.status === 'success' && (!window.Excel || Object.keys(res.data || {}).length === 1)) {
         const firstKey = Object.keys(res.data || [])[0];
         if (firstKey)
-          setActiveStudentWithLog(res.data[firstKey], 'initialLoad');
+          // use the renamed setter here
+          setSelectedStudentWithSource(res.data[firstKey], 'initialLoad');
       }
     };
 
-    // subscribe and fetch initial data via the shared refresh API
-    const unsubscribe = onRefresh(handler);
-    // immediately trigger a refresh to populate data
-    refreshData().catch(() => { /* refreshData already notifies subscribers on error */ });
+    loadCache()
+      .then(applyResult)
+      .catch(() => {
+        applyResult({ status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' });
+      });
 
-    return () => { mounted = false; unsubscribe(); };
+    return () => { mounted = false; };
   }, []);
 
   // Keep selection handler ref for cleanup
@@ -282,7 +254,8 @@ function StudentView() {
           await context.sync();
           const rowIndex = range.rowIndex;
           const colIndex = range.columnIndex;
-          setActiveStudentWithLog(sheetData.data[rowIndex] || null, 'selection');
+          // use the renamed setter here
+          setSelectedStudentWithSource(sheetData.data[rowIndex] || null, 'selection');
 
           const outreachIdx = getCanonicalColIdx(headers, 'Outreach');
           const missingAssignmentsIdx = getCanonicalColIdx(headers, 'Missing Assignments');
@@ -348,13 +321,14 @@ function StudentView() {
   }, [sheetData, headers]);
 
   // Detect test mode (browser, not Excel)
-  const isTestMode = typeof window.Excel === "undefined";
+  // renamed for clarity
+  const runningInBrowser = typeof window.Excel === "undefined";
 
-  // Always show SSO first until userName is set
-  if (!userName) {
+  // Always show SSO first until currentUserName is set
+  if (!currentUserName) {
     return (
       <div className="studentview-outer">
-        <SSO onNameSelect={setUserName} />
+        <SSO onNameSelect={setCurrentUserName} />
       </div>
     );
   }
@@ -380,7 +354,7 @@ function StudentView() {
    
   return (
     <div
-      className={isTestMode ? "studentview-outer testmode" : "studentview-outer"}
+      className={runningInBrowser ? "studentview-outer testmode" : "studentview-outer"}
       style={{ userSelect: "none" }}
     >
       <StudentHeader student={activeStudent} />
