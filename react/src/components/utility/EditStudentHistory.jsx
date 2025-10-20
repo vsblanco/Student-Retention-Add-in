@@ -79,34 +79,41 @@ export async function addComment(commentText, tag, createdBy = null, studentId =
   const userName = checkSSO(createdBy);
 
   try {
-    // Check if an Outreach comment for this student exists today
-    const todaysOutreach = await checkTodaysOutreach(studentId);
-    const ts = formatTimestamp(new Date());
+    // Only check for today's Outreach when the provided tag contains 'Outreach'
+    const isOutreachTag = String(tag || '').toLowerCase().includes('outreach');
+    let todaysOutreach = false;
+    if (isOutreachTag) {
+      todaysOutreach = await checkTodaysOutreach(studentId);
+    }
 
     if (!todaysOutreach) {
-      // No outreach today -> insert a new row
+      // No outreach today (or tag is not Outreach) -> insert a new row
       const result = await insertRow(Sheets.HISTORY, {
         ID: studentId !== null && studentId !== undefined ? studentId : 0,
         Student: studentName ? String(studentName) : 'Unknown Student',
         Comment: String(commentText),
-        Timestamp: ts,
+        Timestamp: formatTimestamp(new Date()),
         CreatedBy: String(userName),
         Tag: tag,
         commentID: generateCommentID(studentId, new Date(), tag)
       });
       try { console.log(`${userName} inserted a new comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+      // trigger a UI refresh (non-blocking)
+      callRefresh().catch(() => {});
       return result;
     } else {
       // Outreach exists today -> edit the existing Outreach row (use helper editComment)
       const outreachCommentID = generateCommentID(studentId, new Date(), 'Outreach');
       const updates = {
         Comment: String(commentText),
-        Timestamp: ts,
+        Timestamp: formatTimestamp(new Date()),
         CreatedBy: String(userName),
         Tag: tag
       };
       const result = await editComment(outreachCommentID, updates);
       try { console.log(`${userName} edited today's Outreach comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+      // trigger a UI refresh (non-blocking)
+      callRefresh().catch(() => {});
       return result;
     }
   } catch (err) {
@@ -114,10 +121,33 @@ export async function addComment(commentText, tag, createdBy = null, studentId =
   }
 }
 
+// Helper: attempt to refresh StudentView data.
+// Tries the global window.refreshStudentViewData first, then dynamic-imports the module.
+// Swallows errors to avoid breaking callers.
+async function callRefresh() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.refreshStudentViewData === 'function') {
+      // fire-and-forget; don't await in callers if they don't need to block
+      await window.refreshStudentViewData();
+      return;
+    }
+    // fallback to dynamic import to avoid top-level circular imports
+    const mod = await import('../studentView/StudentView.jsx');
+    if (mod && typeof mod.refreshData === 'function') {
+      await mod.refreshData();
+    }
+  } catch (_) {
+    // ignore refresh failures
+  }
+}
+
 // Edit an existing history row (rowId can be whatever identifier ExcelAPI expects)
 export async function editComment(commentid, updates) {
   // forwards to ExcelAPI.editRow
-  return editRow(Sheets.HISTORY, "commentID", commentid, updates);
+  const res = await editRow(Sheets.HISTORY, "commentID", commentid, updates);
+  // trigger a UI refresh (non-blocking)
+  callRefresh().catch(() => {});
+  return res;
 }
 
 // Delete a history row by commentID (numeric or string)
@@ -135,6 +165,8 @@ export async function deleteComment(commentID, createdBy = null) {
       console.log(`${userName} deleted comment ${String(commentID)} : 'Unknown Student'}`);
     } catch (_) {}
 
+    // trigger a UI refresh (non-blocking)
+    callRefresh().catch(() => {});
     return result;
   } catch (err) {
     // deletion failed — log and rethrow

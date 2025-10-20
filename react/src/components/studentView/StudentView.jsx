@@ -58,6 +58,39 @@ async function highlightRow(rowIndex, startCol, colCount, color = 'yellow') {
   }
 }
 
+// Add a simple refresh subscription API so other scripts can call refreshData()
+// and subscribed components get the new cache payload.
+const _refreshSubscribers = new Set();
+
+export async function refreshData() {
+  try {
+    const res = await loadCache();
+    for (const cb of Array.from(_refreshSubscribers)) {
+      try { cb(res); } catch (_) { /* swallow subscriber errors */ }
+    }
+    return res;
+  } catch (err) {
+    // notify subscribers of an error state
+    const errPayload = { status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' };
+    for (const cb of Array.from(_refreshSubscribers)) {
+      try { cb(errPayload); } catch (_) {}
+    }
+    throw err;
+  }
+}
+
+export function onRefresh(cb) {
+  _refreshSubscribers.add(cb);
+  return () => { _refreshSubscribers.delete(cb); };
+}
+
+// expose for non-module consumers on window
+try {
+  if (typeof window !== 'undefined' && !window.refreshStudentViewData) {
+    window.refreshStudentViewData = refreshData;
+  }
+} catch (_) {}
+
 function StudentView() {
   const [activeStudent, setActiveStudent] = useState(null);
   const [sheetData, setSheetData] = useState({ status: 'loading', data: null, message: 'Loading student data...' });
@@ -208,26 +241,25 @@ function StudentView() {
   // Effect: Load sheet cache (Excel or test-mode) once
   useEffect(() => {
     let mounted = true;
-    const run = async () => {
-      setSheetData({ status: 'loading', data: null, message: 'Loading student data...' });
-      try {
-        const res = await loadCache();
-        if (!mounted) return;
-        setSheetData({ status: res.status || 'success', data: res.data || {}, message: res.message || '' });
-        setHeaders(res.headers || []);
-        setAssignmentsMap(res.assignmentsMap || {});
-        if (res.status === 'success' && (!window.Excel || Object.keys(res.data || {}).length === 1)) {
-          const firstKey = Object.keys(res.data || [])[0];
-          if (firstKey)
-            setActiveStudentWithLog(res.data[firstKey], 'initialLoad');
-        }
-      } catch (err) {
-        if (!mounted) return;
-        setSheetData({ status: 'error', data: null, message: 'An error occurred while loading the data. Please try again.' });
+    // subscription handler that updates component state when refreshData notifies
+    const handler = (res) => {
+      if (!mounted) return;
+      setSheetData({ status: res.status || 'success', data: res.data || {}, message: res.message || '' });
+      setHeaders(res.headers || []);
+      setAssignmentsMap(res.assignmentsMap || {});
+      if (res.status === 'success' && (!window.Excel || Object.keys(res.data || {}).length === 1)) {
+        const firstKey = Object.keys(res.data || [])[0];
+        if (firstKey)
+          setActiveStudentWithLog(res.data[firstKey], 'initialLoad');
       }
     };
-    run();
-    return () => { mounted = false; };
+
+    // subscribe and fetch initial data via the shared refresh API
+    const unsubscribe = onRefresh(handler);
+    // immediately trigger a refresh to populate data
+    refreshData().catch(() => { /* refreshData already notifies subscribers on error */ });
+
+    return () => { mounted = false; unsubscribe(); };
   }, []);
 
   // Keep selection handler ref for cleanup
