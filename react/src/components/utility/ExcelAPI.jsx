@@ -418,8 +418,8 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
         });
 
         console.log("ExcelAPI.loadSheet: finished - success");
-        // spread payload fields to top-level; no parent `data`
-        return { success: true, message: "Sheet loaded successfully.", ...payload };
+        // Return the payload (data object) directly so callers receive the sheet payload
+        return payload;
     } catch (error) {
         console.log("ExcelAPI.loadSheet: finished - error", error?.message);
         // removed parent `data` per request

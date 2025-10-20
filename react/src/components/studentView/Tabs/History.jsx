@@ -81,7 +81,7 @@ function getMonthYearLabel(monthStr) {
 function StudentHistory({ history, student }) {
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
-
+console.log('StudentHistory history prop:', history);
   // UI state (declare early so hooks order is stable)
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
