@@ -34,18 +34,21 @@ function generateCommentID(StudentID = null, Timestamp = null, Tag = null) {
 	if (!studentLast4) studentLast4 = '0000';
 	else if (studentLast4.length < 4) studentLast4 = studentLast4.padStart(4, '0');
 
-	// date part YYYYMMDD (use provided Timestamp or today)
+	// date part YYMMDD (use provided Timestamp or today) — changed to two-digit year
 	let datePart;
 	try {
 		let d = Timestamp ? new Date(Timestamp) : new Date();
 		if (isNaN(d.getTime())) d = new Date();
 		const yyyy = d.getFullYear();
+		const yy = String(yyyy).slice(-2).padStart(2, '0'); // two-digit year
 		const mm = String(d.getMonth() + 1).padStart(2, '0');
 		const dd = String(d.getDate()).padStart(2, '0');
-		datePart = `${yyyy}${mm}${dd}`;
+		datePart = `${yy}${mm}${dd}`;
 	} catch (_) {
 		const d = new Date();
-		datePart = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+		const yyyy = d.getFullYear();
+		const yy = String(yyyy).slice(-2).padStart(2, '0');
+		datePart = `${yy}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 	}
 
 	// last 4 digits derived from Tag (map to char codes then take last 4 digits, pad to 4)
@@ -60,7 +63,10 @@ function generateCommentID(StudentID = null, Timestamp = null, Tag = null) {
 	if (!tagLast4) tagLast4 = '0000';
 	else if (tagLast4.length < 4) tagLast4 = tagLast4.padStart(4, '0');
 
-	// final ID: studentLast4 + YYYYMMDD + tagLast4
+	// final ID: studentLast4 + YYMMDD + tagLast4
+  console.log(Tag)
+  console.log(tagLast4)
+  console.log(tagDigits)
 	return `${studentLast4}${datePart}${tagLast4}`;
 }
 
@@ -73,24 +79,38 @@ export async function addComment(commentText, tag, createdBy = null, studentId =
   const userName = checkSSO(createdBy);
 
   try {
-    await insertRow(Sheets.HISTORY, {
-      ID: studentId !== null && studentId !== undefined ? studentId : 0,
-      Student: studentName ? String(studentName) : 'Unknown Student',
-      Comment: String(commentText),
-      Timestamp: formatTimestamp(new Date()),
-      CreatedBy: String(userName),
-      Tag: tag,
-      commentID: generateCommentID(studentId, new Date(), tag) // studentLast4 + YYYYMMDD + tagLast4
-    });
+    // Check if an Outreach comment for this student exists today
+    const todaysOutreach = await checkTodaysOutreach(studentId);
+    const ts = formatTimestamp(new Date());
 
-    // Log who created the comment and for which student
-    try {
-      console.log(await checkTodaysOutreach());
-      console.log(`${userName} added a new comment for ${studentName ? String(studentName) : 'Unknown Student'}`);
-    } catch (_) {}
+    if (!todaysOutreach) {
+      // No outreach today -> insert a new row
+      const result = await insertRow(Sheets.HISTORY, {
+        ID: studentId !== null && studentId !== undefined ? studentId : 0,
+        Student: studentName ? String(studentName) : 'Unknown Student',
+        Comment: String(commentText),
+        Timestamp: ts,
+        CreatedBy: String(userName),
+        Tag: tag,
+        commentID: generateCommentID(studentId, new Date(), tag)
+      });
+      try { console.log(`${userName} inserted a new comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+      return result;
+    } else {
+      // Outreach exists today -> edit the existing Outreach row (use helper editComment)
+      const outreachCommentID = generateCommentID(studentId, new Date(), 'Outreach');
+      const updates = {
+        Comment: String(commentText),
+        Timestamp: ts,
+        CreatedBy: String(userName),
+        Tag: tag
+      };
+      const result = await editComment(outreachCommentID, updates);
+      try { console.log(`${userName} edited today's Outreach comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+      return result;
+    }
   } catch (err) {
-    // fallback to console logging if insert fails
-    try { console.error('Comment insert failed:', err); } catch (_) {}
+    try { console.error('Comment insert/edit failed:', err); } catch (_) {}
   }
 }
 
@@ -125,55 +145,12 @@ export async function deleteComment(commentID, createdBy = null) {
 
 // New: check whether there's an "Outreach" comment with a timestamp that matches today.
 // Returns true if at least one Outreach row has a Timestamp on the current date.
-export async function checkTodaysOutreach() {
+export async function checkTodaysOutreach(studentId = null) {
   try {
-    const res = await checkRow(Sheets.HISTORY, 'Tag', 'Outreach');
-
-    if (!res) return false;
-
-    // Normalize to array
-    const rows = Array.isArray(res) ? res : [res];
-
-    const today = new Date();
-    const isoToday = today.toISOString().slice(0, 10); // YYYY-MM-DD
-
-    const parseAndMatch = (ts) => {
-      if (!ts) return false;
-
-      // If it's already a Date or parseable ISO, use it
-      try {
-        const d = new Date(ts);
-        if (!isNaN(d.getTime())) {
-          return d.getFullYear() === today.getFullYear()
-            && d.getMonth() === today.getMonth()
-            && d.getDate() === today.getDate();
-        }
-      } catch (_) {}
-
-      const s = String(ts);
-
-      // Try to find an ISO date substring
-      const iso = s.match(/(\d{4}-\d{2}-\d{2})/);
-      if (iso && iso[1] === isoToday) return true;
-
-      // Try common US format MM/DD/YYYY or M/D/YYYY
-      const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-      if (m) {
-        const mm = parseInt(m[1], 10) - 1;
-        const dd = parseInt(m[2], 10);
-        const yyyy = parseInt(m[3], 10);
-        return yyyy === today.getFullYear() && mm === today.getMonth() && dd === today.getDate();
-      }
-
-      return false;
-    };
-
-    for (const r of rows) {
-      const ts = r && typeof r === 'object' ? (r.Timestamp || r.timestamp || r.Time || r.time) : r;
-      if (parseAndMatch(ts)) return true;
-    }
-
-    return false;
+    const CommentID = generateCommentID(studentId, new Date(), 'Outreach');
+    const res = await checkRow(Sheets.HISTORY, 'commentID', CommentID);
+    // Return true only if checkRow explicitly returned true, otherwise false
+    return res === true;
   } catch (err) {
     try { console.error('checkTodaysOutreach failed:', err); } catch (_) {}
     return false;
