@@ -179,7 +179,7 @@ function StudentView() {
             if (isOutreachTrigger(newValue)) {
               // await the comment insert, then highlight
               try {
-                await addComment(newValue, 'Contacted', effectiveUser, studentId, studentName);
+                await addComment(newValue, 'Contacted, Outreach', effectiveUser, studentId, studentName);
               } catch (_) { /* ignore insert errors */ }
               try {
                 await highlightRow(
