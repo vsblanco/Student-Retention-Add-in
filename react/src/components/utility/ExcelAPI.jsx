@@ -1,3 +1,5 @@
+import { getCanonicalColIdx, canonicalHeaderMap } from './CanonicalMap.jsx';
+
 /**
  * Edits a row in an Excel worksheet by unique ID.
  *
@@ -7,8 +9,6 @@
  * @param {object} newData An object where keys are the column headers to update and values are the new values for those cells.
  * @returns {Promise<{success: boolean, message: string}>}
  */
-import { getCanonicalColIdx, canonicalHeaderMap } from './CanonicalMap.jsx';
-
 export async function editRow(sheet, columnId, rowId, newData) {
     console.log("ExcelAPI.editRow: start", { sheet, columnId, rowId });
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
@@ -313,20 +313,162 @@ export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow
   }
 }
 
+/**
+ * Loads a worksheet's used range and returns headers, values and dimensions.
+ *
+ * @param {string} sheet The name of the worksheet to load.
+ * @returns {Promise<{success: boolean, message: string, data: {headers: any[], values: any[][], rowCount: number, columnCount: number} | null}>}
+ */
+export async function loadSheet(sheet, identifierColumn = null, identifierRow = null) {
+    console.log("ExcelAPI.loadSheet: start", { sheet }, { identifierColumn });
+    if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
+        console.log("ExcelAPI.loadSheet: finished - invalid parameters");
+        // removed parent `data` per request
+        return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
+    }
+
+    try {
+        let payload = null;
+        await Excel.run(async (context) => {
+            const worksheet = context.workbook.worksheets.getItemOrNullObject(sheet);
+            worksheet.load("isNullObject");
+            await context.sync();
+
+            if (worksheet.isNullObject) {
+                throw new Error(`Worksheet "${sheet}" not found.`);
+            }
+
+            const usedRange = worksheet.getUsedRangeOrNullObject();
+            usedRange.load(["values", "rowCount", "columnCount", "address", "isNullObject"]);
+            await context.sync();
+
+            if (usedRange.isNullObject) {
+                // empty sheet (no used range)
+                payload = { rowCount: 0, columnCount: 0, headers: {}, data: [] };
+            } else {
+                const values = usedRange.values || [];
+                const rowCount = usedRange.rowCount || values.length;
+                const columnCount = usedRange.columnCount || (values[0] ? values[0].length : 0);
+                // Normalize headers to strings (use empty string for undefined/null)
+                const headerNames = values.length ? values[0].map(h => (h === undefined || h === null) ? "" : String(h)) : [];
+
+                // Build header -> index map (expose this under `headers` in the result)
+                const headerIndexMap = {};
+                headerNames.forEach((h, i) => {
+                    headerIndexMap[h] = i;
+                });
+
+                // Determine identifier column index by direct presence in headerNames (no canonical matching)
+                const idColIdx = (identifierColumn && typeof identifierColumn === 'string')
+                    ? headerNames.findIndex(h => (h || '').toString().trim() === identifierColumn.toString().trim())
+                    : -1;
+
+                // Build `data`:
+                // - if idColIdx !== -1 => produce an object keyed by identifier value, each value is ALWAYS an array of rows
+                // - otherwise => produce an array of row objects (legacy behavior)
+                let data;
+                if (idColIdx !== -1) {
+                    data = {}; // keyed by identifier value -> array of row objects
+                    for (let r = 1; r < values.length; r++) {
+                        const row = values[r] || [];
+                        const rowObj = {};
+                        for (let c = 0; c < columnCount; c++) {
+                            const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
+                            rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
+                        }
+                        // derive key from the identifier column value; coerce to string to be safe
+                        const rawKey = row[idColIdx];
+                        const key = (rawKey === undefined || rawKey === null) ? `Row${r}` : String(rawKey);
+                        if (!data[key]) data[key] = [];
+                        data[key].push(rowObj);
+                    }
+                } else {
+                    // fallback: array of row objects
+                    data = [];
+                    for (let r = 1; r < values.length; r++) {
+                        const row = values[r] || [];
+                        const rowObj = {};
+                        for (let c = 0; c < columnCount; c++) {
+                            const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
+                            rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
+                        }
+                        data.push(rowObj);
+                    }
+                }
+
+                // If identifierRow was provided, filter the result accordingly:
+                if (identifierRow !== null && identifierRow !== undefined) {
+                    if (idColIdx !== -1) {
+                        // identifierColumn present: return only the array for that identifier key (or empty array)
+                        const lookupKey = String(identifierRow);
+                        data = data[lookupKey] || [];
+                    } else {
+                        // identifierColumn not present: treat identifierRow as a filter value and
+                        // return only rows where any cell loosely equals identifierRow
+                        const lookupVal = identifierRow;
+                        data = (Array.isArray(data) ? data : []).filter(rowObj =>
+                            Object.values(rowObj).some(v => v == lookupVal)
+                        );
+                    }
+                }
+
+                // Note: `headers` here is the index map (name -> column index)
+                payload = { rowCount, columnCount, address: usedRange.address, headers: headerIndexMap, data };
+            }
+        });
+
+        console.log("ExcelAPI.loadSheet: finished - success");
+        // spread payload fields to top-level; no parent `data`
+        return { success: true, message: "Sheet loaded successfully.", ...payload };
+    } catch (error) {
+        console.log("ExcelAPI.loadSheet: finished - error", error?.message);
+        // removed parent `data` per request
+        return { success: false, message: error?.message || String(error) };
+    }
+}
+
 /*
-Example usage for editRow:
+Example usages (updated to new return shape):
+
+// Load sheet and inspect headers/values
+(async () => {
+    const res = await loadSheet("Students");
+    if (res.success) {
+        console.log("Sheet headers (index map):", res.headers);
+        console.log("Row count:", res.rowCount);
+        console.log("Column count:", res.columnCount);
+        console.log("First few rows:", res.data.slice(0, 5));
+    } else {
+        console.error("loadSheet failed:", res.message);
+    }
+})();
+
+// Edit a row by ID
 editRow("Students", "StudentID", 12345, { Name: "John Doe", Status: "Active" })
-  .then(result => console.log(result));
+  .then(result => console.log("editRow:", result));
 
-Example usage for insertRow:
+// Insert a new row (values resolved by canonical headers)
 insertRow("Students", { StudentID: 67890, Name: "Jane Smith", Status: "Inactive" })
-  .then(result => console.log(result));
+  .then(result => console.log("insertRow:", result));
 
-Example usage for deleteRow:
+// Delete a row by ID
 deleteRow("Students", "StudentID", 12345)
-  .then(result => console.log(result));
+  .then(result => console.log("deleteRow:", result));
 
-Example usage for checkRow:
+// Check if a row exists
 checkRow("Students", "StudentID", 12345)
-  .then(exists => console.log("Row exists:", exists));
+  .then(exists => console.log("Row exists:", exists))
+  .catch(err => console.error("checkRow error:", err));
+
+// Highlight a row (rowIndex is 0-based; pass header row index 0 if needed)
+await highlightRow(2, 0, 5, 'lightgreen'); // highlights row index 2 across first 5 columns
+
+// Register a selection-changed handler and remove it later
+(async () => {
+    const handler = await onSelectionChanged(({ address, values }) => {
+        console.log("Selection changed:", address, values);
+    });
+    // later to remove:
+    // await handler.remove();
+})();
 */

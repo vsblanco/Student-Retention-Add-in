@@ -4,7 +4,7 @@ import StudentHistory from './Tabs/History.jsx';
 import StudentHeader from './Parts/Header.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { addComment } from '../utility/EditStudentHistory.jsx';
-import { onSelectionChanged, highlightRow } from '../utility/ExcelAPI.jsx';
+import { onSelectionChanged, highlightRow, loadSheet } from '../utility/ExcelAPI.jsx';
 import SSO from '../utility/SSO.jsx';
 import { getCanonicalColIdx } from '../utility/CanonicalMap.jsx';
 import './Styling/StudentView.css';
@@ -82,6 +82,12 @@ function StudentView() {
       } else {
         if (activeStudent) {
           console.log(`activeStudent (source: ${source}):`, activeStudent);
+          // load and log "Student History" sheet once when a student is selected
+          try {
+            loadSheet('Student History','Student',activeStudent.StudentName)
+              .then(res => console.log(`loadSheet('Student History','Student','${activeStudent.StudentName}')`, res))
+              .catch(err => console.error(`loadSheet('Student History','Student','${activeStudent.StudentName}') error:`, err));
+          } catch (_) { /* ignore */ }
         } else {
           console.log(`activeStudent cleared (source: ${source})`);
         }
