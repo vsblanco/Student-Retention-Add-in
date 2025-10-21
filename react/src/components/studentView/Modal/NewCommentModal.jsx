@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { useRef as useRefHook, useEffect as useEffectHook } from 'react';
 
 const styles = `
   @keyframes fadeInDrop {
@@ -19,7 +20,15 @@ const styles = `
 
 function NewComment({ show, onClose, addCommentToHistory, initialComment = "" }) {
   const newCommentInputRef = useRef(null);
-  const [status, setStatus] = useState('');
+  const [loading, setLoading] = useState(false);
+  const isMountedRef = useRef(null);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (newCommentInputRef.current) {
@@ -30,17 +39,27 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "" })
   const handleSubmit = async () => {
     const comment = newCommentInputRef.current.value.trim();
     if (!comment) {
-      setStatus('Comment cannot be empty.');
+      // keep UX silent on empty comment per request
       return;
     }
-    setStatus('Submitting...');
-    const success = await addCommentToHistory(comment);
-    if (success) {
-      setStatus('Comment added!');
-      newCommentInputRef.current.value = '';
-      if (onClose) onClose();
-    } else {
-      setStatus('Failed to add comment.');
+    setLoading(true);
+    // close modal immediately
+    if (onClose) onClose();
+    // continue submission in background; guard state updates if unmounted
+    try {
+      const success = await addCommentToHistory(comment);
+      if (success) {
+        // clear input if still mounted
+        if (isMountedRef.current && newCommentInputRef.current) {
+          newCommentInputRef.current.value = '';
+        }
+      } else {
+        console.error('Failed to add comment');
+      }
+    } catch (err) {
+      console.error('Error adding comment', err);
+    } finally {
+      if (isMountedRef.current) setLoading(false);
     }
   };
 
@@ -60,20 +79,19 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "" })
           rows={3}
           placeholder="Add a new comment..."
         ></textarea>
-        <div className="flex justify-between items-center mt-4">
-          <span id="comment-status" className="text-sm text-green-600">{status}</span>
-          <button
-            id="submit-comment-button"
-            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-150 disabled:bg-gray-400 disabled:from-gray-400 disabled:to-gray-400"
-            onClick={handleSubmit}
-            disabled={status === 'Submitting...'}
-          >
-            Submit
-          </button>
-        </div>
-      </div>
-    </>
-  );
+        <div className="flex justify-end items-center mt-4">
+           <button
+             id="submit-comment-button"
+             className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-xl shadow-md hover:from-blue-700 hover:to-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-150 disabled:bg-gray-400 disabled:from-gray-400 disabled:to-gray-400"
+             onClick={handleSubmit}
+             disabled={loading}
+           >
+             Submit
+           </button>
+         </div>
+       </div>
+     </>
+   );
 }
 
 export default NewComment;

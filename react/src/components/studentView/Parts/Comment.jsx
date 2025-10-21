@@ -26,7 +26,7 @@ const showMoreBtnStyleAlt = "text-xs text-gray-600 mt-1 rounded bg-gray-200 bg-o
 // Tag definitions for comments
 export const COMMENT_TAGS = [
   {
-    label: "Warning",
+    label: "Urgent",
     bgClass: "bg-red-50",
     tagClass: "px-2 py-0.5 font-semibold rounded-full bg-red-100 text-red-800",
     priority: 2,
@@ -310,6 +310,10 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
   // State for expanding/collapsing long comments and quotes
   const [expanded, setExpanded] = useState(false);
 
+  // Local removal animation state for immediate visual feedback on delete
+  const [removing, setRemoving] = useState(false);
+  const [removed, setRemoved] = useState(false);
+
   // Ref and state for regular comment
   const commentRef = React.useRef(null);
   const [isLong, setIsLong] = useState(false);
@@ -438,6 +442,9 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
     }
   }, [entry.comment, commentContent, quoteText, expanded]);
 
+  // If completely removed, render nothing — placed after all hooks so hook order is stable
+  if (removed) return null;
+
   // Determine border color from the highest priority tag
   const borderColorClass = tagInfo && tagInfo.borderColor ? tagInfo.borderColor : "border-gray-300";
 
@@ -483,7 +490,18 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
         onContextMenu={onContextMenu}
         style={{
           position: 'relative',
-          transition: 'background 0.15s, box-shadow 0.15s'
+          transition: 'background 0.15s, box-shadow 0.15s, opacity 300ms ease, transform 300ms ease, height 300ms ease, margin 300ms ease, padding 300ms ease',
+          // animate out when removing
+          opacity: removing ? 0 : 1,
+          transform: removing ? 'translateX(8px) scale(0.995)' : 'none',
+          // collapse visually by letting inline styles override paddings/margins/height when removing
+          overflow: removing ? 'hidden' : undefined,
+          paddingTop: removing ? 0 : undefined,
+          paddingBottom: removing ? 0 : undefined,
+          marginTop: removing ? 0 : undefined,
+          marginBottom: removing ? 0 : undefined,
+          height: removing ? 0 : undefined,
+          pointerEvents: removing ? 'none' : undefined
         }}
         onClick={() => setModalOpen(true)}
         tabIndex={0}
@@ -608,6 +626,15 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
       <CommentModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
+        // onDeleted gives immediate feedback: animate out locally then unmount
+        onDeleted={() => {
+          // close modal immediately (safety)
+          setModalOpen(false);
+          // start removal animation
+          setRemoving(true);
+          // unmount after animation completes
+          setTimeout(() => setRemoved(true), 350);
+        }}
         entry={entry}
         COMMENT_TAGS={COMMENT_TAGS}
         findTagInfo={findTagInfo}

@@ -10,6 +10,8 @@ import { deleteComment, editComment } from '../../utility/EditStudentHistory.jsx
 function CommentModal({
   isOpen,
   onClose,
+  // called by modal after a successful delete to allow immediate local removal/animation
+  onDeleted,
   entry,
   COMMENT_TAGS,
   findTagInfo,
@@ -142,8 +144,12 @@ function CommentModal({
         theme: "light",
         style: { fontSize: '1rem' }
       });
-      // close the modal after successful delete
-      onClose();
+      // give caller immediate visual feedback if it wants to animate/remove locally
+      if (typeof onDeleted === 'function') {
+        try { onDeleted(); } catch (_) { /* swallow handler errors */ }
+      } else {
+        onClose();
+      }
     } catch (err) {
       // report failure but keep modal open for retry/cancellation
       try { console.error('Delete comment failed:', err); } catch (_) {}

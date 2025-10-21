@@ -400,4 +400,6 @@ function StudentView() {
   );
 }
 
-export default StudentView;
+StudentView.displayName = 'StudentView';
+
+export default React.memo(StudentView);

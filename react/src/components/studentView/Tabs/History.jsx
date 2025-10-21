@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Comment, { COMMENT_TAGS } from '../Parts/Comment';
 import NewComment from '../Modal/NewCommentModal';
-import { formatExcelDate, normalizeKeys } from '../../utility/Conversion';
+import { formatExcelDate, normalizeKeys, formatTimestamp } from '../../utility/Conversion';
 import { /* insertRow, editRow, */ } from '../../utility/ExcelAPI'; // removed direct insert/edit usage
-import { addComment } from '../../utility/EditStudentHistory';
+import { addComment, generateCommentID } from '../../utility/EditStudentHistory';
 import { Folder, FolderOpen } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -78,6 +78,19 @@ function getMonthYearLabel(monthStr) {
   return `${monthNames[monthIdx]} ${year}`;
 }
 
+// add helper to parse timestamp to milliseconds
+function parseTimestampMs(ts) {
+  if (ts == null) return 0;
+  // numeric (Excel serial) or numeric string
+  if (!isNaN(ts)) {
+    const n = Number(ts);
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    return excelEpoch.getTime() + n * 86400000;
+  }
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 function StudentHistory({ history, student }) {
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
@@ -136,15 +149,22 @@ console.log('StudentHistory history prop:', history);
     });
   }
 
-  // Split filteredHistory into pinned and unpinned, then sort unpinned by recency (reverse order)
-  const pinnedComments = filteredHistory.filter(isEntryPinned);
-  const unpinnedComments = filteredHistory.filter(entry => !isEntryPinned(entry));
+  // Split filteredHistory into pinned and unpinned, then sort unpinned by recency (newest first)
+  const pinnedComments = filteredHistory
+    .filter(isEntryPinned)
+    .slice()
+    .sort((a, b) => parseTimestampMs(b.timestamp) - parseTimestampMs(a.timestamp));
 
-  // Group comments by month
+  const unpinnedComments = filteredHistory
+    .filter(entry => !isEntryPinned(entry))
+    .slice()
+    .sort((a, b) => parseTimestampMs(b.timestamp) - parseTimestampMs(a.timestamp));
+
+  // Group comments by month using the sorted unpinnedComments so newest items are first
   const monthGroups = {};
   const currentMonth = getCurrentMonth();
   const currentMonthComments = [];
-  filteredHistory.forEach(entry => {
+  unpinnedComments.forEach(entry => {
     const month = getMonthFromTimestamp(entry.timestamp);
     if (month === currentMonth) {
       currentMonthComments.push(entry);
@@ -181,17 +201,39 @@ console.log('StudentHistory history prop:', history);
 
   // Wrapper that delegates to the shared addComment (from StudentView)
   // Keeps UI responsive by updating localHistory immediately; addComment handles the actual sheet insert.
-  async function addCommentToHistory(comment) {
+  async function addCommentToHistory(comment, tag = '') {
     if (!comment) return false;
     try {
       // Try to provide student id/name to addComment if available
       const studentId = (student && (student.ID ?? student.Id ?? student.id)) ?? null;
       const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
-      // Call shared addComment (non-blocking); tag/createdBy left to defaults unless NewComment supplies them.
+      const timestamp = formatTimestamp(new Date());
+      const commetID = generateCommentID(studentId, timestamp, tag);
+      console.log('Generated comment ID:', commetID);
+      // Build a normalized optimistic entry so it renders like others
+      const commentPreview = {
+        comment: String(comment),
+        timestamp: timestamp,
+        tag: tag, // NewComment can be extended to pass a tag if needed
+        createdBy: '', // NewComment can pass createdBy if available
+        studentId,
+        studentName,
+        commentid: commetID,
+        
+      };
+      const commentPreviewEntry = normalizeKeys(commentPreview);
+
+      // Update UI
+      setLocalHistory(prev => [commentPreviewEntry, ...(Array.isArray(prev) ? prev : [])]);
+
+      // Persist via shared addComment (actual sheet insert)
       await addComment(String(comment), undefined, undefined, studentId, studentName);
+
       toast.success('Comment saved');
       return true;
     } catch (err) {
+      // Roll back optimistic update on error
+      setLocalHistory(prev => (Array.isArray(prev) ? prev.filter(e => e !== commentPreviewEntry) : []));
       toast.error('Failed to save comment');
       return false;
     }
@@ -299,7 +341,7 @@ console.log('StudentHistory history prop:', history);
             />
           ))}
           {/* Current month comments (not in a folder, only unpinned) */}
-          {[...currentMonthComments].filter(entry => !isEntryPinned(entry)).reverse().map((entry, idx) => (
+          {[...currentMonthComments].filter(entry => !isEntryPinned(entry)).map((entry, idx) => (
             <Comment
               key={`currentmonth-${idx}`}
               entry={entry}
@@ -331,7 +373,7 @@ console.log('StudentHistory history prop:', history);
               </div>
               {!collapsedFolders[month] && (
                 <ul className="space-y-2">
-                  {[...monthGroups[month]].filter(entry => !isEntryPinned(entry)).reverse().map((entry, idx) => (
+                  {[...monthGroups[month]].filter(entry => !isEntryPinned(entry)).map((entry, idx) => (
                     <Comment
                       key={`month-${month}-${idx}`}
                       entry={entry}

@@ -22,7 +22,7 @@ function checkSSO(provided) {
 }
 
 // New: generate numeric comment IDs (prefers a localStorage counter, falls back to timestamp)
-function generateCommentID(StudentID = null, Timestamp = null, Tag = null) {
+export function generateCommentID(StudentID = null, Timestamp = null, Tag = null) {
 	// last 4 numeric digits of StudentID (pad to 4)
 	let studentDigits = '';
 	try {
