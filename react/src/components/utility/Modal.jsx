@@ -50,7 +50,7 @@ const Modal = ({
           maxHeight: 500,
           borderRadius,
           padding,
-          background: "rgba(255,255,255,0.7)",
+          background: "rgba(255,255,255,0.85)",
           boxShadow: "0 8px 32px 0 rgba(31, 38, 135, 0.37)",
           backdropFilter: "blur(15px) saturate(140%)",
           WebkitBackdropFilter: "blur(15px) saturate(140%)",

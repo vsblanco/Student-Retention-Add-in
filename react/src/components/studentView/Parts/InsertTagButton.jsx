@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 // TagPill Component
 // =======================
 export const TagPill = ({ label, spanClass }) => (
-  <span className={`relative px-2 py-1 rounded-full ${spanClass}`}>
+  // slimmer pill: even smaller horizontal padding
+  <span className={`relative inline-flex items-center px-1 py-1 rounded-full text-xs leading-none ${spanClass}`}>
     <span className="relative z-10">{label}</span>
   </span>
 );
@@ -13,19 +14,30 @@ export const TagPill = ({ label, spanClass }) => (
 // =======================
 // TagButton Component
 // =======================
-export const TagButton = ({ tag, onClick }) => (
-  <a
-    href="#"
-    className={`px-3 py-2 text-sm text-gray-700 rounded-md flex items-center hover:brightness-95 ${tag.spanClass}`}
-    title={tag.title}
-    onClick={e => {
-      e.preventDefault();
-      onClick(tag.label);
-    }}
-  >
-    <TagPill label={tag.label} spanClass={tag.spanClass} />
-  </a>
-);
+export const TagButton = ({ tag, onClick, index = 0, animate = false }) => {
+  // stagger: 36ms per item (tweak as desired)
+  const delayMs = index * 36;
+  const animStyle = animate
+    ? { animation: `fallDown 320ms cubic-bezier(.22,.9,.17,1) ${delayMs}ms both` }
+    : undefined;
+
+  return (
+    <a
+      href="#"
+      // Use a neutral button style for the outer anchor so the inner TagPill keeps its color.
+      // tighter anchor padding + smaller text
+      className={`px-2 py-1 text-xs text-gray-700 rounded-md flex items-center hover:brightness-95 fall-item`}
+      title={tag.title}
+      onClick={e => {
+        e.preventDefault();
+        onClick(tag.label);
+      }}
+      style={animStyle}
+    >
+      <TagPill label={tag.label} spanClass={tag.spanClass} />
+    </a>
+  );
+};
 
 // =======================
 // TagDropdownModal Component
@@ -94,16 +106,20 @@ export const TagDropdownModal = ({
     <div
       ref={dropdownRef}
       id={id}
-      className={`glass-dropdown rounded-lg flex flex-col gap-1 items-stretch bg-gray-200/90 transition-opacity duration-180 ${fade ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+      // use a slightly more translucent background so backdrop blur is visible
+      className={`glass-dropdown rounded-lg flex flex-col gap-1 items-stretch bg-gray/60 transition-opacity duration-180 ${fade ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       style={{
         position: 'absolute',
-        minWidth: '120px',
-        maxHeight: '260px',
+        minWidth: '100px',
+        maxHeight: '250px',
         boxShadow: '0 8px 24px 0 rgb(0 0 0 / 0.08)',
         overflowY: 'auto',
         borderRadius: '1rem',
-        padding: '0.5rem 0',
+        padding: '0rem 0',
         zIndex: 9999,
+        // enable backdrop blur (and include webkit prefix)
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         ...pos,
       }}
     >
@@ -128,10 +144,38 @@ export const TagDropdownModal = ({
             background: rgba(0,0,0,0.1);
             border-radius: 8px;
           }
+
+          /* fall-down animation for tag items */
+          .fall-item {
+            will-change: transform, opacity;
+          }
+          @keyframes fallDown {
+            from {
+              transform: translateY(-12px);
+              opacity: 0;
+            }
+            to {
+              transform: translateY(0);
+              opacity: 1;
+            }
+          }
+          /* Respect reduced motion preferences */
+          @media (prefers-reduced-motion: reduce) {
+            .fall-item {
+              animation-duration: 0.001ms !important;
+              animation-delay: 0ms !important;
+            }
+          }
         `}
       </style>
-      {tags.map(tag => (
-        <TagButton key={tag.label} tag={tag} onClick={onTagClick} />
+      {tags.map((tag, idx) => (
+        <TagButton
+          key={tag.label}
+          tag={tag}
+          onClick={onTagClick}
+          index={idx}
+          animate={fade}
+        />
       ))}
     </div>,
     document.body

@@ -3,6 +3,7 @@ import { useRef as useRefHook, useEffect as useEffectHook } from 'react';
 import InsertTagButton from '../Parts/InsertTagButton';
 import TagContainer from '../Parts/TagContainer';
 import { COMMENT_TAGS } from '../Parts/Comment.jsx';
+import { DNCModal, LDAModal } from '../Tag.jsx';
 
 const styles = `
   @keyframes fadeInDrop {
@@ -21,10 +22,15 @@ const styles = `
   }
 `;
 
-function NewComment({ show, onClose, addCommentToHistory, initialComment = "" }) {
+function NewComment({ show, onClose, addCommentToHistory, initialComment = "", phone = "", otherPhone = "", email = "" }) {
   const newCommentInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const isMountedRef = useRef(null);
+
+  // DNC / LDA modal state (copied behavior from CommentModal.jsx)
+  const [showDNCModal, setShowDNCModal] = useState(false);
+  const [pendingDncTag, setPendingDncTag] = useState(false);
+  const [showLDAModal, setShowLDAModal] = useState(false);
 
   // dropdown state for InsertTagButton
   const [showDropdown, setShowDropdown] = useState(false);
@@ -45,12 +51,58 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "" })
 
   // insert tag label at cursor position inside textarea
   const handleTagClick = (label) => {
-    // Do NOT insert the tag label into the textarea.
-    // Only record the selected tag in the insertedTags pill list and close the dropdown.
+    // Special handling for DNC / LDA (open modals as in CommentModal)
+    if (label === 'DNC') {
+      setShowDropdown(false);
+      setDropdownTarget(null);
+      setShowDNCModal(true);
+      setPendingDncTag(true);
+      return;
+    }
+    if (label === 'LDA') {
+      setShowDropdown(false);
+      setDropdownTarget(null);
+      setShowLDAModal(true);
+      return;
+    }
+
+    // Default behavior: record the selected tag in the insertedTags pill list and close the dropdown.
     setShowDropdown(false);
     setDropdownTarget(null);
     const tagObj = tags.find(t => t.label === label) || { label, spanClass: 'bg-gray-100 text-gray-800' };
     setInsertedTags(prev => (prev.some(t => (typeof t === 'string' ? t : t.label) === tagObj.label) ? prev : [...prev, tagObj]));
+  };
+
+  // DNC selection callback: insert the chosen DNC string into the pill list (tentative)
+  const handleDncSelect = (dncString) => {
+    setShowDNCModal(false);
+    setPendingDncTag(false);
+    if (dncString) {
+      // Copy styling from the parent "DNC" tag so the new DNC variant keeps the same color
+      const parent = tags.find(t => (t.label || '').toUpperCase() === 'DNC');
+      const tagObj = {
+        label: dncString,
+        title: dncString,
+        spanClass: parent ? parent.spanClass : 'bg-gray-100 text-gray-800'
+      };
+      setInsertedTags(prev => (prev.some(t => (typeof t === 'string' ? t : t.label) === tagObj.label) ? prev : [...prev, tagObj]));
+      setShowDropdown(false);
+    }
+  };
+
+  // LDA selection callback: LDAModal returns the formatted LDA string (e.g. "LDA MM/DD/YY")
+  const handleLdaSelect = (ldaString) => {
+    setShowLDAModal(false);
+    if (ldaString) {
+      // Copy styling from the parent "LDA" tag so the LDA variant keeps the same color
+      const parent = tags.find(t => (t.label || '').toUpperCase() === 'LDA');
+      const tagObj = {
+        label: ldaString,
+        title: ldaString,
+        spanClass: parent ? parent.spanClass : 'bg-gray-100 text-gray-800'
+      };
+      setInsertedTags(prev => (prev.some(t => (typeof t === 'string' ? t : t.label) === tagObj.label) ? prev : [...prev, tagObj]));
+    }
   };
 
   React.useEffect(() => {
@@ -124,6 +176,7 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "" })
               setDropdownTarget={setDropdownTarget}
               targetName="newComment"
               tags={tags}
+              forceCloseDropdown={showDNCModal || showLDAModal || pendingDncTag}
             />
           </div>
           <TagContainer tags={insertedTags} onRemove={handleRemoveInsertedTag} />
@@ -147,8 +200,27 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "" })
            </button>
          </div>
        </div>
+
+       {/* Render DNC/LDA modals alongside the component so they can return tags into insertedTags */}
+       {showDNCModal && (
+         <DNCModal
+           isOpen={showDNCModal}
+           onClose={() => { setShowDNCModal(false); setPendingDncTag(false); }}
+           phone={phone}
+           otherPhone={otherPhone}
+           email={email}
+           onSelect={handleDncSelect}
+         />
+       )}
+       {showLDAModal && (
+         <LDAModal
+           isOpen={showLDAModal}
+           onClose={() => setShowLDAModal(false)}
+           onSelect={handleLdaSelect}
+         />
+       )}
      </>
    );
-}
+ }
 
-export default NewComment;
+ export default NewComment;

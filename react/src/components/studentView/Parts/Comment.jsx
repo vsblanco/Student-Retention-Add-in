@@ -33,14 +33,6 @@ export const COMMENT_TAGS = [
     borderColor: "border-red-400",
     about: 'Reserved for urgent attention',
   },
-    {
-    label: "Withdrawn",
-    bgClass: "bg-red-50",
-    tagClass: "px-2 py-0.5 font-semibold rounded-full bg-gray-700 text-gray-100",
-    priority: 2,
-    borderColor: "border-red-400",
-    about: 'Student has withdrawn from the program',
-  },
   {
     label: "Note",
     bgClass: "bg-gray-200",
