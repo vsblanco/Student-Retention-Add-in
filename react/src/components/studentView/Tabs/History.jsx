@@ -210,7 +210,7 @@ console.log('StudentHistory history prop:', history);
       const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
 
       // Persist via shared addComment (actual sheet insert)
-      await addComment(String(comment), undefined, undefined, studentId, studentName);
+      await addComment(String(comment), tag, undefined, studentId, studentName);
       await reload(); // reload history from parent to ensure sync
       toast.success('Comment saved');
       return true;

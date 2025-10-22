@@ -77,7 +77,7 @@ export function generateCommentID(StudentID = null, Timestamp = null, Tag = null
 // Lightweight, safe implementation that logs the outreach by inserting a row
 // into the History sheet (uses Sheets.HISTORY).
 // Non-blocking from callers — callers may call without awaiting.
-export async function addComment(commentText, tag, createdBy = null, studentId = null, studentName = null) {
+export async function addComment(commentText, tag='', createdBy = null, studentId = null, studentName = null) {
   if (!commentText) return;
   
   const userName = checkSSO(createdBy);

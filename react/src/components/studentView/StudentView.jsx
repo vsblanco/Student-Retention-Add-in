@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
@@ -53,6 +53,31 @@ function StudentView() {
 			return <StudentDetails student={activeStudent} />
 		}
 	};
+
+  // Register Excel selection-changed handler to log selection details.
+  useEffect(() => {
+	let handlerRef = null;
+	(async () => {
+	  try {
+		handlerRef = await onSelectionChanged(({ address, values }) => {
+		  console.log('Excel selection changed:', { address, values });
+		});
+	  } catch (err) {
+		console.error('Failed to register Excel selection handler:', err);
+	  }
+	})();
+
+	// Cleanup: unregister the handler when the component unmounts
+	return () => {
+	  if (handlerRef && typeof handlerRef.remove === 'function') {
+		try {
+		  handlerRef.remove();
+		} catch (err) {
+		  console.warn('Failed to remove selection handler:', err);
+		}
+	  }
+	};
+  }, []);
 
 	return (
 		<div className="studentview-outer">
