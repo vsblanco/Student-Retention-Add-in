@@ -228,6 +228,11 @@ console.log('StudentHistory history prop:', history);
     toast.error('Comment deleted');
   }
 
+  async function saveCommentFromHistory(commentID) {
+    await reload();
+    toast.success('Comment changes saved');
+  }
+
   if (!Array.isArray(normalizedHistory) || normalizedHistory.length === 0) {
     return (
       <div id="history-content">
@@ -328,6 +333,7 @@ console.log('StudentHistory history prop:', history);
               searchTerm={searchTerm}
               index={index}
               delete={deleteCommentFromHistory}
+              save={saveCommentFromHistory}
             />
           ))}
           {/* Current month comments (not in a folder, only unpinned) */}
@@ -338,6 +344,7 @@ console.log('StudentHistory history prop:', history);
               searchTerm={searchTerm}
               index={idx}
               delete={deleteCommentFromHistory}
+              save={saveCommentFromHistory}
             />
           ))}
           {/* Previous months in collapsible folders (only unpinned) */}
@@ -371,6 +378,7 @@ console.log('StudentHistory history prop:', history);
                       searchTerm={searchTerm}
                       index={idx}
                       delete={deleteCommentFromHistory}
+                      save={saveCommentFromHistory}
                     />
                   ))}
                 </ul>

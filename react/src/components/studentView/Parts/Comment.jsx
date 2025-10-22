@@ -147,7 +147,7 @@ function findTagInfo(label) {
   return null;
 }
 
-function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFunction }) {
+function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFunction, save: saveFunction }) {
   // Support multiple tags separated by commas
   let tags = entry.tag
     ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
@@ -625,6 +625,9 @@ function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFuncti
       </li>
       <CommentModal
         isOpen={modalOpen}
+        onSaved={(updatedEntry) => {
+          saveFunction(updatedEntry);
+        }}
         onClose={() => setModalOpen(false)}
         // onDeleted gives immediate feedback: animate out locally then unmount
         onDeleted={(commentID) => {

@@ -12,6 +12,7 @@ function CommentModal({
   onClose,
   // called by modal after a successful delete to allow immediate local removal/animation
   onDeleted,
+  onSaved,
   entry,
   COMMENT_TAGS,
   findTagInfo,
@@ -99,31 +100,11 @@ function CommentModal({
     // send update to shared edit implementation
     try {
       await editComment(entry.commentid, newCommentEntry);
+      onSaved(entry.commentid);
     } catch (err) {
       try { console.error('Edit comment failed:', err); } catch (_) {}
-      toast.error("Failed to save comment.", {
-        position: "bottom-left",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: false,
-        theme: "light",
-        style: { fontSize: '1rem' }
-      });
       return;
     }
-
-    toast.success("Comment updated.", {
-      position: "bottom-left",
-      autoClose: 3000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: false,
-      draggable: false,
-      theme: "light",
-      style: { fontSize: '1rem' }
-    });
     // Switch back to view mode so the newly saved tags appear in the view
     setModalMode('view');
   };
