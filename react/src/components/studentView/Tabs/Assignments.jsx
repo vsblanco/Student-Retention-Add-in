@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FileUp } from 'lucide-react';
 
 const cardStyle =
@@ -12,17 +12,45 @@ const submissionInactiveStyle = 'bg-gray-300 text-gray-600 cursor-not-allowed';
 const dueStyle = 'text-sm text-gray-500';
 const scoreStyle = 'text-sm text-gray-600';
 
-function StudentAssignments({ student, fieldMap }) {
-  const assignments = student?.Assignments || [];
-  // Default field mapping
-  const map = fieldMap || {
-    title: 'title',
-    dueDate: 'dueDate',
-    score: 'score',
-    submissionLink: 'submissionLink',
-    assignmentLink: 'assignmentLink',
-    submission: 'submission' // new field
-  };
+export const COLUMN_ALIASES_ASSIGNMENTS = {
+  student: ['Student Name', 'Student'],
+  title: ['Assignment Title', 'Title', 'Assignment'],
+  dueDate: ['Due Date', 'Deadline'],
+  score: ['Score', 'Points'],
+  submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
+  assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link'],
+  gradebook: ['Gradebook','gradeBookLink'],
+  submission: ['submission', 'Submitted', 'Submission Status', 'Is Submitted']
+};
+
+function StudentAssignments({ assignments, reload }) {
+  // resolve field map by matching aliases to actual object keys (case/space-insensitive)
+  const map = useMemo(() => {
+    // no data -> fallback to first alias for each canonical field
+    if (!assignments || !assignments.length) {
+      const out = {};
+      for (const [canonical, aliases] of Object.entries(COLUMN_ALIASES_ASSIGNMENTS)) {
+        out[canonical] = (aliases && aliases.length) ? aliases[0] : canonical;
+      }
+      return out;
+    }
+
+    const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const keys = Object.keys(assignments[0]);
+
+    const out = {};
+    for (const [canonical, aliases] of Object.entries(COLUMN_ALIASES_ASSIGNMENTS)) {
+      // try to find a key that matches any alias (normalized)
+      let found = keys.find((k) => aliases.some((a) => normalize(a) === normalize(k)));
+      // fallback: try matching canonical name itself (normalized)
+      if (!found) {
+        found = keys.find((k) => normalize(k) === normalize(canonical));
+      }
+      // final fallback: first alias
+      out[canonical] = found || ((aliases && aliases.length) ? aliases[0] : canonical);
+    }
+    return out;
+  }, [assignments]);
 
   if (!assignments.length) {
     return <div className="text-gray-500">No assignments found.</div>;
@@ -53,75 +81,75 @@ function StudentAssignments({ student, fieldMap }) {
         }}
       >
         {assignments.map((a, idx) => {
-          const borderColor =
-            a[map.submission] === false
-              ? "border-red-500"
-              : "border-blue-300";
-          return (
-            <div key={idx} className={`${cardStyle} group border-l-4 ${borderColor} pl-4`}>
-              <div className={`${mainRowStyle} w-full`}>
-                <div className="flex-1 flex flex-col justify-between h-full">
-                  <div>
-                    <div className={titleRowStyle}>
-                      {a[map.assignmentLink] ? (
-                        <a
-                          href={a[map.assignmentLink]}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="View Assignment"
-                          style={{ textDecoration: 'none' }}
-                        >
-                          {a[map.title]}
-                        </a>
-                      ) : (
-                        <span title="No Assignment">
-                          {a[map.title]}
-                        </span>
-                      )}
-                    </div>
-                    <div className={dueStyle}>Due: {a[map.dueDate]}</div>
-                    {a[map.submission] === false && (
-                      <div className="mt-1">
-                        {a[map.submissionLink] ? (
-                          <a
-                            href={a[map.submissionLink]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 cursor-pointer"
-                            title="View Submission"
-                            style={{ width: '60px', justifyContent: 'center' }} // fixed width
-                          >
-                            <div className="text-red-500 text-xs font-semibold">missing</div>
-                          </a>
-                        ) : (
-                          <div
-                            className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
-                            title="No Submission"
-                            style={{ width: '90px', justifyContent: 'center' }} // fixed width
-                          >
-                            <div className="text-red-500 text-xs font-semibold">missing</div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex justify-end mt-2">
-                    <div className={scoreStyle + " flex items-center"}>
-                      Score: {a[map.score] === '' || a[map.score] === undefined || a[map.score] === null ? 0 : a[map.score]}
-                    </div>
-                  </div>
-                </div>
-                <div className={`${iconGroupStyle} flex-shrink-0`}>
-                  {/* Removed old view submission button */}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+          // treat missing submission status as false (i.e. missing)
+          const submission = Object.prototype.hasOwnProperty.call(a, map.submission)
+            ? a[map.submission]
+            : false;
+          const borderColor = submission === false ? 'border-red-500' : 'border-blue-300';
+           return (
+             <div key={idx} className={`${cardStyle} group border-l-4 ${borderColor} pl-4`}>
+               <div className={`${mainRowStyle} w-full`}>
+                 <div className="flex-1 flex flex-col justify-between h-full">
+                   <div>
+                     <div className={titleRowStyle}>
+                       {a[map.assignmentLink] ? (
+                         <a
+                           href={a[map.assignmentLink]}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="View Assignment"
+                           style={{ textDecoration: 'none' }}
+                         >
+                           {a[map.title]}
+                         </a>
+                       ) : (
+                         <span title="No Assignment">
+                           {a[map.title]}
+                         </span>
+                       )}
+                     </div>
+                     <div className={dueStyle}>Due: {a[map.dueDate]}</div>
+                     {submission === false && (
+                       <div className="mt-1">
+                         {a[map.submissionLink] ? (
+                           <a
+                             href={a[map.submissionLink]}
+                             target="_blank"
+                             rel="noopener noreferrer"
+                             className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 cursor-pointer"
+                             title="View Submission"
+                             style={{ width: '60px', justifyContent: 'center' }} // fixed width
+                           >
+                             <div className="text-red-500 text-xs font-semibold">missing</div>
+                           </a>
+                         ) : (
+                           <div
+                             className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
+                             title="No Submission"
+                             style={{ width: '90px', justifyContent: 'center' }} // fixed width
+                           >
+                             <div className="text-red-500 text-xs font-semibold">missing</div>
+                           </div>
+                         )}
+                       </div>
+                     )}
+                   </div>
+                   <div className="flex justify-end mt-2">
+                     <div className={scoreStyle + " flex items-center"}>
+                       Score: {a[map.score] === '' || a[map.score] === undefined || a[map.score] === null ? 0 : a[map.score]}
+                     </div>
+                   </div>
+                 </div>
+                 <div className={`${iconGroupStyle} flex-shrink-0`}>
+                   {/* Removed old view submission button */}
+                 </div>
+               </div>
+             </div>
+           );
+         })}
+       </div>
     </>
   );
 }
-
 
 export default StudentAssignments;

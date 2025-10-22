@@ -2,6 +2,34 @@ import React, { useState } from 'react';
 import Modal from '../utility/Modal';
 import Datepicker from 'react-tailwindcss-datepicker';
 import Calendar from '../utility/Calendar';
+// Outreach trigger phrases (case-insensitive substring match)
+const OUTREACH_TRIGGERS = [
+  "hung up",
+  "hanged up",
+  "promise",
+  "requested",
+  "up to date",
+  "will catch up",
+  "will come",
+  "will complete",
+  "will engage",
+  "will pass",
+  "will submit",
+  "will work",
+  "will be in class",
+  "waiting for instructor",
+  "waiting for professor",
+  "waiting for teacher",
+  "waiting on instructor",
+  "waiting on professor",
+  "waiting on teacher"
+];
+
+export const isOutreachTrigger = (text) => {
+  if (!text || typeof text !== 'string') return false;
+  const lower = text.toLowerCase();
+  return OUTREACH_TRIGGERS.map(t => t.toLowerCase()).some(trigger => lower.includes(trigger));
+};
 
 function DNCModal({ isOpen, onClose, phone, otherPhone, email, onSelect }) {
   const handleSelect = value => {

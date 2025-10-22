@@ -91,7 +91,7 @@ function parseTimestampMs(ts) {
   return isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
-function StudentHistory({ history, student }) {
+function StudentHistory({ history, student, reload }) {
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
 console.log('StudentHistory history prop:', history);
