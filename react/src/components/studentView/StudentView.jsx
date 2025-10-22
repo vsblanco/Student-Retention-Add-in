@@ -45,12 +45,12 @@ function StudentView() {
 	const renderActiveTab = () => {
 		switch (activeTab) {
 		case 'history':
-			return <StudentHistory history={historyData} reload={loadHistory} />;
+			return <StudentHistory history={historyData} student={activeStudent} reload={loadHistory} />;
 		case 'assignments':
 			return <StudentAssignments assignments={assignmentData} reload={loadAssignments} />;
 		case 'details':
 		default:
-			return <StudentDetails />;
+			return <StudentDetails student={activeStudent} />
 		}
 	};
 

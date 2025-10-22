@@ -128,42 +128,9 @@ function CommentModal({
     setModalMode('view');
   };
 
-  const handleDeleteComment = async () => {
-    try {
-      // call shared delete implementation with the entry's commentID
-      console.log(`Deleting comment with ID: ${entry.commentid}`);
-      await deleteComment(entry.commentid);
-
-      toast.success("Comment deleted.", {
-        position: "bottom-left",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: false,
-        theme: "light",
-        style: { fontSize: '1rem' }
-      });
-      // give caller immediate visual feedback if it wants to animate/remove locally
-      if (typeof onDeleted === 'function') {
-        try { onDeleted(); } catch (_) { /* swallow handler errors */ }
-      } else {
-        onClose();
-      }
-    } catch (err) {
-      // report failure but keep modal open for retry/cancellation
-      try { console.error('Delete comment failed:', err); } catch (_) {}
-      toast.error("Failed to delete comment.", {
-        position: "bottom-left",
-        autoClose: 3000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: false,
-        draggable: false,
-        theme: "light",
-        style: { fontSize: '1rem' }
-      });
-    }
+  const handleDeleteComment = () => {
+    console.log(`Deleting comment with ID: ${entry.commentid}`);
+    onDeleted(entry.commentid);
   };
 
   const insertTagButtonTags = COMMENT_TAGS.map(tag => ({

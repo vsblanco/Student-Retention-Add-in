@@ -147,7 +147,7 @@ function findTagInfo(label) {
   return null;
 }
 
-function Comment({ entry, searchTerm, index, onContextMenu }) {
+function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFunction }) {
   // Support multiple tags separated by commas
   let tags = entry.tag
     ? entry.tag.split(',').map(t => t.trim()).filter(Boolean)
@@ -627,13 +627,14 @@ function Comment({ entry, searchTerm, index, onContextMenu }) {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         // onDeleted gives immediate feedback: animate out locally then unmount
-        onDeleted={() => {
+        onDeleted={(commentID) => {
+          deleteFunction(commentID);
           // close modal immediately (safety)
           setModalOpen(false);
           // start removal animation
-          setRemoving(true);
+         // setRemoving(true);
           // unmount after animation completes
-          setTimeout(() => setRemoved(true), 350);
+         // setTimeout(() => setRemoved(true), 350);
         }}
         entry={entry}
         COMMENT_TAGS={COMMENT_TAGS}

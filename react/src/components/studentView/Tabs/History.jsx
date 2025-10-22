@@ -3,7 +3,7 @@ import Comment, { COMMENT_TAGS } from '../Parts/Comment';
 import NewComment from '../Modal/NewCommentModal';
 import { formatExcelDate, normalizeKeys, formatTimestamp } from '../../utility/Conversion';
 import { /* insertRow, editRow, */ } from '../../utility/ExcelAPI'; // removed direct insert/edit usage
-import { addComment, generateCommentID } from '../../utility/EditStudentHistory';
+import { addComment, deleteComment, generateCommentID } from '../../utility/EditStudentHistory';
 import { Folder, FolderOpen } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -92,6 +92,7 @@ function parseTimestampMs(ts) {
 }
 
 function StudentHistory({ history, student, reload }) {
+  console.log('Rendering StudentHistory with history:', history, 'and student:', student);
   // Local state for history to allow adding new comments
   const [localHistory, setLocalHistory] = useState(Array.isArray(history) ? history : []);
 console.log('StudentHistory history prop:', history);
@@ -207,28 +208,10 @@ console.log('StudentHistory history prop:', history);
       // Try to provide student id/name to addComment if available
       const studentId = (student && (student.ID ?? student.Id ?? student.id)) ?? null;
       const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
-      const timestamp = formatTimestamp(new Date());
-      const commetID = generateCommentID(studentId, timestamp, tag);
-      console.log('Generated comment ID:', commetID);
-      // Build a normalized commentPreview so it renders like others
-      const commentPreview = {
-        comment: String(comment),
-        timestamp: timestamp,
-        tag: tag, // NewComment can be extended to pass a tag if needed
-        createdBy: '', // NewComment can pass createdBy if available
-        studentId,
-        studentName,
-        commentid: commetID,
-        
-      };
-      const commentPreviewEntry = normalizeKeys(commentPreview);
-
-      // Update UI
-      setLocalHistory(prev => [commentPreviewEntry, ...(Array.isArray(prev) ? prev : [])]);
 
       // Persist via shared addComment (actual sheet insert)
       await addComment(String(comment), undefined, undefined, studentId, studentName);
-
+      await reload(); // reload history from parent to ensure sync
       toast.success('Comment saved');
       return true;
     } catch (err) {
@@ -237,6 +220,12 @@ console.log('StudentHistory history prop:', history);
       toast.error('Failed to save comment');
       return false;
     }
+  }
+
+  async function deleteCommentFromHistory(commentID) {
+    await deleteComment(commentID);
+    await reload();
+    toast.error('Comment deleted');
   }
 
   if (!Array.isArray(normalizedHistory) || normalizedHistory.length === 0) {
@@ -338,6 +327,7 @@ console.log('StudentHistory history prop:', history);
               entry={entry}
               searchTerm={searchTerm}
               index={index}
+              delete={deleteCommentFromHistory}
             />
           ))}
           {/* Current month comments (not in a folder, only unpinned) */}
@@ -347,6 +337,7 @@ console.log('StudentHistory history prop:', history);
               entry={entry}
               searchTerm={searchTerm}
               index={idx}
+              delete={deleteCommentFromHistory}
             />
           ))}
           {/* Previous months in collapsible folders (only unpinned) */}
@@ -379,6 +370,7 @@ console.log('StudentHistory history prop:', history);
                       entry={entry}
                       searchTerm={searchTerm}
                       index={idx}
+                      delete={deleteCommentFromHistory}
                     />
                   ))}
                 </ul>
