@@ -210,7 +210,7 @@ console.log('StudentHistory history prop:', history);
       const timestamp = formatTimestamp(new Date());
       const commetID = generateCommentID(studentId, timestamp, tag);
       console.log('Generated comment ID:', commetID);
-      // Build a normalized optimistic entry so it renders like others
+      // Build a normalized commentPreview so it renders like others
       const commentPreview = {
         comment: String(comment),
         timestamp: timestamp,
@@ -232,7 +232,7 @@ console.log('StudentHistory history prop:', history);
       toast.success('Comment saved');
       return true;
     } catch (err) {
-      // Roll back optimistic update on error
+      // Roll back commentPreview update on error
       setLocalHistory(prev => (Array.isArray(prev) ? prev.filter(e => e !== commentPreviewEntry) : []));
       toast.error('Failed to save comment');
       return false;
