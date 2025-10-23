@@ -63,6 +63,7 @@ function StudentView() {
 	};
 
 	const renderActiveTab = () => {
+		console.log('Rendering tab:', activeTab);
 		switch (activeTab) {
 		case 'history':
 			return <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} />;
@@ -101,6 +102,15 @@ function StudentView() {
 	  }
 	};
   }, []);
+  
+  // When the active student changes, reload the history for that student.
+  useEffect(() => {
+	// only load if there's a valid ID
+	if (!activeStudentState?.ID) return;
+	// Call the existing loader to update historyData
+	loadHistory();
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStudentState?.ID]);
 
 	return (
 		<div className="studentview-outer">

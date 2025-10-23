@@ -240,7 +240,6 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                 const rawHeaders = usedRange.values[0].map(h => (h === undefined || h === null) ? "" : String(h));
                 const usedColIndex = (typeof usedRange.columnIndex === "number") ? usedRange.columnIndex : 0;
                 const usedColCount = usedRange.columnCount || (rawHeaders.length);
-                console.log(rawHeaders);
 
                 await context.sync(); // ensure selRange.rowIndex is available
 
@@ -271,7 +270,6 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                             return aliases.some(a => normalize(a) === normalizedHeader);
                         });
                         if (match) {
-                            console.log (`Mapping header "${headerRaw}" to canonical "${match}"`);
                             headerKey = match;
                         }
                     }
