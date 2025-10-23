@@ -650,6 +650,80 @@ function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFuncti
   );
 }
 
+// CommentSkeleton: lightweight placeholder for loading states.
+// Usage: <CommentSkeleton /> or <CommentSkeleton showAvatar={false} />
+export function CommentSkeleton({ lines = 1, showAvatar = true, showTags = true }) {
+  // shimmer gradient style applied inline; keyframes defined inside the returned fragment
+  const gradientBase = 'linear-gradient(90deg, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.035) 20%, rgba(0,0,0,0.06) 40%, rgba(0,0,0,0.035) 60%, rgba(0,0,0,0.06) 100%)';
+  const baseStyle = {
+    background: gradientBase,
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 3s linear infinite'
+  };
+
+  const lineCount = Math.max(1, lines);
+  const contentLines = Array.from({ length: lineCount }).map((_, i) => (
+    <div
+      key={i}
+      style={{
+        ...baseStyle,
+        width: i === 0 ? '90%' : (i === lineCount - 1 ? '60%' : '85%')
+      }}
+    />
+  ));
+
+  return (
+    <>
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+
+      <li className={`${liStyle} bg-gray-50 ${borderLeftStyle} border-gray-300`} aria-hidden="true" style={{ overflow: 'hidden' }}>
+        <div className="flex items-start">
+          {showAvatar && (
+            <div
+              style={{
+                ...baseStyle,
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                marginRight: 12
+              }}
+            />
+          )}
+          <div style={{ flex: 1 }}>
+            {/* headline / short line */}
+            <div style={{ ...baseStyle, height: 12, width: '45%', marginBottom: 10, borderRadius: 6 }} />
+
+            {/* content placeholder lines */}
+            {contentLines}
+
+            {/* tags / timestamp row visually matching Comment layout */}
+            <div className="mt-2 flex items-center gap-2" style={{ marginTop: 8 }}>
+              {showTags && (
+                <>
+                  <div style={{ ...baseStyle, width: 72, height: 22, borderRadius: 9999 }} />
+                  <div style={{ ...baseStyle, width: 56, height: 22, borderRadius: 9999 }} />
+                </>
+              )}
+              <div style={{ flex: 1 }} />
+              <div style={{ ...baseStyle, width: 80, height: 12, borderRadius: 6 }} />
+            </div>
+          </div>
+        </div>
+
+        {/* small timestamp line to mirror real comment footer */}
+        <div className={timestampRowStyle} style={{ marginTop: 12 }}>
+          <div style={{ ...baseStyle, width: 120, height: 10, borderRadius: 6 }} />
+        </div>
+      </li>
+    </>
+  );
+}
+
 // Helper to highlight LDA keywords (exported for reuse)
 export function highlightLdaKeywords(part) {
   if (typeof part !== "string") return part;

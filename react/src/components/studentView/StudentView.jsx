@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
-import StudentHistory from './Tabs/History.jsx';
+import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { onSelectionChanged, highlightRow, loadSheet } from '../utility/ExcelAPI.jsx';
 import { isOutreachTrigger } from './Tag';
@@ -44,6 +44,8 @@ function StudentView() {
 
 	const loadHistory = () => {
     console.log('Loading history for', activeStudentState.StudentName);
+    // Trigger global/history loading skeleton before requesting the sheet
+    setHistoryLoading(true);
 		loadSheet('Student History', 'StudentNumber', activeStudentState.ID)
 			.then((res) => {
 				setHistory(res.data);
