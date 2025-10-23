@@ -1,5 +1,11 @@
 import { getCanonicalColIdx, canonicalHeaderMap } from './CanonicalMap.jsx';
 
+// [2025-10-23] Version 2.0
+export function normalize(val) {
+    if (val === undefined || val === null) return "";
+    // Convert to string, remove all spaces globally, and convert to lowercase.
+    return String(val).replace(/\s/g, '').toLowerCase();
+}
 /**
  * Edits a row in an Excel worksheet by unique ID.
  *
@@ -208,37 +214,97 @@ export async function deleteRow(sheet, columnId, rowId) {
  * @param {function} callback - Function to run when selection changes.
  * @returns {Promise<{remove: function}>} - Returns an object with a remove() function to unregister the event.
  */
-export async function onSelectionChanged(callback) {
+export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
     console.log("ExcelAPI.onSelectionChanged: start");
-     let eventHandler;
-     await Excel.run(async (context) => {
-         const worksheet = context.workbook.worksheets.getActiveWorksheet();
-         eventHandler = worksheet.onSelectionChanged.add(async (eventArgs) => {
-             try {
-                 const range = worksheet.getRange(eventArgs.address);
-                 range.load("values");
-                 await context.sync();
-                 callback({
-                     address: eventArgs.address,
-                     values: range.values,
-                 });
-             } catch (err) {
-                 console.error("onSelectionChanged callback error:", err);
-             }
-         });
-         await context.sync();
-     });
-     console.log("ExcelAPI.onSelectionChanged: finished - handler registered");
-     return {
-         remove: async () => {
-             if (eventHandler) {
-                 await Excel.run(async (context) => {
-                     eventHandler.remove();
-                     await context.sync();
-                 });
-             }
-         }
-     };
+    let eventHandler;
+    await Excel.run(async (context) => {
+        const worksheet = context.workbook.worksheets.getActiveWorksheet();
+        // register handler
+        eventHandler = worksheet.onSelectionChanged.add(async (eventArgs) => {
+            try {
+                // Load selection rowIndex (we only care about the first row of the selection)
+                const selRange = worksheet.getRange(eventArgs.address);
+                selRange.load(["rowIndex"]);
+                // Load usedRange headers and position
+                const usedRange = worksheet.getUsedRangeOrNullObject();
+                usedRange.load(["values", "columnIndex", "columnCount", "isNullObject"]);
+                await context.sync();
+
+                // If no used range / no headers, return empty object
+                if (!usedRange || usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
+                    callback({});
+                    return;
+                }
+
+                // Normalize raw header strings
+                const rawHeaders = usedRange.values[0].map(h => (h === undefined || h === null) ? "" : String(h));
+                const usedColIndex = (typeof usedRange.columnIndex === "number") ? usedRange.columnIndex : 0;
+                const usedColCount = usedRange.columnCount || (rawHeaders.length);
+                console.log(rawHeaders);
+
+                await context.sync(); // ensure selRange.rowIndex is available
+
+                const selectedRowIndex = selRange.rowIndex;
+                // Read the full row across the used columns
+                const rowRange = worksheet.getRangeByIndexes(selectedRowIndex, usedColIndex, 1, usedColCount);
+                rowRange.load("values");
+                await context.sync();
+
+                const rowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
+
+                // Build header -> value map for the entire row, using COLUMN_ALIASES if provided
+                const rowObj = {};
+                for (let c = 0; c < usedColCount; c++) {
+                    const headerRaw = (rawHeaders[c] !== undefined && rawHeaders[c] !== null) ? String(rawHeaders[c]) : "";
+                    let headerKey = headerRaw;
+
+                    if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
+                        const normalizedHeader = normalize(headerRaw);
+                        const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
+                            if (!canonical) return false;
+                            const normalizedCanonical = normalize(canonical);
+                            if (normalizedCanonical === normalizedHeader) return true;
+                            const aliasesRaw = COLUMN_ALIASES[canonical];
+                            const aliases = Array.isArray(aliasesRaw)
+                                ? aliasesRaw
+                                : (typeof aliasesRaw === "string" ? [aliasesRaw] : []);
+                            return aliases.some(a => normalize(a) === normalizedHeader);
+                        });
+                        if (match) {
+                            console.log (`Mapping header "${headerRaw}" to canonical "${match}"`);
+                            headerKey = match;
+                        }
+                    }
+
+                    if (!headerKey || headerKey === "") {
+                        headerKey = `Column${usedColIndex + c}`;
+                    }
+                    rowObj[headerKey] = (rowValues[c] !== undefined) ? rowValues[c] : null;
+                }
+
+                // Provide both raw values array and the canonicalized data object
+                callback({
+                    address: eventArgs.address,
+                    data: rowObj,
+                    values: rowValues
+                });
+            } catch (err) {
+                console.error("onSelectionChanged callback error:", err);
+            }
+        });
+        await context.sync();
+    });
+    console.log("ExcelAPI.onSelectionChanged: finished - handler registered");
+    return {
+        remove: async () => {
+            if (eventHandler) {
+                await Excel.run(async (context) => {
+                    eventHandler.remove();
+                    await context.sync();
+                });
+            }
+        }
+    };
 }
 
 /**
@@ -360,7 +426,7 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
 
                 // Determine identifier column index by direct presence in headerNames (no canonical matching)
                 const idColIdx = (identifierColumn && typeof identifierColumn === 'string')
-                    ? headerNames.findIndex(h => (h || '').toString().trim() === identifierColumn.toString().trim())
+                    ? headerNames.findIndex(h => normalize(h) === normalize(identifierColumn))
                     : -1;
 
                 // Build `data`:

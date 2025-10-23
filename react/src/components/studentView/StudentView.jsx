@@ -13,15 +13,35 @@ const activeStudent = {
   Grade: '10',
   Gradebook: 'https://nuc.instructure.com/courses/103987/grades/168591',
 };
+export const COLUMN_ALIASES = {
+  StudentName: ['Student Name', 'Student'],
+  ID: ['Student ID', 'Student Number','Student identifier'],
+  Gender: ['Gender'],
+  Phone: ['Phone Number', 'Contact'],
+  CreatedBy: ['Created By', 'Author', 'Advisor'],
+  OtherPhone: ['Other Phone', 'Alt Phone'],
+  StudentEmail: ['Email', 'Student Email'],
+  PersonalEmail: ['Other Email'],
+  Assigned: ['Advisor'],
+  ExpectedStartDate: ['Expected Start Date', 'Start Date','ExpStartDate'],
+  Grade: ['Current Grade', 'Grade %', 'Grade'],
+  LDA: ['Last Date of Attendance', 'LDA'],
+  DaysOut: ['Days Out'],
+  Gradebook: ['Gradebook','gradeBookLink'],
+  MissingAssignments: ['Missing Assignments', 'Missing'],
+  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
+  // You can add more aliases for other columns here
+};
 
 function StudentView() {
 	const [activeTab, setActiveTab] = useState('assignments'); // default to 'history' tab
 	const [historyData, setHistory] = useState([]); // store array returned by loadSheet
-  const [assignmentData, setAssignments] = useState([]); // store array returned by loadSheet
+  	const [assignmentData, setAssignments] = useState([]); // store array returned by loadSheet
+	const [activeStudentState, setActiveStudentState] = useState(activeStudent);
 
 	const loadHistory = () => {
-    console.log('Loading history for', activeStudent.StudentName);
-		loadSheet('Student History', 'StudentNumber', activeStudent.ID)
+    console.log('Loading history for', activeStudentState.StudentName);
+		loadSheet('Student History', 'StudentNumber', activeStudentState.ID)
 			.then((res) => {
 				setHistory(res.data);
         console.log('Loaded history data:', res.data);
@@ -31,8 +51,8 @@ function StudentView() {
 			});
 	};
   const loadAssignments = () => {
-    console.log('Loading assignments for', activeStudent.StudentName);
-		loadSheet('Missing Assignments', 'gradeBookLink', activeStudent.Gradebook)
+    console.log('Loading assignments for', activeStudentState.StudentName);
+		loadSheet('Missing Assignments', 'gradeBookLink', activeStudentState.Gradebook)
 			.then((res) => {
 				setAssignments(res.data);
         console.log('Loaded assignments data:', res.data);
@@ -45,12 +65,12 @@ function StudentView() {
 	const renderActiveTab = () => {
 		switch (activeTab) {
 		case 'history':
-			return <StudentHistory history={historyData} student={activeStudent} reload={loadHistory} />;
+			return <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} />;
 		case 'assignments':
 			return <StudentAssignments assignments={assignmentData} reload={loadAssignments} />;
 		case 'details':
 		default:
-			return <StudentDetails student={activeStudent} />
+			return <StudentDetails student={activeStudentState} />
 		}
 	};
 
@@ -59,9 +79,12 @@ function StudentView() {
 	let handlerRef = null;
 	(async () => {
 	  try {
-		handlerRef = await onSelectionChanged(({ address, values }) => {
-		  console.log('Excel selection changed:', { address, values });
-		});
+		// pass COLUMN_ALIASES so headers are canonicalized in the callback
+		handlerRef = await onSelectionChanged(({ address, values, data }) => {
+		  console.log('Excel selection changed:', {data});
+		  // merge selected row data into active student state
+		  setActiveStudentState(prev => ({ ...prev, ...data }));
+		}, COLUMN_ALIASES);
 	  } catch (err) {
 		console.error('Failed to register Excel selection handler:', err);
 	  }
@@ -81,7 +104,7 @@ function StudentView() {
 
 	return (
 		<div className="studentview-outer">
-			<StudentHeader student={activeStudent} />
+			<StudentHeader student={activeStudentState} />
 			<div className="studentview-tabs">
 				<button
 					type="button"
