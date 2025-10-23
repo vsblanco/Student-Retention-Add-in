@@ -109,6 +109,7 @@ function StudentView() {
 	if (!activeStudentState?.ID) return;
 	// Call the existing loader to update historyData
 	loadHistory();
+	loadAssignments();
 	// eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStudentState?.ID]);
 

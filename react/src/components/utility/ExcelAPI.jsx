@@ -6,6 +6,23 @@ export function normalize(val) {
     // Convert to string, remove all spaces globally, and convert to lowercase.
     return String(val).replace(/\s/g, '').toLowerCase();
 }
+
+// Helper: extract Hyperlink from Excel HYPERLINK formula or plain URL
+function extractHyperlink(formulaOrValue) {
+  if (!formulaOrValue) return null;
+  if (typeof formulaOrValue !== 'string') return null;
+  const value = formulaOrValue.trim();
+  const hyperlinkRegex = /=\s*HYPERLINK\s*\(\s*["']?([^"',)]+)["']?\s*,/i;
+  const match = value.match(hyperlinkRegex);
+  if (match && match[1]) {
+    return match[1].trim();
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  return null;
+}
+
 /**
  * Edits a row in an Excel worksheet by unique ID.
  *
@@ -227,7 +244,7 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                 selRange.load(["rowIndex"]);
                 // Load usedRange headers and position
                 const usedRange = worksheet.getUsedRangeOrNullObject();
-                usedRange.load(["values", "columnIndex", "columnCount", "isNullObject"]);
+                usedRange.load(["values", "formulas", "rowIndex", "columnIndex", "columnCount", "isNullObject"]);
                 await context.sync();
 
                 // If no used range / no headers, return empty object
@@ -250,6 +267,10 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                 await context.sync();
 
                 const rowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
+                // Compute relative row index into usedRange.formulas (if available)
+                const usedRangeStartRow = (typeof usedRange.rowIndex === "number") ? usedRange.rowIndex : 0;
+                const relativeRowIdx = selectedRowIndex - usedRangeStartRow;
+                const formulasRow = (usedRange.formulas && usedRange.formulas[relativeRowIdx]) ? usedRange.formulas[relativeRowIdx] : [];
 
                 // Build header -> value map for the entire row, using COLUMN_ALIASES if provided
                 const rowObj = {};
@@ -277,7 +298,29 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                     if (!headerKey || headerKey === "") {
                         headerKey = `Column${usedColIndex + c}`;
                     }
-                    rowObj[headerKey] = (rowValues[c] !== undefined) ? rowValues[c] : null;
+
+                    // Prefer formula text from usedRange.formulas for hyperlink extraction.
+                    let cellVal = (rowValues[c] !== undefined) ? rowValues[c] : null;
+                    const formulaCell = (formulasRow && formulasRow[c] !== undefined) ? formulasRow[c] : null;
+                    if (typeof formulaCell === 'string' && formulaCell.trim().startsWith('=')) {
+                        const link = extractHyperlink(formulaCell);
+                        if (link) {
+                            cellVal = link;
+                            console.log(`Extracted hyperlink from formula for column "${headerKey}": ${link}`);
+                        }
+                    } else if (typeof cellVal === 'string' && cellVal.trim() !== '') {
+                        // Fallback: if value itself looks like a formula, handle it (rare if formulas were loaded)
+                        const rawTrim = cellVal.trim();
+                        if (rawTrim.startsWith('=')) {
+                            const link = extractHyperlink(rawTrim);
+                            if (link) {
+                                cellVal = link;
+                                console.log(`Extracted hyperlink from value for column "${headerKey}": ${link}`);
+                            }
+                        }
+                    }
+
+                    rowObj[headerKey] = cellVal;
                 }
 
                 // Provide both raw values array and the canonicalized data object
