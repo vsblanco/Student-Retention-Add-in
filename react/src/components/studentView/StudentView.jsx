@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
@@ -6,7 +6,6 @@ import StudentHistory from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { onSelectionChanged, highlightRow, loadSheet } from '../utility/ExcelAPI.jsx';
 import { isOutreachTrigger } from './Tag';
-import SSO from '../utility/SSO.jsx';
 
 const activeStudent = {};
 export const COLUMN_ALIASES = {
@@ -29,6 +28,9 @@ export const COLUMN_ALIASES = {
   ProfilePicture: ['Profile Picture', 'Photo', 'Avatar']
   // You can add more aliases for other columns here
 };
+
+// add lazy SSO so its module (and any HTML it might insert) is only loaded when needed
+const SSO = lazy(() => import('../utility/SSO.jsx'));
 
 function StudentView() {
 	const [activeTab, setActiveTab] = useState('assignments'); // default to 'history' tab
@@ -138,7 +140,9 @@ function StudentView() {
   if (!currentUserName) {
     return (
       <div className="studentview-outer">
-        <SSO onNameSelect={setCurrentUserName} />
+        <Suspense fallback={null}>
+          <SSO onNameSelect={setCurrentUserName} />
+        </Suspense>
       </div>
     );
   }

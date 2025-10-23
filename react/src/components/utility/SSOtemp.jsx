@@ -2,10 +2,10 @@ import React, { useState, useEffect } from "react";
 
 // updated user list with roles and optional photo (leave photo out or set to null to use initials)
 const Users = [
-	{ name: 'Victor Blanco', role: 'Student Services Coordinator', photo: 'https://wallpapers.com/images/featured/dolphin-w2b1iptrwaumv8de.jpg' },
 	{ name: 'Angel Baez', role: 'Dean of Academic Affairs', photo: 'https://i.natgeofe.com/n/34b9d763-a5ef-434b-8d13-48f4919ca078/green-iguana_thumb_16x9.jpg?w=1200' },
-	{ name: 'Darlen Gutierrez', role: 'Student Services Coordinator', photo: 'https://i.pinimg.com/736x/28/5e/5e/285e5e923048938dbe93d20d054c0c17.jpg' },
 	{ name: 'Angel Coronel', role: 'Associate Dean of Academic Affairs', photo: 'https://play-lh.googleusercontent.com/RHT25lYamggGxosSgW5hUxphFluO4byH-1ZbOuW7nD1AK7QfuqS6ZK_fIoDdb8UIHw'},
+	{ name: 'Darlen Gutierrez', role: 'Student Services Coordinator', photo: 'https://i.pinimg.com/736x/28/5e/5e/285e5e923048938dbe93d20d054c0c17.jpg' },
+	{ name: 'Victor Blanco', role: 'Student Services Coordinator', photo: 'https://wallpapers.com/images/featured/dolphin-w2b1iptrwaumv8de.jpg' },
 	{ name: 'Kelvin Saliers', role: 'Full Time Instructor', photo: 'https://ftccollege.edu/wp-content/uploads/2023/08/mobile_programas_Construction_HVAC_R.jpg' },
 	{ name: 'Yasser Rojas', role: 'Full Time Instructor', photo: 'https://assets.streamlinehq.com/image/private/w_512,h_512,ar_1/f_auto/v1/icons/freebies-freemojis/travel-places/travel-places/hospital-4e1hno0dnb9ndwe5yi08v.png?_a=DATAg1AAZAA0' },
 ];
