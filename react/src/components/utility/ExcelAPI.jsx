@@ -236,98 +236,20 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
     let eventHandler;
     await Excel.run(async (context) => {
         const worksheet = context.workbook.worksheets.getActiveWorksheet();
-        // register handler
+        // register handler that delegates work to loadRange
         eventHandler = worksheet.onSelectionChanged.add(async (eventArgs) => {
             try {
-                // Load selection rowIndex (we only care about the first row of the selection)
-                const selRange = worksheet.getRange(eventArgs.address);
-                selRange.load(["rowIndex"]);
-                // Load usedRange headers and position
-                const usedRange = worksheet.getUsedRangeOrNullObject();
-                usedRange.load(["values", "formulas", "rowIndex", "columnIndex", "columnCount", "isNullObject"]);
-                await context.sync();
-
-                // If no used range / no headers, return empty object
-                if (!usedRange || usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
+                // Delegate selection parsing to loadRange
+                const payload = await loadRange(context, worksheet, eventArgs.address, COLUMN_ALIASES);
+                if (!payload || !payload.success) {
                     callback({});
                     return;
                 }
-
-                // Normalize raw header strings
-                const rawHeaders = usedRange.values[0].map(h => (h === undefined || h === null) ? "" : String(h));
-                const usedColIndex = (typeof usedRange.columnIndex === "number") ? usedRange.columnIndex : 0;
-                const usedColCount = usedRange.columnCount || (rawHeaders.length);
-
-                await context.sync(); // ensure selRange.rowIndex is available
-
-                const selectedRowIndex = selRange.rowIndex;
-                // Read the full row across the used columns
-                const rowRange = worksheet.getRangeByIndexes(selectedRowIndex, usedColIndex, 1, usedColCount);
-                rowRange.load("values");
-                await context.sync();
-
-                const rowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
-                // Compute relative row index into usedRange.formulas (if available)
-                const usedRangeStartRow = (typeof usedRange.rowIndex === "number") ? usedRange.rowIndex : 0;
-                const relativeRowIdx = selectedRowIndex - usedRangeStartRow;
-                const formulasRow = (usedRange.formulas && usedRange.formulas[relativeRowIdx]) ? usedRange.formulas[relativeRowIdx] : [];
-
-                // Build header -> value map for the entire row, using COLUMN_ALIASES if provided
-                const rowObj = {};
-                for (let c = 0; c < usedColCount; c++) {
-                    const headerRaw = (rawHeaders[c] !== undefined && rawHeaders[c] !== null) ? String(rawHeaders[c]) : "";
-                    let headerKey = headerRaw;
-
-                    if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
-                        const normalizedHeader = normalize(headerRaw);
-                        const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
-                            if (!canonical) return false;
-                            const normalizedCanonical = normalize(canonical);
-                            if (normalizedCanonical === normalizedHeader) return true;
-                            const aliasesRaw = COLUMN_ALIASES[canonical];
-                            const aliases = Array.isArray(aliasesRaw)
-                                ? aliasesRaw
-                                : (typeof aliasesRaw === "string" ? [aliasesRaw] : []);
-                            return aliases.some(a => normalize(a) === normalizedHeader);
-                        });
-                        if (match) {
-                            headerKey = match;
-                        }
-                    }
-
-                    if (!headerKey || headerKey === "") {
-                        headerKey = `Column${usedColIndex + c}`;
-                    }
-
-                    // Prefer formula text from usedRange.formulas for hyperlink extraction.
-                    let cellVal = (rowValues[c] !== undefined) ? rowValues[c] : null;
-                    const formulaCell = (formulasRow && formulasRow[c] !== undefined) ? formulasRow[c] : null;
-                    if (typeof formulaCell === 'string' && formulaCell.trim().startsWith('=')) {
-                        const link = extractHyperlink(formulaCell);
-                        if (link) {
-                            cellVal = link;
-                            console.log(`Extracted hyperlink from formula for column "${headerKey}": ${link}`);
-                        }
-                    } else if (typeof cellVal === 'string' && cellVal.trim() !== '') {
-                        // Fallback: if value itself looks like a formula, handle it (rare if formulas were loaded)
-                        const rawTrim = cellVal.trim();
-                        if (rawTrim.startsWith('=')) {
-                            const link = extractHyperlink(rawTrim);
-                            if (link) {
-                                cellVal = link;
-                                console.log(`Extracted hyperlink from value for column "${headerKey}": ${link}`);
-                            }
-                        }
-                    }
-
-                    rowObj[headerKey] = cellVal;
-                }
-
-                // Provide both raw values array and the canonicalized data object
+                // Keep same callback shape as before
                 callback({
-                    address: eventArgs.address,
-                    data: rowObj,
-                    values: rowValues
+                    address: payload.address,
+                    data: payload.data || {},
+                    values: payload.values || []
                 });
             } catch (err) {
                 console.error("onSelectionChanged callback error:", err);
@@ -345,6 +267,107 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                 });
             }
         }
+    };
+}
+
+// New: reusable loader for a given range address within an existing Excel.run context.
+// This version mirrors the prior onSelectionChanged behavior: it reads the entire usedRange header row,
+// then reads the full row (across used columns) for the selected row index and builds a header->value map.
+export async function loadRange(context, worksheet, rangeAddress, COLUMN_ALIASES = null) {
+    // Load selection rowIndex (we only need the selected row index for this address)
+    const selRange = worksheet.getRange(rangeAddress);
+    selRange.load(["address", "rowIndex"]);
+    // Load usedRange headers and position
+    const usedRange = worksheet.getUsedRangeOrNullObject();
+    usedRange.load(["values", "formulas", "rowIndex", "columnIndex", "columnCount", "isNullObject"]);
+    await context.sync();
+
+    if (!usedRange || usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
+        return { success: false, message: "No used range / headers found.", address: rangeAddress };
+    }
+
+    // Normalize raw header strings
+    const rawHeaders = usedRange.values[0].map(h => (h === undefined || h === null) ? "" : String(h));
+    const usedColIndex = (typeof usedRange.columnIndex === "number") ? usedRange.columnIndex : 0;
+    const usedColCount = usedRange.columnCount || (rawHeaders.length);
+
+    // Ensure selRange.rowIndex is available (already loaded earlier)
+    const selectedRowIndex = selRange.rowIndex;
+
+    // Read the full row across the used columns
+    const rowRange = worksheet.getRangeByIndexes(selectedRowIndex, usedColIndex, 1, usedColCount);
+    rowRange.load("values");
+    await context.sync();
+
+    const rowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
+    // Compute relative row index into usedRange.formulas (if available)
+    const usedRangeStartRow = (typeof usedRange.rowIndex === "number") ? usedRange.rowIndex : 0;
+    const relativeRowIdx = selectedRowIndex - usedRangeStartRow;
+    const formulasRow = (usedRange.formulas && usedRange.formulas[relativeRowIdx]) ? usedRange.formulas[relativeRowIdx] : [];
+
+    // Build header -> value map for the entire row, using COLUMN_ALIASES if provided
+    const rowObj = {};
+    for (let c = 0; c < usedColCount; c++) {
+        const headerRaw = (rawHeaders[c] !== undefined && rawHeaders[c] !== null) ? String(rawHeaders[c]) : "";
+        let headerKey = headerRaw;
+
+        if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
+            const normalizedHeader = normalize(headerRaw);
+            const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
+                if (!canonical) return false;
+                const normalizedCanonical = normalize(canonical);
+                if (normalizedCanonical === normalizedHeader) return true;
+                const aliasesRaw = COLUMN_ALIASES[canonical];
+                const aliases = Array.isArray(aliasesRaw)
+                    ? aliasesRaw
+                    : (typeof aliasesRaw === "string" ? [aliasesRaw] : []);
+                return aliases.some(a => normalize(a) === normalizedHeader);
+            });
+            if (match) {
+                headerKey = match;
+            }
+        }
+
+        if (!headerKey || headerKey === "") {
+            headerKey = `Column${usedColIndex + c}`;
+        }
+
+        // Prefer formula text from usedRange.formulas for hyperlink extraction.
+        let cellVal = (rowValues[c] !== undefined) ? rowValues[c] : null;
+        const formulaCell = (formulasRow && formulasRow[c] !== undefined) ? formulasRow[c] : null;
+        if (typeof formulaCell === 'string' && formulaCell.trim().startsWith('=')) {
+            const link = extractHyperlink(formulaCell);
+            if (link) {
+                cellVal = link;
+            }
+        } else if (typeof cellVal === 'string' && cellVal.trim() !== '') {
+            // Fallback: if value itself looks like a formula, handle it (rare if formulas were loaded)
+            const rawTrim = cellVal.trim();
+            if (rawTrim.startsWith('=')) {
+                const link = extractHyperlink(rawTrim);
+                if (link) {
+                    cellVal = link;
+                }
+            }
+        }
+
+        rowObj[headerKey] = cellVal;
+    }
+
+    // Build headers index map
+    const headerIndexMap = {};
+    rawHeaders.forEach((h, i) => { headerIndexMap[h] = i; });
+
+    return {
+        success: true,
+        address: selRange.address,
+        rowIndex: selectedRowIndex,
+        startCol: usedColIndex,
+        columnCount: usedColCount,
+        headers: headerIndexMap,
+        values: rowValues,
+        formulas: formulasRow,
+        data: rowObj
     };
 }
 
@@ -531,6 +554,76 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
         console.log("ExcelAPI.loadSheet: finished - error", error?.message);
         // removed parent `data` per request
         return { success: false, message: error?.message || String(error) };
+    }
+}
+
+/**
+ * Gets the currently selected range in the active worksheet.
+ *
+ * Returns metadata and canonicalized row objects for the current selection.
+ * @param {function} callback - Function to run when selection changes.
+ * @param {object} COLUMN_ALIASES - Optional mapping of canonical column names to alias names.
+ * @param {object} options - Optional flags for the operation (currently unused).
+ * @returns {Promise<{success: boolean, message: string, address: string, startRow: number, startCol: number, rowCount: number, columnCount: number, headers: object, values: any[][], formulas: any[][], rows: object[], singleRow: object | null}>}
+ */
+export async function getSelectedRange(arg1, arg2 = null, options = {}) {
+    // Supports two call styles:
+    // 1) callback mode: getSelectedRange(callback, COLUMN_ALIASES)
+    // 2) promise mode:  getSelectedRange(COLUMN_ALIASES)
+    const isCallbackMode = typeof arg1 === 'function';
+    const callback = isCallbackMode ? arg1 : null;
+    const COLUMN_ALIASES = isCallbackMode ? arg2 : arg1;
+
+    try {
+        // Use Excel.run and return its result so callers can await the payload
+        const result = await Excel.run(async (context) => {
+            console.log("ExcelAPI.getSelectedRange: start");
+            const worksheet = context.workbook.worksheets.getActiveWorksheet();
+            const workbookSel = context.workbook.getSelectedRange();
+            workbookSel.load(["address", "rowIndex"]);
+            await context.sync();
+
+            const payload = await loadRange(context, worksheet, workbookSel.address, COLUMN_ALIASES);
+            if (!payload || !payload.success) {
+                if (callback) {
+                    try { callback({}); } catch (e) { /* swallow callback errors */ }
+                    return { remove: async () => { /* noop for one-time selection */ } };
+                }
+                return { success: false, message: payload?.message || "Failed to load range" };
+            }
+
+            // Normalize payload for promise-mode consumers
+            const normalized = Object.assign({}, payload, {
+                singleRow: payload.data || null,
+                rows: payload.data ? [payload.data] : []
+            });
+
+            if (callback) {
+                try {
+                    callback({
+                        address: payload.address,
+                        data: payload.data || {},
+                        values: payload.values || []
+                    });
+                } catch (err) {
+                    console.error("getSelectedRange callback error:", err);
+                }
+                // mirror onSelectionChanged shape (remove() available)
+                return { remove: async () => { /* noop - one-time selection */ } };
+            } else {
+                console.log("ExcelAPI.getSelectedRange: payload succeeded");
+                return normalized;
+            }
+        });
+
+        return result;
+    } catch (error) {
+        console.error("ExcelAPI.getSelectedRange: error", error);
+        if (isCallbackMode && typeof callback === 'function') {
+            try { callback({}); } catch (_) { /* ignore */ }
+            return { remove: async () => { /* noop */ } };
+        }
+        return { success: false, message: error && error.message ? error.message : String(error) };
     }
 }
 

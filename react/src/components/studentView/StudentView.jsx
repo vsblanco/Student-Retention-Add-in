@@ -4,7 +4,7 @@ import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
-import { onSelectionChanged, highlightRow, loadSheet } from '../utility/ExcelAPI.jsx';
+import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange } from '../utility/ExcelAPI.jsx';
 import { isOutreachTrigger } from './Tag';
 
 const activeStudent = {};
@@ -33,7 +33,7 @@ export const COLUMN_ALIASES = {
 const SSO = lazy(() => import('../utility/SSO.jsx'));
 
 function StudentView() {
-	const [activeTab, setActiveTab] = useState('assignments'); // default to 'history' tab
+	const [activeTab, setActiveTab] = useState('history'); // default to 'history' tab
 	const [historyData, setHistory] = useState([]); // store array returned by loadSheet
   	const [assignmentData, setAssignments] = useState([]); // store array returned by loadSheet
 	const [activeStudentState, setActiveStudentState] = useState(activeStudent);
@@ -91,6 +91,20 @@ function StudentView() {
 		  // merge selected row data into active student state
 		  setActiveStudentState(prev => ({ ...prev, ...data }));
 		}, COLUMN_ALIASES);
+
+		// On initial load, attempt to read the current selection and populate active student
+		try {
+		  const sel = await getSelectedRange(COLUMN_ALIASES);
+		  if (sel && sel.success) {
+		    const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
+		    if (initialRow) {
+		      setActiveStudentState(prev => ({ ...prev, ...initialRow }));
+		      console.log('Initialized active student from current selection:', initialRow);
+		    }
+		  }
+		} catch (gErr) {
+		  console.warn('getSelectedRange failed to initialize selection:', gErr);
+		}
 	  } catch (err) {
 		console.error('Failed to register Excel selection handler:', err);
 	  }

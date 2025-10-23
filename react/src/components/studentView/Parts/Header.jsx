@@ -50,9 +50,9 @@ function StudentHeader({ student }) {
     }
   }
   // Parse grade as a number if possible, handling "%" sign
-  let grade = safeStudent.Grade ?? 'N/A';
+  let grade = safeStudent.Grade ?? null; // use null when not provided
   let parsedGrade = grade;
-  if (typeof grade === 'string' && grade.trim() !== '') {
+  if (grade !== null && typeof grade === 'string' && grade.trim() !== '') {
     const match = grade.match(/^(\d+(?:\.\d+)?)\s*%?$/);
     if (match) {
       parsedGrade = Number(match[1]);
@@ -84,6 +84,14 @@ function StudentHeader({ student }) {
       gradeTextLabel = 'text-black';
     }
     gradeDisplay = `${roundedGrade}%`;
+  }
+  // If no grade was provided, show 'No' so the UI reads "No" + "Grade"
+  if (grade === null || (typeof grade === 'string' && grade.trim() === '')) {
+    gradeDisplay = '--';
+    // keep muted styling for missing grade
+    gradeBg = 'bg-gray-200';
+    gradeText = 'text-gray-800';
+    gradeTextLabel = 'text-gray-500';
   }
   
   // --- Gender-based avatar background ---
