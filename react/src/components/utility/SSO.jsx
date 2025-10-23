@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import SSOtemp from "./SSOtemp"; // <-- added import
 
 // Helper function to decode the JWT token
 function decodeJwt(token) {
@@ -51,6 +52,10 @@ export function useOfficeSSO() {
   return { token, error, getAccessToken };
 }
 
+const CACHE_KEY = "SSO_USER"; // <-- new cache key
+
+const test = true;
+
 export default function SSO({ onNameSelect }) {
   const { getAccessToken, error } = useOfficeSSO();
 
@@ -67,6 +72,14 @@ export default function SSO({ onNameSelect }) {
     if (accessToken) {
       // ✅ CORRECTED: Decode the token to get the user's name
       const userName = decodeJwt(accessToken);
+      // Cache the SSO user
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          localStorage.setItem(CACHE_KEY, userName);
+        }
+      } catch (e) {
+        console.warn("Failed to write sso user to localStorage", e);
+      }
       toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
       if (onNameSelect) {
         onNameSelect(userName);
@@ -75,6 +88,35 @@ export default function SSO({ onNameSelect }) {
       toast.error(`Login failed${error ? `: ${error}` : ""}`, { position: "bottom-center" });
     }
   };
+
+  // New handler to receive selection from SSOtemp
+  const handleTempSelect = (userName) => {
+    // Cache the selected user
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        localStorage.setItem(CACHE_KEY, userName);
+      }
+    } catch (e) {
+      console.warn("Failed to write sso user to localStorage", e);
+    }
+
+    toast.success(`Welcome back ${userName}`, { position: "bottom-center" });
+    if (onNameSelect) {
+      onNameSelect(userName);
+    }
+  };
+
+  // If test mode, render the SSOtemp UI to pick a user
+  if (test) {
+    // pass cached user as defaultUser so SSOtemp can initialize from it
+    const cachedUser = (typeof window !== "undefined" && window.localStorage) ? localStorage.getItem(CACHE_KEY) : null;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <SSOtemp onSelect={handleTempSelect} defaultUser={cachedUser} />
+        <ToastContainer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -106,9 +148,7 @@ export default function SSO({ onNameSelect }) {
           Debug User
         </button>
       </div>
-      {/* Removed old notification display */}
-      {/* {showName && <div className="mt-2">Victor Blanco</div>} */}
-      {/* {loginStatus && <div className="mt-2">{loginStatus}</div>} */}
+      <ToastContainer />
     </div>
   );
 }

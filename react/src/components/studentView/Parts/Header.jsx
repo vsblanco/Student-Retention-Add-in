@@ -151,6 +151,22 @@ function StudentHeader({ student }) {
   // --- NEW: determine if the student is on Hold (string "Yes", case-insensitive) ---
   const isHold = String(safeStudent.Hold ?? safeStudent.hold ?? '').toLowerCase() === 'yes';
 
+  // --- Determine profile picture URL (accept string or object with Value/value) ---
+  const getProfilePicUrl = (s) => {
+    const val = s?.ProfilePicture ?? s?.profilePicture ?? s?.ProfileImage ?? s?.ProfilePic;
+    if (!val) return null;
+    if (typeof val === 'string' && val.trim()) return val.trim();
+    if (typeof val === 'object' && val !== null) {
+      const candidate = val.Value ?? val.value ?? val.url ?? val.Url;
+      return (typeof candidate === 'string' && candidate.trim()) ? candidate.trim() : null;
+    }
+    return null;
+  };
+  const profilePicUrl = getProfilePicUrl(safeStudent);
+
+  // Track if the profile image failed to load so we can show initials instead
+  const [imageError, setImageError] = React.useState(false);
+
   // Helper to check if gradebookUrl is a valid URL
   const isValidGradebookUrl = typeof gradebookUrl === "string" && /^https?:\/\/\S+$/i.test(gradebookUrl);
 
@@ -188,7 +204,20 @@ function StudentHeader({ student }) {
             // Only show a generic title on the avatar if there is no expected start date.
             title={isNew && !expectedStartDisplay ? "New student" : undefined}
           >
-            {initials}
+            {/* Render profile image if available and hasn't errored; otherwise show initials */}
+            {profilePicUrl && !imageError ? (
+              <img
+                src={profilePicUrl}
+                alt={studentName ? `${studentName} profile` : 'Student profile'}
+                onError={() => setImageError(true)}
+                className="w-full h-full object-cover rounded-full"
+                // Prevent the image from stealing pointer events for overlays
+                style={{ display: 'block' }}
+              />
+            ) : (
+              initials
+            )}
+
             {isNew && (
               <span
                 aria-label={`New student${expectedStartDisplay ? `: ${expectedStartDisplay}` : ''}`}

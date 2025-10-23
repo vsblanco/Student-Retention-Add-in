@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
@@ -6,13 +6,9 @@ import StudentHistory from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { onSelectionChanged, highlightRow, loadSheet } from '../utility/ExcelAPI.jsx';
 import { isOutreachTrigger } from './Tag';
+import SSO from '../utility/SSO.jsx';
 
-const activeStudent = {
-  StudentName: 'Saintil, Dominique',
-  ID: 1612676588,
-  Grade: '10',
-  Gradebook: 'https://nuc.instructure.com/courses/103987/grades/168591',
-};
+const activeStudent = {};
 export const COLUMN_ALIASES = {
   StudentName: ['Student Name', 'Student'],
   ID: ['Student ID', 'Student Number','Student identifier'],
@@ -29,7 +25,8 @@ export const COLUMN_ALIASES = {
   DaysOut: ['Days Out'],
   Gradebook: ['Gradebook','gradeBookLink'],
   MissingAssignments: ['Missing Assignments', 'Missing'],
-  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
+  Outreach: ['Outreach', 'Comments', 'Notes', 'Comment'],
+  ProfilePicture: ['Profile Picture', 'Photo', 'Avatar']
   // You can add more aliases for other columns here
 };
 
@@ -38,6 +35,10 @@ function StudentView() {
 	const [historyData, setHistory] = useState([]); // store array returned by loadSheet
   	const [assignmentData, setAssignments] = useState([]); // store array returned by loadSheet
 	const [activeStudentState, setActiveStudentState] = useState(activeStudent);
+	const [currentUserName, setCurrentUserName] = useState(null);
+
+	// add a ref used elsewhere in the component
+	const sessionUserRef = useRef(null);
 
 	const loadHistory = () => {
     console.log('Loading history for', activeStudentState.StudentName);
@@ -102,7 +103,27 @@ function StudentView() {
 	  }
 	};
   }, []);
-  
+
+  // Initialize currentUserName from cache/SSO on mount
+  useEffect(() => {
+    try {
+      const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
+      if (cached) {
+        setCurrentUserName(cached);
+        sessionUserRef.current = cached;
+		console.log('Loaded SSO user from cache:', cached);
+        return;
+      }
+      if (window.SSO && typeof window.SSO.getUserName === 'function') {
+        const n = window.SSO.getUserName();
+        if (n) {
+          setCurrentUserName(n);
+          sessionUserRef.current = n;
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }, []);
+
   // When the active student changes, reload the history for that student.
   useEffect(() => {
 	// only load if there's a valid ID
@@ -113,7 +134,16 @@ function StudentView() {
 	// eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStudentState?.ID]);
 
-	return (
+  // Always show SSO first until currentUserName is set
+  if (!currentUserName) {
+    return (
+      <div className="studentview-outer">
+        <SSO onNameSelect={setCurrentUserName} />
+      </div>
+    );
+  }
+
+  return (
 		<div className="studentview-outer">
 			<StudentHeader student={activeStudentState} />
 			<div className="studentview-tabs">
