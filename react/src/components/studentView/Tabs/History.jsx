@@ -337,6 +337,47 @@ useEffect(() => {
      toast.success('Comment changes saved');
    }
  
+   // add refs to support long-loading toast behavior
+   const isLoadingRef = useRef(externalLoading || history == null || !ready);
+   const longLoadTimerRef = useRef(null);
+   const longLoadToastRef = useRef(null);
+
+   // keep isLoadingRef up-to-date so the timeout callback can read current state
+   useEffect(() => {
+     isLoadingRef.current = externalLoading || history == null || !ready;
+   }, [externalLoading, history, ready]);
+
+   // Show a single toast if loading persists longer than 10 seconds
+   useEffect(() => {
+     const isLoadingNow = externalLoading || history == null || !ready;
+     if (isLoadingNow) {
+       // start timer if not already started
+       if (!longLoadTimerRef.current) {
+         longLoadTimerRef.current = setTimeout(() => {
+           // check the ref for current loading state
+           if (isLoadingRef.current && !longLoadToastRef.current) {
+             longLoadToastRef.current = toast.warn('Uh oh. This is taking longer than usual', { autoClose: 6000 });
+           }
+         }, 3000); // 3 seconds
+       }
+     } else {
+       // clear any pending timer and reset toast ref (do not dismiss existing toasts automatically)
+       if (longLoadTimerRef.current) {
+         clearTimeout(longLoadTimerRef.current);
+         longLoadTimerRef.current = null;
+       }
+       longLoadToastRef.current = null;
+     }
+
+     // cleanup on unmount
+     return () => {
+       if (longLoadTimerRef.current) {
+         clearTimeout(longLoadTimerRef.current);
+         longLoadTimerRef.current = null;
+       }
+     };
+   }, [externalLoading, history, ready]);
+
    return (
      <div>
        <style>{styles}</style>

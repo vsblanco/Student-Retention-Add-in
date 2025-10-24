@@ -5,6 +5,7 @@ import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange } from '../utility/ExcelAPI.jsx';
+import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 
 const activeStudent = {};
@@ -44,16 +45,34 @@ function StudentView() {
 
 	const loadHistory = () => {
     console.log('Loading history for', activeStudentState.StudentName);
+
     // Trigger global/history loading skeleton before requesting the sheet
     setHistoryLoading(true);
-		loadSheet('Student History', 'StudentNumber', activeStudentState.ID)
-			.then((res) => {
-				setHistory(res.data);
-        console.log('Loaded history data:', res.data);
-			})
-			.catch((err) => {
-				console.error('Failed to load Student History sheet:', err);
-			});
+    // loadCache is invoked once on initialization (see selection-effect)
+    // Try to show cached studentHistory quickly, then always fetch fresh data
+    loadSheetCache(activeStudentState.ID)
+      .then((cached) => {
+        if (cached) {
+          setHistory(cached);
+          console.log('Loaded history from sheetCache:', activeStudentState.ID);
+        }
+      })
+      .catch((cacheErr) => {
+        console.warn('loadSheetCache failed:', cacheErr);
+      })
+      .then(() => {
+        // proceed to fetch freshest data regardless of cache result
+        return loadSheet('Student History', 'StudentNumber', activeStudentState.ID);
+      })
+      .then((res) => {
+        if (res && res.data) {
+          setHistory(res.data);
+          console.log('Loaded history data:', res.data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load Student History sheet:', err);
+      });
 	};
   const loadAssignments = () => {
     console.log('Loading assignments for', activeStudentState.StudentName);
@@ -100,6 +119,13 @@ function StudentView() {
 		    if (initialRow) {
 		      setActiveStudentState(prev => ({ ...prev, ...initialRow }));
 		      console.log('Initialized active student from current selection:', initialRow);
+		      // Call loadCache once during initialization with the initial row
+		      try {
+		        loadCache(initialRow);
+		        console.log('loadCache: invoked once for initialization');
+		      } catch (e) {
+		        console.warn('loadCache initial invocation failed', e);
+		      }
 		    }
 		  }
 		} catch (gErr) {
