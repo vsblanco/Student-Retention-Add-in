@@ -482,39 +482,47 @@ function CommentModal({
         width: '100%',
         gap: 8
       }}>
-        <button
-          type="button"
-          onClick={() => setConfirmDelete(confirmDelete ? false : true)}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            background: confirmDelete ? '#fee2e2' : '#ef4444',
-            color: confirmDelete ? '#b91c1c' : 'white',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-            transition: 'background 0.15s, box-shadow 0.15s'
-          }}
-          disabled={false}
-          aria-label={confirmDelete ? "Cancel Delete" : "Delete"}
-          title={confirmDelete ? "Cancel Delete" : "Delete"}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = confirmDelete ? '#fecaca' : '#dc2626';
-            e.currentTarget.style.boxShadow = confirmDelete
-              ? '0 2px 8px rgba(220,38,38,0.10)'
-              : '0 2px 8px rgba(220,38,38,0.15)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = confirmDelete ? '#fee2e2' : '#ef4444';
-            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
-          }}
-        >
-          <Trash2 size={20} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(confirmDelete ? false : true)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: confirmDelete ? '#fee2e2' : '#ef4444',
+              color: confirmDelete ? '#b91c1c' : 'white',
+              border: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+              transition: 'background 0.15s, box-shadow 0.15s'
+            }}
+            disabled={false}
+            aria-label={confirmDelete ? "Cancel Delete" : "Delete"}
+            title={confirmDelete ? "Cancel Delete" : "Delete"}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = confirmDelete ? '#fecaca' : '#dc2626';
+              e.currentTarget.style.boxShadow = confirmDelete
+                ? '0 2px 8px rgba(220,38,38,0.10)'
+                : '0 2px 8px rgba(220,38,38,0.15)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = confirmDelete ? '#fee2e2' : '#ef4444';
+              e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+            }}
+          >
+            <Trash2 size={20} />
+          </button>
+
+          {/* Moved CommentID to sit to the right of the delete button */}
+          <span style={{ fontSize: 12, color: '#6b7280', userSelect: 'text' }}>
+            Comment ID: {entry.commentid}
+          </span>
+        </div>
+
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
