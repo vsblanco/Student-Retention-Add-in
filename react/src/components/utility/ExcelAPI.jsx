@@ -435,19 +435,33 @@ export async function checkRow(sheet, columnId, rowId) {
  * Highlights a row in the active worksheet.
  *
  * @param {number} rowIndex The index of the row to highlight (0-based).
- * @param {number} startCol The index of the first column in the range to highlight (0-based).
- * @param {number} colCount The number of columns to include in the highlight.
+ * @param {number} startCol The index of the reference column in the range (0-based).
+ *                         Highlighting will extend to the left of this column.
+ * @param {number} colCount The number of columns to include in the highlight (extends left).
  * @param {string} [color='yellow'] The color to use for highlighting (in CSS color format).
  */
 export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow') {
   // Quick guard: Excel runtime must exist and parameters must be numbers
   if (typeof window.Excel === "undefined") return;
   if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
+  if (colCount <= 0) return;
 
   try {
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
-      const highlightRange = sheet.getRangeByIndexes(rowIndex, startCol, 1, colCount);
+
+      // Compute leftmost column so the range extends to the left of startCol.
+      // Example: startCol=4, colCount=3 -> leftStartCol = 4 - (3 - 1) = 2  (columns 2,3,4)
+      let leftStartCol = startCol - (colCount - 1);
+      if (leftStartCol < 0) {
+        // clamp to sheet left edge and adjust count so we don't request negative index
+        leftStartCol = 0;
+      }
+      // Adjust actual column count in case leftStartCol was clamped
+      const actualColCount = (startCol - leftStartCol) + 1;
+      if (actualColCount <= 0) return;
+
+      const highlightRange = sheet.getRangeByIndexes(rowIndex, leftStartCol, 1, actualColCount);
       highlightRange.format.fill.color = color;
       await context.sync();
     });

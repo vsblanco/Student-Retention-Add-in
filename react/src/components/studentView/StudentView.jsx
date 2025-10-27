@@ -155,9 +155,38 @@ function StudentView() {
 	  try {
 		// Register an onChanged callback that just logs the event for debugging.
 		changeHandlerRef = await onChanged(
+		  // callback receives the changeEvent payload from ExcelAPI.onChanged
 		  (changeEvent) => {
-		    // changeEvent shape may vary; log entire payload for debug
 		    console.log('Excel cell changed event:', changeEvent);
+		    // Safely extract changes array
+		    const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
+		    // Map each change to a boolean indicating whether its text triggers outreach
+		    const matches = changes.map(ch => {
+		      const rawVal = ch && ch.value;
+		      const text = (rawVal === undefined || rawVal === null) ? '' : String(rawVal);
+		      try {
+		        return { change: ch, text, match: Boolean(isOutreachTrigger(text)) };
+		      } catch (e) {
+		        console.warn('isOutreachTrigger threw for value:', text, e);
+		        return { change: ch, text, match: false };
+		      }
+		    });
+		    // Log each change with its outreach match result
+		    matches.forEach(({ change, text, match }) => {
+		      console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match });
+		      if (match) {
+		        try {
+		          // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
+		          highlightRow(change.rowIndex, change.colIndex, 9);
+		        } catch (e) {
+		          console.warn('highlightRow failed for', change && change.address, e);
+		        }
+		      }
+		    });
+		    const anyMatch = matches.some(m => m.match);
+		    console.log('Excel outreach trigger match (any):', anyMatch);
+		    // Return true if any changed cell matched the outreach trigger; otherwise false.
+		    return anyMatch;
 		  },
 		  null,
 		  'Outreach',
