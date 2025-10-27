@@ -663,7 +663,7 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
  * @param {object|null} COLUMN_ALIASES - optional alias map for canonical header resolution.
  * @returns {Promise<{remove: function}>} - object with remove() to unregister.
  */
-export async function onChanged(callback, sheet, identifierColumn = null, COLUMN_ALIASES = null) {
+export async function onChanged(callback, sheet, identifierColumn = null, COLUMN_ALIASES = null, otherValues = null) {
     console.log("ExcelAPI.onChanged: start", { sheet, identifierColumn });
     // Allow omitted sheet: if provided it must be a string; otherwise we'll use the active worksheet.
     if (sheet !== undefined && sheet !== null && typeof sheet !== 'string') {
@@ -748,8 +748,11 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                         let identifierValue = null;
                         if (idColIdx !== -1) {
                             const idRel = idColIdx; // idColIdx is already relative to headerRow indices
-                            if (relRowIndex >= 0 && relRowIndex + 1 < usedRange.values.length) {
-                                const dataRow = usedRange.values[relRowIndex + 1] || []; // +1 because header is row 0 in usedRange.values
+                            // Use absolute row index to compute data row inside usedRange (header is at index 0)
+                            const dataRowIndex = (changedRange.rowIndex + r) - usedStartRow;
+                            // data rows in usedRange.values start at index 1 (0 == header). Ensure we are inside bounds.
+                            if (dataRowIndex >= 1 && dataRowIndex < usedRange.values.length) {
+                                const dataRow = usedRange.values[dataRowIndex] || [];
                                 identifierValue = dataRow[idRel] !== undefined ? dataRow[idRel] : null;
                             } else {
                                 // If usedRange.values doesn't include this row, try to read changedRange value in id column if it's within changedRange
@@ -796,6 +799,49 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                     // nothing to report
                     return;
                 }
+
+                // NEW: if otherValues was provided as an array of header names, resolve and attach their values for the affected row(s)
+                if (idColIdx !== -1 && Array.isArray(otherValues) && otherValues.length > 0) {
+                    // Resolve requested headers to relative column indices (relative to headerRow)
+                    const resolvedCols = otherValues.map(h => {
+                        if (!h || typeof h !== 'string') return { name: h, relIdx: -1, absIdx: -1 };
+                        const relIdx = getCanonicalColIdx(headerRow, h, canonicalHeaderMap);
+                        return { name: h, relIdx, absIdx: (relIdx !== -1 ? usedStartCol + relIdx : -1) };
+                    });
+
+                    // For each filtered change, compute the otherValues mapping
+                    filteredChanges.forEach(ch => {
+                        const rOffset = ch.rowIndex - changedRange.rowIndex; // row index inside changedRange values
+                        // compute index inside usedRange.values (header is at index 0, data rows start at 1)
+                        const dataRowIndex = ch.rowIndex - usedStartRow;
+                        const map = {};
+                        for (const colInfo of resolvedCols) {
+                            let val = null;
+                            if (colInfo.relIdx !== -1) {
+                                // Prefer usedRange.values when the row is present in usedRange
+                                if (dataRowIndex >= 1 && dataRowIndex < usedRange.values.length) {
+                                    const dataRow = usedRange.values[dataRowIndex] || [];
+                                    val = (dataRow[colInfo.relIdx] !== undefined) ? dataRow[colInfo.relIdx] : null;
+                                } else {
+                                    // fallback to changedRange if the desired column sits inside changedRange
+                                    if (colInfo.absIdx !== -1 &&
+                                        changedRange.columnIndex <= colInfo.absIdx &&
+                                        colInfo.absIdx < changedRange.columnIndex + changedRange.columnCount &&
+                                        rOffset >= 0 && rOffset < (changedRange.values ? changedRange.values.length : 0)) {
+                                        const colOffset = colInfo.absIdx - changedRange.columnIndex;
+                                        val = (changedRange.values && changedRange.values[rOffset] ? changedRange.values[rOffset][colOffset] : null);
+                                    } else {
+                                        val = null;
+                                    }
+                                }
+                            } else {
+                                val = null;
+                            }
+                            map[colInfo.name] = val;
+                        }
+                        ch.otherValues = map;
+                    });
+                 }
 
                 // Log computed changes before invoking callback
                 console.log("ExcelAPI.onChanged: computed changes", { sheet, address: changedRange.address, changes: filteredChanges });

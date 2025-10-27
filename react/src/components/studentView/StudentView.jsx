@@ -7,6 +7,7 @@ import StudentAssignments from './Tabs/Assignments.jsx';
 import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
+import { addComment } from '../utility/EditStudentHistory.jsx';
 
 const activeStudent = {};
 export const COLUMN_ALIASES = {
@@ -171,13 +172,16 @@ function StudentView() {
 		        return { change: ch, text, match: false };
 		      }
 		    });
-		    // Log each change with its outreach match result
+		    // Log each change with its outreach match result and otherValues if provided
 		    matches.forEach(({ change, text, match }) => {
-		      console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match });
+		      console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match, otherValues: change && change.otherValues });
 		      if (match) {
 		        try {
 		          // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
 		          highlightRow(change.rowIndex, change.colIndex, 9);
+				  console.log('Adding outreach comment for ',null)
+				  addComment(String(text), 'Contacted, Outreach', undefined, change.otherValues.ID, change.otherValues.StudentName);
+				  
 		        } catch (e) {
 		          console.warn('highlightRow failed for', change && change.address, e);
 		        }
@@ -188,9 +192,11 @@ function StudentView() {
 		    // Return true if any changed cell matched the outreach trigger; otherwise false.
 		    return anyMatch;
 		  },
-		  null,
-		  'Outreach',
-		  COLUMN_ALIASES
+		  null,               // sheet -> use active worksheet
+		  'Outreach',               // identifierColumn (canonical name, will be resolved via COLUMN_ALIASES)
+		  COLUMN_ALIASES,     // COLUMN_ALIASES for canonical matching
+		  ['StudentName','ID'] // otherValues: request StudentName and ID be returned for the affected row
+		  
 		);
 	  } catch (err) {
 		console.error('Failed to register Excel cell-change handler:', err);

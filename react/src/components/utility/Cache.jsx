@@ -46,7 +46,7 @@ export async function loadCache(options = {}) {
 // --- NEW: try to read cached studentHistory from sheetCache in localStorage ---
 export async function loadSheetCache(studentId) {
 	if (!studentId) return null;
-  return null // temporary disable cache reading
+  //return null // temporary disable cache reading
 	try {
 		const raw = localStorage.getItem('sheetCache');
 		if (!raw) return null;

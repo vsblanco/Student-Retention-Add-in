@@ -74,17 +74,22 @@ export function normalizeKeys(obj) {
 // helper: format date as "MM/DD/YY HH:MM AM/PM"
 export function formatTimestamp(date = new Date()) {
   try {
+    // create Date from input
     const d = new Date(date);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    const yy = String(d.getFullYear() % 100).padStart(2, '0');
 
-    let hours = d.getHours();
+    // add 4 hours to match Eastern Time
+    const adjusted = new Date(d.getTime() + 4 * 60 * 60 * 1000);
+
+    const mm = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const dd = String(adjusted.getDate()).padStart(2, '0');
+    const yy = String(adjusted.getFullYear() % 100).padStart(2, '0');
+
+    let hours = adjusted.getHours();
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     if (hours === 0) hours = 12;
     const hh = String(hours).padStart(2, '0');
-    const mins = String(d.getMinutes()).padStart(2, '0');
+    const mins = String(adjusted.getMinutes()).padStart(2, '0');
 
     return `${mm}/${dd}/${yy} ${hh}:${mins} ${ampm}`;
   } catch (_) {
