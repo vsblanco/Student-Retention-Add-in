@@ -4,7 +4,7 @@ import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
-import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange } from '../utility/ExcelAPI.jsx';
+import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 
@@ -143,6 +143,37 @@ function StudentView() {
 		  handlerRef.remove();
 		} catch (err) {
 		  console.warn('Failed to remove selection handler:', err);
+		}
+	  }
+	};
+  }, []);
+
+// Register Excel cell-change handler to log cell changes for debugging.
+  useEffect(() => {
+	let changeHandlerRef = null;
+	(async () => {
+	  try {
+		// Register an onChanged callback that just logs the event for debugging.
+		changeHandlerRef = await onChanged(
+		  (changeEvent) => {
+		    // changeEvent shape may vary; log entire payload for debug
+		    console.log('Excel cell changed event:', changeEvent);
+		  },
+		  null,
+		  'Outreach',
+		  COLUMN_ALIASES
+		);
+	  } catch (err) {
+		console.error('Failed to register Excel cell-change handler:', err);
+	  }
+	})();
+
+	return () => {
+	  if (changeHandlerRef && typeof changeHandlerRef.remove === 'function') {
+		try {
+		  changeHandlerRef.remove();
+		} catch (err) {
+		  console.warn('Failed to remove cell-change handler:', err);
 		}
 	  }
 	};

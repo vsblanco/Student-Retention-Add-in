@@ -60,8 +60,9 @@ const styles = `
     background: rgba(255,255,255,0.9);
     display: flex;
     flex-direction: column;
-    padding: 0; /* <-- removed padding so skeleton items align exactly with comments */
-    overflow: auto;
+    padding: 0; /* keep items aligned with comments */
+    /* Allow skeleton content to overfill the overlay; do NOT show overlay scrollbars */
+    overflow: visible;
     transition: opacity 400ms cubic-bezier(0.4,0,0.2,1), visibility 400ms;
   }
 `;

@@ -23,6 +23,19 @@ function extractHyperlink(formulaOrValue) {
   return null;
 }
 
+// Helper: convert 0-based column index to A1 column letters (0 -> A, 25 -> Z, 26 -> AA)
+function colIndexToLetter(colIndex) {
+    if (typeof colIndex !== 'number' || colIndex < 0) return '';
+    let letters = '';
+    let n = colIndex + 1;
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        letters = String.fromCharCode(65 + rem) + letters;
+        n = Math.floor((n - 1) / 26);
+    }
+    return letters;
+}
+
 /**
  * Edits a row in an Excel worksheet by unique ID.
  *
@@ -627,6 +640,173 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
     }
 }
 
+/**
+ * Registers a worksheet change handler.
+ *
+ * @param {string} sheet - Worksheet name to observe (required).
+ * @param {string|null} identifierColumn - Column (name) that serves as row identifier (optional).
+ * @param {function} callback - function(payload) called when changes occur. payload = { address, changes: [{ address, rowIndex, colIndex, header, value, identifier }] }
+ * @param {object|null} COLUMN_ALIASES - optional alias map for canonical header resolution.
+ * @returns {Promise<{remove: function}>} - object with remove() to unregister.
+ */
+export async function onChanged(callback, sheet, identifierColumn = null, COLUMN_ALIASES = null) {
+    console.log("ExcelAPI.onChanged: start", { sheet, identifierColumn });
+    // Allow omitted sheet: if provided it must be a string; otherwise we'll use the active worksheet.
+    if (sheet !== undefined && sheet !== null && typeof sheet !== 'string') {
+        throw new Error("Parameter 'sheet' must be a string when provided.");
+    }
+    if (typeof callback !== 'function') {
+        throw new Error("Parameter 'callback' is required and must be a function.");
+    }
+
+    let eventHandler;
+    await Excel.run(async (context) => {
+        let worksheet;
+        if (sheet && typeof sheet === 'string' && sheet.trim() !== '') {
+            // use the named worksheet (preserve previous behavior)
+            worksheet = context.workbook.worksheets.getItemOrNullObject(sheet);
+            worksheet.load("isNullObject");
+            await context.sync();
+
+            if (worksheet.isNullObject) {
+                throw new Error(`Worksheet "${sheet}" not found.`);
+            }
+        } else {
+            // no sheet provided -> use the currently active worksheet
+            worksheet = context.workbook.worksheets.getActiveWorksheet();
+        }
+
+        // Register handler which uses the same context and worksheet captures
+        eventHandler = worksheet.onChanged.add(async (eventArgs) => {
+            try {
+               // Log that a change event fired (include sheet and event address)
+                console.log("ExcelAPI.onChanged: change event fired", { sheet, address: eventArgs && eventArgs.address });
+                // Load changed range and used range within this captured context
+                const changedRange = worksheet.getRange(eventArgs.address);
+                changedRange.load(["address", "rowIndex", "columnIndex", "rowCount", "columnCount", "values", "formulas"]);
+                const usedRange = worksheet.getUsedRangeOrNullObject();
+                usedRange.load(["values", "rowIndex", "columnIndex", "columnCount", "rowCount", "isNullObject"]);
+                await context.sync();
+
+                if (usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
+                    // No headers / used range — still report raw changed cells
+                    const rawChanges = [];
+                    for (let r = 0; r < (changedRange.rowCount || 0); r++) {
+                        for (let c = 0; c < (changedRange.columnCount || 0); c++) {
+                            const absRow = changedRange.rowIndex + r;
+                            const absCol = changedRange.columnIndex + c;
+                            const addr = `${colIndexToLetter(absCol)}${absRow + 1}`;
+                            rawChanges.push({
+                                address: addr,
+                                rowIndex: absRow,
+                                colIndex: absCol,
+                                header: null,
+                                value: (changedRange.values && changedRange.values[r] ? changedRange.values[r][c] : null),
+                                identifier: null
+                            });
+                        }
+                    }
+                    console.log("ExcelAPI.onChanged: computed rawChanges", { sheet, address: changedRange.address, changes: rawChanges });
+                    try { callback({ address: changedRange.address, changes: rawChanges }); } catch (_) { /* swallow */ }
+                    return;
+                }
+
+                const headerRow = usedRange.values[0].map(h => (h === undefined || h === null) ? "" : String(h));
+                const usedStartRow = typeof usedRange.rowIndex === "number" ? usedRange.rowIndex : 0;
+                const usedStartCol = typeof usedRange.columnIndex === "number" ? usedRange.columnIndex : 0;
+
+                // Determine identifier column index (relative to usedRange header indices) using canonical mapping
+                let idColIdx = -1;
+                if (identifierColumn && typeof identifierColumn === 'string') {
+                    idColIdx = getCanonicalColIdx(headerRow, identifierColumn, canonicalHeaderMap);
+                }
+
+                const changes = [];
+                for (let r = 0; r < (changedRange.rowCount || 0); r++) {
+                    for (let c = 0; c < (changedRange.columnCount || 0); c++) {
+                        const relColIndex = (changedRange.columnIndex + c) - usedStartCol;
+                        const relRowIndex = (changedRange.rowIndex + r) - usedStartRow;
+                        const absRow = changedRange.rowIndex + r;
+                        const absCol = changedRange.columnIndex + c;
+                        const headerName = (relColIndex >= 0 && relColIndex < headerRow.length) ? headerRow[relColIndex] : `Column${usedStartCol + relColIndex}`;
+
+                        // identifier value: if idColIdx is present and the usedRange covers that row, extract it
+                        let identifierValue = null;
+                        if (idColIdx !== -1) {
+                            const idRel = idColIdx; // idColIdx is already relative to headerRow indices
+                            if (relRowIndex >= 0 && relRowIndex + 1 < usedRange.values.length) {
+                                const dataRow = usedRange.values[relRowIndex + 1] || []; // +1 because header is row 0 in usedRange.values
+                                identifierValue = dataRow[idRel] !== undefined ? dataRow[idRel] : null;
+                            } else {
+                                // If usedRange.values doesn't include this row, try to read changedRange value in id column if it's within changedRange
+                                if ((changedRange.columnIndex <= usedStartCol + idColIdx) && (usedStartCol + idColIdx < changedRange.columnIndex + changedRange.columnCount)) {
+                                    const idOffset = (usedStartCol + idColIdx) - changedRange.columnIndex;
+                                    identifierValue = (changedRange.values && changedRange.values[r] ? changedRange.values[r][idOffset] : null);
+                                } else {
+                                    // fallback: null
+                                    identifierValue = null;
+                                }
+                            }
+                        }
+
+                        const addr = `${colIndexToLetter(absCol)}${absRow + 1}`;
+                        const cellVal = (changedRange.values && changedRange.values[r] ? changedRange.values[r][c] : null);
+                        changes.push({
+                            address: addr,
+                            rowIndex: absRow,
+                            colIndex: absCol,
+                            header: headerName,
+                            value: cellVal,
+                            identifier: identifierValue
+                        });
+                    }
+                }
+
+                // If an identifier column was resolved, only keep changes that occurred in that column.
+                let filteredChanges = changes;
+                if (idColIdx !== -1) {
+                    const absIdCol = usedStartCol + idColIdx;
+                    filteredChanges = changes.filter(ch => ch.colIndex === absIdCol);
+                    console.log("ExcelAPI.onChanged: identifier column present, filtered changes", { identifierColumn, absIdCol, before: changes.length, after: filteredChanges.length });
+                }
+
+                // If there are no relevant changes after filtering (when identifier column exists), do not invoke callback.
+                if (filteredChanges.length === 0) {
+                    // Log why callback is not sent when identifier column filtering removed all changes
+                    if (idColIdx !== -1) {
+                        const absIdCol = usedStartCol + idColIdx;
+                        console.log("ExcelAPI.onChanged: callback not sent because change was not under identifier column", { identifierColumn, absIdCol, totalDetectedChanges: changes.length });
+                    } else {
+                        console.log("ExcelAPI.onChanged: callback not sent because no relevant changes were detected");
+                    }
+                    // nothing to report
+                    return;
+                }
+
+                // Log computed changes before invoking callback
+                console.log("ExcelAPI.onChanged: computed changes", { sheet, address: changedRange.address, changes: filteredChanges });
+                try { callback({ address: changedRange.address, changes: filteredChanges }); } catch (err) { console.error("onChanged callback error:", err); }
+            } catch (err) {
+                console.error("onChanged handler error:", err);
+            }
+        });
+
+        await context.sync();
+    });
+
+    console.log("ExcelAPI.onChanged: finished - handler registered");
+    return {
+        remove: async () => {
+            if (eventHandler) {
+                await Excel.run(async (context) => {
+                    eventHandler.remove();
+                    await context.sync();
+                });
+            }
+        }
+    };
+}
+
 /*
 Example usages (updated to new return shape):
 
@@ -671,4 +851,12 @@ await highlightRow(2, 0, 5, 'lightgreen'); // highlights row index 2 across firs
     // later to remove:
     // await handler.remove();
 })();
+
+// Register a change handler (logs changes to console)
+const changeHandler = await onChanged("Students", "StudentID", ({ address, changes }) => {
+    console.log("Changes detected:", address, changes);
+});
+
+// To unregister the change handler:
+// await changeHandler.remove();
 */
