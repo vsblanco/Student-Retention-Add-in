@@ -2,15 +2,16 @@ import React, { useMemo } from 'react';
 import { FileUp } from 'lucide-react';
 
 const cardStyle =
-  'bg-gray-100 shadow rounded-lg p-1 flex flex-col md:flex-row md:items-center md:justify-between';
+  // made card slightly smaller (smaller padding and radius, base text-sm)
+  'bg-gray-100 shadow rounded-md p-0.5 flex flex-col md:flex-row md:items-center md:justify-between text-sm';
 const mainRowStyle = 'flex-1 flex items-center justify-between';
-const titleRowStyle = 'font-semibold text-base text-gray-800 flex items-center';
-const iconGroupStyle = 'flex gap-2 ml-2';
+const titleRowStyle = 'font-semibold text-sm text-gray-800 flex items-center'; // reduced from text-base
+const iconGroupStyle = 'flex gap-1 ml-2'; // reduced gap
 const iconButtonStyle = 'p-1 rounded transition flex items-center justify-center';
 const submissionActiveStyle = 'bg-blue-500 hover:bg-blue-600 text-white';
 const submissionInactiveStyle = 'bg-gray-300 text-gray-600 cursor-not-allowed';
-const dueStyle = 'text-sm text-gray-500';
-const scoreStyle = 'text-sm text-gray-600';
+const dueStyle = 'text-xs text-gray-500'; // reduced
+const scoreStyle = 'text-xs text-gray-600'; // reduced
 
 export const COLUMN_ALIASES_ASSIGNMENTS = {
   student: ['Student Name', 'Student'],
@@ -52,9 +53,64 @@ function StudentAssignments({ assignments, reload }) {
     return out;
   }, [assignments]);
 
-  if (!assignments.length) {
+  // Safe check for empty/undefined assignments
+  if (!assignments || !assignments.length) {
     return <div className="text-gray-500">No assignments found.</div>;
   }
+
+  // compute sorted assignments by due date (ascending)
+  const sortedAssignments = useMemo(() => {
+    const monthMap = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11
+    };
+
+    const parseDueToTimestamp = (val) => {
+      if (!val) return Number.POSITIVE_INFINITY;
+      const s = String(val).trim();
+      // match "Oct 21 by 11:59pm" or "October 21 11:59 pm" or "Oct 21"
+      const m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:\s*(?:by)?\s*([\d:]+\s*[ap]m)?)?/i);
+      if (!m) return Number.POSITIVE_INFINITY;
+      const mon = m[1].toLowerCase().slice(0,3);
+      const day = parseInt(m[2], 10);
+      const timePart = m[3] ? m[3].replace(/\s+/g, '').toLowerCase() : null;
+
+      const monthIdx = monthMap[mon];
+      if (monthIdx === undefined) return Number.POSITIVE_INFINITY;
+
+      let hours = 23, minutes = 59; // default to end of day if no time
+      if (timePart) {
+        const t = timePart.match(/(\d{1,2}):?(\d{2})?(am|pm)?/);
+        if (t) {
+          const hh = parseInt(t[1], 10);
+          const mm = t[2] ? parseInt(t[2], 10) : 0;
+          const ampm = t[3];
+          hours = hh % 12;
+          if (ampm === 'pm') hours += 12;
+          if (!ampm && hh === 24) hours = 0; // defensive
+          minutes = mm;
+        }
+      }
+
+      const now = new Date();
+      let year = now.getFullYear();
+      // build date
+      const dt = new Date(year, monthIdx, day, hours, minutes);
+      // if parsed date is more than 11 months in the past, assume next year (handles year wrap)
+      if (dt.getTime() < now.getTime() - 1000 * 60 * 60 * 24 * 330) {
+        dt.setFullYear(year + 1);
+      }
+      return dt.getTime();
+    };
+
+    const copy = [...assignments];
+    copy.sort((a, b) => {
+      const ta = parseDueToTimestamp(a[map.dueDate]);
+      const tb = parseDueToTimestamp(b[map.dueDate]);
+      return ta - tb;
+    });
+    return copy;
+  }, [assignments, map]);
 
   return (
     <>
@@ -80,7 +136,7 @@ function StudentAssignments({ assignments, reload }) {
           scrollbarColor: 'rgba(0,0,0,0.15) rgba(0,0,0,0.03)'
         }}
       >
-        {assignments.map((a, idx) => {
+        {sortedAssignments.map((a, idx) => {
           // treat missing submission status as false (i.e. missing)
           const submission = Object.prototype.hasOwnProperty.call(a, map.submission)
             ? a[map.submission]
@@ -116,17 +172,17 @@ function StudentAssignments({ assignments, reload }) {
                              href={a[map.submissionLink]}
                              target="_blank"
                              rel="noopener noreferrer"
-                             className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 cursor-pointer"
+                             className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 cursor-pointer"
                              title="View Submission"
-                             style={{ width: '60px', justifyContent: 'center' }} // fixed width
+                             style={{ width: '60px', justifyContent: 'center' }} // reduced width
                            >
                              <div className="text-red-500 text-xs font-semibold">missing</div>
                            </a>
                          ) : (
                            <div
-                             className="rounded-full bg-white-500 px-3 py-0.5 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
+                             className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
                              title="No Submission"
-                             style={{ width: '90px', justifyContent: 'center' }} // fixed width
+                             style={{ width: '70px', justifyContent: 'center' }} // reduced width
                            >
                              <div className="text-red-500 text-xs font-semibold">missing</div>
                            </div>
