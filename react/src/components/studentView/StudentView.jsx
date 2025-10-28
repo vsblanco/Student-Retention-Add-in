@@ -175,16 +175,19 @@ function StudentView() {
 		    // Log each change with its outreach match result and otherValues if provided
 		    matches.forEach(({ change, text, match }) => {
 		      console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match, otherValues: change && change.otherValues });
-		      if (match) {
-		        try {
+		      try {
+		        if (match) {
 		          // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
 		          highlightRow(change.rowIndex, change.colIndex, 9);
-				  console.log('Adding outreach comment for ',null)
-				  addComment(String(text), 'Contacted, Outreach', undefined, change.otherValues.ID, change.otherValues.StudentName);
-				  
-		        } catch (e) {
-		          console.warn('highlightRow failed for', change && change.address, e);
+		          console.log('Adding outreach comment for (matched):', text);
+		          addComment(String(text), 'Contacted, Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
+		        } else {
+		          // When the text does NOT match the outreach trigger, add a default Outreach comment
+		          console.log('Text did NOT match outreach trigger — adding Outreach comment for:', text);
+		          addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
 		        }
+		      } catch (e) {
+		        console.warn('highlightRow/addComment failed for', change && change.address, e);
 		      }
 		    });
 		    const anyMatch = matches.some(m => m.match);
