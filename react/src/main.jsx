@@ -51,3 +51,16 @@ if (typeof window.Office === 'undefined') {
     }
   });
 }
+
+// Minimal entry module to render a simple app into #root
+const root = document.getElementById('root');
+if (!root) {
+  console.error('Root element not found');
+} else {
+  root.innerHTML = `
+    <div style="font-family: Segoe UI, Roboto, Arial, sans-serif; padding: 16px;">
+      <h1>Student Retention Settings</h1>
+      <p>The app script loaded successfully from ./src/main.jsx</p>
+    </div>
+  `;
+}
