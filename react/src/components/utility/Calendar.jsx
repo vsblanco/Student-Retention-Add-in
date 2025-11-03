@@ -17,8 +17,9 @@ const MONTHS = [
 
 const Calendar = ({ onDateSelect }) => {
   const today = new Date();
-  const [month, setMonth] = useState(9); // October (0-indexed)
-  const [year, setYear] = useState(2025);
+  // initialize month/year to today's month/year
+  const [month, setMonth] = useState(today.getMonth());
+  const [year, setYear] = useState(today.getFullYear());
   const [selectedDate, setSelectedDate] = useState(null);
 
   // Get number of days in month
