@@ -163,37 +163,39 @@ function StudentView() {
 		    const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
 		    // Map each change to a boolean indicating whether its text triggers outreach
 		    const matches = changes.map(ch => {
-		      const rawVal = ch && ch.value;
-		      const text = (rawVal === undefined || rawVal === null) ? '' : String(rawVal);
-		      try {
-		        return { change: ch, text, match: Boolean(isOutreachTrigger(text)) };
-		      } catch (e) {
-		        console.warn('isOutreachTrigger threw for value:', text, e);
-		        return { change: ch, text, match: false };
-		      }
-		    });
-		    // Log each change with its outreach match result and otherValues if provided
-		    matches.forEach(({ change, text, match }) => {
-		      console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match, otherValues: change && change.otherValues });
-		      try {
-		        if (match) {
-		          // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
-		          highlightRow(change.rowIndex, change.colIndex, 9);
-		          console.log('Adding outreach comment for (matched):', text);
-		          addComment(String(text), 'Contacted, Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
-		        } else {
-		          // When the text does NOT match the outreach trigger, add a default Outreach comment
-		          console.log('Text did NOT match outreach trigger — adding Outreach comment for:', text);
-		          addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
-		        }
-		      } catch (e) {
-		        console.warn('highlightRow/addComment failed for', change && change.address, e);
-		      }
-		    });
-		    const anyMatch = matches.some(m => m.match);
-		    console.log('Excel outreach trigger match (any):', anyMatch);
-		    // Return true if any changed cell matched the outreach trigger; otherwise false.
-		    return anyMatch;
+              const rawVal = ch && ch.value;
+              const text = (rawVal === undefined || rawVal === null) ? '' : String(rawVal);
+              try {
+                const out = isOutreachTrigger(text); // { matched: boolean, tag: string|null }
+                return { change: ch, text, match: Boolean(out && out.matched), tag: out && out.tag };
+              } catch (e) {
+                console.warn('isOutreachTrigger threw for value:', text, e);
+                return { change: ch, text, match: false, tag: null };
+              }
+            });
+            // Log each change with its outreach match result and otherValues if provided
+            matches.forEach(({ change, text, match, tag }) => {
+              console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match, tag, otherValues: change && change.otherValues });
+              try {
+                if (match) {
+                  // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
+                  highlightRow(change.rowIndex, change.colIndex, 9);
+                  console.log('Adding outreach comment for (matched):', text, 'tag:', tag);
+                  const tagString = tag ? `${tag}, Outreach` : 'Outreach';
+                  addComment(String(text), tagString, undefined, change.otherValues?.ID, change.otherValues?.StudentName);
+                } else {
+                  // When the text does NOT match the outreach trigger, add a default Outreach comment
+                  console.log('Text did NOT match outreach trigger — adding Outreach comment for:', text);
+                  addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
+                }
+              } catch (e) {
+                console.warn('highlightRow/addComment failed for', change && change.address, e);
+              }
+            });
+            const anyMatch = matches.some(m => m.match);
+            console.log('Excel outreach trigger match (any):', anyMatch);
+            // Return true if any changed cell matched the outreach trigger; otherwise false.
+            return anyMatch;
 		  },
 		  null,               // sheet -> use active worksheet
 		  'Outreach',               // identifierColumn (canonical name, will be resolved via COLUMN_ALIASES)

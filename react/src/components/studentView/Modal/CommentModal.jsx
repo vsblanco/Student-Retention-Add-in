@@ -303,6 +303,9 @@ function CommentModal({
   const tagKeys = obj => Object.keys(obj || {}).sort().join(', ');
   const noTagChanges = tagKeys(editTagContainer) === tagKeys(modalTagContainer);
 
+  // new helper: true when entry has no comment ID
+  const cannotModify = !entry?.commentid;
+
   // --- Modal content ---
   const [clipboardHover, setClipboardHover] = useState(false);
 
@@ -490,26 +493,28 @@ function CommentModal({
               width: 36,
               height: 36,
               borderRadius: '50%',
-              background: confirmDelete ? '#fee2e2' : '#ef4444',
-              color: confirmDelete ? '#b91c1c' : 'white',
+              background: cannotModify ? '#e5e7eb' : (confirmDelete ? '#fee2e2' : '#ef4444'),
+              color: cannotModify ? '#9ca3af' : (confirmDelete ? '#b91c1c' : 'white'),
               border: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: 'pointer',
+              cursor: cannotModify ? 'not-allowed' : 'pointer',
               boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
               transition: 'background 0.15s, box-shadow 0.15s'
             }}
-            disabled={false}
-            aria-label={confirmDelete ? "Cancel Delete" : "Delete"}
-            title={confirmDelete ? "Cancel Delete" : "Delete"}
+            disabled={cannotModify}
+            aria-label={cannotModify ? "Cannot Delete — no comment ID" : (confirmDelete ? "Cancel Delete" : "Delete")}
+            title={cannotModify ? "Cannot delete — comment does not contain an ID" : (confirmDelete ? "Cancel Delete" : "Delete")}
             onMouseEnter={e => {
+              if (e.currentTarget.disabled) return;
               e.currentTarget.style.background = confirmDelete ? '#fecaca' : '#dc2626';
               e.currentTarget.style.boxShadow = confirmDelete
                 ? '0 2px 8px rgba(220,38,38,0.10)'
                 : '0 2px 8px rgba(220,38,38,0.15)';
             }}
             onMouseLeave={e => {
+              if (e.currentTarget.disabled) return;
               e.currentTarget.style.background = confirmDelete ? '#fee2e2' : '#ef4444';
               e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
             }}
@@ -519,7 +524,7 @@ function CommentModal({
 
           {/* Moved CommentID to sit to the right of the delete button */}
           <span style={{ fontSize: 12, color: '#6b7280', userSelect: 'text' }}>
-            Comment ID: {entry.commentid}
+            {entry?.commentid ? `Comment ID: ${entry.commentid}` : 'No Comment ID was found'}
           </span>
         </div>
 
@@ -562,44 +567,52 @@ function CommentModal({
             type="button"
             onClick={confirmDelete ? handleDeleteComment : handleSaveComment}
             disabled={
-              confirmDelete
-                ? false
-                : (modalComment === (entry.comment || "") && noTagChanges)
+              cannotModify
+                ? true
+                : (confirmDelete
+                    ? false
+                    : (modalComment === (entry.comment || "") && noTagChanges))
             }
             style={{
               width: 36,
               height: 36,
               borderRadius: '50%',
-              background: confirmDelete
-                ? '#ef4444'
-                : (modalComment === (entry.comment || "") && noTagChanges)
-                  ? '#d1d5db'
-                  : '#2563eb',
-              color: confirmDelete
-                ? 'white'
-                : (modalComment === (entry.comment || "") && noTagChanges)
-                  ? '#888'
-                  : 'white',
+              background: cannotModify
+                ? '#d1d5db'
+                : (confirmDelete
+                    ? '#ef4444'
+                    : (modalComment === (entry.comment || "") && noTagChanges)
+                      ? '#d1d5db'
+                      : '#2563eb'),
+              color: cannotModify
+                ? '#9ca3af'
+                : (confirmDelete
+                    ? 'white'
+                    : (modalComment === (entry.comment || "") && noTagChanges)
+                      ? '#888'
+                      : 'white'),
               fontWeight: 500,
               border: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              cursor: confirmDelete
-                ? 'pointer'
-                : (modalComment === (entry.comment || "") && noTagChanges ? 'not-allowed' : 'pointer'),
+              cursor: cannotModify
+                ? 'not-allowed'
+                : (confirmDelete ? 'pointer' : (modalComment === (entry.comment || "") && noTagChanges ? 'not-allowed' : 'pointer')),
               opacity: confirmDelete ? 1 : (modalComment === (entry.comment || "") && noTagChanges ? 0.7 : 1),
               transition: 'background 0.15s, box-shadow 0.15s'
             }}
-            aria-label={confirmDelete ? 'Confirm Delete' : 'Update'}
-            title={confirmDelete ? 'Confirm Delete' : 'Update'}
+            aria-label={cannotModify ? 'Cannot Update — no comment ID' : (confirmDelete ? 'Confirm Delete' : 'Update')}
+            title={cannotModify ? 'Cannot modify — comment does not contain an ID' : (confirmDelete ? 'Confirm Delete' : 'Update')}
             onMouseEnter={e => {
+              if (e.currentTarget.disabled) return;
               e.currentTarget.style.background = confirmDelete ? '#dc2626' : '#1e40af';
               e.currentTarget.style.boxShadow = confirmDelete
                 ? '0 2px 8px rgba(220,38,38,0.15)'
                 : '0 2px 8px rgba(37,99,235,0.15)';
             }}
             onMouseLeave={e => {
+              if (e.currentTarget.disabled) return;
               e.currentTarget.style.background = confirmDelete
                 ? '#ef4444'
                 : (modalComment === (entry.comment || "") && noTagChanges)
