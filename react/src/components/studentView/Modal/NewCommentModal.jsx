@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useRef as useRefHook, useEffect as useEffectHook } from 'react';
 import InsertTagButton from '../Parts/InsertTagButton';
 import TagContainer from '../Parts/TagContainer';
-import { COMMENT_TAGS } from '../Parts/Comment.jsx';
+import { COMMENT_TAGS, extractLdaMatches } from '../Parts/Comment.jsx'; // added extractLdaMatches
 import { DNCModal, LDAModal } from '../Tag.jsx';
 
 const styles = `
@@ -48,6 +48,52 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
     title: t.title || t.label,
     spanClass: t.tagClass || t.spanClass || t.bgClass || ''
   }));
+
+  // Refs for debouncing LDA removals and remembering last matches
+  const ldaRemovalTimerRef = React.useRef(null);
+  const lastLdaMatchesRef = React.useRef([]);
+
+  // Helper: update insertedTags to reflect a concrete set of LDA matches (immediate apply)
+  const updateInsertedTagsForMatches = (matches) => {
+    const newLdaLabels = (matches || []).map(m => `LDA ${m}`);
+    const parent = tags.find(t => (t.label || '').toUpperCase() === 'LDA');
+    setInsertedTags(prev => {
+      // Keep non-LDA tags
+      const nonLda = prev.filter(t => {
+        const lbl = (typeof t === 'string' ? t : t.label) || '';
+        return !lbl.toUpperCase().startsWith('LDA');
+      });
+
+      // Build existing labels set to avoid duplicates
+      const existing = new Set(prev.map(t => (typeof t === 'string' ? t : t.label)));
+
+      // Add only new LDA labels that aren't already present
+      const additions = newLdaLabels
+        .filter(l => !existing.has(l))
+        .map(l => ({
+          label: l,
+          title: l,
+          spanClass: parent ? parent.spanClass : 'bg-gray-100 text-gray-800'
+        }));
+
+      // Return non-LDA tags followed by new (or retained) LDA tags
+      return [...nonLda, ...additions];
+    });
+  };
+
+  // Schedule removal of all LDA tags after a short pause (to avoid oscillation while typing).
+  const scheduleRemoveLdaTags = (delay = 800) => {
+    if (ldaRemovalTimerRef.current) clearTimeout(ldaRemovalTimerRef.current);
+    ldaRemovalTimerRef.current = setTimeout(() => {
+      // remove all LDA tags if no matches persisted
+      setInsertedTags(prev => prev.filter(t => {
+        const lbl = (typeof t === 'string' ? t : t.label) || '';
+        return !lbl.toUpperCase().startsWith('LDA');
+      }));
+      lastLdaMatchesRef.current = [];
+      ldaRemovalTimerRef.current = null;
+    }, delay);
+  };
 
   // insert tag label at cursor position inside textarea
   const handleTagClick = (label) => {
@@ -105,16 +151,52 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
     }
   };
 
+  // New: detect LDA-like text as user types and auto-insert/update/remove LDA tag(s)
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    const matches = extractLdaMatches(val || '') || [];
+
+    // If we found at least one match, cancel any pending removal and apply changes immediately.
+    if (matches.length > 0) {
+      if (ldaRemovalTimerRef.current) {
+        clearTimeout(ldaRemovalTimerRef.current);
+        ldaRemovalTimerRef.current = null;
+      }
+      // If matches changed from last seen, update tags immediately
+      const last = lastLdaMatchesRef.current || [];
+      const same = matches.length === last.length && matches.every((m, i) => m === last[i]);
+      if (!same) {
+        updateInsertedTagsForMatches(matches);
+        lastLdaMatchesRef.current = matches;
+      }
+    } else {
+      // No matches found currently: don't remove immediately (avoids oscillation while typing).
+      // Schedule removal after short debounce so quick typing doesn't cause flicker.
+      scheduleRemoveLdaTags(800);
+    }
+  };
+
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      // cleanup timer on unmount
+      if (ldaRemovalTimerRef.current) {
+        clearTimeout(ldaRemovalTimerRef.current);
+        ldaRemovalTimerRef.current = null;
+      }
     };
   }, []);
 
   React.useEffect(() => {
     if (newCommentInputRef.current) {
       newCommentInputRef.current.value = initialComment;
+      // Ensure insertedTags reflect any LDA content in the initial comment (apply immediately)
+      const initialMatches = extractLdaMatches(initialComment || '') || [];
+      if (initialMatches.length > 0) {
+        updateInsertedTagsForMatches(initialMatches);
+        lastLdaMatchesRef.current = initialMatches;
+      }
     }
   }, [initialComment, show]);
 
@@ -188,6 +270,7 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
           className="w-full p-3 border border-gray-300 rounded-xl bg-white shadow-inner focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-150 text-base placeholder-gray-400 resize-vertical"
           rows={3}
           placeholder="Add a new comment..."
+          onChange={handleInputChange} // attach watcher for LDA detection
         ></textarea>
         <div className="flex justify-end items-center mt-4">
            <button

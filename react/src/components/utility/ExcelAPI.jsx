@@ -695,6 +695,19 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
             try {
                // Log that a change event fired (include sheet and event address)
                 console.log("ExcelAPI.onChanged: change event fired", { sheet, address: eventArgs && eventArgs.address });
+
+                // --- ADDED: ignore non-local changes using eventArgs.source ---
+                if (eventArgs && eventArgs.source) {
+                    const src = eventArgs.source;
+                    const isLocalString = (typeof src === 'string' && src.toLowerCase() === 'local');
+                    const isLocalEnum = (typeof Excel !== 'undefined' && Excel.EventSource && src === Excel.EventSource.local);
+                    if (!isLocalString && !isLocalEnum) {
+                        console.log("ExcelAPI.onChanged: ignoring non-local change", { source: src });
+                        return; // don't process remote/sync changes
+                    }
+                }
+                // --- end added guard ---
+
                 // Load changed range and used range within this captured context
                 const changedRange = worksheet.getRange(eventArgs.address);
                 changedRange.load(["address", "rowIndex", "columnIndex", "rowCount", "columnCount", "values", "formulas"]);

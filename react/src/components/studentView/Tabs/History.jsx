@@ -182,15 +182,22 @@ useEffect(() => {
    // Background processing: normalize, filter, split pinned/unpinned, sort and group by month.
    // This is done off-render so isLoading remains true until the work finishes and order is stable.
    useEffect(() => {
-     // When there's no history, ensure ready is false (we'll keep showing skeletons).
+     // When there's no history (empty array), stop loading and show the "no comments" message.
+     // This prevents skeletons from showing indefinitely when there truly are no comments.
      if (!Array.isArray(localHistory) || localHistory.length === 0) {
+       // clear processed data and collapsed folders
        setProcessed({
          pinnedComments: [],
          currentMonthComments: [],
          monthGroups: {},
          sortedMonths: []
        });
-       setReady(false);
+       setCollapsedFolders({});
+       // mark ready so isLoading becomes false and skeleton overlay fades away
+       setReady(true);
+       // clear external/global loading flag as a courtesy so other modules know loading finished
+       setExternalLoading(false);
+       setHistoryLoading(false);
        return;
      }
 
@@ -462,7 +469,7 @@ useEffect(() => {
          <ul className="space-y-4">
            {(!Array.isArray(localHistory) || localHistory.length === 0) ? (
              <li className="p-3 bg-gray-100 rounded-lg shadow-sm relative">
-               <p className="text-sm text-gray-800">No history found for this student.</p>
+               <p className="text-sm text-gray-800">Student has no comments yet</p>
              </li>
            ) : (
              <>
