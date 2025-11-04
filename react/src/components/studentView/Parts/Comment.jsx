@@ -3,6 +3,7 @@ import { formatExcelDate, formatName } from '../../utility/Conversion';
 import BounceAnimation from '../../utility/BounceAnimation';
 import CommentModal from '../Modal/CommentModal';
 import { toast } from 'react-toastify';
+import { ldaKeywords } from '../Tag';
 
 // CSS class constants
 const liStyle = "p-3 rounded-lg shadow-sm relative";
@@ -236,7 +237,7 @@ function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFuncti
     }
   }
 
-  // Highlight search term in comment (for non-quote or fallback)
+  // bold search term in comment (for non-quote or fallback)
   let commentContent = entry.comment;
   if (!hasQuoteTag || !quoteText) {
     if (isLdaWithDate && entry.comment && ldaDateRegex) {
@@ -255,8 +256,8 @@ function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFuncti
       if (lastIndex < entry.comment.length) {
         parts.push(entry.comment.slice(lastIndex));
       }
-      // Highlight "Tomorrow", "next week", weekdays, and weekends in the resulting parts
-      commentContent = parts.flatMap(part => highlightLdaKeywords(part));
+      // bold "Tomorrow", "next week", weekdays, and weekends in the resulting parts
+      commentContent = parts.flatMap(part => boldLdaKeywords(part));
     } else if (searchTerm && entry.comment) {
       const regex = new RegExp(`(${searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
       commentContent = entry.comment.split(regex).map((part, i) =>
@@ -585,7 +586,7 @@ function Comment({ entry, searchTerm, index, onContextMenu, delete: deleteFuncti
                      textOverflow: 'ellipsis',
                      whiteSpace: 'nowrap',
                      cursor: 'pointer',
-                     userSelect: 'none' // prevent highlighting
+                     userSelect: 'none' // prevent bolding
                    }}
                    onClick={e => {
                      e.stopPropagation(); // Prevent opening modal
@@ -724,127 +725,37 @@ export function CommentSkeleton({ lines = 1, showAvatar = true, showTags = true 
   );
 }
 
-// Helper to highlight LDA keywords (exported for reuse)
-export function highlightLdaKeywords(part) {
-  if (typeof part !== "string") return part;
+// Helper to bold LDA keywords (exported for reuse)
+export function boldLdaKeywords(text) {
+  if (typeof text !== "string") return text;
 
-  // Keywords to highlight
-  const keywords = [
-    "Tomorrow", "next week",
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-    "weekend", "weekends"
-  ];
+  // Use ldaKeywords to determine tokens that should be bolded.
+  // ldaKeywords returns { dates: [], keywords: [] } where `keywords` are the raw matched tokens.
+  const { keywords } = ldaKeywords(text || '');
+  if (!keywords || keywords.length === 0) return text;
 
-  // Build regex parts:
-  // - shortDate: matches MM/DD or M/D and allows optional year (MM/DD/YY or MM/DD/YYYY), accepts / or - separators
-  // - keyword group: word-boundary match for listed keywords (case-insensitive)
-  const shortDatePart = '\\b\\d{1,2}[\\/\\-]\\d{1,2}(?:[\\/\\-]\\d{2,4})?\\b';
-  const keywordPart = `\\b(?:${keywords.map(k => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('|')})\\b`;
-  const combinedRegex = new RegExp(`${shortDatePart}|${keywordPart}`, 'gi');
+  // Sort tokens by length descending to avoid partial matches (e.g., 'day' inside 'Monday').
+  const tokens = Array.from(new Set(keywords)).sort((a, b) => b.length - a.length);
+  const escaped = tokens.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
 
   const parts = [];
   let lastIdx = 0;
   let match;
-  while ((match = combinedRegex.exec(part)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     const idx = match.index;
     if (idx > lastIdx) {
-      parts.push(part.slice(lastIdx, idx));
+      parts.push(text.slice(lastIdx, idx));
     }
-    // Bold the matched keyword or date
     parts.push(<b key={`lda-match-${idx}`}>{match[0]}</b>);
-    lastIdx = combinedRegex.lastIndex;
+    lastIdx = regex.lastIndex;
   }
-  if (lastIdx < part.length) {
-    parts.push(part.slice(lastIdx));
+  if (lastIdx < text.length) {
+    parts.push(text.slice(lastIdx));
   }
 
-  return parts.length > 0 ? parts : part;
+  return parts.length > 0 ? parts : text;
 }
 
-// New helper: extract LDA match strings (normalized as M/D/YY)
-export function extractLdaMatches(text) {
-  if (!text || typeof text !== 'string') return [];
-  const keywords = [
-    "Tomorrow", "next week",
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-    "weekend", "weekends"
-  ];
-  const shortDatePart = '\\b\\d{1,2}[\\/\\-]\\d{1,2}(?:[\\/\\-]\\d{2,4})?\\b';
-  const keywordPart = `\\b(?:${keywords.map(k => k.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')).join('|')})\\b`;
-  const combinedRegex = new RegExp(`${shortDatePart}|${keywordPart}`, 'gi');
-
-  const results = [];
-  let match;
-  const now = new Date();
-
-  const formatTwoDigit = d => {
-    const mm = d.getMonth() + 1;
-    const dd = d.getDate();
-    const yy = String(d.getFullYear()).slice(-2);
-    return `${mm}/${dd}/${yy}`;
-  };
-
-  const weekdayIndex = name => {
-    const map = { sunday:0, monday:1, tuesday:2, wednesday:3, thursday:4, friday:5, saturday:6 };
-    return map[name.toLowerCase()];
-  };
-
-  while ((match = combinedRegex.exec(text)) !== null) {
-    const token = match[0];
-    // numeric date e.g., 10/7, 10/7/25 or 10-7-2025
-    const numeric = token.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
-    if (numeric) {
-      let month = parseInt(numeric[1], 10);
-      let day = parseInt(numeric[2], 10);
-      let yearPart = numeric[3];
-      let year;
-      if (!yearPart) {
-        year = now.getFullYear();
-      } else if (yearPart.length === 2) {
-        year = 2000 + parseInt(yearPart, 10);
-      } else {
-        year = parseInt(yearPart, 10);
-      }
-      const d = new Date(year, month - 1, day);
-      if (!isNaN(d.getTime())) results.push(formatTwoDigit(d));
-      continue;
-    }
-
-    const lc = token.toLowerCase();
-    if (lc === 'tomorrow') {
-      const d = new Date(now);
-      d.setDate(d.getDate() + 1);
-      results.push(formatTwoDigit(d));
-      continue;
-    }
-    if (lc === 'next week') {
-      const d = new Date(now);
-      d.setDate(d.getDate() + 7);
-      results.push(formatTwoDigit(d));
-      continue;
-    }
-    if (lc === 'weekend' || lc === 'weekends') {
-      // return next Saturday
-      const d = new Date(now);
-      const target = 6; // Saturday
-      const diff = (target + 7 - d.getDay()) % 7 || 7;
-      d.setDate(d.getDate() + diff);
-      results.push(formatTwoDigit(d));
-      continue;
-    }
-    // weekday names -> next occurrence of that weekday
-    const wIdx = weekdayIndex(token);
-    if (typeof wIdx === 'number') {
-      const d = new Date(now);
-      const diff = (wIdx + 7 - d.getDay()) % 7 || 7;
-      d.setDate(d.getDate() + diff);
-      results.push(formatTwoDigit(d));
-      continue;
-    }
-  }
-
-  // dedupe and return normalized strings
-  return Array.from(new Set(results));
-}
 
 export default Comment;

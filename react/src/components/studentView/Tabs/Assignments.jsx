@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { FileUp } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Clipboard } from 'lucide-react';
 
 const cardStyle =
   // made card slightly smaller (smaller padding and radius, base text-sm)
@@ -112,6 +112,109 @@ function StudentAssignments({ assignments, reload }) {
     return copy;
   }, [assignments, map]);
 
+  // feedback state for copy button
+  const [copied, setCopied] = useState(false);
+
+  // helper: try to query clipboard-write permission; return true if safe to attempt writeText
+  const requestClipboardPermission = async () => {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) {
+        // Permissions API not supported — proceed and let writeText trigger any prompt
+        console.log('Permissions API not available — will attempt clipboard write (may prompt).');
+        return true;
+      }
+      // note: some browsers may not support 'clipboard-write' in query; guard it
+      const perm = await navigator.permissions.query({ name: 'clipboard-write' });
+      // states: 'granted', 'prompt', 'denied'
+      if (perm.state === 'denied') {
+        console.log('Clipboard permission: denied');
+        return false;
+      }
+      // 'granted' or 'prompt' -> okay to attempt writeText (prompt will appear on write)
+      console.log('Clipboard permission:', perm.state);
+      return true;
+    } catch (e) {
+      // any exception => can't determine; attempt writeText (best-effort)
+      console.log('Could not determine clipboard permission (error), will attempt write.'); // eslint-disable-line no-console
+      return true;
+    }
+  };
+
+  // copy all assignmentLink values as bullet points
+  const copyAssignmentLinks = async () => {
+    try {
+      const items = (sortedAssignments || []).map(a => {
+        const title = a[map.title] || '';
+        const link = a[map.assignmentLink] || a[map.link] || '';
+        return { title, link };
+      }).filter(it => !!it.link);
+
+      if (items.length === 0) {
+        // still provide brief feedback if nothing to copy
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+        return;
+      }
+
+      const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+
+      // format bullets as: "- Title: link"
+      const bullets = items
+        .map(it => `- ${clean(it.title) || 'Untitled'}: ${clean(it.link)}`)
+        .join('\n');
+
+      // Ask/check permission before attempting clipboard write.
+      const canAttemptClipboard = await requestClipboardPermission();
+      let copiedOk = false;
+      if (canAttemptClipboard && navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(bullets);
+          copiedOk = true;
+          console.log('Copied to clipboard via Clipboard API');
+        } catch (err) {
+          // writeText failed (could be Permissions Policy, cross-origin iframe, etc.)
+          console.log('Clipboard writeText failed, falling back to textarea method:', err);
+          copiedOk = false;
+        }
+      }
+
+      if (!copiedOk) {
+        // If permission was explicitly denied, give a brief hint for enabling it.
+        if (!canAttemptClipboard) {
+          try {
+            // minimal user hint
+            window.alert('Clipboard access is denied. Please allow clipboard access in your browser settings or use the manual copy fallback.');
+          } catch (e) {
+            // ignore alert failures in embedded contexts
+          }
+        }
+
+        // textarea fallback (best-effort)
+        const ta = document.createElement('textarea');
+        ta.value = bullets;
+        // off-screen
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          console.log('Copied to clipboard via textarea fallback');
+        } catch (e) {
+          // ignore; best-effort copy
+          console.log('Textarea fallback copy failed', e);
+        }
+        document.body.removeChild(ta);
+      }
+
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch (err) {
+      // minimal fallback: no toast here to keep changes small
+      setCopied(false);
+    }
+  };
+
   return (
     <>
       <style>
@@ -127,8 +230,57 @@ function StudentAssignments({ assignments, reload }) {
           .student-assignments.custom-scrollbar::-webkit-scrollbar-track {
             background: rgba(0,0,0,0.03);
           }
+
+          /* Tooltip styles: positioned to the LEFT of the button, vertically centered.
+             Starts slightly right (invisible) and when .visible it fades in and slides left. */
+          .tooltip {
+            position: absolute;
+            top: 50%;
+            right: calc(100% + 8px); /* place to the left of the button */
+            left: auto;
+            transform: translateY(-50%) translateX(12px); /* start slightly to the right */
+            background-color: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 180ms ease-out, transform 220ms cubic-bezier(.2,.8,.2,1);
+            pointer-events: none;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+          }
+          .tooltip.visible {
+            opacity: 1;
+            transform: translateY(-50%) translateX(-8px); /* slide left into place */
+          }
         `}
       </style>
+
+      { /* New header inserted here */ }
+      <div className="sticky-header space-y-4 mb-2">
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-bold text-gray-800">Assignments</h3>
+          <div className="flex items-center">
+            <div className="relative">
+              <button
+                id="copy-assignments-button"
+                className="bg-gray-500 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-600"
+                aria-label="Copy assignments"
+                title={copied ? "Copied" : "Copy assignment links"}
+                type="button"
+                onClick={copyAssignmentLinks}
+              >
+                <Clipboard className="h-4 w-4" />
+              </button>
+              {copied && (
+                <div className="tooltip visible">Copied!</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         className="student-assignments max-h-125 overflow-y-auto grid gap-4 custom-scrollbar"
         style={{

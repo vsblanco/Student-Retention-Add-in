@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../utility/Modal.jsx';
 import InsertTagButton from '../Parts/InsertTagButton.jsx';
-import { highlightLdaKeywords } from '../Parts/Comment.jsx';
+import { boldLdaKeywords } from '../Parts/Comment.jsx';
 import { DNCModal, LDAModal } from '../Tag.jsx';
 import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -394,7 +394,7 @@ function CommentModal({
               {afterQuote}
             </>
           ) : (
-            highlightLdaKeywords(modalSavedComment)
+            boldLdaKeywords(modalSavedComment)
           )}
         </div>
       </div>

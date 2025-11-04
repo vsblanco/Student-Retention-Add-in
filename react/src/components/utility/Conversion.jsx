@@ -5,31 +5,49 @@
 // This function converts an Excel serial date to a JavaScript Date object
 
 export function formatExcelDate(serial, format = "default") {
-  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-  const days = Math.floor(Number(serial));
-  const ms = Math.round((Number(serial) - days) * 24 * 60 * 60 * 1000);
-  const date = new Date(excelEpoch.getTime() + days * 86400000 + ms);
+  // Parse numeric value
+  const num = Number(serial);
+  if (isNaN(num)) return "N/A";
 
+  // Separate whole days and fractional day (time)
+  const days = Math.floor(num);
+  const fraction = num - days;
+
+  // Adjust for Excel's bogus 1900 leap-year (Excel treats 1900 as leap year).
+  // For serials >= 60 Excel includes a non-existent 1900-02-29, so subtract 1 day for serials > 59.
+  let adjDays = days;
+  if (adjDays > 59) adjDays -= 1;
+
+  // Compute UTC milliseconds from epoch 1899-12-31 so that serial 1 => 1900-01-01
+  const epochUtc = Date.UTC(1899, 11, 31);
+  const ms = epochUtc + adjDays * 86400000 + Math.round(fraction * 86400000);
+
+  const date = new Date(ms);
   if (isNaN(date.getTime())) return "N/A";
 
+  // Helper getters use UTC to avoid local timezone shifts
   if (format === "long") {
-    // "Month Day, Year"
     return date.toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
+      timeZone: 'UTC'
     });
   }
 
-  // Default: mm/dd/yy H:MM AM/PM
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  const yy = String(date.getFullYear()).slice(-2);
-  let hours = date.getHours();
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const yy = String(date.getUTCFullYear()).slice(-2);
+
+  if (format === "short") {
+    return `${mm}/${dd}/${yy}`;
+  }
+
+  let hours = date.getUTCHours();
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
   const ampm = hours >= 12 ? 'PM' : 'AM';
   hours = hours % 12;
-  hours = hours ? hours : 12; // 0 should be 12
+  hours = hours ? hours : 12; // 0 -> 12
 
   return `${mm}/${dd}/${yy} ${hours}:${minutes} ${ampm}`;
 }

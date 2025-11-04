@@ -2,8 +2,8 @@ import React, { useRef, useState } from 'react';
 import { useRef as useRefHook, useEffect as useEffectHook } from 'react';
 import InsertTagButton from '../Parts/InsertTagButton';
 import TagContainer from '../Parts/TagContainer';
-import { COMMENT_TAGS, extractLdaMatches } from '../Parts/Comment.jsx'; // added extractLdaMatches
-import { DNCModal, LDAModal } from '../Tag.jsx';
+import { COMMENT_TAGS } from '../Parts/Comment.jsx'; 
+import { DNCModal, LDAModal, ldaKeywords } from '../Tag.jsx'; // added ldaKeywords
 
 const styles = `
   @keyframes fadeInDrop {
@@ -154,7 +154,8 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
   // New: detect LDA-like text as user types and auto-insert/update/remove LDA tag(s)
   const handleInputChange = (e) => {
     const val = e.target.value;
-    const matches = extractLdaMatches(val || '') || [];
+    const ldaResult = ldaKeywords(val || '') || { dates: [], keywords: [] };
+    const matches = Array.isArray(ldaResult.dates) ? ldaResult.dates : [];
 
     // If we found at least one match, cancel any pending removal and apply changes immediately.
     if (matches.length > 0) {
@@ -192,7 +193,8 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
     if (newCommentInputRef.current) {
       newCommentInputRef.current.value = initialComment;
       // Ensure insertedTags reflect any LDA content in the initial comment (apply immediately)
-      const initialMatches = extractLdaMatches(initialComment || '') || [];
+      const initialLda = ldaKeywords(initialComment || '') || { dates: [], keywords: [] };
+      const initialMatches = Array.isArray(initialLda.dates) ? initialLda.dates : [];
       if (initialMatches.length > 0) {
         updateInsertedTagsForMatches(initialMatches);
         lastLdaMatchesRef.current = initialMatches;
