@@ -6,11 +6,12 @@ import About from './components/about/About.jsx';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Slide, Zoom, Flip, Bounce } from 'react-toastify';
+import Settings from './components/settings/Settings.jsx';
 
 function App() {
   return (
     <>
-      <StudentView />
+      <Settings />
       <ToastContainer
       position="bottom-left"
       pauseOnFocusLoss={false}
