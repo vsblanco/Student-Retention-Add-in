@@ -53,13 +53,10 @@ function StudentAssignments({ assignments, reload }) {
     return out;
   }, [assignments]);
 
-  // Safe check for empty/undefined assignments
-  if (!assignments || !assignments.length) {
-    return <div className="text-gray-500">No assignments found.</div>;
-  }
-
   // compute sorted assignments by due date (ascending)
   const sortedAssignments = useMemo(() => {
+    if (!assignments || !assignments.length) return [];
+
     const monthMap = {
       jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
       jul: 6, aug: 7, sep: 8, sept: 8, oct: 9, nov: 10, dec: 11
@@ -214,6 +211,11 @@ function StudentAssignments({ assignments, reload }) {
       setCopied(false);
     }
   };
+
+  // Safe check for empty/undefined assignments (moved below hooks so hooks order is stable)
+  if (!assignments || !assignments.length) {
+    return <div className="text-gray-500">No assignments found.</div>;
+  }
 
   return (
     <>
