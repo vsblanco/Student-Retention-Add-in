@@ -3,6 +3,27 @@ import importIcon from '../../assets/icons/import-icon.png';
 import createLdaIcon from '../../assets/icons/create-lda-icon.png';
 import emailIcon from '../../assets/icons/email-icon.png';
 
+export const defaultColumns =[
+	{ name: 'Assigned', alias: ['advisor'], static: true },
+	{ name: 'Student Name', alias: ['Student']},
+	{ name: 'Student ID', alias: ['Student Number','Student identifier'], hidden: true },
+	{ name: 'Gender', alias: ['Sex'], hidden: true},
+	{ name: 'Phone', alias: ['Phone Number','Contact Number']},
+	{ name: 'Other Phone', alias: ['Second Phone', 'Alt Phone']},
+	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true},
+	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
+	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, format: ['=HYPERLINK']},
+	{ name: 'Grade', alias: ['Current Grade', 'Grade Level', 'Score']  },
+	{ name: 'LDA', alias: ['Last Date of Attendance'], format: ['MM/DD/YYYY']},
+	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
+	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
+];
+
+export const formatOptions = [
+	{ option: 'Conditional Formatting', type: ['G-Y-R Color Scale', 'R-Y-G Color Scale'] },
+	{ option: 'Function', type: ['=HYPERLINK', '=XLOOKUP'] },
+	{ option: 'Date Format', type: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
+];
 
 export const defaultWorkbookSettings = [
 	
@@ -18,17 +39,19 @@ export const defaultWorkbookSettings = [
 		id: 'columnsToImport',
 		label: 'Columns to Import',
 		type: 'array',
-		defaultValue: ['Column1', 'Column2'],
+		defaultValue: defaultColumns,
 		section: 'Import Data',
-		description: 'Comma-separated list of columns to import from the master list.'
+		description: 'List of columns to import from the master list. Each item is an object: { name, alias, static } where alias may be a string or an array of strings and static is a boolean to prevent edits.'
 	},
 	{
-		id: 'staticColumns',
-		label: 'Static Columns',
-		type: 'array',
-		defaultValue: ['Column1', 'Column2'],
+		id: 'Format',
+		label: 'Format',
+		type: 'editableArray',
+		choices: defaultColumns,
+		options: formatOptions,
+		defaultValue: [],
 		section: 'Import Data',
-		description: 'Comma-separated list of static columns to exclude in the import.'
+		description: 'List of columns to format in the master list.'
 	},
 	{
 		id: 'daysOut',
@@ -53,6 +76,24 @@ export const defaultWorkbookSettings = [
 		defaultValue: true, // Yes
         section: 'Create LDA',
 		description: 'Whether to include the LDA tag.'
+	},
+		{
+		id: 'includeDncTag',
+		label: 'Include DNC Tag',
+		type: 'boolean',
+		defaultValue: true, // Yes
+        section: 'Create LDA',
+		description: 'Whether to include the Do Not Contact students.'
+	},
+		{
+		id: 'hiddenColumns',
+		label: 'Hidden Columns',
+		type: 'selections',
+		choices: defaultColumns,
+		defaultValue: [],
+		key: 'hidden',
+		section: 'Create LDA',
+		description: 'Defines the structure and visibility of the columns in the master list.'
 	},
 	{
 		id: 'powerAutomateFlowUrl',

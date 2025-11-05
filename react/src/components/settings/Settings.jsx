@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Info } from 'lucide-react'; // added: info icon
+import { Info } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
 import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, sectionIcons } from './DefaultSettings'; // added: import defaults
+import SettingsModal from './SettingsModal'; // new: modal component
 
 const Settings = () => {
 	// placeholder SVG avatar
@@ -38,7 +39,26 @@ const Settings = () => {
 
 	const openArrayModal = (setting, currentValue, updater) => {
 		setModalSetting(setting);
-		setModalArray(Array.isArray(currentValue) ? [...currentValue] : []);
+		// normalize items to objects: { name: string, alias: string[], edit: 'name'|'alias', static: boolean }
+		const normalized = Array.isArray(currentValue)
+			? currentValue.map(it => {
+					if (typeof it === 'string') return { name: it, alias: [], edit: 'name', static: false };
+					if (it && typeof it === 'object') {
+						return {
+							name: it.name ?? '',
+							alias: Array.isArray(it.alias)
+								? it.alias
+								: it.alias
+									? String(it.alias).split(',').map(s => s.trim()).filter(Boolean)
+									: [],
+							edit: 'name',
+							static: !!it.static
+						};
+					}
+					return { name: '', alias: [], edit: 'name', static: false };
+			  })
+			: [];
+		setModalArray(normalized);
 		// store updater as a function reference
 		setModalUpdater(() => updater);
 		setModalOpen(true);
@@ -53,7 +73,13 @@ const Settings = () => {
 
 	const saveModal = () => {
 		if (modalSetting && typeof modalUpdater === 'function') {
-			modalUpdater(modalSetting.id, modalArray);
+			// ensure we send a clean array of objects: { name, alias: string[], static: boolean }
+			const cleaned = modalArray.map(it => ({
+				name: String(it?.name ?? '').trim(),
+				alias: Array.isArray(it?.alias) ? it.alias.map(a => String(a).trim()).filter(Boolean) : [],
+				static: !!it?.static
+			}));
+			modalUpdater(modalSetting.id, cleaned);
 		}
 		closeModal();
 	};
@@ -67,6 +93,83 @@ const Settings = () => {
 	const updateSetting = (id, value) => {
 		setUserSettingsState(prev => ({ ...prev, [id]: value }));
 	};
+
+	// --- NEW: selections modal state & helpers ---
+	const [selectionsModalOpen, setSelectionsModalOpen] = useState(false);
+	const [selectionsModalSetting, setSelectionsModalSetting] = useState(null);
+	const [selectionsAvailable, setSelectionsAvailable] = useState([]); // items not chosen
+	const [selectionsChosen, setSelectionsChosen] = useState([]);       // items chosen
+	const [selectionsFilter, setSelectionsFilter] = useState('');
+	const [selectionsUpdater, setSelectionsUpdater] = useState(null);
+
+	// helper to normalize an array of option items into { key, label, raw }
+	const normalizeOptions = arr => {
+		// Accept primitives or objects. Prefer common choice shapes:
+		// { value, label }, { id, name }, { id, value, label }, { title, name }, etc.
+		return (Array.isArray(arr) ? arr : []).map((it, i) => {
+			if (typeof it === 'string') return { key: `${i}-${String(it)}`, label: it, raw: it };
+			if (it && typeof it === 'object') {
+				// pick friendly label from common fields
+				const label = it.label ?? it.name ?? it.title ?? String(it.id ?? it.value ?? JSON.stringify(it));
+				// prefer explicit value/id for identity
+				const key = String(it.value ?? it.id ?? `${i}-${label}`);
+				return { key, label, raw: it };
+			}
+			return { key: `${i}-item`, label: String(it), raw: it };
+		});
+	};
+
+	const openSelectionsModal = (setting, currentValue, updater) => {
+		// Use setting.choices if provided, otherwise fall back to setting.options
+		const source = setting.choices ?? setting.options ?? [];
+		// normalize all available options from the provided choices/options
+		const all = normalizeOptions(source);
+		// normalize current chosen value (could be array of strings/objects)
+		const chosenNormalized = normalizeOptions(currentValue ?? []);
+		// build chosen set using key equality
+		const chosenKeys = new Set(chosenNormalized.map(c => c.key));
+		// split available vs chosen ensuring no duplicates
+		const available = all.filter(a => !chosenKeys.has(a.key));
+		const chosen = all.filter(a => chosenKeys.has(a.key)).concat(
+			// also include any chosen items not present in all (custom items)
+			chosenNormalized.filter(c => !all.some(a => a.key === c.key))
+		);
+		setSelectionsAvailable(available);
+		setSelectionsChosen(chosen);
+		setSelectionsModalSetting(setting);
+		setSelectionsUpdater(() => updater);
+		setSelectionsFilter('');
+		setSelectionsModalOpen(true);
+	};
+
+	const closeSelectionsModal = () => {
+		setSelectionsModalOpen(false);
+		setSelectionsModalSetting(null);
+		setSelectionsAvailable([]);
+		setSelectionsChosen([]);
+		setSelectionsUpdater(null);
+		setSelectionsFilter('');
+	};
+
+	const saveSelectionsModal = () => {
+		if (selectionsModalSetting && typeof selectionsUpdater === 'function') {
+			// send the raw values back to updater in the original shape
+			const cleaned = selectionsChosen.map(i => i.raw);
+			selectionsUpdater(selectionsModalSetting.id, cleaned);
+		}
+		closeSelectionsModal();
+	};
+
+	const moveToChosen = item => {
+		setSelectionsAvailable(prev => prev.filter(i => i.key !== item.key));
+		setSelectionsChosen(prev => [...prev, item]);
+	};
+
+	const moveToAvailable = item => {
+		setSelectionsChosen(prev => prev.filter(i => i.key !== item.key));
+		setSelectionsAvailable(prev => [...prev, item]);
+	};
+	// --- END NEW ---
 
 	// render settings grouped by optional `section` property
 	const renderSettingsControls = (settings, state, updater, idPrefix = '') => {
@@ -165,11 +268,66 @@ const Settings = () => {
 							}
 
 							if (setting.type === 'array') {
+								// show disabled Configure button with lock indicator when locked
+								if (setting.locked) {
+									return (
+										<button
+											onClick={() => {}}
+											style={{
+												padding: '6px 10px',
+												borderRadius: 6,
+												background: '#f9fafb',
+												border: '1px solid #e6e7eb',
+												cursor: 'not-allowed',
+												display: 'inline-flex',
+												alignItems: 'center',
+												gap: 8,
+												color: '#6b7280'
+											}}
+											aria-label={`Configure`}
+											aria-disabled="true"
+											title="This setting is locked"
+										>
+											{/* small lock icon */}
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', color: '#9ca3af' }}>
+												<rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
+												<path d="M7 11V8a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+											<span style={{ fontSize: 13 }}>Locked</span>
+										</button>
+									);
+								}
 								return (
 									<button
 										onClick={() => openArrayModal(setting, cur, updater)}
 										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
-										aria-label={`Configure ${setting.label}`}
+										aria-label={`Configure`}
+									>
+										Configure
+									</button>
+								);
+							}
+
+							// ADD: show Configure button for editableArray
+							if (setting.type === 'editableArray') {
+								return (
+									<button
+										onClick={() => openArrayModal(setting, cur, updater)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#eef2ff', border: '1px solid #e0e7ff', cursor: 'pointer' }}
+										aria-label={`Configure`}
+									>
+										Configure
+									</button>
+								);
+							}
+
+							// NEW: selections type shows a two-bank configure flow
+							if (setting.type === 'selections') {
+								return (
+									<button
+										onClick={() => openSelectionsModal(setting, cur, updater)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#eef2ff', border: '1px solid #e0e7ff', cursor: 'pointer' }}
+										aria-label={`Configure`}
 									>
 										Configure
 									</button>
@@ -376,53 +534,28 @@ const Settings = () => {
 				/>
 			</div>
 
-			{/* Array configure modal */}
-			{modalOpen && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-					<div style={{ width: 'min(720px, 96%)', maxHeight: '80vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 16, boxSizing: 'border-box' }}>
-						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-							<h3 style={{ margin: 0 }}>{modalSetting?.label || 'Configure array'}</h3>
-							<button onClick={closeModal} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }} aria-label="Close">✕</button>
-						</div>
+			{/* Render the modals via the new component */}
+			<SettingsModal
+				// array modal
+				modalOpen={modalOpen}
+				modalSetting={modalSetting}
+				modalArray={modalArray}
+				setModalArray={setModalArray}
+				closeModal={closeModal}
+				saveModal={saveModal}
 
-						<div style={{ display: 'grid', gap: 8 }}>
-							{modalArray.map((item, idx) => (
-								<div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-									<input
-										type="text"
-										value={item ?? ''}
-										onChange={e => {
-											const copy = [...modalArray];
-											copy[idx] = e.target.value;
-											setModalArray(copy);
-										}}
-										style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb' }}
-									/>
-									<button
-										onClick={() => setModalArray(prev => prev.filter((_, i) => i !== idx))}
-										style={{ padding: '6px 8px', borderRadius: 6 }}
-										aria-label={`Remove item ${idx + 1}`}
-									>
-										Remove
-									</button>
-								</div>
-							))}
-
-							<button
-								onClick={() => setModalArray(prev => [...prev, ''])}
-								style={{ padding: '8px 10px', borderRadius: 6, width: 'max-content' }}
-							>
-								Add item
-							</button>
-						</div>
-
-						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-							<button onClick={closeModal} style={{ padding: '8px 10px', borderRadius: 6 }}>Cancel</button>
-							<button onClick={saveModal} style={{ padding: '8px 10px', borderRadius: 6, background: '#4f46e5', color: '#fff', border: 'none' }}>Save</button>
-						</div>
-					</div>
-				</div>
-			)}
+				// selections modal
+				selectionsModalOpen={selectionsModalOpen}
+				selectionsModalSetting={selectionsModalSetting}
+				selectionsAvailable={selectionsAvailable}
+				selectionsChosen={selectionsChosen}
+				selectionsFilter={selectionsFilter}
+				setSelectionsFilter={setSelectionsFilter}
+				closeSelectionsModal={closeSelectionsModal}
+				saveSelectionsModal={saveSelectionsModal}
+				moveToChosen={moveToChosen}
+				moveToAvailable={moveToAvailable}
+			/>
 		</div>
 	);
 };
