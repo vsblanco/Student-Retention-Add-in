@@ -109,78 +109,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		});
 	}
 
-	// refresh the list view by rebuilding editableMap/orderList from current modalArray and workbookColumns
-	const refreshList = React.useCallback(() => {
-		try {
-			const map = {};
-			const order = {};
-			// seed from modalArray first
-			if (Array.isArray(modalArray) && modalArray.length) {
-				modalArray.forEach((entry, idx) => {
-					if (entry && entry.column) {
-						const key = String(entry.column).trim();
-						const fromOptions = (entry.options && typeof entry.options === 'object') ? { ...entry.options } : {};
-						const extra = {};
-						['alias', 'static', 'hidden', 'format', 'label', 'name'].forEach(k => {
-							if (entry[k] !== undefined) extra[k] = entry[k];
-						});
-						map[key] = { ...fromOptions, ...extra };
-						order[key] = idx + 1;
-					}
-				});
-			}
-
-			// determine choices source (prefer workbookColumns)
-			const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
-			const seedFromWorkbookEntry = wbEntry => {
-				const seed = {};
-				if (!wbEntry || typeof wbEntry !== 'object') return seed;
-				Object.keys(wbEntry).forEach(k => {
-					if (k === 'name' || k === 'label') return;
-					seed[k] = wbEntry[k];
-				});
-				return seed;
-			};
-
-			choicesSource.forEach((choice, i) => {
-				const key = String(choice.name ?? choice.label ?? choice).trim();
-				if (!map[key]) {
-					const wbEntry = workbookLookup[key];
-					if (wbEntry) {
-						if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
-							map[key] = { ...(wbEntry.options) };
-						} else {
-							map[key] = seedFromWorkbookEntry(wbEntry);
-						}
-					} else {
-						map[key] = {};
-					}
-				}
-				if (!order[key]) order[key] = i + 1;
-			});
-
-			// apply computed state
-			setEditableMap(map);
-			setOrderMap(order);
-			const orderedKeys = Object.keys(order).sort((a, b) => (order[a] || 0) - (order[b] || 0));
-			setOrderList(orderedKeys);
-			setTitleInput(orderedKeys[0] || '');
-			setSelectedIdx(0);
-			setViewMode('choices');
-
-			// refresh snapshot / save-state
-			try {
-				initialSnapshotRef.current = JSON.stringify({ editableMap: map, orderList: orderedKeys });
-				setIsDirty(false);
-			} catch (e) {
-				initialSnapshotRef.current = null;
-				setIsDirty(false);
-			}
-		} catch (e) {
-			// ignore errors - best-effort refresh
-		}
-	}, [modalArray, modalSetting, workbookColumns, workbookLookup]);
-
 	// initialize editableMap, orderMap, orderList and selected index whenever the modal/setting/array changes
 	React.useEffect(() => {
 		const map = {};
@@ -337,11 +265,18 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 			column: col,
 			options: { ...(editableMap[col] || {}) }
 		}));
-		// update parent array state but DO NOT call saveModal (to avoid parent closing the modal)
+		// update parent array state
 		try {
 			setModalArray(out);
 		} catch (e) {
 			// ignore
+		}
+		if (typeof saveModal === 'function') {
+			try {
+				saveModal(out);
+			} catch (e) {
+				// swallow errors, fallback already setModalArray
+			}
 		}
 
 		// Do NOT close the modal. Instead go back to the choices list.
@@ -395,8 +330,18 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 			options: { ...(newEditableMap[col] || {}) }
 		}));
 
-		// Persist to parent via setModalArray only; do NOT call saveModal (so parent can't auto-close)
-		try { setModalArray(out); } catch (_) {}
+		// Persist to parent if available; do NOT close the modal.
+		if (typeof saveModal === 'function') {
+			try {
+				saveModal(out);
+			} catch (e) {
+				// fallback: update parent's modalArray locally
+				try { setModalArray(out); } catch (_) {}
+			}
+		} else {
+			// fallback local behavior
+			setModalArray(out);
+		}
 
 		// update snapshot so Save becomes disabled until further edits
 		try {
@@ -729,13 +674,12 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 			<div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 				<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 					<button
-						onClick={() => { refreshList(); }}
+						onClick={() => setViewMode('choices')}
 						style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', background: '#f8fafc', cursor: 'pointer' }}
 						aria-label="Back to columns"
 					>
 						Back
 					</button>
-
 					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
 						<span>Options for:</span>
 						{editingTitle ? (

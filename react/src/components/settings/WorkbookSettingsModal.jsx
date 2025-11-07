@@ -450,7 +450,7 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 											border: 'none',
 											background: 'transparent',
 											cursor: 'pointer',
-											padding: 6,
+											padding: 2,
 											display: 'inline-flex',
 											alignItems: 'center',
 											justifyContent: 'center',

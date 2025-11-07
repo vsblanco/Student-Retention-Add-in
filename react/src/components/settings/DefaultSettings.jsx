@@ -31,14 +31,6 @@ export const Options = [
 export const defaultWorkbookSettings = [
 	
 	{
-		id: 'masterListName',
-		label: 'Master List Name',
-		type: 'text',
-		defaultValue: 'Master List',
-		section: 'Import Data',
-		description: 'The name of the master list to import data from.'
-	},
-	{
 		id: 'columns',
 		label: 'Columns',
 		type: 'array',
