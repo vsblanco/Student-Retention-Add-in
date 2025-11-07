@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { X, Plus } from 'lucide-react';
+import React from 'react';
+import { X } from 'lucide-react';
+import DeleteConfirmModal from './DeleteConfirmModal'; // <-- added
 
 const SettingsModal = ({
 	// array modal props
@@ -9,100 +10,20 @@ const SettingsModal = ({
 	setModalArray = () => {},
 	closeModal = () => {},
 	saveModal = () => {},
-
-	// selections modal props
-	selectionsModalOpen,
-	selectionsModalSetting,
-	selectionsAvailable = [],
-	selectionsChosen = [],
-	selectionsFilter = '',
-	setSelectionsFilter = () => {},
-	closeSelectionsModal = () => {},
-	saveSelectionsModal = () => {},
-	moveToChosen = () => {},
-	moveToAvailable = () => {},
+	// new: prefer workbook columns (from saved workbook settings) over default choices
+	workbookColumns = []
 }) => {
-	// add drag state
-	const [dragIndex, setDragIndex] = useState(null);
-	const [dragOverIndex, setDragOverIndex] = useState(null);
-
-	// highlight state for recently-moved row
-	const [justMovedIndex, setJustMovedIndex] = useState(null);
-	const highlightTimerRef = useRef(null);
-
-	useEffect(() => {
-		return () => {
-			if (highlightTimerRef.current) {
-				clearTimeout(highlightTimerRef.current);
-			}
-		};
-	}, []);
-
-	// list scroll flags for array modal
-	const listScrollable = Array.isArray(modalArray) && modalArray.length > 4;
-
-	// drag handlers for reordering
-	const onDragStart = (e, idx) => {
-		setDragIndex(idx);
-		// some browsers require data set for drag to start
-		try { e.dataTransfer.setData('text/plain', String(idx)); } catch (err) {}
-		e.dataTransfer.effectAllowed = 'move';
-	};
-	const onDragOver = (e, idx) => {
-		e.preventDefault(); // allow drop
-		if (dragOverIndex !== idx) setDragOverIndex(idx);
-	};
-	const onDrop = (e, idx) => {
-		e.preventDefault();
-		if (dragIndex === null) return;
-		if (dragIndex === idx) {
-			setDragIndex(null);
-			setDragOverIndex(null);
-			return;
-		}
-		setModalArray(prev => {
-			const copy = [...prev];
-			const [moved] = copy.splice(dragIndex, 1);
-			// insert at target index (works for both directions)
-			copy.splice(idx, 0, moved);
-			return copy;
-		});
-		// show quick highlight where the row landed
-		setJustMovedIndex(idx);
-		if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-		highlightTimerRef.current = setTimeout(() => setJustMovedIndex(null), 800);
-
-		setDragIndex(null);
-		setDragOverIndex(null);
-	};
-	const onDragEnd = () => {
-		setDragIndex(null);
-		setDragOverIndex(null);
-	};
-
-	// selections derived values
-	// If the setting provides a key (e.g. 'hidden'), derive chosen/available from selectionsAvailable using that key.
-	const keyName = selectionsModalSetting?.key;
-	let derivedAvailable = Array.isArray(selectionsAvailable) ? [...selectionsAvailable] : [];
-	let derivedChosen = Array.isArray(selectionsChosen) ? [...selectionsChosen] : [];
-
-	if (keyName && Array.isArray(selectionsAvailable)) {
-		derivedChosen = selectionsAvailable.filter(item => !!item?.[keyName]);
-		derivedAvailable = selectionsAvailable.filter(item => !item?.[keyName]);
-	}
-
-	const filteredAvailable = derivedAvailable.filter(item =>
-		String(item.label ?? '').toLowerCase().includes(String(selectionsFilter ?? '').toLowerCase())
-	);
-	const availableScrollable = filteredAvailable.length > 4;
-	const chosenScrollable = derivedChosen.length > 4;
-
 	return (
 		<>
-			{/* Array configure modal OR editableArray modal */}
-			{modalOpen && modalSetting?.type === 'editableArray' ? (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-					<div style={{ width: 'min(820px, 96%)', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 16, boxSizing: 'border-box' }}>
+			{/* Only show the editableArray modal */}
+			{modalOpen && modalSetting?.type === 'array' ? (
+				<div
+					onClick={closeModal}
+					style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+					role="dialog"
+					aria-modal="true"
+				>
+					<div onClick={e => e.stopPropagation()} style={{ width: 'min(820px, 96%)', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 16, boxSizing: 'border-box' }}>
 						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
 							<h3 style={{ margin: 0 }}>{modalSetting?.label || 'Edit items'}</h3>
 							<button
@@ -121,378 +42,282 @@ const SettingsModal = ({
 							setModalArray={setModalArray}
 							closeModal={closeModal}
 							saveModal={saveModal}
+							// pass workbook columns so the modal uses the workbook's columns array when available
+							workbookColumns={workbookColumns}
 						/>
 					</div>
 				</div>
-			) : modalOpen && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-					<div style={{ width: 'min(720px, 96%)', maxHeight: '80vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 16, boxSizing: 'border-box' }}>
-						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-							<h3 style={{ margin: 0 }}>{modalSetting?.label || 'Configure array'}</h3>
-							<button
-								onClick={closeModal}
-								style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-								aria-label="Close"
-							>
-								<X size={16} />
-							</button>
-						</div>
-
-						<div style={{ display: 'grid', gap: 8 }}>
-							{/* list becomes scrollable when more than 4 entries */}
-							<div style={{
-								display: 'grid',
-								gap: 8,
-								maxHeight: listScrollable ? '240px' : 'auto',
-								overflowY: listScrollable ? 'auto' : 'visible',
-								overflowX: 'hidden',
-								paddingRight: listScrollable ? 8 : 0,
-								boxSizing: 'border-box'
-							}}>
-								{modalArray.map((item, idx) => (
-									// make row a drop target only; handle is draggable
-									<div
-										key={idx}
-										onDragOver={e => onDragOver(e, idx)}
-										onDrop={e => onDrop(e, idx)}
-										style={{
-											display: 'flex',
-											gap: 8,
-											alignItems: 'center',
-											border: dragIndex === idx ? '2px dashed #4f46e5' : (dragOverIndex === idx ? '2px dashed #93c5fd' : 'none'),
-											padding: dragIndex === idx || dragOverIndex === idx ? 6 : 0,
-											borderRadius: 6,
-											// highlight animation: temporary warm background + subtle transition
-											background: dragIndex === idx ? '#f8fafc' : (justMovedIndex === idx ? '#bbdefc' : 'transparent'),
-											transition: 'background-color 360ms ease, box-shadow 360ms ease'
-										}}
-									>
-										{/* draggable handle (click-and-hold here to drag) */}
-										<button
-											type="button"
-											draggable
-											onDragStart={e => onDragStart(e, idx)}
-											onDragEnd={onDragEnd}
-											title="Drag to reorder"
-											aria-label={`Drag item ${idx + 1}`}
-											style={{
-												display: 'inline-flex',
-												alignItems: 'center',
-												justifyContent: 'center',
-												width: 28,
-												height: 28,
-												borderRadius: 6,
-												background: 'transparent',
-												border: '1px solid transparent',
-												cursor: dragIndex === idx ? 'grabbing' : 'grab',
-												padding: 4,
-												flexShrink: 0
-											}}
-										>
-											{/* grip icon: six dots */}
-											<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-												<circle cx="3" cy="3" r="1" fill="#6b7280"/>
-												<circle cx="7" cy="3" r="1" fill="#6b7280"/>
-												<circle cx="11" cy="3" r="1" fill="#6b7280"/>
-												<circle cx="3" cy="7" r="1" fill="#6b7280"/>
-												<circle cx="7" cy="7" r="1" fill="#6b7280"/>
-												<circle cx="11" cy="7" r="1" fill="#6b7280"/>
-											</svg>
-										</button>
-
-										<input
-											type="text"
-											value={item.edit === 'name' ? (item.name ?? '') : (Array.isArray(item.alias) ? item.alias.join(', ') : (item.alias ?? ''))}
-											onChange={e => {
-												const copy = [...modalArray];
-												if (copy[idx].edit === 'name') {
-													copy[idx] = { ...copy[idx], name: e.target.value };
-												} else {
-													const parsed = String(e.target.value)
-														.split(',')
-														.map(s => s.trim())
-														.filter(Boolean);
-													copy[idx] = { ...copy[idx], alias: parsed };
-												}
-												setModalArray(copy);
-											}}
-											placeholder={item.edit === 'name' ? 'name' : 'aliases (comma separated)'}
-											style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb' }}
-											title={item.static ? 'Static flag is set (this is metadata); value remains editable' : undefined}
-										/>
-
-										{/* aliases toggle */}
-										{(() => {
-											const iconColor = item.edit === 'alias' ? '#2563eb' : '#60a5fa';
-											const bg = item.edit === 'alias' ? '#e8f0ff' : '#f3f8ff';
-											return (
-												<button
-													onClick={() => {
-														const copy = [...modalArray];
-														copy[idx] = { ...copy[idx], edit: copy[idx].edit === 'name' ? 'alias' : 'name' };
-														setModalArray(copy);
-													}}
-													title={item.edit === 'name' ? 'Edit aliases' : 'Edit name'}
-													aria-label={item.edit === 'name' ? 'Edit aliases' : 'Edit name'}
-													style={{
-														display: 'inline-flex',
-														alignItems: 'center',
-														justifyContent: 'center',
-														width: 34,
-														height: 34,
-														borderRadius: 6,
-														background: bg,
-														border: '1px solid rgba(37,99,235,0.12)',
-														cursor: 'pointer',
-														color: iconColor,
-														transition: 'color 120ms ease, background-color 120ms ease, box-shadow 120ms ease'
-													}}
-												>
-													<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
-														<path d="M20.59 13.41L11 3.83A2 2 0 0 0 9.59 3H5a2 2 0 0 0-2 2v4.59c0 .53.21 1.04.59 1.41l9.59 9.59a2 2 0 0 0 2.83 0l4.59-4.59a2 2 0 0 0 0-2.83z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-														<circle cx="7.5" cy="7.5" r="1.5" fill="currentColor"/>
-													</svg>
-												</button>
-											);
-										})()}
-
-										{/* static toggle */}
-										<button
-											onClick={() => {
-												const copy = [...modalArray];
-												copy[idx] = { ...copy[idx], static: !copy[idx].static };
-												setModalArray(copy);
-											}}
-											title={item.static ? 'Unset static (make editable)' : 'Set static (lock)'}
-											aria-label={item.static ? 'Unset static' : 'Set static'}
-											aria-pressed={!!item.static}
-											style={{
-												display: 'inline-flex',
-												alignItems: 'center',
-												justifyContent: 'center',
-												width: 34,
-												height: 34,
-												borderRadius: 6,
-												background: item.static ? '#fff7ed' : '#f3f4f6',
-												border: '1px solid rgba(0,0,0,0.06)',
-												cursor: 'pointer',
-												color: item.static ? '#b45309' : '#6b7280'
-											}}
-										>
-											{item.static ? (
-												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-													<rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/>
-													<path d="M7 11V8a5 5 0 0 1 10 0v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-												</svg>
-											) : (
-												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-													<rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/>
-													<path d="M16 11V8a4 4 0 0 0-8 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-												</svg>
-											)}
-										</button>
-
-										<button
-											onClick={() => setModalArray(prev => prev.filter((_, i) => i !== idx))}
-											style={{
-												padding: '6px 8px',
-												borderRadius: 6,
-												background: '#fff5f5',
-												border: '1px solid rgba(239,68,68,0.12)',
-												color: '#ef4444',
-												cursor: 'pointer',
-												transition: 'background-color 120ms ease, color 120ms ease, transform 120ms ease'
-											}}
-											aria-label={`Remove item ${idx + 1}`}
-										>
-											<X size={14} color="#ef4444" />
-										</button>
-									</div>
-								))}
-							</div>
-
-							<button
-								onClick={() => setModalArray(prev => [...prev, { name: '', alias: [], edit: 'name', static: false }])}
-								style={{ padding: '8px 10px', borderRadius: 6, width: 'max-content' }}
-							>
-								Add item
-							</button>
-						</div>
-
-						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-							<button onClick={closeModal} style={{ padding: '8px 10px', borderRadius: 6 }}>Cancel</button>
-							<button onClick={saveModal} style={{ padding: '8px 10px', borderRadius: 6, background: '#4f46e5', color: '#fff', border: 'none' }}>Save</button>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* Selections modal */}
-			{selectionsModalOpen && (
-				<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-					<div style={{ width: 'min(900px, 96%)', maxHeight: '86vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 16, boxSizing: 'border-box' }}>
-						<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-							<h3 style={{ margin: 0 }}>{selectionsModalSetting?.label || 'Configure'}</h3>
-							<button
-								onClick={closeSelectionsModal}
-								style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-								aria-label="Close"
-							>
-								<X size={16} />
-							</button>
-						</div>
-
-						<div style={{ display: 'grid', gridTemplateColumns: '1fr 12px 1fr', gap: 12, alignItems: 'start' }}>
-							{/* Available bank */}
-							<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 12, background: '#fafafa' }}>
-								<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-									<input
-										type="search"
-										placeholder="Search available..."
-										value={selectionsFilter}
-										onChange={e => setSelectionsFilter(e.target.value)}
-										style={{ flex: 1, padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb' }}
-										aria-label="Filter available selections"
-									/>
-								</div>
-
-								<div style={{
-									display: 'grid',
-									gap: 8,
-									maxHeight: availableScrollable ? '240px' : 'auto',
-									overflowY: availableScrollable ? 'auto' : 'visible',
-									overflowX: 'hidden',
-									paddingRight: availableScrollable ? 8 : 0,
-									boxSizing: 'border-box'
-								}}>
-									{filteredAvailable.length === 0 && (
-										<div style={{ color: '#6b7280', fontSize: 13 }}>No available items</div>
-									)}
-									{filteredAvailable.map(item => (
-										<div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-											<div style={{ overflow: 'hidden', minWidth: 0, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
-											<button
-												onClick={() => moveToChosen(item)}
-												aria-label={`Add ${item.label}`}
-												title={`Add ${item.label}`}
-												style={{ padding: 6, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-											>
-												<Plus size={16} />
-											</button>
-										</div>
-									))}
-								</div>
-							</div>
-
-							{/* spacer */}
-							<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden>
-								<div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: '#9ca3af' }}>Selected →</div>
-							</div>
-
-							{/* Chosen bank */}
-							<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 12, background: '#fff' }}>
-								<div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-									<div style={{ fontWeight: 600 }}>Chosen</div>
-									<div style={{ fontSize: 13, color: '#6b7280' }}>{derivedChosen.length} selected</div>
-								</div>
-
-								<div style={{
-									display: 'grid',
-									gap: 8,
-									maxHeight: chosenScrollable ? '240px' : 'auto',
-									overflowY: chosenScrollable ? 'auto' : 'visible',
-									overflowX: 'hidden',
-									paddingRight: chosenScrollable ? 8 : 0,
-									boxSizing: 'border-box'
-								}}>
-									{derivedChosen.length === 0 && (
-										<div style={{ color: '#6b7280', fontSize: 13 }}>No items chosen</div>
-									)}
-									{derivedChosen.map(item => (
-										<div key={item.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-											<div style={{ overflow: 'hidden', minWidth: 0, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
-											<button
-												onClick={() => moveToAvailable(item)}
-												aria-label={`Remove ${item.label}`}
-												title={`Remove ${item.label}`}
-												style={{
-													padding: '6px 8px',
-													borderRadius: 6,
-													background: '#fff5f5',
-													border: '1px solid rgba(239,68,68,0.12)',
-													color: '#ef4444',
-													cursor: 'pointer',
-													display: 'inline-flex',
-													alignItems: 'center',
-													justifyContent: 'center'
-												}}
-											>
-												<X size={14} color="#ef4444" />
-											</button>
-										</div>
-									))}
-								</div>
-							</div>
-						</div>
-
-						<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-							<button onClick={closeSelectionsModal} style={{ padding: '8px 10px', borderRadius: 6 }}>Cancel</button>
-							<button onClick={saveSelectionsModal} style={{ padding: '8px 10px', borderRadius: 6, background: '#4f46e5', color: '#fff', border: 'none' }}>Save</button>
-						</div>
-					</div>
-				</div>
-			)}
+			) : null}
 		</>
 	);
 };
 
 export default SettingsModal;
 
-// Add small helper component in the same file (keeps changes minimal)
-const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal }) => {
-	const [selectedIdx, setSelectedIdx] = useState(0);
-	// editableMap: { [columnName]: { [optionName]: selectedTypeOrEmptyString } }
-	const [editableMap, setEditableMap] = useState({});
+// Replace the existing EditableArrayInner component with this updated version
+const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [] }) => {
+	// ...existing state...
+	const [selectedIdx, setSelectedIdx] = React.useState(0);
+	const [viewMode, setViewMode] = React.useState('choices');
+	const [editableMap, setEditableMap] = React.useState({});
+	const [hoverIdx, setHoverIdx] = React.useState(null);
+	const [orderMap, setOrderMap] = React.useState({});
+	const [orderList, setOrderList] = React.useState([]);
+	// editing state for the "Options for:" title
+	const [editingTitle, setEditingTitle] = React.useState(false);
+	const [titleInput, setTitleInput] = React.useState('');
+	// dirty tracking: initial snapshot + current dirty flag
+	const initialSnapshotRef = React.useRef(null);
+	const [isDirty, setIsDirty] = React.useState(false);
+	// drag state
+	const [dragIdx, setDragIdx] = React.useState(null);
+	const [dragOverIdx, setDragOverIdx] = React.useState(null);
+	const [draggedHeight, setDraggedHeight] = React.useState(0);
+	// preview that follows placeholder (now includes number)
+	const [preview, setPreview] = React.useState({ visible: false, x: 0, y: 0, key: null, label: '', height: 0, number: null });
+	// refs to row DOM nodes for measuring
+	const itemsRef = React.useRef({});
+	// container ref to compute end placeholder position
+	const containerRef = React.useRef(null);
+	// NEW: state to control delete confirmation modal
+	const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
-	useEffect(() => {
-		// initialize map from modalArray if it follows expected shape, otherwise default
-		const map = {};
-		// modalArray expected to be array of objects like: { column: 'Name', options: { 'Format': 'MM/DD/YYYY' } }
-		if (Array.isArray(modalArray) && modalArray.length) {
-			modalArray.forEach(entry => {
-				if (entry && entry.column) {
-					map[entry.column] = { ...(entry.options || {}) };
-				}
+	// build quick lookup of workbookColumns by key (name/label)
+	const workbookLookup = React.useMemo(() => {
+		const l = {};
+		if (Array.isArray(workbookColumns)) {
+			workbookColumns.forEach(entry => {
+				const key = String(entry?.name ?? entry?.label ?? entry).trim();
+				if (key) l[key] = entry;
 			});
 		}
-		// ensure every choice exists in map
-		(modalSetting?.choices || []).forEach(choice => {
-			const key = String(choice.name ?? choice.label ?? choice).trim();
-			if (!map[key]) map[key] = {};
-		});
-		setEditableMap(map);
-		// pick previously-selected index if possible
-		setSelectedIdx(prev => (modalSetting?.choices && modalSetting.choices[prev] ? prev : 0));
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [modalOpenOrSettingMarker() /* dummy dependency to silence lint; see helper below */]);
+		return l;
+	}, [workbookColumns]);
 
 	// helper for effect dependency without introducing new props
 	function modalOpenOrSettingMarker() {
-		// combine relevant values to create a shallow marker — avoids adding modalArray to deps directly
 		return JSON.stringify({
-			choices: modalSetting?.choices?.length ?? 0,
+			choices: (Array.isArray(workbookColumns) ? workbookColumns.length : 0),
+			// include a small signature of workbook options so effect runs when options change
+			workbookSignature: (Array.isArray(workbookColumns) ? workbookColumns.map(e => {
+				const n = String(e?.name ?? e?.label ?? e).trim();
+				const oLen = Array.isArray(e?.options) ? e.options.length : (e?.options && typeof e.options === 'object' ? Object.keys(e.options).length : 0);
+				return `${n}:${oLen}`;
+			}) : []).join('|'),
 			options: modalSetting?.options?.length ?? 0,
 			modalArrayLength: (modalArray || []).length
 		});
 	}
 
+	// refresh the list view by rebuilding editableMap/orderList from current modalArray and workbookColumns
+	const refreshList = React.useCallback(() => {
+		try {
+			const map = {};
+			const order = {};
+			// seed from modalArray first
+			if (Array.isArray(modalArray) && modalArray.length) {
+				modalArray.forEach((entry, idx) => {
+					if (entry && entry.column) {
+						const key = String(entry.column).trim();
+						const fromOptions = (entry.options && typeof entry.options === 'object') ? { ...entry.options } : {};
+						const extra = {};
+						['alias', 'static', 'hidden', 'format', 'label', 'name'].forEach(k => {
+							if (entry[k] !== undefined) extra[k] = entry[k];
+						});
+						map[key] = { ...fromOptions, ...extra };
+						order[key] = idx + 1;
+					}
+				});
+			}
+
+			// determine choices source (prefer workbookColumns)
+			const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
+			const seedFromWorkbookEntry = wbEntry => {
+				const seed = {};
+				if (!wbEntry || typeof wbEntry !== 'object') return seed;
+				Object.keys(wbEntry).forEach(k => {
+					if (k === 'name' || k === 'label') return;
+					seed[k] = wbEntry[k];
+				});
+				return seed;
+			};
+
+			choicesSource.forEach((choice, i) => {
+				const key = String(choice.name ?? choice.label ?? choice).trim();
+				if (!map[key]) {
+					const wbEntry = workbookLookup[key];
+					if (wbEntry) {
+						if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
+							map[key] = { ...(wbEntry.options) };
+						} else {
+							map[key] = seedFromWorkbookEntry(wbEntry);
+						}
+					} else {
+						map[key] = {};
+					}
+				}
+				if (!order[key]) order[key] = i + 1;
+			});
+
+			// apply computed state
+			setEditableMap(map);
+			setOrderMap(order);
+			const orderedKeys = Object.keys(order).sort((a, b) => (order[a] || 0) - (order[b] || 0));
+			setOrderList(orderedKeys);
+			setTitleInput(orderedKeys[0] || '');
+			setSelectedIdx(0);
+			setViewMode('choices');
+
+			// refresh snapshot / save-state
+			try {
+				initialSnapshotRef.current = JSON.stringify({ editableMap: map, orderList: orderedKeys });
+				setIsDirty(false);
+			} catch (e) {
+				initialSnapshotRef.current = null;
+				setIsDirty(false);
+			}
+		} catch (e) {
+			// ignore errors - best-effort refresh
+		}
+	}, [modalArray, modalSetting, workbookColumns, workbookLookup]);
+
+	// initialize editableMap, orderMap, orderList and selected index whenever the modal/setting/array changes
+	React.useEffect(() => {
+		const map = {};
+		const order = {};
+		// 1) seed map from modalArray (what was previously saved via Save)
+		if (Array.isArray(modalArray) && modalArray.length) {
+			modalArray.forEach((entry, idx) => {
+				if (entry && entry.column) {
+					const key = String(entry.column).trim();
+					// entry.options may be an object with the per-column settings
+					const fromOptions = (entry.options && typeof entry.options === 'object') ? { ...entry.options } : {};
+					// also preserve top-level properties that may have been saved (alias/static/etc)
+					const extra = {};
+					['alias', 'static', 'hidden', 'format', 'label', 'name'].forEach(k => {
+						if (entry[k] !== undefined) extra[k] = entry[k];
+					});
+					map[key] = { ...fromOptions, ...extra };
+					order[key] = idx + 1;
+				}
+			});
+		}
+
+		// 2) determine the choices source (prefer workbookColumns when available)
+		const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
+		// helper to extract non-name/label properties from a workbook entry
+		const seedFromWorkbookEntry = wbEntry => {
+			const seed = {};
+			if (!wbEntry || typeof wbEntry !== 'object') return seed;
+			Object.keys(wbEntry).forEach(k => {
+				if (k === 'name' || k === 'label') return;
+				// copy everything else (alias, static, hidden, format, options, etc)
+				seed[k] = wbEntry[k];
+			});
+			return seed;
+		};
+
+		choicesSource.forEach((choice, i) => {
+			const key = String(choice.name ?? choice.label ?? choice).trim();
+			if (!map[key]) {
+				// prefer seeding from the current workbook mapping if available
+				const wbEntry = workbookLookup[key];
+				if (wbEntry) {
+					// if workbook provided an .options object/structure use it, otherwise seed from other properties
+					if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
+						map[key] = { ...(wbEntry.options) };
+					} else {
+						map[key] = seedFromWorkbookEntry(wbEntry);
+					}
+				} else {
+					map[key] = {};
+				}
+			}
+			if (!order[key]) order[key] = i + 1;
+		});
+
+		setEditableMap(map);
+		setOrderMap(order);
+		const orderedKeys = Object.keys(order).sort((a, b) => (order[a] || 0) - (order[b] || 0));
+		setOrderList(orderedKeys);
+		// reset title input when selection or order changes
+		setTitleInput(orderedKeys[0] || '');
+		setSelectedIdx(prev => (orderedKeys[prev] ? prev : 0));
+		setViewMode('choices');
+
+		// capture initial snapshot for dirty tracking whenever modal/setting opens or array changes
+		try {
+			initialSnapshotRef.current = JSON.stringify({ editableMap: map, orderList: orderedKeys });
+			setIsDirty(false);
+		} catch (e) {
+			initialSnapshotRef.current = null;
+			setIsDirty(false);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [modalOpenOrSettingMarker()]);
+
+	// update dirty state whenever editableMap or orderList change
+	React.useEffect(() => {
+		try {
+			const cur = JSON.stringify({ editableMap, orderList });
+			setIsDirty(initialSnapshotRef.current ? cur !== initialSnapshotRef.current : false);
+		} catch (e) {
+			setIsDirty(false);
+		}
+	}, [editableMap, orderList]);
+
 	if (!modalSetting) return null;
 
-	const choices = modalSetting.choices || [];
-	const options = modalSetting.options || [];
+	// prefer workbookColumns when available for the choice list shown in the UI
+	const choices = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting.choices || []);
+	// prefer options descriptors from the workbook entry for the currently selected key (if provided) else fall back to modalSetting.options
+	const currentKey = orderList[selectedIdx] || '';
+	const workbookEntryForCurrent = workbookLookup[currentKey];
+	let options = Array.isArray(modalSetting?.options) ? modalSetting.options : [];
+	if (workbookEntryForCurrent && Array.isArray(workbookEntryForCurrent.options) && workbookEntryForCurrent.options.length) {
+		options = workbookEntryForCurrent.options;
+	}
 
-	const currentChoice = choices[selectedIdx];
-	const currentKey = String(currentChoice?.name ?? currentChoice?.label ?? currentChoice ?? '').trim();
+	const getChoiceByKey = key => {
+		return (choices.find(c => {
+			const k = String(c?.name ?? c?.label ?? c).trim();
+			return k === key;
+		}) || null);
+	};
+
+	const currentChoice = getChoiceByKey(currentKey);
+
+	// helper: rename the current key (avoid duplicates)
+	const renameCurrentKey = newLabel => {
+		const newKey = String(newLabel || '').trim();
+		if (!newKey || newKey === currentKey) return;
+		if (orderList.includes(newKey)) {
+			// duplicate - ignore rename
+			return;
+		}
+		const next = [...orderList];
+		next[selectedIdx] = newKey;
+		const newOrderMap = {};
+		next.forEach((k, i) => { newOrderMap[k] = i + 1; });
+		setOrderList(next);
+		setOrderMap(newOrderMap);
+		setEditableMap(prev => {
+			const copy = { ...prev };
+			copy[newKey] = copy[currentKey] || {};
+			delete copy[currentKey];
+			return copy;
+		});
+		// keep selection on the renamed item
+		setSelectedIdx(selectedIdx);
+	};
+
+	// when entering edit mode, prepare input
+	React.useEffect(() => {
+		if (editingTitle) {
+			setTitleInput(currentKey || '');
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [editingTitle]);
 
 	const updateOption = (optionName, value) => {
 		setEditableMap(prev => {
@@ -508,87 +333,574 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	};
 
 	const onSave = () => {
-		// transform editableMap into an array for setModalArray: [{ column, options: }]
-		const out = Object.keys(editableMap).map(col => ({ column: col, options: { ...(editableMap[col] || {}) } }));
-		setModalArray(out);
-		saveModal && saveModal();
-		closeModal && closeModal();
+		const out = (orderList.length ? orderList : Object.keys(editableMap)).map(col => ({
+			column: col,
+			options: { ...(editableMap[col] || {}) }
+		}));
+		// update parent array state but DO NOT call saveModal (to avoid parent closing the modal)
+		try {
+			setModalArray(out);
+		} catch (e) {
+			// ignore
+		}
+
+		// Do NOT close the modal. Instead go back to the choices list.
+		setViewMode('choices');
+
+		// update snapshot so Save becomes disabled until further edits
+		try {
+			initialSnapshotRef.current = JSON.stringify({ editableMap, orderList });
+			setIsDirty(false);
+		} catch (e) {
+			// ignore
+			setIsDirty(false);
+		}
 	};
 
-	return (
-		<div style={{ display: 'grid', gridTemplateColumns: '220px 12px 1fr', gap: 12 }}>
-			{/* Choice selector (list) */}
-			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto' }}>
-				<div style={{ marginBottom: 8, fontWeight: 600 }}>Columns</div>
-				{choices.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No choices available</div>}
-				{choices.map((c, i) => {
-					const label = String(c.name ?? c.label ?? c).trim();
+	// OLD deleteCurrent replaced: open confirm modal instead of immediate confirm
+	const deleteCurrent = () => {
+		if (!currentKey) return;
+		// open confirm modal — actual deletion is done in performDeleteCurrent
+		setDeleteConfirmOpen(true);
+	};
+
+	// perform actual deletion when user confirms
+	const performDeleteCurrent = () => {
+		const keyToDelete = currentKey;
+		if (!keyToDelete) {
+			setDeleteConfirmOpen(false);
+			return;
+		}
+
+		// Build new editable map & order list locally (synchronously) so we can persist immediately
+		const newEditableMap = { ...(editableMap || {}) };
+		delete newEditableMap[keyToDelete];
+
+		const nextOrderList = orderList.filter(k => k !== keyToDelete);
+		const newOrderMap = {};
+		nextOrderList.forEach((k, i) => { newOrderMap[k] = i + 1; });
+
+		// Update local UI state
+		setEditableMap(newEditableMap);
+		setOrderList(nextOrderList);
+		setOrderMap(newOrderMap);
+		const newIdx = Math.max(0, Math.min(nextOrderList.length - 1, selectedIdx));
+		setSelectedIdx(newIdx);
+		setTitleInput(nextOrderList[newIdx] || '');
+		if (nextOrderList.length === 0) setViewMode('choices');
+
+		// Build the array shape expected by the parent and persist immediately.
+		const out = (nextOrderList.length ? nextOrderList : Object.keys(newEditableMap || {})).map(col => ({
+			column: col,
+			options: { ...(newEditableMap[col] || {}) }
+		}));
+
+		// Persist to parent via setModalArray only; do NOT call saveModal (so parent can't auto-close)
+		try { setModalArray(out); } catch (_) {}
+
+		// update snapshot so Save becomes disabled until further edits
+		try {
+			initialSnapshotRef.current = JSON.stringify({ editableMap: newEditableMap, orderList: nextOrderList });
+			setIsDirty(false);
+		} catch (e) {
+			setIsDirty(false);
+		}
+
+		// close the confirm dialog but keep the main modal open and show the list
+		setDeleteConfirmOpen(false);
+		setViewMode('choices');
+	};
+
+	// drag handlers (placeholder + floating preview showing target number)
+	const handleDragStart = (e, idx, key, label) => {
+		setDragIdx(idx);
+		setDragOverIdx(idx);
+		// measure the row height for placeholder
+		const node = itemsRef.current[idx];
+		const h = node && node.getBoundingClientRect ? Math.round(node.getBoundingClientRect().height) : 40;
+		setDraggedHeight(h);
+		// initialize preview (position will be updated on dragOver)
+		const rect = node && node.getBoundingClientRect ? node.getBoundingClientRect() : null;
+		setPreview({
+			visible: true,
+			x: rect ? rect.left : (e.clientX || 0),
+			y: rect ? rect.top : (e.clientY || 0),
+			key,
+			label,
+			height: h,
+			number: idx + 1
+		});
+		try { e.dataTransfer.setData('text/plain', String(idx)); } catch (err) {}
+		e.dataTransfer.effectAllowed = 'move';
+		if (e.dataTransfer.setDragImage) {
+			const img = document.createElement('canvas');
+			img.width = img.height = 0;
+			e.dataTransfer.setDragImage(img, 0, 0);
+		}
+	};
+	const handleDragEnd = () => {
+		setDragIdx(null);
+		setDragOverIdx(null);
+		setDraggedHeight(0);
+		setPreview({ visible: false, x: 0, y: 0, key: null, label: '', height: 0, number: null });
+	};
+	// update preview position to the placeholder location
+	const positionPreviewAtIndex = idx => {
+		// compute target element rect (insert before index idx)
+		if (idx >= 0 && idx < orderList.length) {
+			const node = itemsRef.current[idx];
+			if (node && node.getBoundingClientRect) {
+				const r = node.getBoundingClientRect();
+				// position preview aligned with the row (left align with row content)
+				setPreview(prev => ({ ...prev, x: r.left + 12, y: r.top, number: idx + 1 }));
+				return;
+			}
+		}
+		// placeholder at end: place below last item or at container bottom
+		const lastNode = itemsRef.current[orderList.length - 1];
+		if (lastNode && lastNode.getBoundingClientRect) {
+			const r = lastNode.getBoundingClientRect();
+			setPreview(prev => ({ ...prev, x: r.left + 12, y: r.bottom + 6, number: orderList.length + 1 }));
+			return;
+		}
+		// fallback to container top
+		if (containerRef.current && containerRef.current.getBoundingClientRect) {
+			const cr = containerRef.current.getBoundingClientRect();
+			setPreview(prev => ({ ...prev, x: cr.left + 12, y: cr.top + 12, number: orderList.length ? orderList.length : 1 }));
+		}
+	};
+	// update preview based on dragover target
+	const handleDragOver = (e, idx) => {
+		e.preventDefault();
+		if (dragIdx === null) return;
+		if (dragOverIdx !== idx) setDragOverIdx(idx);
+		// update preview position & number to reflect where it would land
+		positionPreviewAtIndex(idx);
+	};
+	const handleContainerDragOver = e => {
+		// if dragging but not yet over a row, keep preview visible and update end placeholder if near bottom
+		if (!preview.visible) return;
+		e.preventDefault();
+		// if there is a known dragOverIdx, position accordingly; otherwise keep preview near cursor as fallback
+		if (typeof dragOverIdx === 'number') {
+			positionPreviewAtIndex(dragOverIdx);
+		} else {
+			setPreview(prev => ({ ...prev, x: e.clientX + 12, y: e.clientY + 12 }));
+		}
+	};
+	const handleDrop = (e, idx) => {
+		e.preventDefault();
+		if (dragIdx === null) return;
+		const from = dragIdx;
+		let to = typeof dragOverIdx === 'number' ? dragOverIdx : idx;
+		if (from === to) {
+			handleDragEnd();
+			return;
+		}
+		const next = [...orderList];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		const newOrder = {};
+		next.forEach((k, i) => { newOrder[k] = i + 1; });
+		setOrderList(next);
+		setOrderMap(newOrder);
+		handleDragEnd();
+	};
+
+	// helper to add a new empty row/column
+	const addNewRow = () => {
+		const base = 'New Column';
+		let counter = 1;
+		let key = base;
+		// ensure uniqueness
+		while (orderList.includes(key)) {
+			counter += 1;
+			key = `${base} ${counter}`;
+		}
+		const next = [...orderList, key];
+		const newOrderMap = {};
+		next.forEach((k, i) => { newOrderMap[k] = i + 1; });
+		setOrderList(next);
+		setOrderMap(newOrderMap);
+		setEditableMap(prev => ({ ...(prev || {}), [key]: {} }));
+		setSelectedIdx(next.length - 1);
+		setViewMode('options');
+		setTitleInput(key);
+		// mark dirty so Save is enabled
+		setIsDirty(true);
+	};
+
+	// Render
+	if (viewMode === 'choices') {
+		return (
+			<div
+				ref={containerRef}
+				style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}
+				onDragOver={handleContainerDragOver}
+			>
+				{/* header: Columns + add button */}
+				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>Columns</div>
+					<button
+						type="button"
+						onClick={addNewRow}
+						title="Add column"
+						aria-label="Add column"
+						style={{
+							padding: '6px 8px',
+							borderRadius: 6,
+							background: '#eef2ff',
+							border: '1px solid rgba(79,70,229,0.12)',
+							cursor: 'pointer',
+							display: 'inline-flex',
+							alignItems: 'center',
+							justifyContent: 'center',
+							gap: 6,
+							fontSize: 13
+						}}
+					>
+						{/* plus icon */}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+							<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+						</svg>
+						Add
+					</button>
+				</div>
+
+				{orderList.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No choices available</div>}
+
+				{orderList.map((key, i) => {
+					// show placeholder before row if appropriate
+					const showPlaceholderBefore = dragIdx !== null && dragOverIdx === i && dragIdx !== null && dragIdx !== i;
+					const choiceObj = getChoiceByKey(key);
+					const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
 					const selected = i === selectedIdx;
+					const num = orderMap[key] ?? (i + 1);
+					const isDragging = dragIdx === i;
+					const isHoverTarget = dragOverIdx === i && dragIdx !== i;
+
 					return (
-						<button
-							key={label + i}
-							onClick={() => setSelectedIdx(i)}
-							style={{
-								display: 'block',
-								width: '100%',
-								textAlign: 'left',
-								padding: '8px',
-								marginBottom: 6,
-								borderRadius: 6,
-								background: selected ? '#eef2ff' : 'transparent',
-								border: selected ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
-								cursor: 'pointer'
-							}}
-						>
-							<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
-						</button>
+						<React.Fragment key={key + i}>
+							{showPlaceholderBefore && preview.visible && (
+								<div
+									style={{
+										height: draggedHeight || 44,
+										marginBottom: 6,
+										borderRadius: 6,
+										background: 'rgba(255,255,255,0.98)',
+										border: '1px solid rgba(0,0,0,0.06)',
+										boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
+										transition: 'height 120ms ease, margin 120ms ease, transform 120ms ease',
+										display: 'flex',
+										alignItems: 'center',
+										padding: '8px'
+									}}
+								>
+									{/* preview shows the dragged item's number + label inline */}
+									<div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+										<div style={{ width: 28, height: 28, borderRadius: 6, background: '#f3f4f6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#374151', fontSize: 13 }}>
+											{preview.number ?? (dragIdx + 1)}
+										</div>
+										<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111' }}>{preview.label}</div>
+									</div>
+								</div>
+							)}
+
+							<button
+								ref={el => { itemsRef.current[i] = el; }}
+								onMouseEnter={() => setHoverIdx(i)}
+								onMouseLeave={() => setHoverIdx(null)}
+								onClick={() => {
+									setSelectedIdx(i);
+									setViewMode('options');
+								}}
+								onDragOver={e => handleDragOver(e, i)}
+								onDrop={e => handleDrop(e, i)}
+								style={{
+									position: 'relative',
+									display: 'flex',
+									width: '100%',
+									textAlign: 'left',
+									padding: '8px',
+									marginBottom: 6,
+									borderRadius: 6,
+									// only show the hover visual effect when hovering — do not apply it for "selected"
+									background: (hoverIdx === i) ? '#eef2ff' : 'transparent',
+									border: (hoverIdx === i) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+									boxShadow: isHoverTarget ? '0 8px 24px rgba(99,102,241,0.12)' : ((!selected && hoverIdx === i && !isDragging) ? '0 4px 10px rgba(2,6,23,0.06)' : 'none'),
+									transform: isHoverTarget ? 'translateY(6px)' : ((!selected && hoverIdx === i && !isDragging) ? 'translateY(-1px)' : 'none'),
+									cursor: 'pointer',
+									transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), box-shadow 200ms ease, background-color 120ms ease'
+								}}
+							>
+								{/* left: badge + label */}
+								<div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0, flex: 1 }}>
+									<div
+										aria-hidden="true"
+										style={{
+											width: 28,
+											height: 28,
+											opacity: 0.95,
+											display: 'inline-flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											borderRadius: 6,
+											// only highlight badge on hover, not when item is selected
+											background: (hoverIdx === i) ? '#eef2ff' : '#f3f4f6',
+											color: '#374151',
+											fontWeight: 700,
+											flexShrink: 0,
+											userSelect: 'none',
+											fontSize: 13
+										}}
+										title={`Position ${num}`}
+									>
+										{num}
+									</div>
+	
+									<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
+								</div>
+	
+								{/* draggable handle */}
+								<span
+									role="button"
+									draggable
+									tabIndex={-1}
+									aria-hidden="true"
+									onDragStart={e => handleDragStart(e, i, key, label)}
+									onDragEnd={handleDragEnd}
+									onClick={e => e.stopPropagation()}
+									style={{
+										position: 'absolute',
+										right: 0,
+										top: 0,
+										bottom: 0,
+										width: 36,
+										background: isDragging ? 'rgba(240,240,240,0.95)' : '#f0f0f0',
+										borderLeft: '1px solid #e6e7eb',
+										borderTopRightRadius: 6,
+										borderBottomRightRadius: 6,
+										flexShrink: 0,
+										cursor: dragIdx === i ? 'grabbing' : 'grab',
+										userSelect: 'none',
+										transition: 'background-color 120ms ease'
+									}}
+								/>
+							</button>
+						</React.Fragment>
+					);
+				})}
+
+				{/* placeholder at end showing inline preview */}
+				{dragIdx !== null && dragOverIdx === orderList.length && preview.visible && (
+					<div
+						style={{
+							height: draggedHeight || 44,
+							marginBottom: 6,
+							borderRadius: 6,
+							background: 'rgba(255,255,255,0.98)',
+							border: '1px solid rgba(0,0,0,0.06)',
+							boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
+							transition: 'height 120ms ease, margin 120ms ease, transform 120ms ease',
+							display: 'flex',
+							alignItems: 'center',
+							padding: '8px'
+						}}
+						onDragOver={e => { e.preventDefault(); if (dragOverIdx !== orderList.length) setDragOverIdx(orderList.length); positionPreviewAtIndex(orderList.length); }}
+						onDrop={e => handleDrop(e, orderList.length)}
+					>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+							<div style={{ width: 28, height: 28, borderRadius: 6, background: '#f3f4f6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#374151', fontSize: 13 }}>
+								{preview.number ?? (dragIdx + 1)}
+							</div>
+							<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111' }}>{preview.label}</div>
+						</div>
+					</div>
+				)}
+
+			</div>
+		);
+	}
+
+	// options view
+	return (
+		<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 12, background: '#fff', maxHeight: '56vh', overflowY: 'auto' }}>
+			{/* Header: show back button to return to choices-only view */}
+			<div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+					<button
+						onClick={() => { refreshList(); }}
+						style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', background: '#f8fafc', cursor: 'pointer' }}
+						aria-label="Back to columns"
+					>
+						Back
+					</button>
+
+					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+						<span>Options for:</span>
+						{editingTitle ? (
+							<input
+								autoFocus
+								value={titleInput}
+								onChange={e => setTitleInput(e.target.value)}
+								onBlur={() => {
+									renameCurrentKey(titleInput);
+									setEditingTitle(false);
+								}}
+								onKeyDown={e => {
+									if (e.key === 'Enter') {
+										renameCurrentKey(titleInput);
+										setEditingTitle(false);
+									} else if (e.key === 'Escape') {
+										setEditingTitle(false);
+									}
+								}}
+								style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
+								aria-label="Rename column"
+							/>
+						) : (
+							<span
+								onClick={() => { setEditingTitle(true); }}
+								style={{ fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}
+								title="Click to rename"
+								role="button"
+								tabIndex={0}
+								onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setEditingTitle(true); } }}
+							>
+								{currentKey}
+							</span>
+						)}
+					</div>
+				</div>
+				<div style={{ fontSize: 13, color: '#6b7280' }}>{Object.keys(editableMap[currentKey] || {}).length} set</div>
+			</div>
+
+			<div style={{ display: 'grid', gap: 8 }}>
+				{options.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No options available</div>}
+				{options.map(opt => {
+					// use opt.option / opt.name as the internal key, but use opt.label (if provided) for display
+					const optKey = opt.option || opt.name || String(opt);
+					const optLabel = opt.label || optKey;
+					const values = Array.isArray(opt.values) ? opt.values : (Array.isArray(opt.type) ? opt.type : []);
+					const value = (editableMap[currentKey] && editableMap[currentKey][optKey]) || '';
+					return (
+						<div key={optKey} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+							<div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{optLabel}</div>
+
+							{values && values.length > 0 ? (
+								<select
+									value={value}
+									onChange={e => updateOption(optKey, e.target.value)}
+									style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
+									aria-label={`Select ${optLabel} for ${currentKey}`}
+								>
+									<option value=''>None</option>
+									{values.map(v => (
+										<option key={v} value={v}>{v}</option>
+									))}
+								</select>
+							) : opt.type === 'boolean' ? (
+								(() => {
+									const checked = value === true || value === 'Yes' || value === 'On' || String(value).toLowerCase() === 'true' || String(value).toLowerCase() === 'yes' || String(value).toLowerCase() === 'on';
+									return (
+										<label style={{ display: 'inline-flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
+											<span style={{ position: 'relative', width: 44, height: 24, display: 'inline-block' }}>
+												<input
+													type="checkbox"
+													checked={checked}
+													onChange={e => updateOption(optKey, e.target.checked)}
+													aria-label={optLabel}
+													style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
+												/>
+												<span style={{
+													position: 'absolute',
+													inset: 0,
+													borderRadius: 9999,
+													background: checked ? '#4f46e5' : '#e5e7eb',
+													transition: 'background-color 160ms linear',
+													padding: 2,
+													boxSizing: 'border-box'
+												}} />
+												<span style={{
+													position: 'absolute',
+													top: 2,
+													left: checked ? 22 : 2,
+													width: 20,
+													height: 20,
+													borderRadius: '50%',
+													background: '#fff',
+													boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+													transition: 'left 160ms linear',
+												}} />
+											</span>
+											<span style={{ fontSize: 13 }}>{checked ? 'On' : 'Off'}</span>
+										</label>
+									);
+								})()
+							) : (
+								<input
+									type="text"
+									value={value}
+									onChange={e => updateOption(optKey, e.target.value)}
+									style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
+									aria-label={`Enter ${optLabel} for ${currentKey}`}
+									placeholder="Enter value"
+								/>
+							)}
+						</div>
 					);
 				})}
 			</div>
 
-			{/* spacer */}
-			<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-hidden>
-				<div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', color: '#9ca3af' }}>Options →</div>
+			{/* Actions */}
+			<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+				{/* Delete current column (left) */}
+				<button
+					onClick={deleteCurrent}
+					disabled={!currentKey}
+					aria-disabled={!currentKey}
+					title={currentKey ? `Delete ${currentKey}` : 'No column selected'}
+					style={{
+						padding: '8px 10px',
+						borderRadius: 6,
+						background: '#fff',
+						color: '#ef4444',
+						border: '1px solid rgba(239,68,68,0.12)',
+						cursor: currentKey ? 'pointer' : 'not-allowed',
+						opacity: currentKey ? 1 : 0.6
+					}}
+				>
+					Delete
+				</button>
+
+				<button
+					onClick={onSave}
+					disabled={!isDirty}
+					aria-disabled={!isDirty}
+					style={{
+						padding: '8px 10px',
+						borderRadius: 6,
+						background: isDirty ? '#4f46e5' : '#9ca3af',
+						color: '#fff',
+						border: 'none',
+						cursor: isDirty ? 'pointer' : 'not-allowed',
+						opacity: isDirty ? 1 : 0.9
+					}}
+					title={isDirty ? 'Save changes' : 'No changes to save'}
+				>
+					Save
+				</button>
 			</div>
 
-			{/* Options editor */}
-			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 12, background: '#fff', maxHeight: '56vh', overflowY: 'auto' }}>
-				<div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-					<div style={{ fontWeight: 600 }}>Options for: <span style={{ fontWeight: 700 }}>{currentKey}</span></div>
-					<div style={{ fontSize: 13, color: '#6b7280' }}>{Object.keys(editableMap[currentKey] || {}).length} set</div>
-				</div>
-
-				<div style={{ display: 'grid', gap: 8 }}>
-					{options.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No options available</div>}
-					{options.map(opt => {
-						const optName = opt.option || opt.name || String(opt);
-						const types = Array.isArray(opt.type) ? opt.type : [];
-						const value = (editableMap[currentKey] && editableMap[currentKey][optName]) || '';
-						return (
-							<div key={optName} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-								<div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{optName}</div>
-								<select
-									value={value}
-									onChange={e => updateOption(optName, e.target.value)}
-									style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
-									aria-label={`Select ${optName} for ${currentKey}`}
-								>
-									<option value=''>None</option>
-									{types.map(t => (
-										<option key={t} value={t}>{t}</option>
-									))}
-								</select>
-							</div>
-						);
-					})}
-				</div>
-
-				{/* Actions */}
-				<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-					<button onClick={closeModal} style={{ padding: '8px 10px', borderRadius: 6 }}>Cancel</button>
-					<button onClick={onSave} style={{ padding: '8px 10px', borderRadius: 6, background: '#4f46e5', color: '#fff', border: 'none' }}>Save</button>
-				</div>
-			</div>
+			{/* Delete confirmation modal */}
+			<DeleteConfirmModal
+				isOpen={deleteConfirmOpen}
+				title="Delete column"
+				message={`Delete column "${currentKey}"? This cannot be undone.`}
+				confirmLabel="Delete"
+				onConfirm={performDeleteCurrent}
+				onCancel={() => setDeleteConfirmOpen(false)}
+			/>
 		</div>
 	);
 };

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Info } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
 import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
-import { defaultUserSettings, defaultWorkbookSettings, sectionIcons } from './DefaultSettings'; // added: import defaults
+import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
+import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 
 const Settings = () => {
 	// placeholder SVG avatar
@@ -36,6 +37,9 @@ const Settings = () => {
 	const [modalSetting, setModalSetting] = useState(null);
 	const [modalArray, setModalArray] = useState([]);
 	const [modalUpdater, setModalUpdater] = useState(null);
+
+	// new: workbook inspector modal state
+	const [workbookModalOpen, setWorkbookModalOpen] = useState(false);
 
 	const openArrayModal = (setting, currentValue, updater) => {
 		setModalSetting(setting);
@@ -71,105 +75,100 @@ const Settings = () => {
 		setModalUpdater(null);
 	};
 
-	const saveModal = () => {
+	// modal save: accept optional newArray provided by the modal to avoid reading stale state
+	const saveModal = (providedArray) => {
 		if (modalSetting && typeof modalUpdater === 'function') {
-			// ensure we send a clean array of objects: { name, alias: string[], static: boolean }
-			const cleaned = modalArray.map(it => ({
-				name: String(it?.name ?? '').trim(),
+			// prefer the array passed from the modal (freshly computed) otherwise use parent's modalArray state
+			const sourceArray = Array.isArray(providedArray) ? providedArray : modalArray;
+			// ensure we send a clean array of objects: { name, alias: string[], static: boolean, ...options }
+			const cleaned = (Array.isArray(sourceArray) ? sourceArray : []).map(it => ({
+				name: String(it?.name ?? it?.column ?? '').trim(),
 				alias: Array.isArray(it?.alias) ? it.alias.map(a => String(a).trim()).filter(Boolean) : [],
-				static: !!it?.static
+				static: !!it?.static,
+				// preserve any other option fields the editor wrote under `options`
+				...((it && it.options && typeof it.options === 'object') ? it.options : {})
 			}));
 			modalUpdater(modalSetting.id, cleaned);
 		}
+		// close modal via parent helper
 		closeModal();
 	};
 
-	// helper to update a workbook setting
+	// Persist/load helpers for Office document (Workbook) settings
+	const DOC_KEY = 'workbookSettings';
+
+	const loadWorkbookSettingsFromDocument = () => {
+		try {
+			// ensure Office.js is available and document settings exist
+			if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
+				const docSettings = Office.context.document.settings.get(DOC_KEY);
+				return docSettings || null;
+			}
+		} catch (err) {
+			console.warn('Failed to read document settings', err);
+		}
+		return null;
+	};
+
+	const saveWorkbookSettingsToDocument = (mapping) => {
+		try {
+			if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
+				Office.context.document.settings.set(DOC_KEY, mapping);
+				Office.context.document.settings.saveAsync(result => {
+					if (result && result.status !== Office.AsyncResultStatus.Succeeded) {
+						console.warn('Failed to save workbook settings to document', result.error);
+					}
+				});
+			}
+		} catch (err) {
+			console.warn('Failed to save document settings', err);
+		}
+	};
+
+	// one-time effect: ensure document has a workbook settings key; load it if present
+	useEffect(() => {
+		const existing = loadWorkbookSettingsFromDocument();
+		if (existing && typeof existing === 'object') {
+			// if columns are missing or empty, inject defaultColumns (one-time import)
+			const needsColumns = !Array.isArray(existing.columns) || existing.columns.length === 0;
+			const merged = { ...existing };
+			if (needsColumns) {
+				merged.columns = [...defaultColumns];
+				// persist the merged mapping back to document settings
+				saveWorkbookSettingsToDocument(merged);
+			}
+			setWorkbookSettingsState(prev => ({ ...prev, ...merged }));
+			return;
+		}
+
+		// no settings in document: create mapping from defaultWorkbookSettings and persist once
+		const initial = defaultWorkbookSettings.reduce((acc, s) => {
+			acc[s.id] = s.defaultValue;
+			return acc;
+		}, {});
+		// ensure columns are populated from defaultColumns on initial import
+		if (!Array.isArray(initial.columns) || initial.columns.length === 0) {
+			initial.columns = [...defaultColumns];
+		}
+		setWorkbookSettingsState(initial);
+		saveWorkbookSettingsToDocument(initial);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []); // run once on mount
+
+	// helper to update a workbook setting (also persist to document)
 	const updateWorkbookSetting = (id, value) => {
-		setWorkbookSettingsState(prev => ({ ...prev, [id]: value }));
+		setWorkbookSettingsState(prev => {
+			const next = { ...prev, [id]: value };
+			// persist mapping to document settings
+			saveWorkbookSettingsToDocument(next);
+			return next;
+		});
 	};
 
 	// helper to update a setting
 	const updateSetting = (id, value) => {
 		setUserSettingsState(prev => ({ ...prev, [id]: value }));
 	};
-
-	// --- NEW: selections modal state & helpers ---
-	const [selectionsModalOpen, setSelectionsModalOpen] = useState(false);
-	const [selectionsModalSetting, setSelectionsModalSetting] = useState(null);
-	const [selectionsAvailable, setSelectionsAvailable] = useState([]); // items not chosen
-	const [selectionsChosen, setSelectionsChosen] = useState([]);       // items chosen
-	const [selectionsFilter, setSelectionsFilter] = useState('');
-	const [selectionsUpdater, setSelectionsUpdater] = useState(null);
-
-	// helper to normalize an array of option items into { key, label, raw }
-	const normalizeOptions = arr => {
-		// Accept primitives or objects. Prefer common choice shapes:
-		// { value, label }, { id, name }, { id, value, label }, { title, name }, etc.
-		return (Array.isArray(arr) ? arr : []).map((it, i) => {
-			if (typeof it === 'string') return { key: `${i}-${String(it)}`, label: it, raw: it };
-			if (it && typeof it === 'object') {
-				// pick friendly label from common fields
-				const label = it.label ?? it.name ?? it.title ?? String(it.id ?? it.value ?? JSON.stringify(it));
-				// prefer explicit value/id for identity
-				const key = String(it.value ?? it.id ?? `${i}-${label}`);
-				return { key, label, raw: it };
-			}
-			return { key: `${i}-item`, label: String(it), raw: it };
-		});
-	};
-
-	const openSelectionsModal = (setting, currentValue, updater) => {
-		// Use setting.choices if provided, otherwise fall back to setting.options
-		const source = setting.choices ?? setting.options ?? [];
-		// normalize all available options from the provided choices/options
-		const all = normalizeOptions(source);
-		// normalize current chosen value (could be array of strings/objects)
-		const chosenNormalized = normalizeOptions(currentValue ?? []);
-		// build chosen set using key equality
-		const chosenKeys = new Set(chosenNormalized.map(c => c.key));
-		// split available vs chosen ensuring no duplicates
-		const available = all.filter(a => !chosenKeys.has(a.key));
-		const chosen = all.filter(a => chosenKeys.has(a.key)).concat(
-			// also include any chosen items not present in all (custom items)
-			chosenNormalized.filter(c => !all.some(a => a.key === c.key))
-		);
-		setSelectionsAvailable(available);
-		setSelectionsChosen(chosen);
-		setSelectionsModalSetting(setting);
-		setSelectionsUpdater(() => updater);
-		setSelectionsFilter('');
-		setSelectionsModalOpen(true);
-	};
-
-	const closeSelectionsModal = () => {
-		setSelectionsModalOpen(false);
-		setSelectionsModalSetting(null);
-		setSelectionsAvailable([]);
-		setSelectionsChosen([]);
-		setSelectionsUpdater(null);
-		setSelectionsFilter('');
-	};
-
-	const saveSelectionsModal = () => {
-		if (selectionsModalSetting && typeof selectionsUpdater === 'function') {
-			// send the raw values back to updater in the original shape
-			const cleaned = selectionsChosen.map(i => i.raw);
-			selectionsUpdater(selectionsModalSetting.id, cleaned);
-		}
-		closeSelectionsModal();
-	};
-
-	const moveToChosen = item => {
-		setSelectionsAvailable(prev => prev.filter(i => i.key !== item.key));
-		setSelectionsChosen(prev => [...prev, item]);
-	};
-
-	const moveToAvailable = item => {
-		setSelectionsChosen(prev => prev.filter(i => i.key !== item.key));
-		setSelectionsAvailable(prev => [...prev, item]);
-	};
-	// --- END NEW ---
 
 	// render settings grouped by optional `section` property
 	const renderSettingsControls = (settings, state, updater, idPrefix = '') => {
@@ -301,32 +300,6 @@ const Settings = () => {
 									<button
 										onClick={() => openArrayModal(setting, cur, updater)}
 										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
-										aria-label={`Configure`}
-									>
-										Configure
-									</button>
-								);
-							}
-
-							// ADD: show Configure button for editableArray
-							if (setting.type === 'editableArray') {
-								return (
-									<button
-										onClick={() => openArrayModal(setting, cur, updater)}
-										style={{ padding: '6px 10px', borderRadius: 6, background: '#eef2ff', border: '1px solid #e0e7ff', cursor: 'pointer' }}
-										aria-label={`Configure`}
-									>
-										Configure
-									</button>
-								);
-							}
-
-							// NEW: selections type shows a two-bank configure flow
-							if (setting.type === 'selections') {
-								return (
-									<button
-										onClick={() => openSelectionsModal(setting, cur, updater)}
-										style={{ padding: '6px 10px', borderRadius: 6, background: '#eef2ff', border: '1px solid #e0e7ff', cursor: 'pointer' }}
 										aria-label={`Configure`}
 									>
 										Configure
@@ -469,7 +442,7 @@ const Settings = () => {
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
 					<h1 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '6px 8px', borderRadius: 6 }}>Welcome to Settings</h1>
 					<p style={{ margin: '4px 0 12px 0' }}>
-						This is a placeholder settings page. Configure your add-in options here.
+						Work in progress.
 					</p>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
@@ -500,7 +473,33 @@ const Settings = () => {
 					>
 						{activeTab === 'workbook' ? (
 							<div>
-								<h2 style={{ margin: '0 0 8px 0', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>Workbook Settings</h2>
+								<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px 0' }}>
+									<h2 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>Workbook Settings</h2>
+									<button
+										type="button"
+										onClick={() => setWorkbookModalOpen(true)}
+										title="Open workbook inspector"
+										aria-label="Open workbook inspector"
+										style={{
+											marginLeft: 4,
+											padding: '6px 8px',
+											borderRadius: 6,
+											background: '#f3f4f6',
+											border: '1px solid #e6e7eb',
+											cursor: 'pointer',
+											display: 'inline-flex',
+											alignItems: 'center',
+											gap: 6,
+											fontSize: 13
+										}}
+									>
+										{/* small file icon */}
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+											<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+										</svg>
+									</button>
+								</div>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
 							</div>
 						) : (
@@ -543,19 +542,11 @@ const Settings = () => {
 				setModalArray={setModalArray}
 				closeModal={closeModal}
 				saveModal={saveModal}
-
-				// selections modal
-				selectionsModalOpen={selectionsModalOpen}
-				selectionsModalSetting={selectionsModalSetting}
-				selectionsAvailable={selectionsAvailable}
-				selectionsChosen={selectionsChosen}
-				selectionsFilter={selectionsFilter}
-				setSelectionsFilter={setSelectionsFilter}
-				closeSelectionsModal={closeSelectionsModal}
-				saveSelectionsModal={saveSelectionsModal}
-				moveToChosen={moveToChosen}
-				moveToAvailable={moveToAvailable}
+				// provide current workbook columns so modal uses document columns instead of defaults
+				workbookColumns={workbookSettingsState.columns}
 			/>
+			{/* pass the document key constant so the modal can read the workbook-specific mapping */}
+			<WorkbookSettingsModal isOpen={workbookModalOpen} onClose={() => setWorkbookModalOpen(false)} docKey={DOC_KEY} />
 		</div>
 	);
 };

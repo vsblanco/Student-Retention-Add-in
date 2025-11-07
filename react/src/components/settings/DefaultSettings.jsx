@@ -19,10 +19,13 @@ export const defaultColumns =[
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
 ];
 
-export const formatOptions = [
-	{ option: 'Conditional Formatting', type: ['G-Y-R Color Scale', 'R-Y-G Color Scale'] },
-	{ option: 'Function', type: ['=HYPERLINK', '=XLOOKUP'] },
-	{ option: 'Date Format', type: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
+export const Options = [
+	{ option: 'static', label: 'Static', type: 'boolean'},
+	{ option: 'hidden', label: 'Hidden in LDA', type: 'boolean' },
+	{ option: 'colors', label: 'Colors', type: 'string', values: ['G-Y-R Color Scale', 'R-Y-G Color Scale'] },
+	{ option: 'function', label: 'Function', type: 'string', values: ['=HYPERLINK', '=XLOOKUP'] },
+	{ option: 'dateFormat', label: 'Date Format', type: 'string', values: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
+	{ option: 'alias', label: 'Aliases', type: 'string' },
 ];
 
 export const defaultWorkbookSettings = [
@@ -36,19 +39,11 @@ export const defaultWorkbookSettings = [
 		description: 'The name of the master list to import data from.'
 	},
 	{
-		id: 'columnsToImport',
-		label: 'Columns to Import',
+		id: 'columns',
+		label: 'Columns',
 		type: 'array',
-		defaultValue: defaultColumns,
-		section: 'Import Data',
-		description: 'List of columns to import from the master list. Each item is an object: { name, alias, static } where alias may be a string or an array of strings and static is a boolean to prevent edits.'
-	},
-	{
-		id: 'Format',
-		label: 'Format',
-		type: 'editableArray',
 		choices: defaultColumns,
-		options: formatOptions,
+		options: Options,
 		defaultValue: [],
 		section: 'Import Data',
 		description: 'List of columns to format in the master list.'
@@ -84,16 +79,6 @@ export const defaultWorkbookSettings = [
 		defaultValue: true, // Yes
         section: 'Create LDA',
 		description: 'Whether to include the Do Not Contact students.'
-	},
-		{
-		id: 'hiddenColumns',
-		label: 'Hidden Columns',
-		type: 'selections',
-		choices: defaultColumns,
-		defaultValue: [],
-		key: 'hidden',
-		section: 'Create LDA',
-		description: 'Defines the structure and visibility of the columns in the master list.'
 	},
 	{
 		id: 'powerAutomateFlowUrl',
