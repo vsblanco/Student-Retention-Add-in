@@ -201,6 +201,18 @@ export default function ImportManager({ onImport } = {}) {
 					<button type="button" onClick={handleImport} style={styles.importButton}>
 						{importInfo.type}
 					</button>
+
+					{/* display the action type under the import button */}
+					<div
+						style={
+							styles.actionText
+								? styles.actionText
+								: { marginTop: 8, fontSize: 12, color: '#444' }
+						}
+					>
+						Action: {importInfo.action || 'Unknown'}
+					</div>
+
 					{/* preview / processing UI can remain hidden until import */}
 				</div>
 			)}
@@ -214,6 +226,7 @@ export default function ImportManager({ onImport } = {}) {
 						headers={headers}
 						settingsColumns={workbookColumns}
 						matched={importInfo.matched}
+						action={importInfo.action}
 					/>
 				</div>
 			)}
