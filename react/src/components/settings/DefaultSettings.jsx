@@ -6,14 +6,14 @@ import emailIcon from '../../assets/icons/email-icon.png';
 export const defaultColumns =[
 	{ name: 'Assigned', alias: ['advisor'], static: true },
 	{ name: 'Student Name', alias: ['Student']},
-	{ name: 'Student ID', alias: ['Student Number','Student identifier'], hidden: true },
+	{ name: 'Student ID', alias: ['Student Number','Student identifier'], hidden: true, identifier: true },
 	{ name: 'Gender', alias: ['Sex'], hidden: true},
 	{ name: 'Phone', alias: ['Phone Number','Contact Number']},
 	{ name: 'Other Phone', alias: ['Second Phone', 'Alt Phone']},
-	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true},
+	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true, identifier: true },
 	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
 	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, format: ['=HYPERLINK']},
-	{ name: 'Grade', alias: ['Current Grade', 'Grade Level', 'Score']  },
+	{ name: 'Grade', alias: ['Current Grade', 'Grade Level', 'Score', 'Course Grade']  },
 	{ name: 'LDA', alias: ['Last Date of Attendance'], format: ['MM/DD/YYYY']},
 	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
@@ -25,6 +25,7 @@ export const Options = [
 	{ option: 'colors', label: 'Colors', type: 'string', values: ['G-Y-R Color Scale', 'R-Y-G Color Scale'] },
 	{ option: 'function', label: 'Function', type: 'string', values: ['=HYPERLINK', '=XLOOKUP'] },
 	{ option: 'dateFormat', label: 'Date Format', type: 'string', values: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
+	{ option: 'identifier', label: 'Identifier', type: 'boolean' },
 	{ option: 'alias', label: 'Aliases', type: 'string' },
 ];
 
