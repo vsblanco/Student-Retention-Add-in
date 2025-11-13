@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
 import styles from './importManagerStyles';
-import { getImportType } from './ImportType'; // new import
-import { getWorkbookSettings } from '../utility/getSettings'; // <-- added import
-import { File } from 'lucide-react'; // file icon under title
-import csvIcon from '../../assets/icons/csv-icon.png';
+import { getImportType } from './ImportType';
+import { getWorkbookSettings } from '../utility/getSettings';
+import { Upload } from 'lucide-react';
+import FileCard from './FileCard';
 
 export default function ImportManager({ onImport } = {}) {
 	const [fileName, setFileName] = useState('');
@@ -16,33 +16,13 @@ export default function ImportManager({ onImport } = {}) {
 	const [isImported, setIsImported] = useState(false); // new: whether user clicked Import
 	const [workbookColumns, setWorkbookColumns] = useState([]); // new: columns from workbook settings
 
-	// NEW: control icon scale for press / bounce animation
-	const [iconScale, setIconScale] = useState(1);
 	const inputRef = useRef(null);
 
 	// drag state for drop-zone
 	const [dragActive, setDragActive] = useState(false);
 
-	// Preload CSV icon so it's ready to display when a CSV is selected
-	useEffect(() => {
-		const img = new Image();
-		img.src = csvIcon;
-		console.log('Preloading CSV icon:', csvIcon);
-		// optional: attach handlers if you want to monitor load/fail
-		return () => {
-			// cleanup handlers to avoid leaks in some environments
-			img.onload = null;
-			img.onerror = null;
-		};
-	}, []);
-
 	const handleFile = (file) => {
 		if (!file) return;
-
-		// when a file is chosen, trigger a quick bounce animation
-		// make sure we override any pressed state
-		setIconScale(1.3);
-		setTimeout(() => setIconScale(1), 160);
 
 		setFileName(file.name);
 		setStatus('Reading file...');
@@ -78,7 +58,6 @@ export default function ImportManager({ onImport } = {}) {
 					// call workbook settings util with detected columns (will log columns)
 					try {
 						const wbSettings = getWorkbookSettings(extractedHeaders);
-						// store resolved columns from settings into state so we can pass them to DataProcessor
 						setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
 						// log static columns if helper exists
 						if (typeof DataProcessor.logStaticColumns === 'function') {
@@ -94,7 +73,6 @@ export default function ImportManager({ onImport } = {}) {
 					setStatus(`Parsed ${Array.isArray(data) ? data.length : 0} rows`);
 					setParsedData(data);
 
-					// NOTE: do not call onImport here — wait for explicit "Import" click
 				} catch (err) {
 					setStatus('Error parsing CSV.');
 					console.error(err);
@@ -210,17 +188,12 @@ export default function ImportManager({ onImport } = {}) {
 		if (typeof message === 'string' && message) setStatus(message);
 	};
 
-	// replaced click handler to animate on click and then open file picker
+	// replaced click handler: simplified, open file picker immediately
 	const onButtonClick = () => {
-		// shrink icon briefly when clicked
-		setIconScale(0.92);
-
-		// wait a short moment so the shrink is visible, then open file dialog
-		setTimeout(() => {
-			if (inputRef.current) inputRef.current.value = null;
-			inputRef.current && inputRef.current.click();
-
-		}, 100);
+		if (inputRef.current) {
+			inputRef.current.value = null;
+			inputRef.current.click();
+		}
 	};
 
 	// drag handlers
@@ -271,14 +244,15 @@ export default function ImportManager({ onImport } = {}) {
 				onDragLeave={handleDragLeave}
 				onDrop={handleDrop}
 				style={{
-					margin: '0 auto 12px',
+					margin: '0 0 12px',
+					width: '100%',
+					boxSizing: 'border-box',
 					padding: 16,
 					borderRadius: 10,
 					display: 'flex',
 					flexDirection: 'column',
 					alignItems: 'center',
 					gap: 12,
-					maxWidth: 420,
 					cursor: 'pointer',
 					border: dragActive ? '2px dashed #2b6cb0' : '2px dashed rgba(43,108,176,0.25)',
 					background: dragActive ? 'rgba(43,108,176,0.03)' : 'transparent',
@@ -286,33 +260,18 @@ export default function ImportManager({ onImport } = {}) {
 				}}
 				title={fileName ? `Selected file ${fileName}` : 'Click or drop a CSV file here'}
 			>
-				{/* icon */}
-				{uploadedFile && /\.csv$/i.test(fileName) ? (
-					<img
-						src={csvIcon}
-						alt="CSV file"
-						// apply same transform + transition for smooth shrink / bounce
-						style={{
-							width: 48,
-							height: 48,
-							objectFit: 'contain',
-							transform: `scale(${iconScale})`,
-							transition: 'transform 140ms cubic-bezier(.2,.8,.2,1)',
-							transformOrigin: 'center center',
-						}}
-					/>
-				) : (
-					<File
-						size={48}
-						color="#b5b5b5"
-						// apply transform + transition for smooth shrink / bounce
-						style={{
-							transform: `scale(${iconScale})`,
-							transition: 'transform 140ms cubic-bezier(.2,.8,.2,1)',
-							transformOrigin: 'center center',
-						}}
-					/>
-				)}
+				{/* icon: simplified to use lucide-react Upload icon */}
+				<Upload
+					size={48}
+					color="#b5b5b5"
+					// keep layout consistent with previous image
+					style={{ display: 'block' }}
+				/>
+
+				{/* helper text above the choose button */}
+				<div style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
+					Drag files here or
+				</div>
 
 				{/* upload button (shows filename when selected) */}
 				<button
@@ -329,7 +288,8 @@ export default function ImportManager({ onImport } = {}) {
 						fontSize: 14,
 						fontWeight: 600,
 						boxShadow: '0 2px 6px rgba(43,108,176,0.18)',
-						maxWidth: 360,
+						width: '100%',
+						maxWidth: '100%',
 						overflow: 'hidden',
 						textOverflow: 'ellipsis',
 						whiteSpace: 'nowrap',
@@ -352,6 +312,15 @@ export default function ImportManager({ onImport } = {}) {
 					handleFile(file);
 				}}
 			/>
+			{/* uploaded files list */}
+			{uploadedFile && (
+				<div style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: '8px 12px' }}>
+					<div style={{ marginBottom: 8, fontSize: 13, color: '#24303f', fontWeight: 600 }}>
+						Uploaded file
+					</div>
+					<FileCard file={uploadedFile} rows={Array.isArray(parsedData) ? parsedData.length : undefined} />
+				</div>
+			)}
 			{status && (
 				<div style={{ ...styles.infoBox }}>
 					<div style={styles.statusText}>Status: {status}</div>
