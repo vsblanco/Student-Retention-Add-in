@@ -1,9 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
 import styles from './importManagerStyles';
 import { getImportType } from './ImportType'; // new import
 import { getWorkbookSettings } from '../utility/getSettings'; // <-- added import
+import { File } from 'lucide-react'; // file icon under title
+import csvIcon from '../../assets/icons/csv-icon.png';
 
 export default function ImportManager({ onImport } = {}) {
 	const [fileName, setFileName] = useState('');
@@ -13,10 +15,35 @@ export default function ImportManager({ onImport } = {}) {
 	const [uploadedFile, setUploadedFile] = useState(null); // new: store selected File
 	const [isImported, setIsImported] = useState(false); // new: whether user clicked Import
 	const [workbookColumns, setWorkbookColumns] = useState([]); // new: columns from workbook settings
+
+	// NEW: control icon scale for press / bounce animation
+	const [iconScale, setIconScale] = useState(1);
 	const inputRef = useRef(null);
+
+	// drag state for drop-zone
+	const [dragActive, setDragActive] = useState(false);
+
+	// Preload CSV icon so it's ready to display when a CSV is selected
+	useEffect(() => {
+		const img = new Image();
+		img.src = csvIcon;
+		console.log('Preloading CSV icon:', csvIcon);
+		// optional: attach handlers if you want to monitor load/fail
+		return () => {
+			// cleanup handlers to avoid leaks in some environments
+			img.onload = null;
+			img.onerror = null;
+		};
+	}, []);
 
 	const handleFile = (file) => {
 		if (!file) return;
+
+		// when a file is chosen, trigger a quick bounce animation
+		// make sure we override any pressed state
+		setIconScale(1.3);
+		setTimeout(() => setIconScale(1), 160);
+
 		setFileName(file.name);
 		setStatus('Reading file...');
 		setUploadedFile(file);
@@ -183,17 +210,138 @@ export default function ImportManager({ onImport } = {}) {
 		if (typeof message === 'string' && message) setStatus(message);
 	};
 
+	// replaced click handler to animate on click and then open file picker
 	const onButtonClick = () => {
-		if (inputRef.current) inputRef.current.value = null;
-		inputRef.current && inputRef.current.click();
+		// shrink icon briefly when clicked
+		setIconScale(0.92);
+
+		// wait a short moment so the shrink is visible, then open file dialog
+		setTimeout(() => {
+			if (inputRef.current) inputRef.current.value = null;
+			inputRef.current && inputRef.current.click();
+
+		}, 100);
+	};
+
+	// drag handlers
+	const handleDragOver = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		if (!dragActive) setDragActive(true);
+	};
+
+	const handleDragLeave = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		// only clear when leaving the drop-zone element
+		setDragActive(false);
+	};
+
+	const handleDrop = (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setDragActive(false);
+		const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+		if (file) handleFile(file);
+	};
+
+	// allow clicking the drop area to open picker
+	const openFilePicker = () => {
+		if (inputRef.current) {
+			inputRef.current.value = null;
+			inputRef.current.click();
+		}
 	};
 
 	return (
 		<div style={styles.container}>
-			{/* renamed button to 'Upload' */}
-			<button type="button" onClick={onButtonClick} style={styles.uploadButton}>
-				Upload
-			</button>
+			{/* Title at the top */}
+			<div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginTop: 8, marginBottom: 8, paddingLeft: 12 }}>
+				<h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#24303f' }}>Select a file to import</h2>
+			</div>
+
+			{/* drop-zone: border around icon + button, clickable and supports drag/drop */}
+			<div
+				role="button"
+				tabIndex={0}
+				onClick={openFilePicker}
+				onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
+				onDragOver={handleDragOver}
+				onDragEnter={handleDragOver}
+				onDragLeave={handleDragLeave}
+				onDrop={handleDrop}
+				style={{
+					margin: '0 auto 12px',
+					padding: 16,
+					borderRadius: 10,
+					display: 'flex',
+					flexDirection: 'column',
+					alignItems: 'center',
+					gap: 12,
+					maxWidth: 420,
+					cursor: 'pointer',
+					border: dragActive ? '2px dashed #2b6cb0' : '2px dashed rgba(43,108,176,0.25)',
+					background: dragActive ? 'rgba(43,108,176,0.03)' : 'transparent',
+					transition: 'border-color 120ms ease, background 120ms ease',
+				}}
+				title={fileName ? `Selected file ${fileName}` : 'Click or drop a CSV file here'}
+			>
+				{/* icon */}
+				{uploadedFile && /\.csv$/i.test(fileName) ? (
+					<img
+						src={csvIcon}
+						alt="CSV file"
+						// apply same transform + transition for smooth shrink / bounce
+						style={{
+							width: 48,
+							height: 48,
+							objectFit: 'contain',
+							transform: `scale(${iconScale})`,
+							transition: 'transform 140ms cubic-bezier(.2,.8,.2,1)',
+							transformOrigin: 'center center',
+						}}
+					/>
+				) : (
+					<File
+						size={48}
+						color="#b5b5b5"
+						// apply transform + transition for smooth shrink / bounce
+						style={{
+							transform: `scale(${iconScale})`,
+							transition: 'transform 140ms cubic-bezier(.2,.8,.2,1)',
+							transformOrigin: 'center center',
+						}}
+					/>
+				)}
+
+				{/* upload button (shows filename when selected) */}
+				<button
+					type="button"
+					onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
+					// preserve shrink animation behavior and ellipsis for long names
+					style={{
+						background: '#2b6cb0',
+						color: '#fff',
+						border: 'none',
+						cursor: 'pointer',
+						padding: '6px 20px',
+						borderRadius: 999,
+						fontSize: 14,
+						fontWeight: 600,
+						boxShadow: '0 2px 6px rgba(43,108,176,0.18)',
+						maxWidth: 360,
+						overflow: 'hidden',
+						textOverflow: 'ellipsis',
+						whiteSpace: 'nowrap',
+						display: 'inline-block',
+					}}
+					aria-label={fileName ? `Selected file ${fileName}` : 'Choose file'}
+					title={fileName || 'Choose CSV file'}
+				>
+					{fileName || 'Choose File'}
+				</button>
+			</div>
+
 			<input
 				ref={inputRef}
 				type="file"
@@ -204,11 +352,6 @@ export default function ImportManager({ onImport } = {}) {
 					handleFile(file);
 				}}
 			/>
-			{fileName && (
-				<div style={{ ...styles.infoBox }}>
-					<div style={styles.fileName}>File: {fileName}</div>
-				</div>
-			)}
 			{status && (
 				<div style={{ ...styles.infoBox }}>
 					<div style={styles.statusText}>Status: {status}</div>
