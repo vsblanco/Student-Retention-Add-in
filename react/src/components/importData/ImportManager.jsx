@@ -8,12 +8,16 @@ import { Upload } from 'lucide-react';
 import FileCard from './FileCard';
 
 export default function ImportManager({ onImport } = {}) {
-	const [fileName, setFileName] = useState('');
+	const [fileName, setFileName] = useState(''); // name of active file
 	const [status, setStatus] = useState('');
 	const [parsedData, setParsedData] = useState(null);
 	const [headers, setHeaders] = useState([]); // store column headers
-	const [uploadedFile, setUploadedFile] = useState(null); // new: store selected File
-	const [isImported, setIsImported] = useState(false); // new: whether user clicked Import
+	// now support multiple uploaded files
+	const [uploadedFiles, setUploadedFiles] = useState([]); // array of File
+	const [activeIndex, setActiveIndex] = useState(-1); // index into uploadedFiles that is parsed/active
+	// per-file import info computed from headers (e.g. { type, action, matched })
+	const [fileInfos, setFileInfos] = useState([]);
+	const [isImported, setIsImported] = useState(false); // whether user clicked Import
 	const [workbookColumns, setWorkbookColumns] = useState([]); // new: columns from workbook settings
 
 	const inputRef = useRef(null);
@@ -21,68 +25,135 @@ export default function ImportManager({ onImport } = {}) {
 	// drag state for drop-zone
 	const [dragActive, setDragActive] = useState(false);
 
-	const handleFile = (file) => {
+	// parse a single CSV file into parsedData/headers and set active
+	const parseCSVFile = (file, index) => {
 		if (!file) return;
-
 		setFileName(file.name);
 		setStatus('Reading file...');
-		setUploadedFile(file);
-		setIsImported(false); // reset import flag on new upload
+		setIsImported(false);
 
 		const isCSV = /\.csv$/i.test(file.name);
-
-		const reader = new FileReader();
-
-		reader.onerror = () => {
-			setStatus('Failed to read file.');
-		};
-
-		if (isCSV) {
-			reader.onload = (e) => {
-				try {
-					const text = e.target.result;
-					const data = parseCSV(text);
-
-					// extract headers robustly for later use
-					let extractedHeaders = [];
-					if (Array.isArray(data) && data.length > 0) {
-						const firstRow = data[0];
-						if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
-							extractedHeaders = Object.keys(firstRow);
-						} else if (Array.isArray(firstRow)) {
-							extractedHeaders = firstRow;
-						}
-					}
-					setHeaders(extractedHeaders);
-
-					// call workbook settings util with detected columns (will log columns)
-					try {
-						const wbSettings = getWorkbookSettings(extractedHeaders);
-						setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
-						// log static columns if helper exists
-						if (typeof DataProcessor.logStaticColumns === 'function') {
-							DataProcessor.logStaticColumns(wbSettings.columns);
-						}
-						/* eslint-disable no-console */
-						console.log('ImportManager: workbook settings ->', wbSettings);
-						/* eslint-enable no-console */
-					} catch (err) {
-						// ignore errors from settings read
-					}
-
-					setStatus(`Parsed ${Array.isArray(data) ? data.length : 0} rows`);
-					setParsedData(data);
-
-				} catch (err) {
-					setStatus('Error parsing CSV.');
-					console.error(err);
-				}
-			};
-			reader.readAsText(file);
+		if (!isCSV) {
+			setStatus('Unsupported file type. Please select a .csv file.');
 			return;
 		}
 
-		setStatus('Unsupported file type. Please select a .csv file.');
+		const reader = new FileReader();
+		reader.onerror = () => setStatus('Failed to read file.');
+		reader.onload = (e) => {
+			try {
+				const text = e.target.result;
+				const data = parseCSV(text);
+
+				// extract headers
+				let extractedHeaders = [];
+				if (Array.isArray(data) && data.length > 0) {
+					const firstRow = data[0];
+					if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+						extractedHeaders = Object.keys(firstRow);
+					} else if (Array.isArray(firstRow)) {
+						extractedHeaders = firstRow;
+					}
+				}
+				setHeaders(extractedHeaders);
+
+				// call workbook settings util
+				try {
+					const wbSettings = getWorkbookSettings(extractedHeaders);
+					setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
+					if (typeof DataProcessor.logStaticColumns === 'function') {
+						DataProcessor.logStaticColumns(wbSettings.columns);
+					}
+					/* eslint-disable no-console */
+					console.log('ImportManager: workbook settings ->', wbSettings);
+					/* eslint-enable no-console */
+				} catch (err) {
+					// ignore
+				}
+
+				setStatus(`Parsed ${Array.isArray(data) ? data.length : 0} rows`);
+				setParsedData(data);
+				setActiveIndex(index);
+				// compute and store import info for this file
+				try {
+					const info = getImportType(extractedHeaders);
+					setFileInfos((prev) => {
+						const copy = [...prev];
+						copy[index] = info;
+						return copy;
+					});
+				} catch (e) {
+					// ignore
+				}
+			} catch (err) {
+				setStatus('Error parsing CSV.');
+				console.error(err);
+			}
+		};
+		reader.readAsText(file);
+	};
+
+	// add one or more files to the uploadedFiles array; parse the first CSV among the added files
+	const handleAddFiles = (filesList) => {
+		if (!filesList || filesList.length === 0) return;
+		const filesArr = Array.from(filesList);
+		// append files and expand fileInfos placeholders, then read a small slice of each CSV
+		setUploadedFiles((prev) => {
+			const start = prev.length;
+			const combined = [...prev, ...filesArr];
+
+			// expand fileInfos to keep indexes aligned
+			setFileInfos((prevInfos) => [...prevInfos, ...filesArr.map(() => null)]);
+
+			// for each new file, try to read a small slice to detect headers and compute importInfo
+			filesArr.forEach((f, i) => {
+				const globalIndex = start + i;
+				if (/\.csv$/i.test(f.name)) {
+					const r = new FileReader();
+					// read a chunk (first 64KB) to avoid loading huge files just to detect headers
+					r.onload = (ev) => {
+						try {
+							const text = ev.target.result;
+							const data = parseCSV(text);
+							let extractedHeaders = [];
+							if (Array.isArray(data) && data.length > 0) {
+								const firstRow = data[0];
+								if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+									extractedHeaders = Object.keys(firstRow);
+								} else if (Array.isArray(firstRow)) {
+									extractedHeaders = firstRow;
+								}
+							}
+							const info = getImportType(extractedHeaders);
+							setFileInfos((prev) => {
+								const copy = [...prev];
+								copy[globalIndex] = info;
+								return copy;
+							});
+						} catch (err) {
+							// ignore parse errors for the chunk
+						}
+					};
+					r.onerror = () => { /* ignore */ };
+					r.readAsText(f.slice(0, 64 * 1024));
+				}
+			});
+
+			// choose first CSV among the newly added files to parse and make active (back-compat)
+			const idxInNew = filesArr.findIndex((f) => /\.csv$/i.test(f.name));
+			if (idxInNew !== -1) {
+				const globalIndex = start + idxInNew;
+				parseCSVFile(filesArr[idxInNew], globalIndex);
+			}
+
+			return combined;
+		});
+	};
+
+	const handleFile = (file) => {
+		// keep backward-compatible behavior: add single file and parse if CSV
+		if (!file) return;
+		handleAddFiles([file]);
 	};
 
 	// derive columns array to pass to getImportType (names as they appear)
@@ -93,7 +164,8 @@ export default function ImportManager({ onImport } = {}) {
 
 	// triggered when user clicks the Import button
 	const handleImport = () => {
-		if (!uploadedFile || !parsedData) {
+		const activeFile = uploadedFiles[activeIndex];
+		if (!activeFile || !parsedData) {
 			setStatus('No file/data to import.');
 			return;
 		}
@@ -148,7 +220,7 @@ export default function ImportManager({ onImport } = {}) {
 
 		if (typeof onImport === 'function') {
 			onImport({
-				file: uploadedFile,
+				file: uploadedFiles[activeIndex],
 				data: parsedData,
 				// pass detected import type and matched columns
 				type: importInfo.type || 'csv',
@@ -157,7 +229,7 @@ export default function ImportManager({ onImport } = {}) {
 			});
 		} else {
 			console.log('Imported CSV data', {
-				file: uploadedFile,
+				file: uploadedFiles[activeIndex],
 				data: parsedData,
 				type: importInfo.type,
 				matched: importInfo.matched,
@@ -214,8 +286,10 @@ export default function ImportManager({ onImport } = {}) {
 		e.preventDefault();
 		e.stopPropagation();
 		setDragActive(false);
-		const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-		if (file) handleFile(file);
+		const list = e.dataTransfer && e.dataTransfer.files;
+		if (list && list.length > 0) {
+			handleAddFiles(list);
+		}
 	};
 
 	// allow clicking the drop area to open picker
@@ -258,7 +332,8 @@ export default function ImportManager({ onImport } = {}) {
 					background: dragActive ? 'rgba(43,108,176,0.03)' : 'transparent',
 					transition: 'border-color 120ms ease, background 120ms ease',
 				}}
-				title={fileName ? `Selected file ${fileName}` : 'Click or drop a CSV file here'}
+				/* Keep the title static so selected filename is not revealed in the UI */
+				title={'Click or drop a CSV file here'}
 			>
 				{/* icon: simplified to use lucide-react Upload icon */}
 				<Upload
@@ -295,10 +370,11 @@ export default function ImportManager({ onImport } = {}) {
 						whiteSpace: 'nowrap',
 						display: 'inline-block',
 					}}
-					aria-label={fileName ? `Selected file ${fileName}` : 'Choose file'}
-					title={fileName || 'Choose CSV file'}
+					/* Always show the same label and accessible text — do not surface fileName */
+					aria-label={'Choose file'}
+					title={'Choose CSV file'}
 				>
-					{fileName || 'Choose File'}
+					{'Choose File'}
 				</button>
 			</div>
 
@@ -306,19 +382,29 @@ export default function ImportManager({ onImport } = {}) {
 				ref={inputRef}
 				type="file"
 				accept=".csv"
+				multiple
 				style={{ display: 'none' }}
 				onChange={(e) => {
-					const file = e.target.files && e.target.files[0];
-					handleFile(file);
+					const files = e.target.files;
+					if (files && files.length > 0) handleAddFiles(files);
 				}}
 			/>
 			{/* uploaded files list */}
-			{uploadedFile && (
+			{uploadedFiles && uploadedFiles.length > 0 && (
 				<div style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: '8px 12px' }}>
 					<div style={{ marginBottom: 8, fontSize: 13, color: '#24303f', fontWeight: 600 }}>
-						Uploaded file
+						Uploaded files
 					</div>
-					<FileCard file={uploadedFile} rows={Array.isArray(parsedData) ? parsedData.length : undefined} />
+					{uploadedFiles.map((f, idx) => (
+						<FileCard
+							key={`${f.name}-${idx}`}
+							file={f}
+							rows={idx === activeIndex && Array.isArray(parsedData) ? parsedData.length : undefined}
+							type={fileInfos[idx] && fileInfos[idx].type}
+							action={fileInfos[idx] && fileInfos[idx].action}
+							icon={fileInfos[idx] && fileInfos[idx].icon} // <-- new: pass icon through
+						/>
+					))}
 				</div>
 			)}
 			{status && (
@@ -330,27 +416,21 @@ export default function ImportManager({ onImport } = {}) {
 			{/* show Import button after parsing but before actual import */}
 			{parsedData && !isImported && (
 				<div style={styles.controlRow}>
-					<button type="button" onClick={handleImport} style={styles.importButton}>
+					<button
+						type="button"
+						onClick={handleImport}
+						// ensure the import button fills the taskpane width
+						style={{ ...styles.importButton, width: '100%' }}
+					>
 						{importInfo.type}
 					</button>
-
-					{/* display the action type under the import button */}
-					<div
-						style={
-							styles.actionText
-								? styles.actionText
-								: { marginTop: 8, fontSize: 12, color: '#444' }
-						}
-					>
-						Action: {importInfo.action || 'Unknown'}
-					</div>
 
 					{/* preview / processing UI can remain hidden until import */}
 				</div>
 			)}
 
-			{/* DataProcessor receives data only after user clicked Import */}
-			{isImported && parsedData && (
+			{/* DataProcessor receives data only after user clicked Import (active file) */}
+			{isImported && parsedData && activeIndex !== -1 && (
 				<div style={styles.processorWrap}>
 					<DataProcessor
 						data={parsedData}

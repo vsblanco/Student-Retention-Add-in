@@ -1,3 +1,7 @@
+import AnthologyFile from '../../assets/icons/AnthologyFile.png';
+import CanvasFile from '../../assets/icons/CanvasFile.png';
+import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
+
 export const CanvasImport = ['student name', 'student id', 'student sis', 'course', 'course id']
 export const AnthologyImport = ['student name', 'student id', 'SSN'];
 export const DropoutDetectiveImport = ['email', 'risk trend', 'course grade','course missing assignments','course zero assignments'];
@@ -12,23 +16,27 @@ export function getImportType(columns = []) {
 	const isAnthology = AnthologyImport.every((col) => cols.includes(col));
 	const isDropoutDetective = DropoutDetectiveImport.every((col) => cols.includes(col));
 
-	let type = 'Unknown Import';
+	let type = 'Standard';
 	let matched = [];
-	let action = 'Unknown';
+	let action = 'Refresh';
+	let icon = null; // -> new: icon to return
 
 	if (isCanvas) {
-		type = 'Canvas Import';
+		type = 'Gradebook Link';
 		matched = CanvasImport;
 		action = 'Update';
+		icon = CanvasFile;
 	} else if (isAnthology) {
-		type = 'Anthology Import';
+		type = 'Student Population';
 		matched = AnthologyImport;
 		action = 'Refresh';
+		icon = AnthologyFile;
 	} else if (isDropoutDetective) {
-		type = 'Dropout Detective Import';
+		type = 'Grade';
 		matched = DropoutDetectiveImport;
 		action = 'Update';
+		icon = DropoutDetectiveFile;
 	}
 
-	return { type, matched, action };
+	return { type, matched, action, icon };
 }
