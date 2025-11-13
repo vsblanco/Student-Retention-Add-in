@@ -17,9 +17,6 @@ export function getWorkbookSettings(defaultColumns = [], docKey = 'workbookSetti
 				}
 				// log the columns array provided
 				try {
-					/* eslint-disable no-console */
-					console.log('getWorkbookSettings: columns ->', Array.isArray(docSettings.columns) ? [...docSettings.columns] : docSettings.columns);
-					/* eslint-enable no-console */
 				} catch (e) {
 					// ignore logging errors
 				}
@@ -27,7 +24,6 @@ export function getWorkbookSettings(defaultColumns = [], docKey = 'workbookSetti
 			}
 		}
 	} catch (err) {
-		/* eslint-disable no-console */
 		console.warn('getWorkbookSettings: failed to read document settings', err);
 		/* eslint-enable no-console */
 	}

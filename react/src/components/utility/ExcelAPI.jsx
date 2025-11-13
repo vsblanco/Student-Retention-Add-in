@@ -470,6 +470,33 @@ export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow
   }
 }
 
+// NEW: clear fill for a row range (inverse of highlightRow)
+export async function clearRowFill(rowIndex, startCol, colCount) {
+  // Quick guard: Excel runtime must exist and parameters must be numbers
+  if (typeof window.Excel === "undefined") return;
+  if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
+  if (colCount <= 0) return;
+
+  try {
+    await Excel.run(async (context) => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+
+      // Compute leftmost column so the range extends to the left of startCol.
+      let leftStartCol = startCol - (colCount - 1);
+      if (leftStartCol < 0) leftStartCol = 0;
+
+      const actualColCount = (startCol - leftStartCol) + 1;
+      if (actualColCount <= 0) return;
+
+      const targetRange = sheet.getRangeByIndexes(rowIndex, leftStartCol, 1, actualColCount);
+      targetRange.format.fill.clear();
+      await context.sync();
+    });
+  } catch (_) {
+    // swallow errors intentionally
+  }
+}
+
 /**
  * Loads a worksheet's used range and returns headers, values and dimensions.
  *

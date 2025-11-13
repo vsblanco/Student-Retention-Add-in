@@ -13,7 +13,7 @@ export const defaultColumns =[
 	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true, identifier: true },
 	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
 	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, format: ['=HYPERLINK']},
-	{ name: 'Grade', alias: ['Current Grade', 'Grade Level', 'Score', 'Course Grade']  },
+	{ name: 'Grade', alias: ['Current Grade', 'Score', 'Course Grade']  },
 	{ name: 'LDA', alias: ['Last Date of Attendance'], format: ['MM/DD/YYYY']},
 	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },

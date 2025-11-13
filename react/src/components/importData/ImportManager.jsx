@@ -159,8 +159,28 @@ export default function ImportManager({ onImport } = {}) {
 				headers,
 			});
 		}
-		setStatus('Import completed.');
+
+		// show that processing has started; final "completed" status will be set by DataProcessor
+		setStatus('Processing import into workbook...');
 		setIsImported(true); // allow DataProcessor to receive/process data now
+
+		// NOTE: do NOT set status to 'Import completed.' here — wait for DataProcessor callback
+	};
+
+	// handler invoked when DataProcessor finishes (success or failure)
+	const handleProcessorComplete = (result) => {
+		if (result && result.success) {
+			setStatus('Import completed.');
+		} else {
+			const errMsg = result && result.error ? `: ${result.error}` : (result && result.reason ? `: ${result.reason}` : '');
+			setStatus(`Import failed${errMsg}`);
+		}
+		/* keep DataProcessor visible if you want to inspect the sheet after import */
+	};
+
+	// handler to receive incremental status updates from DataProcessor
+	const handleProcessorStatus = (message) => {
+		if (typeof message === 'string' && message) setStatus(message);
 	};
 
 	const onButtonClick = () => {
@@ -227,6 +247,8 @@ export default function ImportManager({ onImport } = {}) {
 						settingsColumns={workbookColumns}
 						matched={importInfo.matched}
 						action={importInfo.action}
+						onComplete={handleProcessorComplete} // <-- existing prop
+						onStatus={handleProcessorStatus}    // <-- newly added prop
 					/>
 				</div>
 			)}

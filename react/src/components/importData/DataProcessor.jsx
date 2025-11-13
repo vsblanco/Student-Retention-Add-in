@@ -1,465 +1,64 @@
 import React, { useEffect } from 'react';
+import {
+	normalizeKey,
+	parseHyperlink,
+	makeHyperlinkFormula,
+	findColumnIndex,
+	buildAliasMap,
+	renameHeaderArray,
+	gatherIdentifierColumn,
+	renameObjectRows,
+	renameArrayRows,
+	computeSavedStaticFromValues,
+	computeIdentifierListFromValues,
+	applyStaticColumnsWithContext,
+	extractHyperlink,
+	getHeaderIndexMap, // added for fast header lookups
+} from './dataProcessorUtility';
 
-export default function DataProcessor({ data, sheetName, settingsColumns, headers }) {
-	// normalizeKey: trim, lowercase, and remove internal whitespace for robust matching
-	function normalizeKey(v) {
-		if (v == null) return '';
-		return String(v).trim().toLowerCase().replace(/\s+/g, '');
-	}
-
-	// NEW helper: find column index in a header array for a settings entry (match name first, then aliases)
-	function findColumnIndex(headerArr = [], setting = {}) {
-		if (!Array.isArray(headerArr) || headerArr.length === 0 || !setting) return -1;
-		const normalizedHeaders = headerArr.map(normalizeKey);
-		// check canonical name first
-		if (setting.name) {
-			const nk = normalizeKey(setting.name);
-			const idx = normalizedHeaders.indexOf(nk);
-			if (idx !== -1) return idx;
+export default function DataProcessor({ data, sheetName, settingsColumns, headers, onComplete, onStatus }) {
+	// helper to notify caller (guarded)
+	const notifyComplete = (payload) => {
+		if (typeof onComplete === 'function') {
+			try { onComplete(payload); } catch (e) { /* swallow callback errors */ }
 		}
-		// then check aliases
-		if (setting.alias) {
-			if (Array.isArray(setting.alias)) {
-				for (const a of setting.alias) {
-					const idx = normalizedHeaders.indexOf(normalizeKey(a));
-					if (idx !== -1) return idx;
-				}
-			} else {
-				const idx = normalizedHeaders.indexOf(normalizeKey(setting.alias));
-				if (idx !== -1) return idx;
-			}
+	};
+
+	// new: helper to send incremental status updates
+	const notifyStatus = (msg) => {
+		if (typeof onStatus === 'function') {
+			try { onStatus(String(msg)); } catch (e) { /* swallow callback errors */ }
 		}
-		return -1;
-	}
-
-	// checkAliases: match settingsColumns (name + alias) against targetColumns (worksheet or data headers)
-	function checkAliases(settingsCols = [], targetCols = []) {
-		// changed: use normalizeKey for consistent trimming + lowercase + whitespace removal
-		const targetMap = new Map();
-		(targetCols || []).forEach((c, idx) => {
-			targetMap.set(normalizeKey(c), { name: c, index: idx });
-		});
-
-		const matches = (settingsCols || []).map((sc) => {
-			if (!sc) return null;
-
-			// 1) check the canonical name first
-			if (sc.name) {
-				const nameKey = normalizeKey(sc.name);
-				if (targetMap.has(nameKey)) {
-					const info = targetMap.get(nameKey);
-					return { setting: sc, matchedName: info.name, matchedIndex: info.index };
-				}
-			}
-
-			// 2) fall back to aliases if the name didn't match
-			const candidates = [];
-			if (sc.alias) {
-				if (Array.isArray(sc.alias)) candidates.push(...sc.alias);
-				else candidates.push(sc.alias);
-			}
-			const found = candidates.map(normalizeKey).find((n) => targetMap.has(n));
-			if (found) {
-				const info = targetMap.get(found);
-				return { setting: sc, matchedName: info.name, matchedIndex: info.index };
-			}
-
-			// no match
-			return { setting: sc, matchedName: null, matchedIndex: -1 };
-		});
-
-		const unmatched = matches.filter((m) => m && m.matchedName == null);
-		return { matches, unmatched };
-	}
-
-	// buildAliasMap: returns a Map where normalized target column -> canonical setting.name
-	function buildAliasMap(settingsCols = [], targetCols = []) {
-		const targetSet = new Set((targetCols || []).map(normalizeKey));
-		const map = new Map();
-
-		(settingsCols || []).forEach((sc) => {
-			if (!sc) return;
-			const canonical = sc.name ? String(sc.name).trim() : null;
-			if (!canonical) return;
-			const candidates = new Set();
-			candidates.add(normalizeKey(canonical));
-			if (sc.alias) {
-				if (Array.isArray(sc.alias)) sc.alias.forEach((a) => candidates.add(normalizeKey(a)));
-				else candidates.add(normalizeKey(sc.alias));
-			}
-			// find which target column matches any candidate, map that target to canonical
-			for (const cand of candidates) {
-				if (targetSet.has(cand)) {
-					// map the target (normalized) -> canonical (original casing from settings)
-					map.set(cand, canonical);
-				}
-			}
-		});
-
-		return map;
-	}
-
-	// rename header array using aliasMap (map keys are normalized target -> canonical)
-	function renameHeaderArray(headerArr = [], aliasMap = new Map()) {
-		return (headerArr || []).map((h) => {
-			const key = normalizeKey(h);
-			return aliasMap.has(key) ? aliasMap.get(key) : h;
-		});
-	}
-
-	// write a header row back to the worksheet so renamed/canonical headers are visible
-	async function writeHeaderToWorksheet(headerArr = []) {
-		if (!sheetName || !headerArr || headerArr.length === 0) return;
-		if (!window.Excel || !window.Excel.run) {
-			console.error('Excel JS API is not available in this context.');
-			return;
-		}
-		try {
-			await Excel.run(async (context) => {
-				const sheets = context.workbook.worksheets;
-				let sheet = sheets.getItemOrNullObject(sheetName);
-				await context.sync();
-				if (sheet.isNullObject) {
-					// create sheet when missing
-					sheet = sheets.add(sheetName);
-				}
-				// ensure the range for the header exists and set the values (single-row)
-				const range = sheet.getRangeByIndexes(0, 0, 1, headerArr.length);
-				range.values = [headerArr];
-				range.format.autofitColumns();
-				await context.sync();
-			});
-		} catch (err) {
-			console.error('writeHeaderToWorksheet error', err);
-		}
-	}
-
-	// NEW: read and retain values for static columns, keyed by identifier
-	// signature changed: accept sheetHeaders so identifier discovery uses the worksheet header mapping
-	async function retainStaticColumns(staticCols = [], identifierSetting = null, sheetHeaders = []) {
-		if (!sheetName || !Array.isArray(staticCols) || staticCols.length === 0) return null;
-		if (!identifierSetting || !identifierSetting.name) {
-			console.warn('retainStaticColumns: no identifier setting provided; skipping static retention');
-			return null;
-		}
-		if (!window.Excel || !window.Excel.run) {
-			console.error('Excel JS API not available for retainStaticColumns');
-			return null;
-		}
-
-		try {
-			return await Excel.run(async (context) => {
-				const sheets = context.workbook.worksheets;
-				const sheet = sheets.getItemOrNullObject(sheetName);
-				await context.sync();
-				if (sheet.isNullObject) {
-					// nothing to retain if sheet missing
-					return null;
-				}
-
-				const used = sheet.getUsedRangeOrNullObject();
-				used.load(['values', 'rowCount', 'columnCount']);
-				await context.sync();
-
-				if (used.isNullObject) return null;
-				const values = used.values || [];
-				if (!values || values.length === 0) return null;
-
-				// use provided sheetHeaders (if given) or fallback to top row from used range
-				const headerRow = (Array.isArray(sheetHeaders) && sheetHeaders.length > 0)
-					? sheetHeaders.map((v) => (v == null ? '' : String(v).trim()))
-					: (values[0].map((v) => (v == null ? '' : String(v).trim())));
-
-				const normalizedHeader = headerRow.map(normalizeKey);
-
-				// find identifier index using name + alias matching against the worksheet header
-				const identifierIndex = findColumnIndex(headerRow, identifierSetting);
-				if (identifierIndex === -1) {
-					console.warn('retainStaticColumns: identifier column not found on worksheet');
-					return null;
-				}
-
-				// find indices for static columns (using same find logic to respect aliases/canonical names)
-				const staticIndices = staticCols.map((colName) => {
-					const idxDirect = normalizedHeader.indexOf(normalizeKey(colName));
-					return idxDirect; // -1 if not present
-				});
-
-				// build map: identifierValue(string) -> { colName: value, ... }
-				const saved = new Map();
-				// iterate data rows (starting at row 1, since 0 is header)
-				for (let r = 1; r < values.length; r++) {
-					const row = Array.isArray(values[r]) ? values[r] : [];
-					const idValRaw = row[identifierIndex];
-					const idVal = idValRaw == null ? '' : String(idValRaw).trim();
-					const obj = {};
-
-					staticCols.forEach((colName, i) => {
-						const colIdx = staticIndices[i];
-						const rawVal = colIdx >= 0 && row.length > colIdx ? row[colIdx] : null;
-						// only store when the cell has a non-empty value (null/undefined/empty-string => skip)
-						if (rawVal != null) {
-							const asStr = String(rawVal).trim();
-							if (asStr !== '') {
-								obj[colName] = rawVal;
-							}
-						}
-					});
-
-					// only add map entry when at least one static value was captured
-					if (Object.keys(obj).length > 0) {
-						saved.set(String(idVal), obj);
-					}
-				}
-
-				// LOG: report static capture summary
-				if (saved.size > 0) {
-					console.log(`retainStaticColumns: captured ${saved.size} static row entries for cols: ${staticCols.join(', ')}`);
-				} else {
-					console.log('retainStaticColumns: no static values captured');
-				}
-
-				return {
-					identifierIndex,
-					staticCols,
-					staticIndices,
-					savedMap: saved,
-				};
-			});
-		} catch (err) {
-			console.error('retainStaticColumns error', err);
-			return null;
-		}
-	}
-
-	// NEW: restore static column values using the saved map, matching by identifier for the newly written rows
-	async function restoreStaticColumns(savedInfo = null, writeStartRow = 0, rowCount = 0) {
-		if (!savedInfo || !savedInfo.savedMap || savedInfo.savedMap.size === 0) return;
-		if (!sheetName) return;
-		if (!window.Excel || !window.Excel.run) {
-			console.error('Excel JS API not available for restoreStaticColumns');
-			return;
-		}
-
-		try {
-			await Excel.run(async (context) => {
-				const sheets = context.workbook.worksheets;
-				const sheet = sheets.getItemOrNullObject(sheetName);
-				await context.sync();
-				if (sheet.isNullObject) return;
-
-				// validate rowCount
-				if (rowCount <= 0) return;
-
-				// read identifiers for the newly written rows
-				const idRange = sheet.getRangeByIndexes(writeStartRow, savedInfo.identifierIndex, rowCount, 1);
-				idRange.load('values');
-				await context.sync();
-
-				const idValues = idRange.values || [];
-
-				// for each static column, build values to write back
-				for (let i = 0; i < savedInfo.staticCols.length; i++) {
-					const colName = savedInfo.staticCols[i];
-					const colIndex = savedInfo.staticIndices[i];
-					if (colIndex === -1) continue; // skip missing columns
-
-					// prepare a column of values (rowCount x 1)
-					const valuesToWrite = idValues.map((row) => {
-						const rawId = row && row[0] != null ? String(row[0]).trim() : '';
-						const savedRow = savedInfo.savedMap.get(String(rawId));
-						return [savedRow && Object.prototype.hasOwnProperty.call(savedRow, colName) ? savedRow[colName] : ''];
-					});
-
-					// write the column back
-					const targetRange = sheet.getRangeByIndexes(writeStartRow, colIndex, rowCount, 1);
-					targetRange.values = valuesToWrite;
-				}
-
-				await context.sync();
-			});
-		} catch (err) {
-			console.error('restoreStaticColumns error', err);
-		}
-	}
-
-	// gatherIdentifierColumn: find settingsColumns entry where identifier === true
-	function gatherIdentifierColumn(settingsCols = []) {
-		const cols = Array.isArray(settingsCols) ? settingsCols : (Array.isArray(settingsColumns) ? settingsColumns : []);
-		if (!cols || cols.length === 0) {
-			console.log('gatherIdentifierColumn: no settings columns provided');
-			return null;
-		}
-		// support boolean true, string "true", and common misspelling 'identifer'
-		const found = cols.find((c) => {
-			if (!c || typeof c !== 'object') return false;
-			const id = c.identifier;
-			const idMiss = c.identifer; // tolerate misspelling seen elsewhere
-			return id === true || id === 'true' || idMiss === true || idMiss === 'true';
-		}) || null;
-		console.log('gatherIdentifierColumn found:', found);
-		return found;
-	}
-
-	// rename object keys for array of objects using aliasMap
-	function renameObjectRows(rows = [], aliasMap = new Map()) {
-		if (!aliasMap || aliasMap.size === 0) return rows.slice();
-		return rows.map((obj) => {
-			if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
-			const newObj = {};
-			Object.keys(obj).forEach((k) => {
-				const nk = normalizeKey(k);
-				const canonical = aliasMap.get(nk);
-				if (canonical) newObj[canonical] = obj[k];
-				else newObj[k] = obj[k];
-			});
-			return newObj;
-		});
-	}
-
-	// rename first-row header of array-of-arrays and keep remaining rows unchanged
-	function renameArrayRows(rows = [], aliasMap = new Map()) {
-		if (!Array.isArray(rows) || rows.length === 0 || aliasMap.size === 0) return rows.slice();
-		const header = rows[0];
-		const renamedHeader = renameHeaderArray(header, aliasMap);
-		return [renamedHeader, ...rows.slice(1)];
-	}
-
-	// gatherWorksheetColumns: return header row (array of strings; empty strings preserved)
-	async function gatherWorksheetColumns() {
-		if (!sheetName) return [];
-		if (!window.Excel || !window.Excel.run) {
-			console.error('Excel JS API is not available in this context.');
-			return [];
-		}
-
-		try {
-			return await Excel.run(async (context) => {
-				const sheets = context.workbook.worksheets;
-				const sheet = sheets.getItemOrNullObject(sheetName);
-				await context.sync();
-				if (sheet.isNullObject) return [];
-
-				const used = sheet.getUsedRangeOrNullObject();
-				used.load('values');
-				await context.sync();
-
-				if (used.isNullObject) return [];
-
-				const raw = used.values && used.values[0] ? used.values[0] : [];
-				return raw.map((v) => (v == null ? '' : String(v).trim()));
-			});
-		} catch (err) {
-			console.error('gatherWorksheetColumns error', err);
-			return [];
-		}
-	}
-
-	// NEW helper: compute saved static data from a used-range values array (no Excel.run)
-	function computeSavedStaticFromValues(values = [], sheetHeaders = [], staticCols = [], identifierSetting = null) {
-		if (!Array.isArray(staticCols) || staticCols.length === 0) return null;
-		if (!identifierSetting || !identifierSetting.name) return null;
-		if (!Array.isArray(values) || values.length === 0) return null;
-
-		const headerRow = (Array.isArray(sheetHeaders) && sheetHeaders.length > 0)
-			? sheetHeaders.map((v) => (v == null ? '' : String(v).trim()))
-			: (values[0].map((v) => (v == null ? '' : String(v).trim())));
-
-		const normalizedHeader = headerRow.map(normalizeKey);
-
-		const identifierIndex = findColumnIndex(headerRow, identifierSetting);
-		if (identifierIndex === -1) return null;
-
-		const staticIndices = staticCols.map((colName) => normalizedHeader.indexOf(normalizeKey(colName)));
-
-		const saved = new Map();
-		for (let r = 1; r < values.length; r++) {
-			const row = Array.isArray(values[r]) ? values[r] : [];
-			const idValRaw = row[identifierIndex];
-			const idVal = idValRaw == null ? '' : String(idValRaw).trim();
-			const obj = {};
-
-			staticCols.forEach((colName, i) => {
-				const colIdx = staticIndices[i];
-				const rawVal = colIdx >= 0 && row.length > colIdx ? row[colIdx] : null;
-				// only keep non-empty values (preserve 0 and false)
-				if (rawVal != null) {
-					const asStr = String(rawVal).trim();
-					if (asStr !== '') {
-						obj[colName] = rawVal;
-					}
-				}
-			});
-
-			if (Object.keys(obj).length > 0) {
-				saved.set(String(idVal), obj);
-			}
-		}
-
-		// LOG: report computeSavedStaticFromValues summary
-		if (saved.size > 0) {
-			console.log(`computeSavedStaticFromValues: captured ${saved.size} static row entries for cols: ${staticCols.join(', ')}`);
-		} else {
-			console.log('computeSavedStaticFromValues: no static values captured');
-		}
-
-		return {
-			identifierIndex,
-			staticCols,
-			staticIndices,
-			savedMap: saved,
-		};
-	}
-
-	// NEW helper: apply static columns inside an existing Excel.run context and sheet
-	async function applyStaticColumnsWithContext(context, sheet, savedInfo, writeStartRow = 0, rowCount = 0) {
-		if (!savedInfo || !savedInfo.savedMap || savedInfo.savedMap.size === 0) return;
-		if (!sheet || rowCount <= 0) return;
-
-		// read identifiers for the newly written rows
-		const idRange = sheet.getRangeByIndexes(writeStartRow, savedInfo.identifierIndex, rowCount, 1);
-		idRange.load('values');
-		await context.sync();
-
-		const idValues = idRange.values || [];
-
-		for (let i = 0; i < savedInfo.staticCols.length; i++) {
-			const colName = savedInfo.staticCols[i];
-			const colIndex = savedInfo.staticIndices[i];
-			if (colIndex === -1) continue;
-
-			const valuesToWrite = idValues.map((row) => {
-				const rawId = row && row[0] != null ? String(row[0]).trim() : '';
-				const savedRow = savedInfo.savedMap.get(String(rawId));
-				return [savedRow && Object.prototype.hasOwnProperty.call(savedRow, colName) ? savedRow[colName] : ''];
-			});
-
-			const targetRange = sheet.getRangeByIndexes(writeStartRow, colIndex, rowCount, 1);
-			targetRange.values = valuesToWrite;
-
-			// LOG: report each static column write
-			console.log(`applyStaticColumnsWithContext: queued restore for static column '${colName}' (${valuesToWrite.length} rows) on sheet ${sheetName}`);
-		}
-	}
+	};
 
 	// Refresh: write `data` to the worksheet named `sheetName` using the Excel JS API.
 	async function Refresh(dataToWrite) {
+		notifyStatus('Starting DataProcessor refresh...');
 		if (!dataToWrite || !dataToWrite.length) {
 			console.warn('Refresh: no data to write');
+			notifyStatus('No data to write.');
+			notifyComplete({ success: false, reason: 'no-data' });
 			return;
 		}
 		if (!sheetName) {
 			console.warn('Refresh: missing sheetName');
+			notifyStatus('Missing sheet name.');
+			notifyComplete({ success: false, reason: 'missing-sheetName' });
 			return;
 		}
 		if (!window.Excel || !window.Excel.run) {
 			console.error('Excel JS API is not available in this context.');
+			notifyStatus('Excel JS API not available.');
+			notifyComplete({ success: false, reason: 'no-excel-api' });
 			return;
 		}
 
+		let rowCount = 0; // visible to final log
 		try {
-			// INITIAL READ: get sheet (if exists) and used range values in one Excel.run
+			notifyStatus('Reading existing worksheet (if any)...');
+			// INITIAL READ: single Excel.run to obtain existing used values + formulas (if sheet exists)
 			let usedValues = [];
+			let usedFormulas = [];
 			let sheetExisted = false;
 			await Excel.run(async (context) => {
 				const sheets = context.workbook.worksheets;
@@ -471,126 +70,132 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 				} else {
 					sheetExisted = true;
 					const used = sheet.getUsedRangeOrNullObject();
-					used.load(['values']);
+					used.load(['values', 'formulas']);
 					await context.sync();
-					if (!used.isNullObject && Array.isArray(used.values)) {
-						usedValues = used.values;
+					if (!used.isNullObject) {
+						usedValues = Array.isArray(used.values) ? used.values : [];
+						usedFormulas = Array.isArray(used.formulas) ? used.formulas : [];
 					} else {
 						usedValues = [];
 					}
 				}
 			});
 
-			// derive sheetHeaders from usedValues (if any)
-			let sheetHeaders = Array.isArray(usedValues) && usedValues[0] ? usedValues[0].map((v) => (v == null ? '' : String(v).trim())) : [];
-			const hasHeaders = Array.isArray(sheetHeaders) && sheetHeaders.some((h) => h !== '');
+			notifyStatus('Derived existing sheet headers and formulas.');
 
-			// derive data headers from incoming data (object keys or first-row array)
+			// derive sheetHeaders (trim once) and index map for O(1) membership/index lookups
+			let sheetHeaders = Array.isArray(usedValues) && usedValues[0]
+				? usedValues[0].map((v) => (v == null ? '' : String(v).trim()))
+				: [];
+			const hasHeaders = Array.isArray(sheetHeaders) && sheetHeaders.some((h) => h !== '');
+			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
+
+			// derive data headers from incoming data and build index map
 			const dataFirst = dataToWrite[0];
 			let dataHeaders = (dataFirst && typeof dataFirst === 'object' && !Array.isArray(dataFirst))
 				? Object.keys(dataFirst).map((h) => (h == null ? '' : String(h).trim()))
 				: (Array.isArray(dataFirst) ? dataFirst.map((h) => (h == null ? '' : String(h).trim())) : []);
+			const dataHeaderIndexMap = getHeaderIndexMap(dataHeaders);
 
-			// normalize settings
+			// normalize settings and pick identifier early
 			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
+			const identifierSetting = gatherIdentifierColumn(settingsCols);
 
-			// 1) Check "name" matches first (exact canonical name present in both)
-			const sheetSet = new Set((sheetHeaders || []).map(normalizeKey));
-			const dataSet = new Set((dataHeaders || []).map(normalizeKey));
+			// CAPTURE BEFORE IDENTIFIERS
+			let beforeIdentifiers = null;
+			if (identifierSetting && Array.isArray(usedValues) && usedValues.length > 0) {
+				const beforeInfo = computeIdentifierListFromValues(usedValues, sheetHeaders, identifierSetting, usedFormulas);
+				beforeIdentifiers = beforeInfo.identifiers;
+			}
+
+			notifyStatus('Normalizing and mapping incoming data columns...');
+			// 1) Match canonical names by checking the header-index maps (O(1) checks)
 			const matchedByName = new Map();
-			(settingsCols || []).forEach((sc) => {
-				if (!sc || !sc.name) return;
+			for (let i = 0; i < settingsCols.length; i++) {
+				const sc = settingsCols[i];
+				if (!sc || !sc.name) continue;
 				const nameKey = normalizeKey(sc.name);
-				if (sheetSet.has(nameKey) && dataSet.has(nameKey)) {
+				if (sheetHeaderIndexMap.has(nameKey) && dataHeaderIndexMap.has(nameKey)) {
 					matchedByName.set(nameKey, String(sc.name).trim());
 				}
-			});
+			}
 
-			// 2) For any settings not matched by name, run alias checks and rename where possible.
-			const remainingSettings = (settingsCols || []).filter((sc) => {
-				if (!sc || !sc.name) return false;
-				return !matchedByName.has(normalizeKey(sc.name));
-			});
-
-			// build alias maps against worksheet and data (only for remaining settings)
-			const sheetAliasMap = buildAliasMap(remainingSettings, sheetHeaders); // normalized target -> canonical
+			// 2) For remaining settings, run alias checks
+			const remainingSettings = settingsCols.filter((sc) => sc && sc.name && !matchedByName.has(normalizeKey(sc.name)));
+			const sheetAliasMap = buildAliasMap(remainingSettings, sheetHeaders);
 			const dataAliasMap = buildAliasMap(remainingSettings, dataHeaders);
 
-			// 3) Apply canonicalization for exact-name matches on worksheet headers (so casing becomes settings.name)
+			// 3) Canonicalize exact-name matches on worksheet headers (in-memory)
 			if (matchedByName.size > 0) {
 				sheetHeaders = sheetHeaders.map((h) => {
 					const key = normalizeKey(h);
 					return matchedByName.has(key) ? matchedByName.get(key) : h;
 				});
-				// Note: header writes deferred to the single write Excel.run below
+				// rebuild index map after possible canonicalization
+				// (only needed for subsequent logic)
+				// note: getHeaderIndexMap is cheap and cached via normalizeKey cache
+				Object.assign(sheetHeaderIndexMap, getHeaderIndexMap(sheetHeaders));
 			}
 
-			// 4) Apply alias renames to worksheet headers in-memory (write deferred)
+			// 4) Apply alias renames to worksheet headers in-memory
 			if (sheetAliasMap && sheetAliasMap.size > 0) {
 				sheetHeaders = renameHeaderArray(sheetHeaders, sheetAliasMap);
-				// write deferred
 			}
 
-			// 5) Normalize incoming data column names to canonical names (both name-matches and alias-matches)
+			// 5) Normalize incoming data column names to canonical names
 			const combinedDataAliasMap = new Map();
 			for (const [k, v] of matchedByName.entries()) combinedDataAliasMap.set(k, v);
 			if (dataAliasMap && dataAliasMap.size > 0) {
 				for (const [k, v] of dataAliasMap.entries()) combinedDataAliasMap.set(k, v);
 			}
 
-			let normalizedData = dataToWrite;
 			if (combinedDataAliasMap && combinedDataAliasMap.size > 0) {
 				const firstRow = dataToWrite[0];
 				if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
-					normalizedData = renameObjectRows(dataToWrite, combinedDataAliasMap);
+					dataToWrite = renameObjectRows(dataToWrite, combinedDataAliasMap);
 				} else if (Array.isArray(firstRow)) {
-					normalizedData = renameArrayRows(dataToWrite, combinedDataAliasMap);
+					dataToWrite = renameArrayRows(dataToWrite, combinedDataAliasMap);
 				}
 			}
-			dataToWrite = normalizedData;
 
-			// --- determine static columns (present on worksheet but not in data) ---
-			// Recompute the set of data fields AFTER normalization.
-			// For object rows, use the union of keys across all objects (so any mapped key is considered non-static).
-			// For array rows, use the first row as header positions.
-			let dataFieldSet;
+			// DETERMINE static columns: present on worksheet but not in data
+			let dataFieldSet = new Set();
 			const firstAfter = dataToWrite && dataToWrite[0];
 			const isObjectRowsAfter = firstAfter && typeof firstAfter === 'object' && !Array.isArray(firstAfter);
 			if (isObjectRowsAfter) {
-				dataFieldSet = new Set();
-				for (const rowObj of dataToWrite) {
-					if (rowObj && typeof rowObj === 'object' && !Array.isArray(rowObj)) {
-						Object.keys(rowObj).forEach((k) => {
-							const key = normalizeKey(k);
-							if (key) dataFieldSet.add(key);
-						});
+				for (let i = 0; i < dataToWrite.length; i++) {
+					const rowObj = dataToWrite[i];
+					if (!rowObj || typeof rowObj !== 'object' || Array.isArray(rowObj)) continue;
+					const keys = Object.keys(rowObj);
+					for (let k = 0; k < keys.length; k++) {
+						const key = normalizeKey(keys[k]);
+						if (key) dataFieldSet.add(key);
 					}
 				}
 			} else if (Array.isArray(firstAfter)) {
-				dataFieldSet = new Set((firstAfter || []).map((h) => normalizeKey(h)));
-			} else {
-				dataFieldSet = new Set();
+				for (let i = 0; i < firstAfter.length; i++) dataFieldSet.add(normalizeKey(firstAfter[i]));
 			}
 
-			const sheetHeadersNormalized = (sheetHeaders || []).map((v) => (v == null ? '' : String(v).trim()));
-			const staticCols = sheetHeadersNormalized.filter((h) => {
+			const sheetHeadersNormalized = sheetHeaders.map((v) => (v == null ? '' : String(v).trim()));
+			const staticCols = [];
+			for (let i = 0; i < sheetHeadersNormalized.length; i++) {
+				const h = sheetHeadersNormalized[i];
 				const key = normalizeKey(h);
-				return key && !dataFieldSet.has(key);
-			});
+				if (key && !dataFieldSet.has(key)) staticCols.push(h);
+			}
 
-			// gather identifier setting and compute saved static values from the usedValues read above
+			// capture static values (if needed)
 			let savedStatic = null;
 			if (staticCols.length > 0) {
-				const identifierSetting = gatherIdentifierColumn(settingsCols);
 				if (!identifierSetting || !identifierSetting.name) {
 					console.warn('No identifier configured; skipping static column retention.');
 				} else {
-					// compute saved static from the values we already read (no Excel.run)
-					savedStatic = computeSavedStaticFromValues(usedValues, sheetHeaders, staticCols, identifierSetting);
+					savedStatic = computeSavedStaticFromValues(usedValues, sheetHeaders, staticCols, identifierSetting, usedFormulas);
 				}
 			}
 
-			// Build rows to write and decide writeStartRow
+			notifyStatus('Preparing rows to write...');
+			// Build rows to write and decide writeStartRow (minimize intermediate allocations)
 			const first = dataToWrite[0];
 			const isObjectRows = first && typeof first === 'object' && !Array.isArray(first);
 
@@ -603,42 +208,70 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 					.filter(Boolean);
 
 				if (isObjectRows) {
-					rows = dataToWrite.map((obj) =>
-						desiredColumns.map((c) => (obj && Object.prototype.hasOwnProperty.call(obj, c.name) ? obj[c.name] : ''))
-					);
+					rows = new Array(dataToWrite.length);
+					for (let i = 0; i < dataToWrite.length; i++) {
+						const obj = dataToWrite[i];
+						const out = new Array(desiredColumns.length);
+						for (let j = 0; j < desiredColumns.length; j++) {
+							const c = desiredColumns[j];
+							out[j] = (obj && Object.prototype.hasOwnProperty.call(obj, c.name)) ? obj[c.name] : '';
+						}
+						rows[i] = out;
+					}
 				} else {
-					rows = dataToWrite.map((arr) =>
-						desiredColumns.map((c) => (Array.isArray(arr) && arr.length > c.index ? arr[c.index] : ''))
-					);
+					rows = new Array(dataToWrite.length);
+					for (let i = 0; i < dataToWrite.length; i++) {
+						const arr = dataToWrite[i];
+						const out = new Array(desiredColumns.length);
+						for (let j = 0; j < desiredColumns.length; j++) {
+							const c = desiredColumns[j];
+							out[j] = (Array.isArray(arr) && arr.length > c.index) ? arr[c.index] : '';
+						}
+						rows[i] = out;
+					}
 				}
-
 				writeStartRow = 1;
 			} else {
 				if (isObjectRows) {
 					const headers = Object.keys(first);
-					rows = [headers, ...dataToWrite.map((obj) => headers.map((h) => (obj[h] ?? '')))];
+					const headerRow = headers.slice();
+					rows = new Array(dataToWrite.length + 1);
+					rows[0] = headerRow;
+					for (let i = 0; i < dataToWrite.length; i++) {
+						const obj = dataToWrite[i];
+						const out = new Array(headers.length);
+						for (let j = 0; j < headers.length; j++) out[j] = obj[headers[j]] ?? '';
+						rows[i + 1] = out;
+					}
 					writeStartRow = 0;
 				} else {
-					rows = dataToWrite;
+					rows = dataToWrite.slice();
 					writeStartRow = 0;
 				}
 			}
 
-			const rowCount = rows.length;
+			rowCount = rows.length;
 			let colCount = rows[0] ? rows[0].length : 0;
 			if (rowCount === 0 || colCount === 0) {
 				console.warn('Refresh: nothing to write after normalization');
+				notifyComplete({ success: false, reason: 'nothing-to-write' });
 				return;
 			}
 
-			rows = rows.map((r) => {
-				const rowArr = Array.isArray(r) ? r.slice() : [];
-				if (rowArr.length < colCount) return rowArr.concat(Array(colCount - rowArr.length).fill(''));
-				if (rowArr.length > colCount) return rowArr.slice(0, colCount);
-				return rowArr;
-			});
+			// normalize row widths once
+			for (let i = 0; i < rows.length; i++) {
+				const r = rows[i];
+				if (!Array.isArray(r)) rows[i] = new Array(colCount).fill('');
+				else if (r.length < colCount) {
+					const fill = new Array(colCount - r.length).fill('');
+					rows[i] = r.concat(fill);
+				} else if (r.length > colCount) {
+					rows[i] = r.slice(0, colCount);
+				}
+			}
 
-			// FINAL WRITE: single Excel.run to create sheet (if needed), write header + data, and restore static columns
+			notifyStatus('Writing data to worksheet...');
+			// FINAL WRITE: single Excel.run to create sheet (if needed), clear below header, write header + data, restore static columns
 			await Excel.run(async (context) => {
 				const sheets = context.workbook.worksheets;
 				let sheet = sheets.getItemOrNullObject(sheetName);
@@ -647,7 +280,7 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 					sheet = sheets.add(sheetName);
 				}
 
-				// --- NEW: clear all existing rows below the header to remove leftover values before writing ---
+				// clear existing rows below header (minimize writes)
 				const used = sheet.getUsedRangeOrNullObject();
 				used.load(['rowCount', 'columnCount']);
 				await context.sync();
@@ -655,50 +288,115 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 				if (!used.isNullObject) {
 					const existingRowCount = used.rowCount || 0;
 					const existingColCount = used.columnCount || 0;
-					// only clear rows below the header (preserve header at row 0)
 					const rowsToClear = Math.max(0, existingRowCount - writeStartRow);
 					const colsToClear = Math.max(colCount, existingColCount, 1);
 					if (rowsToClear > 0 && colsToClear > 0) {
-						// build a blank matrix rowsToClear x colsToClear
 						const blankRow = new Array(colsToClear).fill('');
-						const blankMatrix = new Array(rowsToClear).fill(null).map(() => blankRow.slice());
+						const blankMatrix = new Array(rowsToClear);
+						for (let i = 0; i < rowsToClear; i++) blankMatrix[i] = blankRow.slice();
 						const clearRange = sheet.getRangeByIndexes(writeStartRow, 0, rowsToClear, colsToClear);
 						clearRange.values = blankMatrix;
-
-						// LOG: clearing summary
-						console.log(`Cleared ${rowsToClear} rows and ${colsToClear} columns below header on sheet ${sheetName}`);
 					}
 				}
 
-				// write header row if we have headers (use current sheetHeaders array)
+				// write header row if present
 				if (hasHeaders && Array.isArray(sheetHeaders) && sheetHeaders.length > 0) {
 					const headerRange = sheet.getRangeByIndexes(0, 0, 1, sheetHeaders.length);
 					headerRange.values = [sheetHeaders];
-
-					// LOG: header written
-					console.log(`Wrote header to sheet ${sheetName}`);
 				}
 
-				// write all rows in one range write
+				// bulk-write rows
 				const writeRange = sheet.getRangeByIndexes(writeStartRow, 0, rowCount, colCount);
 				writeRange.values = rows;
 
-				// LOG: paste/write summary
-				console.log(`Pasted ${rowCount} rows x ${colCount} cols to sheet ${sheetName} starting at row ${writeStartRow}`);
-
-				writeRange.format.autofitColumns();
-				writeRange.format.autofitRows();
-
-				// if we saved static columns, restore them here (reads ids then writes values)
+				// restore static columns inside same context
 				if (savedStatic && savedStatic.savedMap && savedStatic.savedMap.size > 0) {
-					console.log(`Restoring static columns (${savedStatic.staticCols.join(', ')}) for ${savedStatic.savedMap.size} saved rows`);
-					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount);
+					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, sheetName);
 				}
 
 				await context.sync();
 			});
+
+			notifyStatus('Data written; applying static columns and finalizing...');
+			// AFTER WRITE: read used-range again and perform diff + clear/highlight in a single Excel.run (reduces round trips)
+			if (identifierSetting && beforeIdentifiers) {
+				notifyStatus('Detecting/highlighting new identifiers...');
+				try {
+					await Excel.run(async (context) => {
+						const sheets = context.workbook.worksheets;
+						const sheet = sheets.getItemOrNullObject(sheetName);
+						await context.sync();
+						if (sheet.isNullObject) return;
+
+						const used = sheet.getUsedRangeOrNullObject();
+						used.load(['values', 'formulas', 'rowIndex', 'columnIndex', 'columnCount', 'isNullObject']);
+						await context.sync();
+						if (used.isNullObject) return;
+
+						const afterValues = used.values || [];
+						const afterFormulas = Array.isArray(used.formulas) ? used.formulas : [];
+						const afterInfo = computeIdentifierListFromValues(afterValues, sheetHeaders, identifierSetting, afterFormulas);
+						const afterIdentifiers = afterInfo.identifiers;
+
+						// compute diffs
+						const newIds = [];
+						const existingIds = [];
+						for (const id of afterIdentifiers) {
+							if (!beforeIdentifiers.has(id)) newIds.push(id);
+							else existingIds.push(id);
+						}
+						if (newIds.length === 0 && existingIds.length === 0) return;
+
+						const colCountUsed = used.columnCount || (afterValues[0] ? afterValues[0].length : 0);
+						const startCol = (typeof used.columnIndex === 'number') ? used.columnIndex : 0;
+						const rightmostCol = startCol + Math.max(colCountUsed, 1) - 1;
+						const leftStartCol = Math.max(0, rightmostCol - Math.max(colCountUsed, 1) + 1);
+						const actualColCount = (rightmostCol >= leftStartCol) ? (rightmostCol - leftStartCol + 1) : Math.max(colCountUsed, 1);
+
+						// locate absolute row indices for each id and queue format changes
+						for (let r = 1; r < afterValues.length; r++) {
+							const row = Array.isArray(afterValues[r]) ? afterValues[r] : [];
+							let raw = row[afterInfo.identifierIndex];
+							if (afterFormulas && afterFormulas[r] && typeof afterFormulas[r][afterInfo.identifierIndex] === 'string' && afterFormulas[r][afterInfo.identifierIndex].trim().startsWith('=')) {
+								const link = extractHyperlink(afterFormulas[r][afterInfo.identifierIndex]);
+								if (link) raw = link;
+							}
+							const id = raw == null ? '' : String(raw).trim();
+							if (newIds.includes(id)) {
+								const absRow = (typeof used.rowIndex === 'number' ? used.rowIndex : 0) + r;
+								try {
+									const rng = sheet.getRangeByIndexes(absRow, leftStartCol, 1, actualColCount);
+									rng.format.fill.color = 'lightblue';
+								} catch (inner) {
+									console.error('queue highlight range failed for', id, inner);
+								}
+							} else if (existingIds.includes(id)) {
+								const absRow = (typeof used.rowIndex === 'number' ? used.rowIndex : 0) + r;
+								try {
+									const rng = sheet.getRangeByIndexes(absRow, leftStartCol, 1, actualColCount);
+									rng.format.fill.clear();
+								} catch (inner) {
+									console.error('queue clear range failed for', id, inner);
+								}
+							}
+						}
+
+						await context.sync();
+					});
+				} catch (err) {
+					console.error('Error detecting/highlighting new identifiers after import', err);
+				}
+				notifyStatus('Identifier highlighting complete.');
+			}
+
+			// final successful write
+			console.log(`Refresh concluded for sheet="${sheetName}", rowsWritten=${rowCount}`);
+			notifyStatus(`Refresh completed (${rowCount} rows).`);
+			notifyComplete({ success: true, rowsWritten: rowCount });
 		} catch (err) {
 			console.error('Refresh error', err);
+			notifyStatus(`Refresh error: ${String(err)}`);
+			notifyComplete({ success: false, error: String(err) });
 		}
 	}
 
