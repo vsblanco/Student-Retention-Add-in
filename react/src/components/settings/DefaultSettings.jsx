@@ -7,7 +7,7 @@ export const defaultColumns =[
 	{ name: 'Assigned', alias: ['advisor'], static: true },
 	{ name: 'Student Name', alias: ['Student']},
 	{ name: 'Student Number', alias: ['Student Numbers'], hidden: true },
-	{ name: 'Student ID', alias: ['SyStudentId', 'student sis'], hidden: true, identifier: true },
+	{ name: 'Student Identification', alias: ['SyStudentId', 'student sis'], hidden: true, identifier: true },
 	{ name: 'Gender', alias: ['Sex'], hidden: true},
 	{ name: 'Phone', alias: ['Phone Number','Contact Number']},
 	{ name: 'Other Phone', alias: ['Second Phone', 'Alt Phone']},
