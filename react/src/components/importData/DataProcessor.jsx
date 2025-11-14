@@ -16,7 +16,7 @@ import {
 	getHeaderIndexMap, // added for fast header lookups
 } from './dataProcessorUtility';
 
-export default function DataProcessor({ data, sheetName, settingsColumns, headers, onComplete, onStatus }) {
+export default function DataProcessor({ data, sheetName, settingsColumns, matched, onComplete, onStatus, action }) {
 	// helper to notify caller (guarded)
 	const notifyComplete = (payload) => {
 		if (typeof onComplete === 'function') {
@@ -101,6 +101,51 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
 			const identifierSetting = gatherIdentifierColumn(settingsCols);
 
+			// Log all settings entries that are marked as identifiers (flatten aliases)
+			try {
+				const identifierEntries = (settingsCols || []).filter((sc) => sc && sc.identifier);
+				const idInfo = identifierEntries.map((sc) => {
+					// collect alias sources into an array (may be string or array)
+					let rawAliases = [];
+					if (Array.isArray(sc.aliases)) rawAliases = sc.aliases.slice();
+					else if (Array.isArray(sc.alias)) rawAliases = sc.alias.slice();
+					else if (typeof sc.alias === 'string') rawAliases = [sc.alias];
+
+					// fallback alternate properties
+					if ((!rawAliases || rawAliases.length === 0) && Array.isArray(sc.alternates)) rawAliases = sc.alternates.slice();
+					if ((!rawAliases || rawAliases.length === 0) && sc.alt) rawAliases = Array.isArray(sc.alt) ? sc.alt.slice() : [sc.alt];
+
+					// flatten any nested arrays and remove null/undefined
+					rawAliases = rawAliases.reduce((acc, v) => {
+						if (Array.isArray(v)) return acc.concat(v.filter(Boolean));
+						if (v == null) return acc;
+						return acc.concat([v]);
+					}, []);
+
+					const aliasesNormalized = rawAliases.map((a) => (a ? normalizeKey(String(a)) : '')).filter(Boolean);
+					return {
+						name: sc.name || '',
+						normalized: normalizeKey(sc.name || ''),
+						aliases: rawAliases,
+						aliasesNormalized,
+						raw: sc,
+					};
+				});
+				console.log('Settings identifier entries (update):', idInfo);
+				notifyStatus(`Settings identifiers (update): ${idInfo.map((i) => i.name || '(unnamed)').join(', ') || '(none)'}`);
+			} catch (logErr) {
+				console.warn('Failed logging identifier entries from settings (update)', logErr);
+			}
+			// Log workbook settings and identifier info for debugging
+			try {
+				const settingsNames = settingsCols.map((sc) => (sc && sc.name ? String(sc.name).trim() : ''));
+				console.log('Workbook settings columns:', settingsNames);
+				notifyStatus(`Workbook settings columns: ${settingsNames.join(', ') || '(none)'}`);
+				console.log('gatherIdentifierColumn ->', identifierSetting);
+				notifyStatus(`Identifier setting from workbook: ${identifierSetting && identifierSetting.name ? identifierSetting.name : 'none'}`);
+			} catch (logErr) {
+				console.warn('Failed logging workbook settings/identifier', logErr);
+			}
 			// CAPTURE BEFORE IDENTIFIERS
 			let beforeIdentifiers = null;
 			if (identifierSetting && Array.isArray(usedValues) && usedValues.length > 0) {
@@ -400,12 +445,490 @@ export default function DataProcessor({ data, sheetName, settingsColumns, header
 		}
 	}
 
-	useEffect(() => {
-		// call Refresh when data or sheetName changes
-		if (data && sheetName) {
-			Refresh(data);
+	async function Update(dataToWrite) {
+		notifyStatus('Starting DataProcessor update (no-remove mode)...');
+		if (!dataToWrite || !dataToWrite.length) {
+			console.warn('Update: no data to update');
+			notifyStatus('No data to update.');
+			notifyComplete({ success: false, reason: 'no-data' });
+			return;
 		}
-	}, [data, sheetName]);
+		if (!sheetName) {
+			console.warn('Update: missing sheetName');
+			notifyStatus('Missing sheet name.');
+			notifyComplete({ success: false, reason: 'missing-sheetName' });
+			return;
+		}
+		if (!window.Excel || !window.Excel.run) {
+			console.error('Excel JS API is not available in this context.');
+			notifyStatus('Excel JS API not available.');
+			notifyComplete({ success: false, reason: 'no-excel-api' });
+			return;
+		}
+
+		try {
+			notifyStatus('Reading existing worksheet for update...');
+			let usedValues = [];
+			let usedFormulas = [];
+			let sheetRangeRowIndex = 0;
+			let sheetRowCount = 0;
+			let sheetColCount = 0;
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				const sheet = sheets.getItemOrNullObject(sheetName);
+				await context.sync();
+				if (sheet.isNullObject) {
+					notifyStatus('Sheet not found for update.');
+					notifyComplete({ success: false, reason: 'sheet-not-found' });
+					return;
+				}
+				const used = sheet.getUsedRangeOrNullObject();
+				used.load(['values', 'formulas', 'rowIndex', 'rowCount', 'columnCount', 'isNullObject']);
+				await context.sync();
+				if (used.isNullObject) {
+					notifyStatus('Sheet is empty; performing append as update.');
+				} else {
+					usedValues = Array.isArray(used.values) ? used.values : [];
+					usedFormulas = Array.isArray(used.formulas) ? used.formulas : [];
+					sheetRangeRowIndex = typeof used.rowIndex === 'number' ? used.rowIndex : 0;
+					sheetRowCount = typeof used.rowCount === 'number' ? used.rowCount : (usedValues.length || 0);
+					sheetColCount = typeof used.columnCount === 'number' ? used.columnCount : (usedValues[0] ? usedValues[0].length : 0);
+				}
+			});
+
+			// derive sheetHeaders if present
+			const sheetHeaders = Array.isArray(usedValues) && usedValues[0]
+				? usedValues[0].map((v) => (v == null ? '' : String(v).trim()))
+				: [];
+
+			// prepare header index maps and normalize incoming data (reuse same logic as Refresh)
+			const dataFirst = dataToWrite[0];
+			let dataHeaders = (dataFirst && typeof dataFirst === 'object' && !Array.isArray(dataFirst))
+				? Object.keys(dataFirst).map((h) => (h == null ? '' : String(h).trim()))
+				: (Array.isArray(dataFirst) ? dataFirst.map((h) => (h == null ? '' : String(h).trim())) : []);
+			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
+			const dataHeaderIndexMap = getHeaderIndexMap(dataHeaders);
+			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
+
+			// Log all settings entries that are marked as identifiers (update flow)
+			try {
+				const identifierEntries = (settingsCols || []).filter((sc) => sc && sc.identifier);
+				const idInfo = identifierEntries.map((sc) => {
+					// collect alias sources into an array (may be string or array)
+					let rawAliases = [];
+					if (Array.isArray(sc.aliases)) rawAliases = sc.aliases.slice();
+					else if (Array.isArray(sc.alias)) rawAliases = sc.alias.slice();
+					else if (typeof sc.alias === 'string') rawAliases = [sc.alias];
+
+					// fallback alternate properties
+					if ((!rawAliases || rawAliases.length === 0) && Array.isArray(sc.alternates)) rawAliases = sc.alternates.slice();
+					if ((!rawAliases || rawAliases.length === 0) && sc.alt) rawAliases = Array.isArray(sc.alt) ? sc.alt.slice() : [sc.alt];
+
+					// flatten any nested arrays and remove null/undefined
+					rawAliases = rawAliases.reduce((acc, v) => {
+						if (Array.isArray(v)) return acc.concat(v.filter(Boolean));
+						if (v == null) return acc;
+						return acc.concat([v]);
+					}, []);
+
+					const aliasesNormalized = rawAliases.map((a) => (a ? normalizeKey(String(a)) : '')).filter(Boolean);
+					return {
+						name: sc.name || '',
+						normalized: normalizeKey(sc.name || ''),
+						aliases: rawAliases,
+						aliasesNormalized,
+						raw: sc,
+					};
+				});
+				console.log('Settings identifier entries (update):', idInfo);
+				notifyStatus(`Settings identifiers (update): ${idInfo.map((i) => i.name || '(unnamed)').join(', ') || '(none)'}`);
+			} catch (logErr) {
+				console.warn('Failed logging identifier entries from settings (update)', logErr);
+			}
+			// FIRST: detect identifier from the incoming file (try multiple candidates)
+			const firstRow = dataToWrite[0];
+			const isObjectRows = firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow);
+
+			// Build normalized header sets from incoming file/data
+			const fileHeaderNames = isObjectRows ? Object.keys(firstRow || {}) : dataHeaders.slice();
+			const fileHeaderKeySet = new Set((fileHeaderNames || []).map((h) => normalizeKey(String(h || ''))).filter(Boolean));
+			const dataHeaderKeySet = new Set(Array.from(dataHeaderIndexMap.keys()));
+
+			// First: find which settings entries are present in the incoming file (by name or aliases)
+			const matchedSettingsInFile = [];
+			for (let i = 0; i < settingsCols.length; i++) {
+				const sc = settingsCols[i];
+				if (!sc || !sc.name) continue;
+
+				const nameKey = normalizeKey(String(sc.name));
+				let matched = false;
+				if (nameKey && (fileHeaderKeySet.has(nameKey) || dataHeaderKeySet.has(nameKey))) matched = true;
+
+				// collect aliases (flatten)
+				let aliases = [];
+				if (Array.isArray(sc.aliases)) aliases = sc.aliases.slice();
+				else if (Array.isArray(sc.alias)) aliases = sc.alias.slice();
+				else if (typeof sc.alias === 'string') aliases = [sc.alias];
+				if ((!aliases || aliases.length === 0) && Array.isArray(sc.alternates)) aliases = sc.alternates.slice();
+				if ((!aliases || aliases.length === 0) && sc.alt) aliases = Array.isArray(sc.alt) ? sc.alt.slice() : [sc.alt];
+				aliases = aliases.reduce((acc, v) => acc.concat(Array.isArray(v) ? v.filter(Boolean) : (v == null ? [] : [v])), []);
+
+				// check aliases normalized
+				if (!matched && aliases.length > 0) {
+					for (let a = 0; a < aliases.length; a++) {
+						const key = normalizeKey(String(aliases[a] || ''));
+						if (!key) continue;
+						const inFile = fileHeaderKeySet.has(key);
+						const inData = dataHeaderKeySet.has(key);
+						console.debug(`Settings match check name="${sc.name}" alias="${aliases[a]}" normalized="${key}" => inFile=${inFile}, inData=${inData}`);
+						if (inFile || inData) {
+							matched = true;
+							break;
+						}
+					}
+				}
+
+				if (matched) matchedSettingsInFile.push(sc);
+			}
+
+			// Log what settings matched the incoming file (regardless of identifier flag)
+			try {
+				const matchedNames = matchedSettingsInFile.map((s) => s && s.name ? s.name : '(unnamed)');
+				console.log('Settings matched in file (name or alias):', matchedNames);
+				notifyStatus(`Settings matched in file: ${matchedNames.join(', ') || '(none)'}`);
+			} catch (e) { /* ignore logging errors */ }
+
+			// Now restrict to those explicitly marked identifier:true
+			const fileCandidates = matchedSettingsInFile.filter((s) => s && s.identifier);
+			if (fileCandidates.length === 0 && matchedSettingsInFile.length > 0) {
+				// matched settings exist but none are flagged identifier
+				const matchedNames = matchedSettingsInFile.map((s) => s && s.name ? s.name : '(unnamed)');
+				console.warn('Matched settings were found but none are flagged identifier:true:', matchedNames);
+				notifyStatus(`Matched settings found but none marked identifier: ${matchedNames.join(', ')}`);
+			}
+			// if still none, diagnostics will follow below as before
+
+			if (fileCandidates.length === 0) {
+				// Detailed diagnostics to help understand why no identifier was found
+				try {
+					const settingsNames = settingsCols.map((sc) => (sc && sc.name ? String(sc.name).trim() : ''));
+					const settingsKeys = settingsCols.map((sc) => (sc && sc.name ? normalizeKey(sc.name) : ''));
+					const fileHeaderNames = isObjectRows ? Object.keys(firstRow || {}) : dataHeaders.slice();
+					const fileHeaderKeys = (fileHeaderNames || []).map((h) => (h == null ? '' : normalizeKey(String(h))));
+					console.warn('Identifier not found in file. Diagnostics follow.');
+					console.log('settings (names):', settingsNames);
+					console.log('settings (normalized keys):', settingsKeys);
+					console.log('file headers:', fileHeaderNames);
+					console.log('file headers (normalized):', fileHeaderKeys);
+					if (isObjectRows && dataToWrite && dataToWrite.length > 0) {
+						console.log('sample first data row:', dataToWrite[0]);
+					}
+					notifyStatus('Identifier column not found in file; see console for diagnostics.');
+				} catch (diagErr) {
+					console.warn('Failed producing diagnostics for missing identifier', diagErr);
+				}
+
+				notifyComplete({ success: false, reason: 'identifier-not-in-file' });
+				return;
+			}
+
+			// Log workbook settings for update flow
+			try {
+				const settingsNames = settingsCols.map((sc) => (sc && sc.name ? String(sc.name).trim() : ''));
+				console.log('Workbook settings columns (update):', settingsNames);
+				notifyStatus(`Workbook settings (update): ${settingsNames.join(', ') || '(none)'}`);
+			} catch (logErr) {
+				console.warn('Failed logging workbook settings for update', logErr);
+			}
+
+			// Log the identifier candidates discovered in the incoming file
+			try {
+				const candidateNames = fileCandidates.map((c) => (c && c.name ? String(c.name).trim() : ''));
+				console.log('Identifier candidates found in file:', candidateNames);
+				notifyStatus(`Identifier candidates in file: ${candidateNames.join(', ') || '(none)'}`);
+			} catch (logErr) {
+				console.warn('Failed logging file identifier candidates', logErr);
+			}
+
+			// alias / canonicalization like Refresh (keep in-memory only)
+			const matchedByName = new Map();
+			for (let i = 0; i < settingsCols.length; i++) {
+				const sc = settingsCols[i];
+				if (!sc || !sc.name) continue;
+				const nameKey = normalizeKey(sc.name);
+				if (sheetHeaderIndexMap.has(nameKey) && dataHeaderIndexMap.has(nameKey)) {
+					matchedByName.set(nameKey, String(sc.name).trim());
+				}
+			}
+			const remainingSettings = settingsCols.filter((sc) => sc && sc.name && !matchedByName.has(normalizeKey(sc.name)));
+			const sheetAliasMap = buildAliasMap(remainingSettings, sheetHeaders);
+			const dataAliasMap = buildAliasMap(remainingSettings, dataHeaders);
+
+			let effectiveSheetHeaders = sheetHeaders.slice();
+			if (matchedByName.size > 0) {
+				effectiveSheetHeaders = effectiveSheetHeaders.map((h) => {
+					const key = normalizeKey(h);
+					return matchedByName.has(key) ? matchedByName.get(key) : h;
+				});
+			}
+			if (sheetAliasMap && sheetAliasMap.size > 0) {
+				effectiveSheetHeaders = renameHeaderArray(effectiveSheetHeaders, sheetAliasMap);
+			}
+
+			// normalize incoming data column names to canonical names
+			const combinedDataAliasMap = new Map();
+			for (const [k, v] of matchedByName.entries()) combinedDataAliasMap.set(k, v);
+			if (dataAliasMap && dataAliasMap.size > 0) {
+				for (const [k, v] of dataAliasMap.entries()) combinedDataAliasMap.set(k, v);
+			}
+			if (combinedDataAliasMap && combinedDataAliasMap.size > 0) {
+				const firstRowInner = dataToWrite[0];
+				if (firstRowInner && typeof firstRowInner === 'object' && !Array.isArray(firstRowInner)) {
+					dataToWrite = renameObjectRows(dataToWrite, combinedDataAliasMap);
+				} else if (Array.isArray(firstRowInner)) {
+					dataToWrite = renameArrayRows(dataToWrite, combinedDataAliasMap);
+				}
+			}
+
+			// SECOND: try each candidate (found in the file) against the worksheet until one matches
+			let identifierSettingFromFile = null;
+			let identifierIndex = undefined;
+			for (let ci = 0; ci < fileCandidates.length; ci++) {
+				const candidate = fileCandidates[ci];
+				const info = computeIdentifierListFromValues(usedValues, effectiveSheetHeaders, candidate, usedFormulas);
+				if (info && typeof info.identifierIndex === 'number') {
+					identifierSettingFromFile = candidate;
+					identifierIndex = info.identifierIndex;
+					break;
+				}
+			}
+			if (!identifierSettingFromFile || typeof identifierIndex !== 'number') {
+				notifyStatus('None of the file-based identifier candidates were found on the sheet; update aborted.');
+				notifyComplete({ success: false, reason: 'identifier-not-on-sheet', attempted: fileCandidates.map((c) => c.name) });
+				return;
+			}
+
+			// Use 'matched' prop to determine which columns to update
+			//			const providedHeaders = Array.isArray(matched) ? matched.map((h) => (h == null ? '' : String(h).trim())) : [];
+			//			if (!providedHeaders || providedHeaders.length === 0) {
+			//				notifyStatus('No update headers (matched) provided; update aborted.');
+			//				notifyComplete({ success: false, reason: 'no-headers' });
+			//				return;
+			//			}
+
+			// Trim incoming matched entries and canonicalize them using settingsColumns (aliases -> canonical name).
+			let providedHeaders = Array.isArray(matched) ? matched.map((h) => (h == null ? '' : String(h).trim())) : [];
+			if (!providedHeaders || providedHeaders.length === 0) {
+				notifyStatus('No update headers (matched) provided.');
+				notifyComplete({ success: false, reason: 'no-headers' });
+				return;
+			}
+
+			// Build alias -> canonical name map from settingsCols
+			const aliasToCanonical = new Map();
+			for (let i = 0; i < settingsCols.length; i++) {
+				const sc = settingsCols[i];
+				if (!sc || !sc.name) continue;
+				const canonical = String(sc.name).trim();
+				const nameKey = normalizeKey(canonical);
+				if (nameKey) aliasToCanonical.set(nameKey, canonical);
+
+				// collect aliases/alternate names (flatten)
+				let aliases = [];
+				if (Array.isArray(sc.aliases)) aliases = sc.aliases.slice();
+				else if (Array.isArray(sc.alias)) aliases = sc.alias.slice();
+				else if (typeof sc.alias === 'string') aliases = [sc.alias];
+				if ((!aliases || aliases.length === 0) && Array.isArray(sc.alternates)) aliases = sc.alternates.slice();
+				if ((!aliases || aliases.length === 0) && sc.alt) aliases = Array.isArray(sc.alt) ? sc.alt.slice() : [sc.alt];
+				aliases = aliases.reduce((acc, v) => acc.concat(Array.isArray(v) ? v.filter(Boolean) : (v == null ? [] : [v])), []);
+
+				for (let a = 0; a < aliases.length; a++) {
+					const key = normalizeKey(String(aliases[a] || ''));
+					if (key) aliasToCanonical.set(key, canonical);
+				}
+			}
+
+			// Map provided headers via aliasToCanonical and dedupe while preserving order
+			{
+				const seen = new Set();
+				const out = [];
+				for (let i = 0; i < providedHeaders.length; i++) {
+					const ph = providedHeaders[i];
+					const key = normalizeKey(ph);
+					let mapped = ph;
+					if (key && aliasToCanonical.has(key)) mapped = aliasToCanonical.get(key);
+					const mk = normalizeKey(mapped);
+					if (!mk) continue;
+					if (seen.has(mk)) continue;
+					seen.add(mk);
+					out.push(mapped);
+				}
+				providedHeaders = out;
+			}
+
+			if (!providedHeaders || providedHeaders.length === 0) {
+				notifyStatus('No update headers (matched) provided after canonicalization; update aborted.');
+				notifyComplete({ success: false, reason: 'no-headers' });
+				return;
+			}
+
+			// build normalized map of effective sheet headers -> index
+			const effectiveHeaderIndexMap = new Map();
+			for (let i = 0; i < effectiveSheetHeaders.length; i++) {
+				const h = effectiveSheetHeaders[i];
+				const key = normalizeKey(h);
+				if (key) effectiveHeaderIndexMap.set(key, i);
+			}
+
+			// determine which provided headers actually map to sheet columns
+			const updateColumns = [];
+			for (let i = 0; i < providedHeaders.length; i++) {
+				const ph = providedHeaders[i];
+				const key = normalizeKey(ph);
+				if (!key) continue;
+				if (effectiveHeaderIndexMap.has(key)) {
+					updateColumns.push({ name: effectiveSheetHeaders[effectiveHeaderIndexMap.get(key)], index: effectiveHeaderIndexMap.get(key) });
+				} else {
+					// header not found on sheet; inform once
+					notifyStatus(`Update header not found on sheet: "${ph}" (skipped)`);
+				}
+			}
+			if (updateColumns.length === 0) {
+				notifyStatus('None of the provided headers matched sheet columns; update aborted.');
+				notifyComplete({ success: false, reason: 'no-matching-headers' });
+				return;
+			}
+
+			// build a mapping of existing ids -> absolute row index for efficient updates
+			const existingIdToAbsRow = new Map();
+			if (usedValues && usedValues.length > 0) {
+				for (let r = 1; r < usedValues.length; r++) {
+					const row = Array.isArray(usedValues[r]) ? usedValues[r] : [];
+					let raw = row[identifierIndex];
+					if (usedFormulas && usedFormulas[r] && typeof usedFormulas[r][identifierIndex] === 'string' && usedFormulas[r][identifierIndex].trim().startsWith('=')) {
+						const link = extractHyperlink(usedFormulas[r][identifierIndex]);
+						if (link) raw = link;
+					}
+					const id = raw == null ? '' : String(raw).trim();
+					if (id) {
+						const absRow = sheetRangeRowIndex + r;
+						existingIdToAbsRow.set(id, absRow);
+					}
+				}
+			}
+
+			// Build updates/appends but populate only the provided updateColumns
+			const updates = []; // { absRow, cells: [{colIdx, value}] }
+			let skippedRows = 0; // count of incoming rows that would have been appended but are skipped for Update mode (no-append)
+
+			const colCount = Math.max(sheetColCount, effectiveSheetHeaders.length, 1);
+
+			for (let i = 0; i < dataToWrite.length; i++) {
+				const rowIn = dataToWrite[i];
+				// determine incoming id using the identifier found in the file
+				let incomingId = '';
+				if (isObjectRows && identifierSettingFromFile && identifierSettingFromFile.name) {
+					const idKey = identifierSettingFromFile.name;
+					const val = rowIn && rowIn[idKey];
+					incomingId = val == null ? '' : String(val).trim();
+				} else if (!isObjectRows) {
+					if (identifierSettingFromFile && identifierSettingFromFile.name && dataHeaderIndexMap.has(normalizeKey(identifierSettingFromFile.name))) {
+						const dataIdx = dataHeaderIndexMap.get(normalizeKey(identifierSettingFromFile.name));
+						incomingId = (Array.isArray(rowIn) && rowIn.length > dataIdx) ? String(rowIn[dataIdx] ?? '').trim() : '';
+					}
+				}
+
+				// Build cell updates for this incoming row
+				const cellUpdates = [];
+				for (let uc = 0; uc < updateColumns.length; uc++) {
+					const col = updateColumns[uc];
+					let val = '';
+					if (isObjectRows) {
+						val = rowIn && Object.prototype.hasOwnProperty.call(rowIn, col.name) ? rowIn[col.name] : '';
+					} else {
+						const key = normalizeKey(col.name);
+						if (dataHeaderIndexMap.has(key)) {
+							const dataIdx = dataHeaderIndexMap.get(key);
+							val = (Array.isArray(rowIn) && rowIn.length > dataIdx) ? rowIn[dataIdx] : '';
+						} else {
+							val = '';
+						}
+					}
+					cellUpdates.push({ colIdx: col.index, value: val });
+				}
+
+				// Only update existing rows. If identifier missing or not found, skip (no append).
+				if (incomingId && existingIdToAbsRow.has(incomingId)) {
+					updates.push({ absRow: existingIdToAbsRow.get(incomingId), cells: cellUpdates });
+				} else {
+					skippedRows++;
+				}
+			}
+
+			// Perform writes in a single Excel.run: per-cell updates (queued) and a bulk append if needed.
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				const sheet = sheets.getItemOrNullObject(sheetName);
+				await context.sync();
+				if (sheet.isNullObject) {
+					notifyStatus('Sheet disappeared before update could run.');
+					notifyComplete({ success: false, reason: 'sheet-missing-during-update' });
+					return;
+				}
+
+				// execute updates: write individual cells for specified columns
+				for (let u = 0; u < updates.length; u++) {
+					const upd = updates[u];
+					for (let c = 0; c < upd.cells.length; c++) {
+						const cell = upd.cells[c];
+						try {
+							const rng = sheet.getRangeByIndexes(upd.absRow, cell.colIdx, 1, 1);
+							rng.values = [[cell.value]];
+						} catch (e) {
+							console.error('Update: failed writing cell', upd.absRow, cell.colIdx, e);
+						}
+					}
+				}
+
+				await context.sync();
+			});
+
+			notifyStatus(`Update completed (updated=${updates.length}, skipped=${skippedRows}).`);
+			notifyComplete({ success: true, rowsUpdated: updates.length, rowsSkipped: skippedRows });
+		} catch (err) {
+			console.error('Update error', err);
+			notifyStatus(`Update error: ${String(err)}`);
+			notifyComplete({ success: false, error: String(err) });
+		}
+	}
+
+	useEffect(() => {
+		// Only call Refresh when explicitly requested via action === 'Refresh'.
+		if (action === 'Refresh') {
+			if (data && sheetName) {
+				Refresh(data);
+			} else {
+				// missing params — report and complete
+				if (!data) notifyStatus('Skipping refresh: no data provided.');
+				if (!sheetName) notifyStatus('Skipping refresh: no sheetName provided.');
+				notifyComplete({ success: false, reason: 'missing-params' });
+			}
+		} else if (action === 'Update') {
+			// call Update when explicitly requested
+			if (data && sheetName) {
+				Update(data);
+			} else {
+				if (!data) notifyStatus('Skipping update: no data provided.');
+				if (!sheetName) notifyStatus('Skipping update: no sheetName provided.');
+				notifyComplete({ success: false, reason: 'missing-params' });
+			}
+		} else {
+			// do nothing but return a status message per spec
+			const actDesc = action === undefined || action === null ? 'no action provided' : `action="${String(action)}"`;
+			notifyStatus(`Skipping refresh: ${actDesc}`);
+			notifyComplete({ success: false, reason: 'action does not exist', action });
+		}
+	}, [data, sheetName, action]);
 
 	return null;
 }
