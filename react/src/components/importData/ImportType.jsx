@@ -2,7 +2,7 @@ import AnthologyFile from '../../assets/icons/AnthologyFile.png';
 import CanvasFile from '../../assets/icons/CanvasFile.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
 
-export const CanvasImport = ['student name', 'student id', 'student sis', 'course', 'course id']
+export const CanvasImport = ['student name', 'student sis', 'course', 'course id']
 export const AnthologyImport = ['studentname', 'studentnumber']; // for ssome reason it has to be lowercase and no spaces
 export const DropoutDetectiveImport = ['email', 'risk trend', 'course grade','course missing assignments','course zero assignments'];
 
