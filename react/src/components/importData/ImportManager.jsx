@@ -6,6 +6,7 @@ import { getImportType } from './ImportType';
 import { getWorkbookSettings } from '../utility/getSettings';
 import { Upload } from 'lucide-react';
 import FileCard from './FileCard';
+import ImportIcon from '../../assets/icons/import-icon.png';
 
 export default function ImportManager({ onImport } = {}) {
 	const [fileName, setFileName] = useState(''); // name of active file
@@ -99,14 +100,29 @@ export default function ImportManager({ onImport } = {}) {
 		const filesArr = Array.from(filesList);
 		// append files and expand fileInfos placeholders, then read a small slice of each CSV
 		setUploadedFiles((prev) => {
+			// filter out any incoming files whose name already exists in prev,
+			// and dedupe filesArr itself by name (keep first occurrence)
+			const existingNames = new Set(prev.map((f) => f.name));
+			const seen = new Set();
+			const uniques = [];
+			filesArr.forEach((f) => {
+				if (!existingNames.has(f.name) && !seen.has(f.name)) {
+					uniques.push(f);
+					seen.add(f.name);
+				}
+			});
+
+			// nothing new to add
+			if (uniques.length === 0) return prev;
+
 			const start = prev.length;
-			const combined = [...prev, ...filesArr];
+			const combined = [...prev, ...uniques];
 
 			// expand fileInfos to keep indexes aligned
-			setFileInfos((prevInfos) => [...prevInfos, ...filesArr.map(() => null)]);
+			setFileInfos((prevInfos) => [...prevInfos, ...uniques.map(() => null)]);
 
-			// for each new file, try to read a small slice to detect headers and compute importInfo
-			filesArr.forEach((f, i) => {
+			// for each new unique file, try to read a small slice to detect headers and compute importInfo
+			uniques.forEach((f, i) => {
 				const globalIndex = start + i;
 				if (/\.csv$/i.test(f.name)) {
 					const r = new FileReader();
@@ -139,11 +155,11 @@ export default function ImportManager({ onImport } = {}) {
 				}
 			});
 
-			// choose first CSV among the newly added files to parse and make active (back-compat)
-			const idxInNew = filesArr.findIndex((f) => /\.csv$/i.test(f.name));
+			// choose first CSV among the newly added unique files to parse and make active (back-compat)
+			const idxInNew = uniques.findIndex((f) => /\.csv$/i.test(f.name));
 			if (idxInNew !== -1) {
 				const globalIndex = start + idxInNew;
-				parseCSVFile(filesArr[idxInNew], globalIndex);
+				parseCSVFile(uniques[idxInNew], globalIndex);
 			}
 
 			return combined;
@@ -338,7 +354,7 @@ export default function ImportManager({ onImport } = {}) {
 				{/* icon: simplified to use lucide-react Upload icon */}
 				<Upload
 					size={48}
-					color="#b5b5b5"
+					color="#92cbf7"
 					// keep layout consistent with previous image
 					style={{ display: 'block' }}
 				/>
@@ -420,9 +436,12 @@ export default function ImportManager({ onImport } = {}) {
 						type="button"
 						onClick={handleImport}
 						// ensure the import button fills the taskpane width
-						style={{ ...styles.importButton, width: '100%' }}
+						style={{ ...styles.importButton, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
 					>
-						{importInfo.type}
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+							{'Import Data'}
+							<img src={ImportIcon} alt="" style={{ width: 19, height: 19, objectFit: 'contain', marginLeft: 4 }} />
+						</span>
 					</button>
 
 					{/* preview / processing UI can remain hidden until import */}

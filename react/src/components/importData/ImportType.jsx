@@ -3,7 +3,7 @@ import CanvasFile from '../../assets/icons/CanvasFile.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
 
 export const CanvasImport = ['student name', 'student id', 'student sis', 'course', 'course id']
-export const AnthologyImport = ['student name', 'student id', 'SSN'];
+export const AnthologyImport = ['studentname', 'studentnumber']; // for ssome reason it has to be lowercase and no spaces
 export const DropoutDetectiveImport = ['email', 'risk trend', 'course grade','course missing assignments','course zero assignments'];
 
 // new: helper that returns an object with the detected type, the array it used to match (case-insensitive),

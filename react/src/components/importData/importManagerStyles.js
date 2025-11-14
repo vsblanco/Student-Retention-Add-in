@@ -28,7 +28,7 @@ const styles = {
 		boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
 	},
 	importButton: {
-		background: '#10b981',
+		background: '#454c57',
 		color: '#fff',
 		border: 'none',
 		padding: '8px 12px',
