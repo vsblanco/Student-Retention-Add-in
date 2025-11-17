@@ -178,6 +178,36 @@ export default function ImportManager({ onImport } = {}) {
 	// compute import info once per render
 	const importInfo = getImportType(columns);
 
+	// Add: helper to apply rename mapping to headers and parsed data
+	const applyRenames = (dataInput, headersInput, renameMap) => {
+		if (!renameMap || typeof renameMap !== 'object') return { data: dataInput, headers: headersInput };
+		const normalize = (v) => (v === null || v === undefined ? '' : String(v).toLowerCase().trim());
+		const normMap = {};
+		Object.keys(renameMap).forEach((k) => { normMap[normalize(k)] = renameMap[k]; });
+
+		const newHeaders = Array.isArray(headersInput)
+			? headersInput.map((h) => (normMap[normalize(h)] ? normMap[normalize(h)] : h))
+			: headersInput;
+
+		let newData = dataInput;
+		if (Array.isArray(dataInput) && dataInput.length > 0) {
+			const first = dataInput[0];
+			// only rename object rows (array-of-objects); leave array rows as-is (header row handling stays as before)
+			if (first && typeof first === 'object' && !Array.isArray(first)) {
+				newData = dataInput.map((row) => {
+					const out = {};
+					Object.keys(row).forEach((k) => {
+						const nk = normMap[normalize(k)] || k;
+						out[nk] = row[k];
+					});
+					return out;
+				});
+			}
+		}
+
+		return { data: newData, headers: newHeaders };
+	};
+
 	// triggered when user clicks the Import button
 	const handleImport = () => {
 		const activeFile = uploadedFiles[activeIndex];
@@ -234,22 +264,25 @@ export default function ImportManager({ onImport } = {}) {
 			// ignore errors from settings read
 		}
 
+		// APPLY RENAMES BEFORE SENDING OUT
+		const renamed = applyRenames(parsedData, headers, importInfo && importInfo.rename);
+
 		if (typeof onImport === 'function') {
 			onImport({
 				file: uploadedFiles[activeIndex],
-				data: parsedData,
+				data: renamed.data,
 				// pass detected import type and matched columns
 				type: importInfo.type || 'csv',
 				matched: importInfo.matched || [],
-				headers,
+				headers: renamed.headers,
 			});
 		} else {
 			console.log('Imported CSV data', {
 				file: uploadedFiles[activeIndex],
-				data: parsedData,
+				data: renamed.data,
 				type: importInfo.type,
 				matched: importInfo.matched,
-				headers,
+				headers: renamed.headers,
 			});
 		}
 
@@ -451,10 +484,11 @@ export default function ImportManager({ onImport } = {}) {
 			{/* DataProcessor receives data only after user clicked Import (active file) */}
 			{isImported && parsedData && activeIndex !== -1 && (
 				<div style={styles.processorWrap}>
+					{/* pass renamed data/headers into DataProcessor when a rename mapping exists */}
 					<DataProcessor
-						data={parsedData}
+						data={applyRenames(parsedData, headers, importInfo && importInfo.rename).data}
 						sheetName="test"
-						headers={headers}
+						headers={applyRenames(parsedData, headers, importInfo && importInfo.rename).headers}
 						settingsColumns={workbookColumns}
 						matched={importInfo.matched}
 						action={importInfo.action}
