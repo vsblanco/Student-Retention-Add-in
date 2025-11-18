@@ -25,6 +25,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 	const [processingIndex, setProcessingIndex] = useState(-1);
 	// NEW: track last index for which onImport was emitted so we don't emit twice
 	const [lastEmittedIndex, setLastEmittedIndex] = useState(-1);
+	// NEW: whether the previous import batch completed (used to reset on next upload)
+	const [importCompleted, setImportCompleted] = useState(false);
 
 	const inputRef = useRef(null);
 
@@ -107,7 +109,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
 		// If we've already imported and the user selects/upload new files,
 		// reset the uploadedFiles list and treat the incoming set as the next batch.
-		if (isImported) {
+		// Use importCompleted OR active import state to detect "upload after import"
+		if (isImported || importCompleted) {
 			// dedupe incoming files by name (keep first occurrence)
 			const seen = new Set();
 			const uniques = [];
@@ -125,6 +128,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			setHeaders([]);
 			setActiveIndex(-1);
 			setIsImported(false);
+			// we're starting a fresh batch; clear active import flags
+			setImportCompleted(false);
 
 			// compute fileInfos for each new file by reading a small slice
 			uniques.forEach((f, i) => {
@@ -588,6 +593,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 		setProcessingIndex(firstCsvIdx);
 		setLastEmittedIndex(-1);
 		setIsImported(true);
+		// mark that a new import batch is running
+		setImportCompleted(false);
 		setStatus(`Starting import 1 of ${uploadedFiles.length}...`);
 
 		// parse and activate the first CSV to kick off processing
@@ -706,6 +713,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			setIsImported(false);
 			setProcessingIndex(-1);
 			setActiveIndex(-1);
+			// mark that the import batch finished so future uploads reset lists
+			setImportCompleted(true);
 			/* eslint-disable no-console */
 			console.log('ImportManager: all files processed.');
 			/* eslint-enable no-console */
