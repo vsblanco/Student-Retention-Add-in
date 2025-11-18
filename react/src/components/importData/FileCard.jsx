@@ -1,68 +1,79 @@
+/* * Timestamp: 2025-11-18 15:35:00 EST
+ * Version: 2.0.0
+ * Author: Gemini (for Victor)
+ * Description: Refactored FileCard component using Tailwind CSS.
+ */
+
 import React from 'react';
 import csvIcon from '../../assets/icons/csv-icon.png';
 import { File } from 'lucide-react';
 
 export default function FileCard({ file, rows, type, action, icon } = {}) {
-	const name = (file && (file.name || file.filename)) || 'Unknown.csv';
-	const sizeKB = file && file.size ? Math.round(file.size / 1024) : null;
+    const name = (file && (file.name || file.filename)) || 'Unknown.csv';
+    const sizeKB = file && file.size ? Math.round(file.size / 1024) : null;
 
-	// small badge style for type/action
-	const badgeStyle = {
-		background: '#eef2ff',
-		color: '#2b6cb0',
-		fontSize: 11,
-		fontWeight: 700,
-		padding: '4px 4px',
-		borderRadius: 999,
-		whiteSpace: 'nowrap',
-	};
+    return (
+        <div
+            title={name}
+            className="
+                w-full group relative
+                flex items-center gap-3
+                p-3
+                bg-white rounded-xl
+                border border-slate-100
+                shadow-sm hover:shadow-md hover:border-slate-200
+                transition-all duration-200 ease-in-out
+            "
+        >
+            {/* Icon Container */}
+            <div className="w-11 h-11 flex-none flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100">
+                {/* Icon Logic */}
+                {icon ? (
+                    <img src={icon} alt="import type" className="w-8 h-8 object-contain" />
+                ) : /\.csv$/i.test(name) ? (
+                    <img src={csvIcon} alt="CSV" className="w-8 h-8 object-contain" />
+                ) : (
+                    <File size={24} className="text-slate-400" />
+                )}
+            </div>
 
-	return (
-		<div
-			style={{
-				width: '100%',
-				boxSizing: 'border-box',
-				display: 'flex',
-				alignItems: 'center',
-				gap: 7,
-				padding: '10px 12px',
-				borderRadius: 8,
-				border: '1px solid rgba(15,23,42,0.06)',
-				background: '#fff',
-				boxShadow: '0 1px 2px rgba(16,24,40,0.03)',
-			}}
-			title={name}
-		>
-			<div style={{ width: 44, height: 44, flex: '0 0 44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-				{ /* if an import-type icon was provided, show it (overrides csvIcon) */ }
-				{icon ? (
-					<img src={icon} alt="import type" style={{ width: 36, height: 36, objectFit: 'contain' }} />
-				) : /\.csv$/i.test(name) ? (
-					<img src={csvIcon} alt="CSV" style={{ width: 36, height: 36, objectFit: 'contain' }} />
-				) : (
-					<File size={36} color="#9aa4b2" />
-				)}
-			</div>
+            {/* Content Container */}
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                
+                {/* File Name */}
+                <div className="text-sm font-semibold text-slate-700 truncate pr-2">
+                    {name}
+                </div>
 
-			<div style={{ flex: 1, minWidth: 0 }}>
-				<div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-					{name}
-				</div>
+                {/* Metadata Row */}
+                <div className="flex items-center justify-between mt-0.5">
+                    <div className="text-xs text-slate-400 font-medium">
+                        {sizeKB !== null ? `${sizeKB} KB` : '—'}
+                        {rows !== undefined && (
+                            <>
+                                <span className="mx-1.5 text-slate-300">•</span>
+                                <span>{rows} rows</span>
+                            </>
+                        )}
+                    </div>
 
-				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-					<div style={{ fontSize: 12, color: '#556070' }}>
-						{sizeKB !== null ? `${sizeKB} KB` : '—'}{rows !== undefined ? ` • ${rows} rows` : ''}
-					</div>
-
-					{/* show type/action badges if provided */}
-					{(type || action) && (
-						<div style={{ display: 'flex', gap: 1, marginLeft: 4 }}>
-							{type && <div style={badgeStyle}>{type}</div>}
-							{action && <div style={{ ...badgeStyle, background: '#fff7ed', color: '#d97706' }}>{action}</div>}
-						</div>
-					)}
-				</div>
-			</div>
-		</div>
-	);
+                    {/* Badges Area */}
+                    {(type || action) && (
+                        <div className="flex items-center gap-1.5 ml-2">
+                            {type && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide">
+                                    {type}
+                                </span>
+                            )}
+                            {action && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100 uppercase tracking-wide">
+                                    {action}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }

@@ -5,6 +5,7 @@ import styles from './importManagerStyles';
 import { getImportType } from './ImportType';
 import { getWorkbookSettings } from '../utility/getSettings';
 import { Upload } from 'lucide-react';
+import { CloudUpload, FileSpreadsheet, FileText, Table, ArrowRight } from 'lucide-react';
 import FileCard from './FileCard';
 import ImportIcon from '../../assets/icons/import-icon.png';
 
@@ -766,155 +767,161 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			inputRef.current.click();
 		}
 	};
+return (
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-white overflow-hidden p-8 transition-all duration-300">
+        
+        {/* --- Header --- */}
+        <div className="flex justify-between items-center mb-8">
+            <div>
+                <h2 className="text-2xl text-slate-800 font-bold tracking-tight">
+                    Import Data
+                </h2>
+                <p className="text-slate-400 text-sm mt-1">
+                    Upload your CSV to begin processing
+                </p>
+            </div>
+        </div>
 
-	return (
-		<div style={styles.container}>
-			{/* Title at the top */}
-			<div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginTop: 8, marginBottom: 8, paddingLeft: 12 }}>
-				<h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: '#24303f' }}>Select a file to import</h2>
-			</div>
+        {/* --- Drop Zone --- */}
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={openFilePicker}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`
+                relative group transition-all duration-300 ease-out
+                border-2 border-dashed rounded-2xl cursor-pointer
+                flex flex-col items-center justify-center py-10 px-4
+                ${dragActive 
+                    ? 'border-indigo-500 bg-indigo-50/40 scale-[0.99]' 
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+                }
+            `}
+        >
+            {/* Visual: Floating Icon Cluster */}
+            <div className="relative mb-6 pointer-events-none transition-transform duration-300 group-hover:scale-110">
+                {/* Center Cloud */}
+                <div className={`transition-colors duration-300 ${dragActive ? 'text-indigo-500' : 'text-slate-300'}`}>
+                    <CloudUpload size={64} strokeWidth={1.5} />
+                </div>
 
-			{/* drop-zone: border around icon + button, clickable and supports drag/drop */}
-			<div
-				role="button"
-				tabIndex={0}
-				onClick={openFilePicker}
-				onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
-				onDragOver={handleDragOver}
-				onDragEnter={handleDragOver}
-				onDragLeave={handleDragLeave}
-				onDrop={handleDrop}
-				style={{
-					margin: '0 0 12px',
-					width: '100%',
-					boxSizing: 'border-box',
-					padding: 16,
-					borderRadius: 10,
-					display: 'flex',
-					flexDirection: 'column',
-					alignItems: 'center',
-					gap: 12,
-					cursor: 'pointer',
-					border: dragActive ? '2px dashed #2b6cb0' : '2px dashed rgba(43,108,176,0.25)',
-					background: dragActive ? 'rgba(43,108,176,0.03)' : 'transparent',
-					transition: 'border-color 120ms ease, background 120ms ease',
-				}}
-				/* Keep the title static so selected filename is not revealed in the UI */
-				title={'Click or drop a CSV file here'}
-			>
-				{/* icon: simplified to use lucide-react Upload icon */}
-				<Upload
-					size={48}
-					color="#92cbf7"
-					// keep layout consistent with previous image
-					style={{ display: 'block' }}
-				/>
+                {/* Floating CSV Icon (Left) */}
+                <div className="absolute -top-4 -left-12 bg-white p-2.5 rounded-xl shadow-lg shadow-slate-100 border border-slate-50 transform -rotate-12 transition-transform duration-500 group-hover:-translate-x-2 group-hover:-rotate-12">
+                    <FileText size={24} className="text-emerald-500" />
+                    <span className="text-[10px] font-bold text-slate-400 absolute bottom-1 right-2 opacity-50">CSV</span>
+                </div>
 
-				{/* helper text above the choose button */}
-				<div style={{ fontSize: 12, color: '#444', marginTop: 4 }}>
-					Drag files here or
-				</div>
+                {/* Floating Table Icon (Right) */}
+                <div className="absolute -top-2 -right-10 bg-white p-2.5 rounded-xl shadow-lg shadow-slate-100 border border-slate-50 transform rotate-12 transition-transform duration-500 group-hover:translate-x-2 group-hover:rotate-6">
+                    <Table size={24} className="text-indigo-500" />
+                </div>
+            </div>
 
-				{/* upload button (shows filename when selected) */}
-				<button
-					type="button"
-					onClick={(e) => { e.stopPropagation(); onButtonClick(); }}
-					// preserve shrink animation behavior and ellipsis for long names
-					style={{
-						background: '#2b6cb0',
-						color: '#fff',
-						border: 'none',
-						cursor: 'pointer',
-						padding: '6px 20px',
-						borderRadius: 999,
-						fontSize: 14,
-						fontWeight: 600,
-						boxShadow: '0 2px 6px rgba(43,108,176,0.18)',
-						width: '100%',
-						maxWidth: '100%',
-						overflow: 'hidden',
-						textOverflow: 'ellipsis',
-						whiteSpace: 'nowrap',
-						display: 'inline-block',
-					}}
-					/* Always show the same label and accessible text — do not surface fileName */
-					aria-label={'Choose file'}
-					title={'Choose CSV file'}
-				>
-					{'Choose File'}
-				</button>
-			</div>
+            {/* Visual: Text */}
+            <div className="text-center space-y-2 pointer-events-none">
+                <h3 className="text-lg font-semibold text-slate-700">
+                    Drag & drop
+                </h3>
+                <p className="text-sm text-slate-400 font-medium">
+                    your CSV files here, or <span className="text-indigo-500 hover:text-indigo-600 underline decoration-indigo-200 underline-offset-2">browse</span>
+                </p>
+            </div>
 
-			<input
-				ref={inputRef}
-				type="file"
-				accept=".csv"
-				multiple
-				style={{ display: 'none' }}
-				onChange={(e) => {
-					const files = e.target.files;
-					if (files && files.length > 0) handleAddFiles(files);
-				}}
-			/>
-			{/* uploaded files list */}
-			{uploadedFiles && uploadedFiles.length > 0 && (
-				<div style={{ width: '100%', boxSizing: 'border-box', margin: '8px 0', padding: '8px 12px' }}>
-					<div style={{ marginBottom: 8, fontSize: 13, color: '#24303f', fontWeight: 600 }}>
-						Uploaded files
-					</div>
-					{uploadedFiles.map((f, idx) => (
-						<FileCard
-							key={`${f.name}-${idx}`}
-							file={f}
-							rows={idx === activeIndex && Array.isArray(parsedData) ? parsedData.length : undefined}
-							type={fileInfos[idx] && fileInfos[idx].type}
-							action={fileInfos[idx] && fileInfos[idx].action}
-							icon={fileInfos[idx] && fileInfos[idx].icon} // <-- new: pass icon through
-						/>
-					))}
-				</div>
-			)}
-			{status && (
-				<div style={{ ...styles.infoBox }}>
-					<div style={styles.statusText}>Status: {status}</div>
-				</div>
-			)}
+            {/* Hidden Input */}
+            <input
+                ref={inputRef}
+                type="file"
+                accept=".csv"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                    const files = e.target.files;
+                    if (files && files.length > 0) handleAddFiles(files);
+                }}
+            />
+        </div>
 
-			{/* show Import button after parsing but before actual import */}
-			{parsedData && !isImported && (
-				<div style={styles.controlRow}>
-					<button
-						type="button"
-						onClick={handleImport}
-						// ensure the import button fills the taskpane width
-						style={{ ...styles.importButton, width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-					>
-						<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-							{'Import Data'}
-							<img src={ImportIcon} alt="" style={{ width: 19, height: 19, objectFit: 'contain', marginLeft: 4 }} />
-						</span>
-					</button>
+        {/* --- Uploaded Files List --- */}
+        {uploadedFiles && uploadedFiles.length > 0 && (
+            <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Ready for import
+                    </div>
+                    <div className="text-xs font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-full">
+                        {uploadedFiles.length} file{uploadedFiles.length !== 1 && 's'}
+                    </div>
+                </div>
+                <div className="space-y-3">
+                    {uploadedFiles.map((f, idx) => (
+                        <FileCard
+                            key={`${f.name}-${idx}`}
+                            file={f}
+                            rows={idx === activeIndex && Array.isArray(parsedData) ? parsedData.length : undefined}
+                            type={fileInfos[idx] && fileInfos[idx].type}
+                            action={fileInfos[idx] && fileInfos[idx].action}
+                            icon={fileInfos[idx] && fileInfos[idx].icon}
+                        />
+                    ))}
+                </div>
+            </div>
+        )}
 
-					{/* preview / processing UI can remain hidden until import */}
-				</div>
-			)}
+        {/* --- Status Info Box --- */}
+        {status && (
+            <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-100 text-sm text-slate-500 animate-pulse">
+                <span className="font-semibold text-slate-700">Status:</span> {status}
+            </div>
+        )}
 
-			{/* DataProcessor receives data only after user clicked Import (active file) */}
-			{isImported && parsedData && activeIndex !== -1 && activeIndex === processingIndex && (
-				<div style={styles.processorWrap}>
-					{/* pass memoized renamed data/headers into DataProcessor to avoid reruns */}
-					<DataProcessor
-						data={filteredData}
-						sheetName="test"
-						headers={enriched.headers || renamed.headers}
-						settingsColumns={workbookColumns}
-						matched={matchedWithLink}
-						action={importInfo.action}
-						onComplete={handleProcessorComplete} // <-- existing prop
-						onStatus={handleProcessorStatus}    // <-- newly added prop
-					/>
-				</div>
-			)}
-		</div>
-	);
+        {/* --- Action Bar (Modern Blended Button) --- */}
+        {parsedData && !isImported && (
+            <div className="mt-8 flex justify-center animate-in fade-in slide-in-from-bottom-8 duration-700 fill-mode-forwards">
+                <button
+                    type="button"
+                    onClick={handleImport}
+                    className="
+                        group relative
+                        flex items-center justify-center gap-3
+                        bg-slate-900 hover:bg-slate-800 text-white
+                        px-8 py-3.5
+                        rounded-full
+                        shadow-xl shadow-slate-200 hover:shadow-2xl hover:shadow-slate-300
+                        transform transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0
+                        w-full sm:w-auto sm:min-w-[200px]
+                    "
+                >
+                    <span className="font-semibold tracking-wide text-sm">Import Data</span>
+                    
+                    {/* Icon: If you have a custom icon, use that, otherwise use Lucide arrow */}
+                    {ImportIcon ? (
+                         <img src={ImportIcon} alt="" className="w-5 h-5 object-contain invert opacity-90 group-hover:opacity-100 transition-opacity" />
+                    ) : (
+                        <ArrowRight size={18} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+                    )}
+                </button>
+            </div>
+        )}
+
+        {/* --- Data Processor (Hidden Logic) --- */}
+        {isImported && parsedData && activeIndex !== -1 && activeIndex === processingIndex && (
+            <div className="mt-6">
+                <DataProcessor
+                    data={filteredData}
+                    sheetName="test"
+                    headers={enriched.headers || renamed.headers}
+                    settingsColumns={workbookColumns}
+                    matched={matchedWithLink}
+                    action={importInfo.action}
+                    onComplete={handleProcessorComplete}
+                    onStatus={handleProcessorStatus}
+                />
+            </div>
+        )}
+    </div>
+);
 }
