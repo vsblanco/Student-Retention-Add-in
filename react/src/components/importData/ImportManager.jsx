@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
 import styles from './importManagerStyles';
@@ -8,7 +8,7 @@ import { Upload } from 'lucide-react';
 import FileCard from './FileCard';
 import ImportIcon from '../../assets/icons/import-icon.png';
 
-export default function ImportManager({ onImport, excludeFilter } = {}) {
+export default function ImportManager({ onImport, excludeFilter, hyperLink } = {}) {
 	const [fileName, setFileName] = useState(''); // name of active file
 	const [status, setStatus] = useState('');
 	const [parsedData, setParsedData] = useState(null);
@@ -236,6 +236,170 @@ export default function ImportManager({ onImport, excludeFilter } = {}) {
 		return null;
 	}, [excludeFilter && JSON.stringify(excludeFilter), importInfo && JSON.stringify(importInfo && importInfo.excludeFilter)]);
 
+	// effective hyperLink: explicit prop overrides detected hyperLink from getImportType
+	const effectiveHyperLink = useMemo(() => {
+		if (hyperLink && hyperLink.column) return hyperLink;
+		if (importInfo && importInfo.hyperLink && importInfo.hyperLink.column) return importInfo.hyperLink;
+		return null;
+	}, [hyperLink && JSON.stringify(hyperLink), importInfo && JSON.stringify(importInfo && importInfo.hyperLink)]);
+
+	// NEW: ensure the hyperlink column (if defined) is included in the matched set
+	const matchedWithLink = useMemo(() => {
+		const base = Array.isArray(matchedWithRenames) ? [...matchedWithRenames] : [];
+		// prefer the explicit effectiveHyperLink (prop or detected) then fallback to importInfo.hyperLink
+		const hyper = effectiveHyperLink || (importInfo && importInfo.hyperLink);
+		const col = hyper && hyper.column ? String(hyper.column) : null;
+		if (col && base.indexOf(col) === -1) base.push(col);
+		return base;
+	}, [matchedWithRenames, effectiveHyperLink && JSON.stringify(effectiveHyperLink), importInfo && JSON.stringify(importInfo && importInfo.hyperLink)]);
+
+	// helper to build hyperlinks and ensure the target column exists
+	const escapeRegExp = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	const applyHyperlink = (renamedObj, hyper) => {
+		if (!hyper || !hyper.column) return renamedObj;
+		const colName = hyper.column;
+		const template = hyper.linkLocation || '';
+		const paramsDef = Array.isArray(hyper.parameter) ? hyper.parameter : [];
+
+		// helper to escape double-quotes for Excel string literals
+		const excelEscape = (s) => String(s == null ? '' : s).replace(/"/g, '""');
+		// determine friendly text preference: allow display/friendly/name then fallback to column
+		const friendlyTextFor = (hyperObj, col) => {
+			return String(hyperObj && (hyperObj.display || hyperObj.friendly || hyperObj.name) || col);
+		};
+
+		const headersIn = Array.isArray(renamedObj.headers) ? [...renamedObj.headers] : renamedObj.headers;
+		let dataIn = renamedObj.data;
+		if (!Array.isArray(dataIn) || dataIn.length === 0) {
+			// still ensure header exists so downstream writers see the column
+			if (Array.isArray(headersIn) && headersIn.indexOf(colName) === -1) headersIn.push(colName);
+			return { data: dataIn, headers: headersIn };
+		}
+
+		const first = dataIn[0];
+		// object rows
+		if (first && typeof first === 'object' && !Array.isArray(first)) {
+			if (Array.isArray(headersIn) && headersIn.indexOf(colName) === -1) headersIn.push(colName);
+			const out = dataIn.map((row) => {
+				const newRow = { ...(row || {}) };
+				// collect param values by matching param names case-insensitively against row keys
+				const paramValues = paramsDef.map((p) => {
+					const needle = String(p || '').toLowerCase().trim();
+					const foundKey = Object.keys(row).find((k) => String(k || '').toLowerCase().trim() === needle);
+					return foundKey ? row[foundKey] : (row[p] || '');
+				});
+
+				// try token replacement in template using exact param text matches
+				let url = template;
+				if (typeof url === 'string' && url.length > 0 && paramsDef.length > 0) {
+					paramsDef.forEach((p, i) => {
+						const token = String(p || '');
+						const val = paramValues[i] == null ? '' : String(paramValues[i]);
+						url = url.replace(new RegExp(escapeRegExp(token), 'g'), encodeURIComponent(val));
+					});
+					// if replacement didn't change template meaningfully, fallback to join
+					if (url === template) {
+						const suffix = paramValues.map((v) => encodeURIComponent(String(v || ''))).join('/');
+						url = template.endsWith('/') ? (template + suffix) : (template + (template.includes('?') ? '&' : '/') + suffix);
+					}
+				} else {
+					// no template: just join params onto empty base
+					url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
+				}
+
+				// wrap url and friendly name in Excel HYPERLINK formula
+				const display = friendlyTextFor(hyper, colName);
+				const formula = `=HYPERLINK("${excelEscape(url)}","${excelEscape(display)}")`;
+				newRow[colName] = formula;
+				return newRow;
+			});
+			return { data: out, headers: headersIn };
+		}
+
+		// array rows (header row may be present in headersIn)
+		if (Array.isArray(first)) {
+			let idx = Array.isArray(headersIn) ? headersIn.findIndex((h) => String(h || '').toLowerCase().trim() === String(colName || '').toLowerCase().trim()) : -1;
+			if (idx === -1 && Array.isArray(headersIn)) {
+				headersIn.push(colName);
+				idx = headersIn.length - 1;
+			}
+			const out = dataIn.map((row) => {
+				const newRow = Array.isArray(row) ? [...row] : [];
+				// compute param values by matching headersIn
+				const paramValues = paramsDef.map((p) => {
+					const needle = String(p || '').toLowerCase().trim();
+					const foundIdx = headersIn.findIndex((h) => String(h || '').toLowerCase().trim() === needle);
+					return foundIdx !== -1 && Array.isArray(row) ? row[foundIdx] : '';
+				});
+				// build url similar to object case
+				let url = template;
+				if (typeof url === 'string' && url.length > 0 && paramsDef.length > 0) {
+					paramsDef.forEach((p, i) => {
+						const token = String(p || '');
+						const val = paramValues[i] == null ? '' : String(paramValues[i]);
+						url = url.replace(new RegExp(escapeRegExp(token), 'g'), encodeURIComponent(val));
+					});
+					if (url === template) {
+						const suffix = paramValues.map((v) => encodeURIComponent(String(v || ''))).join('/');
+						url = template.endsWith('/') ? (template + suffix) : (template + '/' + suffix);
+					}
+				} else {
+					url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
+				}
+				// ensure row has correct length and set value at idx
+				while (newRow.length < idx) newRow.push('');
+				// wrap URL in Excel HYPERLINK formula for array rows as well
+				const display = friendlyTextFor(hyper, colName);
+				const formula = `=HYPERLINK("${excelEscape(url)}","${excelEscape(display)}")`;
+				newRow[idx] = formula;
+				return newRow;
+			});
+			return { data: out, headers: headersIn };
+		}
+
+		return renamedObj;
+	};
+
+	// enriched renamed data/headers with hyperlink column added (when applicable)
+	const enriched = useMemo(() => applyHyperlink(renamed, effectiveHyperLink), [renamed && JSON.stringify(renamed.headers), renamed && (Array.isArray(renamed.data) ? renamed.data.length : JSON.stringify(renamed.data)), effectiveHyperLink && JSON.stringify(effectiveHyperLink)]);
+
+	// Log generated hyperlinks whenever enriched or the effectiveHyperLink changes
+	useEffect(() => {
+		try {
+			if (!enriched) {
+				console.log('ImportManager: enriched not ready yet.');
+				return;
+			}
+
+			const colName = effectiveHyperLink && effectiveHyperLink.column;
+			if (!colName) {
+				console.log('ImportManager: effectiveHyperLink has no column defined.', effectiveHyperLink);
+				return;
+			}
+
+			// collect values (sample up to 20) from enriched.data, supporting object-rows and array-rows
+			const dataArr = Array.isArray(enriched.data) ? enriched.data : [];
+			const sample = dataArr.slice(0, 20).map((row) => {
+				// object rows
+				if (row && typeof row === 'object' && !Array.isArray(row)) {
+					return row[colName];
+				}
+				// array rows: find index by header name (case-insensitive)
+				if (Array.isArray(row)) {
+					const idx = Array.isArray(enriched.headers)
+						? enriched.headers.findIndex((h) => String(h || '').toLowerCase().trim() === String(colName || '').toLowerCase().trim())
+						: -1;
+					return idx !== -1 ? row[idx] : undefined;
+				}
+				return undefined;
+			}).filter((v) => v !== undefined);
+
+			console.log(`ImportManager: generated ${sample.length} hyperlink(s) (sample up to 20):`, sample, { column: colName });
+		} catch (err) {
+			console.error('ImportManager: error while logging generated hyperlinks', err);
+		}
+	}, [enriched && JSON.stringify(enriched.headers), enriched && (Array.isArray(enriched.data) ? enriched.data.length : JSON.stringify(enriched.data)), effectiveHyperLink && JSON.stringify(effectiveHyperLink)]);
+
 	// helper to exclude rows where a specified column contains a given value (case-insensitive)
 	const applyExclusion = (dataInput, headersInput, filter) => {
 		if (!filter || !filter.column || (filter.value === null || filter.value === undefined || String(filter.value).trim() === '')) {
@@ -303,9 +467,9 @@ export default function ImportManager({ onImport, excludeFilter } = {}) {
 
 	// memoized filtered data: apply exclusion on top of renamed data
 	const filteredData = useMemo(() => {
-		return applyExclusion(renamed.data, renamed.headers, effectiveExcludeFilter);
-		// depend on rename result and the effective filter
-	}, [renamed && JSON.stringify(renamed.data ? (Array.isArray(renamed.data) ? [renamed.data.length] : renamed.data) : renamed), renamed && JSON.stringify(renamed.headers), effectiveExcludeFilter && JSON.stringify(effectiveExcludeFilter)]);
+		return applyExclusion(enriched.data, enriched.headers, effectiveExcludeFilter);
+		// depend on enriched result and the effective filter
+	}, [enriched && JSON.stringify(enriched.data ? (Array.isArray(enriched.data) ? [enriched.data.length] : enriched.data) : enriched), enriched && JSON.stringify(enriched.headers), effectiveExcludeFilter && JSON.stringify(effectiveExcludeFilter)]);
 
 	// triggered when user clicks the Import button
 	const handleImport = () => {
@@ -372,16 +536,16 @@ export default function ImportManager({ onImport, excludeFilter } = {}) {
 				data: dataToEmit,
 				// pass detected import type and matched columns
 				type: importInfo.type || 'csv',
-				matched: matchedWithRenames,
-				headers: renamed.headers,
+				matched: matchedWithLink,
+				headers: enriched.headers || renamed.headers,
 			});
 		} else {
 			console.log('Imported CSV data', {
 				file: uploadedFiles[activeIndex],
 				data: dataToEmit,
 				type: importInfo.type,
-				matched: matchedWithRenames,
-				headers: renamed.headers,
+				matched: matchedWithLink,
+				headers: enriched.headers || renamed.headers,
 			});
 		}
 
@@ -587,9 +751,9 @@ export default function ImportManager({ onImport, excludeFilter } = {}) {
 					<DataProcessor
 						data={filteredData}
 						sheetName="test"
-						headers={renamed.headers}
+						headers={enriched.headers || renamed.headers}
 						settingsColumns={workbookColumns}
-						matched={matchedWithRenames}
+						matched={matchedWithLink}
 						action={importInfo.action}
 						onComplete={handleProcessorComplete} // <-- existing prop
 						onStatus={handleProcessorStatus}    // <-- newly added prop

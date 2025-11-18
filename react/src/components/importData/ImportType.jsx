@@ -2,8 +2,8 @@ import AnthologyFile from '../../assets/icons/AnthologyFile.png';
 import CanvasFile from '../../assets/icons/CanvasFile.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
 
-const CanvasId = 'Canvas id';
-const CourseId = 'Course id';
+const CanvasId = 'canvas id';
+const CourseId = 'course id';
 export const CanvasImport = ['student sis', 'course', CourseId, 'current score']// note: not sure if to use canonical from settings or not.
 // Add: mapping of detected Canvas column -> desired renamed column
 export const CanvasRename = {
@@ -40,7 +40,7 @@ export function getImportType(columns = []) {
 		excludeFilter = { column: 'course', value: 'CAPV' }; // exclude CAPV course rows
 		hyperLink = {column: 'Grade Book', // Create hyperlink to grade book
 			friendlyName: 'Grade Book', 
-			linkLocation: 'https://canvas.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
+			linkLocation: 'https://nuc.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
 			parameter: [CourseId, CanvasId]
 		};
 	} else if (isAnthology) {
