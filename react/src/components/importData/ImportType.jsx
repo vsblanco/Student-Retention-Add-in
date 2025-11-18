@@ -2,11 +2,12 @@ import AnthologyFile from '../../assets/icons/AnthologyFile.png';
 import CanvasFile from '../../assets/icons/CanvasFile.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
 
-export const CanvasImport = ['student sis', 'course', 'course id', 'current score']// note: not sure if to use canonical from settings or not.
-
+const CanvasId = 'Canvas id';
+const CourseId = 'Course id';
+export const CanvasImport = ['student sis', 'course', CourseId, 'current score']// note: not sure if to use canonical from settings or not.
 // Add: mapping of detected Canvas column -> desired renamed column
 export const CanvasRename = {
-	'student id': 'canvas id',
+	'student id': CanvasId,
 };
 
 export const AnthologyImport = ['studentname', 'studentnumber']; // for ssome reason it has to be lowercase and no spaces
@@ -26,7 +27,7 @@ export function getImportType(columns = []) {
 	let matched = [];
 	let action = 'Refresh';
 	let icon = null; // -> new: icon to return
-	let urlBuilder = null; // -> now an object { build: Function, to: string } when applicable
+	let hyperLink = null; // -> new: hyperlink info when applicable
 	let rename = null; // -> new: rename mapping when applicable
 	let excludeFilter = null; // -> new: optional exclusion filter { column, value }
 
@@ -36,8 +37,12 @@ export function getImportType(columns = []) {
 		action = 'Update';
 		icon = CanvasFile;
 		rename = CanvasRename; // return the mapping to rename detected columns
-		// exclude CAPV course rows by default for Canvas imports
-		excludeFilter = { column: 'course', value: 'CAPV' };
+		excludeFilter = { column: 'course', value: 'CAPV' }; // exclude CAPV course rows
+		hyperLink = {column: 'Grade Book', // Create hyperlink to grade book
+			friendlyName: 'Grade Book', 
+			linkLocation: 'https://canvas.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
+			parameter: [CourseId, CanvasId]
+		};
 	} else if (isAnthology) {
 		type = 'Student Population';
 		matched = AnthologyImport;
@@ -50,6 +55,6 @@ export function getImportType(columns = []) {
 		icon = DropoutDetectiveFile;
 	}
 
-	return { type, matched, action, icon, urlBuilder, rename, excludeFilter };
+	return { type, matched, action, icon, hyperLink, rename, excludeFilter };
 }
 
