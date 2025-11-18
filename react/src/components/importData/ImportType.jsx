@@ -1,6 +1,7 @@
-import AnthologyFile from '../../assets/icons/AnthologyFile.png';
-import CanvasFile from '../../assets/icons/CanvasFile.png';
-import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
+import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
+import CanvasFile from '../../assets/icons/CanvasLogo.png';
+import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveLogo.png';
+import AttendanceFile from '../../assets/icons/MyNUC-icon.png';
 
 const CanvasId = 'canvas id';
 const CourseId = 'course id';
@@ -12,7 +13,7 @@ export const CanvasRename = {
 
 export const AnthologyImport = ['studentname', 'studentnumber']; // for ssome reason it has to be lowercase and no spaces
 export const DropoutDetectiveImport = ['email', 'risk trend', 'course grade','course missing assignments','course zero assignments'];
-
+export const AttendanceImport = ['issued id', 'date of attendance'];
 // new: helper that returns an object with the detected type, the array it used to match (case-insensitive),
 // and an "action" indicating whether to use Update or Refresh
 export function getImportType(columns = []) {
@@ -22,6 +23,7 @@ export function getImportType(columns = []) {
 	const isCanvas = CanvasImport.every((col) => cols.includes(col));
 	const isAnthology = AnthologyImport.every((col) => cols.includes(col));
 	const isDropoutDetective = DropoutDetectiveImport.every((col) => cols.includes(col));
+	const isAttendance = AttendanceImport.every((col) => cols.includes(col));
 
 	let type = 'Standard';
 	let matched = [];
@@ -53,6 +55,11 @@ export function getImportType(columns = []) {
 		matched = DropoutDetectiveImport;
 		action = 'Update';
 		icon = DropoutDetectiveFile;
+	} else if (isAttendance) {
+		type = 'LDA';
+		matched = AttendanceImport;
+		action = 'Update';
+		icon = AttendanceFile;
 	}
 
 	return { type, matched, action, icon, hyperLink, rename, excludeFilter };

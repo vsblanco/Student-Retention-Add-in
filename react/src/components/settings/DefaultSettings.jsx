@@ -6,7 +6,7 @@ import emailIcon from '../../assets/icons/email-icon.png';
 export const defaultColumns =[
 	{ name: 'Assigned', alias: ['advisor'], static: true },
 	{ name: 'Student Name', alias: ['Student']},
-	{ name: 'Student Number', alias: ['Student Numbers'], hidden: true },
+	{ name: 'Student Number', alias: ['Student Numbers','Issued ID'], hidden: true },
 	{ name: 'SyStudentId', alias: ['student sis'], hidden: true, identifier: true },
 	{ name: 'Gender', alias: ['Sex'], hidden: true},
 	{ name: 'Phone', alias: ['Phone Number','Contact Number']},
@@ -15,7 +15,7 @@ export const defaultColumns =[
 	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
 	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, format: ['=HYPERLINK']},
 	{ name: 'Grade', alias: ['Course Grade','current score']  },
-	{ name: 'LDA', alias: ['Last Date of Attendance'], format: ['MM/DD/YYYY']},
+	{ name: 'LDA', alias: ['Last Date of Attendance','Date of Attendance'], format: ['MM/DD/YYYY']},
 	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
 ];
