@@ -261,13 +261,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 		const template = hyper.linkLocation || '';
 		const paramsDef = Array.isArray(hyper.parameter) ? hyper.parameter : [];
 
-		// helper to escape double-quotes for Excel string literals
-		const excelEscape = (s) => String(s == null ? '' : s).replace(/"/g, '""');
-		// determine friendly text preference: allow display/friendly/name then fallback to column
-		const friendlyTextFor = (hyperObj, col) => {
-			return String(hyperObj && (hyperObj.display || hyperObj.friendly || hyperObj.name) || col);
-		};
-
 		const headersIn = Array.isArray(renamedObj.headers) ? [...renamedObj.headers] : renamedObj.headers;
 		let dataIn = renamedObj.data;
 		if (!Array.isArray(dataIn) || dataIn.length === 0) {
@@ -277,6 +270,16 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 		}
 
 		const first = dataIn[0];
+
+		// helper to build excel HYPERLINK formula safely
+		const escapeForExcel = (s) => String(s || '').replace(/"/g, '""');
+		const makeHyperlinkFormula = (url, friendly) => {
+			const u = escapeForExcel(url);
+			const f = escapeForExcel(friendly == null || friendly === '' ? url : friendly);
+			// Excel formula: =HYPERLINK("url","friendly")
+			return `=HYPERLINK("${u}","${f}")`;
+		};
+
 		// object rows
 		if (first && typeof first === 'object' && !Array.isArray(first)) {
 			if (Array.isArray(headersIn) && headersIn.indexOf(colName) === -1) headersIn.push(colName);
@@ -307,10 +310,9 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 					url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
 				}
 
-				// wrap url and friendly name in Excel HYPERLINK formula
-				const display = friendlyTextFor(hyper, colName);
-				const formula = `=HYPERLINK("${excelEscape(url)}","${excelEscape(display)}")`;
-				newRow[colName] = formula;
+				// wrap with Excel HYPERLINK and use friendlyName when provided
+				const friendly = hyper.friendlyName || colName || url;
+				newRow[colName] = makeHyperlinkFormula(url, friendly);
 				return newRow;
 			});
 			return { data: out, headers: headersIn };
@@ -346,12 +348,10 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 				} else {
 					url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
 				}
-				// ensure row has correct length and set value at idx
+				// ensure row has correct length and set HYPERLINK formula at idx
 				while (newRow.length < idx) newRow.push('');
-				// wrap URL in Excel HYPERLINK formula for array rows as well
-				const display = friendlyTextFor(hyper, colName);
-				const formula = `=HYPERLINK("${excelEscape(url)}","${excelEscape(display)}")`;
-				newRow[idx] = formula;
+				const friendly = hyper.friendlyName || colName || url;
+				newRow[idx] = makeHyperlinkFormula(url, friendly);
 				return newRow;
 			});
 			return { data: out, headers: headersIn };
