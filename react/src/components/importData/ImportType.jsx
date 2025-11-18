@@ -2,7 +2,7 @@ import AnthologyFile from '../../assets/icons/AnthologyFile.png';
 import CanvasFile from '../../assets/icons/CanvasFile.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveFile.png';
 
-export const CanvasImport = ['student sis', 'course', 'course id', 'grade']// note: not sure if to use canonical from settings or not.
+export const CanvasImport = ['student sis', 'course', 'course id', 'current score']// note: not sure if to use canonical from settings or not.
 
 // Add: mapping of detected Canvas column -> desired renamed column
 export const CanvasRename = {
@@ -28,6 +28,7 @@ export function getImportType(columns = []) {
 	let icon = null; // -> new: icon to return
 	let urlBuilder = null; // -> now an object { build: Function, to: string } when applicable
 	let rename = null; // -> new: rename mapping when applicable
+	let excludeFilter = null; // -> new: optional exclusion filter { column, value }
 
 	if (isCanvas) {
 		type = 'Gradebook Link';
@@ -35,6 +36,8 @@ export function getImportType(columns = []) {
 		action = 'Update';
 		icon = CanvasFile;
 		rename = CanvasRename; // return the mapping to rename detected columns
+		// exclude CAPV course rows by default for Canvas imports
+		excludeFilter = { column: 'course', value: 'CAPV' };
 	} else if (isAnthology) {
 		type = 'Student Population';
 		matched = AnthologyImport;
@@ -47,6 +50,6 @@ export function getImportType(columns = []) {
 		icon = DropoutDetectiveFile;
 	}
 
-	return { type, matched, action, icon, urlBuilder, rename };
+	return { type, matched, action, icon, urlBuilder, rename, excludeFilter };
 }
 

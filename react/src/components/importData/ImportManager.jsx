@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
 import styles from './importManagerStyles';
@@ -8,7 +8,7 @@ import { Upload } from 'lucide-react';
 import FileCard from './FileCard';
 import ImportIcon from '../../assets/icons/import-icon.png';
 
-export default function ImportManager({ onImport } = {}) {
+export default function ImportManager({ onImport, excludeFilter } = {}) {
 	const [fileName, setFileName] = useState(''); // name of active file
 	const [status, setStatus] = useState('');
 	const [parsedData, setParsedData] = useState(null);
@@ -175,8 +175,23 @@ export default function ImportManager({ onImport } = {}) {
 	// derive columns array to pass to getImportType (names as they appear)
 	const columns = headers;
 
-	// compute import info once per render
-	const importInfo = getImportType(columns);
+	// compute import info once and memoize based on headers so it stays stable across renders
+	const importInfo = useMemo(() => getImportType(columns), [Array.isArray(columns) ? columns.join('|') : String(columns)]);
+
+	// merge matched array with any rename targets so consumers see renamed columns too
+	const matchedWithRenames = useMemo(() => {
+		const base = Array.isArray(importInfo && importInfo.matched) ? [...importInfo.matched] : [];
+		const rename = importInfo && importInfo.rename;
+		if (rename && typeof rename === 'object') {
+			Object.keys(rename).forEach((orig) => {
+				const target = rename[orig];
+				if (target && base.indexOf(target) === -1) {
+					base.push(target);
+				}
+			});
+		}
+		return base;
+	}, [importInfo && JSON.stringify(importInfo)]);
 
 	// Add: helper to apply rename mapping to headers and parsed data
 	const applyRenames = (dataInput, headersInput, renameMap) => {
@@ -207,6 +222,90 @@ export default function ImportManager({ onImport } = {}) {
 
 		return { data: newData, headers: newHeaders };
 	};
+
+	// Memoize renamed data/headers so DataProcessor gets stable references (prevents infinite loop)
+	const renamed = useMemo(() => {
+		return applyRenames(parsedData, headers, importInfo && importInfo.rename);
+		// stringify rename to detect changes; headers/parsedData references are used directly
+	}, [parsedData, Array.isArray(headers) ? headers.join('|') : String(headers), importInfo && JSON.stringify(importInfo.rename)]);
+
+	// effective exclude filter: prop overrides detected filter from getImportType
+	const effectiveExcludeFilter = useMemo(() => {
+		if (excludeFilter && excludeFilter.column) return excludeFilter;
+		if (importInfo && importInfo.excludeFilter && importInfo.excludeFilter.column) return importInfo.excludeFilter;
+		return null;
+	}, [excludeFilter && JSON.stringify(excludeFilter), importInfo && JSON.stringify(importInfo && importInfo.excludeFilter)]);
+
+	// helper to exclude rows where a specified column contains a given value (case-insensitive)
+	const applyExclusion = (dataInput, headersInput, filter) => {
+		if (!filter || !filter.column || (filter.value === null || filter.value === undefined || String(filter.value).trim() === '')) {
+			return dataInput;
+		}
+
+		const colName = String(filter.column).toLowerCase().trim();
+		const excludeText = String(filter.value).toLowerCase();
+
+		// if no data or headers, nothing to do
+		if (!Array.isArray(dataInput) || dataInput.length === 0) return dataInput;
+
+		const originalLength = dataInput.length;
+		let result = dataInput;
+
+		// object rows (array of objects)
+		const first = dataInput[0];
+		if (first && typeof first === 'object' && !Array.isArray(first)) {
+			result = dataInput.filter((row) => {
+				// find matching key in row (case-insensitive)
+				for (const k of Object.keys(row)) {
+					if (String(k || '').toLowerCase().trim() === colName) {
+						const val = row[k];
+						if (val === null || val === undefined) return true; // keep if nothing to compare
+						return String(val).toLowerCase().indexOf(excludeText) === -1;
+					}
+				}
+				// if column not present in this row, keep the row
+				return true;
+			});
+		} else if (Array.isArray(first)) {
+			// array rows (first row may be header row or arrays of values)
+			// find column index from headersInput if available
+			let idx = -1;
+			if (Array.isArray(headersInput) && headersInput.length > 0) {
+				idx = headersInput.findIndex((h) => String(h || '').toLowerCase().trim() === colName);
+			}
+			// if headers didn't help, try scanning first row for matching header name
+			if (idx === -1 && Array.isArray(dataInput) && dataInput.length > 0) {
+				const headerRow = dataInput[0];
+				if (Array.isArray(headerRow)) {
+					idx = headerRow.findIndex((h) => String(h || '').toLowerCase().trim() === colName);
+				}
+			}
+			// if we still didn't find an index, nothing to filter
+			if (idx !== -1) {
+				// filter rows where value at idx contains excludeText
+				result = dataInput.filter((row) => {
+					const v = row && row[idx];
+					if (v === null || v === undefined) return true;
+					return String(v).toLowerCase().indexOf(excludeText) === -1;
+				});
+			}
+		}
+
+		const excludedCount = Math.max(0, originalLength - (Array.isArray(result) ? result.length : 0));
+		if (excludedCount > 0) {
+			/* eslint-disable no-console */
+			console.log(`ImportManager: excluded ${excludedCount} row(s) where column "${filter.column}" contains "${filter.value}"`);
+			/* eslint-enable no-console */
+		}
+
+		return result;
+	};
+
+	// memoized filtered data: apply exclusion on top of renamed data
+	const filteredData = useMemo(() => {
+		return applyExclusion(renamed.data, renamed.headers, effectiveExcludeFilter);
+		// depend on rename result and the effective filter
+	}, [renamed && JSON.stringify(renamed.data ? (Array.isArray(renamed.data) ? [renamed.data.length] : renamed.data) : renamed), renamed && JSON.stringify(renamed.headers), effectiveExcludeFilter && JSON.stringify(effectiveExcludeFilter)]);
 
 	// triggered when user clicks the Import button
 	const handleImport = () => {
@@ -264,24 +363,24 @@ export default function ImportManager({ onImport } = {}) {
 			// ignore errors from settings read
 		}
 
-		// APPLY RENAMES BEFORE SENDING OUT
-		const renamed = applyRenames(parsedData, headers, importInfo && importInfo.rename);
+		// use memoized renamed values computed above
+		const dataToEmit = filteredData;
 
 		if (typeof onImport === 'function') {
 			onImport({
 				file: uploadedFiles[activeIndex],
-				data: renamed.data,
+				data: dataToEmit,
 				// pass detected import type and matched columns
 				type: importInfo.type || 'csv',
-				matched: importInfo.matched || [],
+				matched: matchedWithRenames,
 				headers: renamed.headers,
 			});
 		} else {
 			console.log('Imported CSV data', {
 				file: uploadedFiles[activeIndex],
-				data: renamed.data,
+				data: dataToEmit,
 				type: importInfo.type,
-				matched: importInfo.matched,
+				matched: matchedWithRenames,
 				headers: renamed.headers,
 			});
 		}
@@ -484,13 +583,13 @@ export default function ImportManager({ onImport } = {}) {
 			{/* DataProcessor receives data only after user clicked Import (active file) */}
 			{isImported && parsedData && activeIndex !== -1 && (
 				<div style={styles.processorWrap}>
-					{/* pass renamed data/headers into DataProcessor when a rename mapping exists */}
+					{/* pass memoized renamed data/headers into DataProcessor to avoid reruns */}
 					<DataProcessor
-						data={applyRenames(parsedData, headers, importInfo && importInfo.rename).data}
+						data={filteredData}
 						sheetName="test"
-						headers={applyRenames(parsedData, headers, importInfo && importInfo.rename).headers}
+						headers={renamed.headers}
 						settingsColumns={workbookColumns}
-						matched={importInfo.matched}
+						matched={matchedWithRenames}
 						action={importInfo.action}
 						onComplete={handleProcessorComplete} // <-- existing prop
 						onStatus={handleProcessorStatus}    // <-- newly added prop
