@@ -21,6 +21,11 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 	const [isImported, setIsImported] = useState(false); // whether user clicked Import
 	const [workbookColumns, setWorkbookColumns] = useState([]); // new: columns from workbook settings
 
+	// NEW: index of file currently being processed (sequenced import)
+	const [processingIndex, setProcessingIndex] = useState(-1);
+	// NEW: track last index for which onImport was emitted so we don't emit twice
+	const [lastEmittedIndex, setLastEmittedIndex] = useState(-1);
+
 	const inputRef = useRef(null);
 
 	// drag state for drop-zone
@@ -31,7 +36,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 		if (!file) return;
 		setFileName(file.name);
 		setStatus('Reading file...');
-		setIsImported(false);
+		// DO NOT clear isImported here — parsing is used during multi-file import as well
+		// setIsImported(false);
 
 		const isCSV = /\.csv$/i.test(file.name);
 		if (!isCSV) {
@@ -98,35 +104,32 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 	const handleAddFiles = (filesList) => {
 		if (!filesList || filesList.length === 0) return;
 		const filesArr = Array.from(filesList);
-		// append files and expand fileInfos placeholders, then read a small slice of each CSV
-		setUploadedFiles((prev) => {
-			// filter out any incoming files whose name already exists in prev,
-			// and dedupe filesArr itself by name (keep first occurrence)
-			const existingNames = new Set(prev.map((f) => f.name));
+
+		// If we've already imported and the user selects/upload new files,
+		// reset the uploadedFiles list and treat the incoming set as the next batch.
+		if (isImported) {
+			// dedupe incoming files by name (keep first occurrence)
 			const seen = new Set();
 			const uniques = [];
 			filesArr.forEach((f) => {
-				if (!existingNames.has(f.name) && !seen.has(f.name)) {
+				if (f && !seen.has(f.name)) {
 					uniques.push(f);
 					seen.add(f.name);
 				}
 			});
 
-			// nothing new to add
-			if (uniques.length === 0) return prev;
+			// reset state to the new batch
+			setUploadedFiles(uniques);
+			setFileInfos(uniques.map(() => null));
+			setParsedData(null);
+			setHeaders([]);
+			setActiveIndex(-1);
+			setIsImported(false);
 
-			const start = prev.length;
-			const combined = [...prev, ...uniques];
-
-			// expand fileInfos to keep indexes aligned
-			setFileInfos((prevInfos) => [...prevInfos, ...uniques.map(() => null)]);
-
-			// for each new unique file, try to read a small slice to detect headers and compute importInfo
+			// compute fileInfos for each new file by reading a small slice
 			uniques.forEach((f, i) => {
-				const globalIndex = start + i;
 				if (/\.csv$/i.test(f.name)) {
 					const r = new FileReader();
-					// read a chunk (first 64KB) to avoid loading huge files just to detect headers
 					r.onload = (ev) => {
 						try {
 							const text = ev.target.result;
@@ -142,8 +145,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 							}
 							const info = getImportType(extractedHeaders);
 							setFileInfos((prev) => {
-								const copy = [...prev];
-								copy[globalIndex] = info;
+								const copy = Array.isArray(prev) ? [...prev] : [];
+								copy[i] = info;
 								return copy;
 							});
 						} catch (err) {
@@ -155,14 +158,109 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 				}
 			});
 
-			// choose first CSV among the newly added unique files to parse and make active (back-compat)
-			const idxInNew = uniques.findIndex((f) => /\.csv$/i.test(f.name));
-			if (idxInNew !== -1) {
-				const globalIndex = start + idxInNew;
-				parseCSVFile(uniques[idxInNew], globalIndex);
+			// parse the first CSV among the new batch and make it active
+			const firstCsvIdx = uniques.findIndex((f) => /\.csv$/i.test(f.name));
+			if (firstCsvIdx !== -1) {
+				parseCSVFile(uniques[firstCsvIdx], firstCsvIdx);
 			}
+			return;
+		}
 
-			return combined;
+		// existing behavior: append or replace files and expand/adjust fileInfos placeholders, then read a small slice of each CSV
+		setUploadedFiles((prev) => {
+			const copy = [...prev];
+			// track whether we've parsed a new CSV among newly appended files (back-compat)
+			let parsedNewCsv = false;
+
+			filesArr.forEach((f) => {
+				// find existing file with same name
+				const existingIndex = copy.findIndex((p) => p.name === f.name);
+				if (existingIndex !== -1) {
+					// replace existing file
+					copy[existingIndex] = f;
+					// ensure fileInfos placeholder exists at that index
+					setFileInfos((prevInfos) => {
+						const infos = Array.isArray(prevInfos) ? [...prevInfos] : [];
+						infos[existingIndex] = null;
+						return infos;
+					});
+					// if CSV, read a small slice to recompute headers/importInfo and also fully parse to make active
+					if (/\.csv$/i.test(f.name)) {
+						const r = new FileReader();
+						r.onload = (ev) => {
+							try {
+								const text = ev.target.result;
+								const data = parseCSV(text);
+								let extractedHeaders = [];
+								if (Array.isArray(data) && data.length > 0) {
+									const firstRow = data[0];
+									if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+										extractedHeaders = Object.keys(firstRow);
+									} else if (Array.isArray(firstRow)) {
+										extractedHeaders = firstRow;
+									}
+								}
+								try {
+									const info = getImportType(extractedHeaders);
+									setFileInfos((prev2) => {
+										const copy2 = Array.isArray(prev2) ? [...prev2] : [];
+										copy2[existingIndex] = info;
+										return copy2;
+									});
+								} catch (err) { /* ignore */ }
+								// fully parse and make this replaced file active (preserve prior behavior for replacements)
+								parseCSVFile(f, existingIndex);
+							} catch (err) { /* ignore parse errors for the chunk */ }
+						};
+						r.onerror = () => { /* ignore */ };
+						r.readAsText(f.slice(0, 64 * 1024));
+					}
+				} else {
+					// new file: append
+					const newIndex = copy.length;
+					copy.push(f);
+					// expand fileInfos
+					setFileInfos((prevInfos) => [...(Array.isArray(prevInfos) ? prevInfos : []), null]);
+
+					// for each new unique file, try to read a small slice to detect headers and compute importInfo
+					if (/\.csv$/i.test(f.name)) {
+						const r = new FileReader();
+						r.onload = (ev) => {
+							try {
+								const text = ev.target.result;
+								const data = parseCSV(text);
+								let extractedHeaders = [];
+								if (Array.isArray(data) && data.length > 0) {
+									const firstRow = data[0];
+									if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+										extractedHeaders = Object.keys(firstRow);
+									} else if (Array.isArray(firstRow)) {
+										extractedHeaders = firstRow;
+									}
+								}
+								const info = getImportType(extractedHeaders);
+								setFileInfos((prev2) => {
+									const copy2 = Array.isArray(prev2) ? [...prev2] : [];
+									copy2[newIndex] = info;
+									return copy2;
+								});
+							} catch (err) {
+								// ignore parse errors for the chunk
+							}
+						};
+						r.onerror = () => { /* ignore */ };
+						r.readAsText(f.slice(0, 64 * 1024));
+
+						// pick the first CSV among the newly appended files to parse and make active (back-compat)
+						if (!parsedNewCsv) {
+							parsedNewCsv = true;
+							parseCSVFile(f, newIndex);
+						}
+					}
+				}
+			});
+
+			return copy;
 		});
 	};
 
@@ -473,17 +571,42 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
 	// triggered when user clicks the Import button
 	const handleImport = () => {
-		const activeFile = uploadedFiles[activeIndex];
-		if (!activeFile || !parsedData) {
+		// if no files uploaded
+		if (!uploadedFiles || uploadedFiles.length === 0) {
 			setStatus('No file/data to import.');
 			return;
 		}
 
-		// ensure we read workbook settings just before import as well
+		// find first CSV file from top to bottom
+		const firstCsvIdx = uploadedFiles.findIndex((f) => f && /\.csv$/i.test(f.name));
+		if (firstCsvIdx === -1) {
+			setStatus('No CSV files found to import.');
+			return;
+		}
+
+		// start multi-file processing
+		setProcessingIndex(firstCsvIdx);
+		setLastEmittedIndex(-1);
+		setIsImported(true);
+		setStatus(`Starting import 1 of ${uploadedFiles.length}...`);
+
+		// parse and activate the first CSV to kick off processing
+		parseCSVFile(uploadedFiles[firstCsvIdx], firstCsvIdx);
+	};
+
+	// Emit onImport for current file once parsed and validated, then allow DataProcessor to run.
+	useEffect(() => {
+		if (!isImported) return;
+		if (processingIndex === -1) return;
+		// only act when parsedData corresponds to the processingIndex
+		if (activeIndex !== processingIndex) return;
+		// ensure we call onImport exactly once per file
+		if (lastEmittedIndex === processingIndex) return;
+
+		// validate workbook settings & identifiers for this file (same logic as before)
 		try {
 			const wbSettings = getWorkbookSettings(headers);
 			setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
-			// log static columns at import time as well
 			if (typeof DataProcessor.logStaticColumns === 'function') {
 				DataProcessor.logStaticColumns(wbSettings.columns);
 			}
@@ -491,9 +614,8 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			console.log('ImportManager: workbook settings at import ->', wbSettings);
 			/* eslint-enable no-console */
 
-			// NEW: if settings define an identifier, ensure the import file contains that identifier column
+			// if settings define identifier columns, ensure this file contains at least one
 			const normalize = (v) => (v === null || v === undefined ? '' : String(v).replace(/\s/g, '').toLowerCase());
-			// collect identifier candidates in order and pick the first that exists in the CSV headers
 			const identifierCandidates = Array.isArray(wbSettings.columns)
 				? wbSettings.columns.filter((c) => c && (c.identifier || c.identifer))
 				: [];
@@ -506,7 +628,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 					const alias = cand.alias;
 					if (Array.isArray(alias)) alias.forEach((a) => { if (a) candKeys.add(normalize(a)); });
 					else if (alias) candKeys.add(normalize(alias));
-					// if any candidate key exists in the file headers, accept this candidate
 					if (headerKeys.some((hk) => candKeys.has(hk))) {
 						foundAny = true;
 						break;
@@ -520,28 +641,30 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 					console.warn(msg);
 					/* eslint-enable no-console */
 					setStatus(msg);
-					return; // abort import
+					// abort whole multi-import
+					setIsImported(false);
+					setProcessingIndex(-1);
+					return;
 				}
 			}
 		} catch (err) {
-			// ignore errors from settings read
+			// ignore settings read errors
 		}
 
-		// use memoized renamed values computed above
+		// ready to emit for this file
+		const currentFile = uploadedFiles[processingIndex];
 		const dataToEmit = filteredData;
-
 		if (typeof onImport === 'function') {
 			onImport({
-				file: uploadedFiles[activeIndex],
+				file: currentFile,
 				data: dataToEmit,
-				// pass detected import type and matched columns
 				type: importInfo.type || 'csv',
 				matched: matchedWithLink,
 				headers: enriched.headers || renamed.headers,
 			});
 		} else {
 			console.log('Imported CSV data', {
-				file: uploadedFiles[activeIndex],
+				file: currentFile,
 				data: dataToEmit,
 				type: importInfo.type,
 				matched: matchedWithLink,
@@ -549,22 +672,45 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			});
 		}
 
-		// show that processing has started; final "completed" status will be set by DataProcessor
-		setStatus('Processing import into workbook...');
-		setIsImported(true); // allow DataProcessor to receive/process data now
-
-		// NOTE: do NOT set status to 'Import completed.' here — wait for DataProcessor callback
-	};
+		// mark emitted so we don't re-emit
+		setLastEmittedIndex(processingIndex);
+		// signal processing has started for this file (DataProcessor will render)
+		setStatus(`Processing import ${processingIndex + 1} of ${uploadedFiles.length} into workbook...`);
+	}, [isImported, processingIndex, activeIndex, parsedData, headers, filteredData, importInfo, matchedWithLink, enriched, renamed, uploadedFiles, lastEmittedIndex, onImport]);
 
 	// handler invoked when DataProcessor finishes (success or failure)
 	const handleProcessorComplete = (result) => {
+		// show status for this file
 		if (result && result.success) {
-			setStatus('Import completed.');
+			setStatus(`Import ${processingIndex + 1} completed.`);
 		} else {
 			const errMsg = result && result.error ? `: ${result.error}` : (result && result.reason ? `: ${result.reason}` : '');
-			setStatus(`Import failed${errMsg}`);
+			setStatus(`Import ${processingIndex + 1} failed${errMsg}`);
 		}
-		/* keep DataProcessor visible if you want to inspect the sheet after import */
+
+		// advance to next CSV (top-to-bottom). find next index > processingIndex
+		const total = uploadedFiles ? uploadedFiles.length : 0;
+		let next = (processingIndex === -1) ? 0 : processingIndex + 1;
+		while (next < total && !(/\.csv$/i.test(uploadedFiles[next] && uploadedFiles[next].name))) {
+			next += 1;
+		}
+
+		if (next < total) {
+			// continue with next CSV
+			setProcessingIndex(next);
+			setLastEmittedIndex(-1);
+			// parse next file which will trigger the effect to emit and run DataProcessor
+			parseCSVFile(uploadedFiles[next], next);
+		} else {
+			// finished all files
+			setIsImported(false);
+			setProcessingIndex(-1);
+			setActiveIndex(-1);
+			/* eslint-disable no-console */
+			console.log('ImportManager: all files processed.');
+			/* eslint-enable no-console */
+			setStatus('All imports completed.');
+		}
 	};
 
 	// handler to receive incremental status updates from DataProcessor
@@ -745,7 +891,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 			)}
 
 			{/* DataProcessor receives data only after user clicked Import (active file) */}
-			{isImported && parsedData && activeIndex !== -1 && (
+			{isImported && parsedData && activeIndex !== -1 && activeIndex === processingIndex && (
 				<div style={styles.processorWrap}>
 					{/* pass memoized renamed data/headers into DataProcessor to avoid reruns */}
 					<DataProcessor
