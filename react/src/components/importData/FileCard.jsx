@@ -1,7 +1,7 @@
-/* * Timestamp: 2025-11-18 15:35:00 EST
- * Version: 2.0.0
+/* * Timestamp: 2025-11-18 15:55:00 EST
+ * Version: 2.1.0
  * Author: Gemini (for Victor)
- * Description: Refactored FileCard component using Tailwind CSS.
+ * Description: Refactored FileCard - Fixed layout to prevent text wrapping.
  */
 
 import React from 'react';
@@ -25,9 +25,8 @@ export default function FileCard({ file, rows, type, action, icon } = {}) {
                 transition-all duration-200 ease-in-out
             "
         >
-            {/* Icon Container */}
+            {/* Icon Container (Fixed Width) */}
             <div className="w-11 h-11 flex-none flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100">
-                {/* Icon Logic */}
                 {icon ? (
                     <img src={icon} alt="import type" className="w-8 h-8 object-contain" />
                 ) : /\.csv$/i.test(name) ? (
@@ -40,14 +39,16 @@ export default function FileCard({ file, rows, type, action, icon } = {}) {
             {/* Content Container */}
             <div className="flex-1 min-w-0 flex flex-col justify-center">
                 
-                {/* File Name */}
+                {/* File Name (Truncates if too long) */}
                 <div className="text-sm font-semibold text-slate-700 truncate pr-2">
                     {name}
                 </div>
 
-                {/* Metadata Row */}
-                <div className="flex items-center justify-between mt-0.5">
-                    <div className="text-xs text-slate-400 font-medium">
+                {/* Metadata Row (Flex-nowrap to prevent wrapping) */}
+                <div className="flex items-center justify-between mt-0.5 w-full">
+                    
+                    {/* Text Info: Size & Rows (Nowrap + Truncate allowed) */}
+                    <div className="text-xs text-slate-400 font-medium whitespace-nowrap truncate min-w-0">
                         {sizeKB !== null ? `${sizeKB} KB` : '—'}
                         {rows !== undefined && (
                             <>
@@ -57,16 +58,17 @@ export default function FileCard({ file, rows, type, action, icon } = {}) {
                         )}
                     </div>
 
-                    {/* Badges Area */}
+                    {/* Badges Area (Fixed width, does not shrink) */}
                     {(type || action) && (
-                        <div className="flex items-center gap-1.5 ml-2">
+                        <div className="flex items-center gap-1.5 ml-2 flex-none">
                             {type && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide whitespace-nowrap">
                                     {type}
                                 </span>
                             )}
+                            {/* Re-added Action Badge */}
                             {action && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100 uppercase tracking-wide">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold bg-orange-50 text-gray-600 border border-gray-200 uppercase tracking-wide whitespace-nowrap">
                                     {action}
                                 </span>
                             )}

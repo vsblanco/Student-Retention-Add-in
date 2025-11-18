@@ -44,7 +44,7 @@ export function getImportType(columns = []) {
 			parameter: [CourseId, CanvasId]
 		};
 	} else if (isAnthology) {
-		type = 'Student Population';
+		type = 'Student List';
 		matched = AnthologyImport;
 		action = 'Refresh';
 		icon = AnthologyFile;
