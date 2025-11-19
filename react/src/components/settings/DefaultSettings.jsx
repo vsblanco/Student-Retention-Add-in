@@ -13,11 +13,12 @@ export const defaultColumns =[
 	{ name: 'Other Phone', alias: ['Second Phone', 'Alt Phone']},
 	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true, identifier: true },
 	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
-	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, format: ['=HYPERLINK']},
+	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, identifier: true, format: ['=HYPERLINK']},
 	{ name: 'Grade', alias: ['Course Grade','current score']  },
 	{ name: 'LDA', alias: ['Last Date of Attendance','Date of Attendance'], format: ['MM/DD/YYYY']},
 	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
+	{ name: 'Missing Assignments', alias: ['Total Missing'] },
 ];
 
 export const Options = [

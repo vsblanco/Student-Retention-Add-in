@@ -2,6 +2,7 @@ import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
 import CanvasFile from '../../assets/icons/CanvasLogo.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveLogo.png';
 import AttendanceFile from '../../assets/icons/MyNUC-icon.png';
+import MissingAssignmentFile from '../../assets/icons/MissingAssignmentsLogo.png';
 
 const CanvasId = 'canvas id';
 const CourseId = 'course id';
@@ -44,6 +45,15 @@ export const IMPORT_DEFINITIONS = [
         action: 'Update',
         icon: DropoutDetectiveFile,
     },
+	{
+        id: 'missingassignments',
+        name: 'Missing Assignments Report',
+        type: 'Missing Assignments',
+        matchColumns: ['current grade', 'total missing','grade book'],
+        action: 'Hybrid',
+		refreshSheet: 'Missing Assignments',
+        icon: MissingAssignmentFile,
+    },
     {
         id: 'attendance',
         name: 'MyNUC Attendance',
@@ -59,6 +69,9 @@ export const CanvasImport = IMPORT_DEFINITIONS.find(d => d.id === 'canvas').matc
 export const AnthologyImport = IMPORT_DEFINITIONS.find(d => d.id === 'anthology').matchColumns;
 export const DropoutDetectiveImport = IMPORT_DEFINITIONS.find(d => d.id === 'dropout').matchColumns;
 export const AttendanceImport = IMPORT_DEFINITIONS.find(d => d.id === 'attendance').matchColumns;
+export const MissingAssignmentsImport = IMPORT_DEFINITIONS.find(d => d.id === 'missingassignments').matchColumns;
+
+// Function to determine import type based on provided columns
 
 export function getImportType(columns = []) {
 	const cols = (columns || []).map((c) => String(c || '').toLowerCase().trim());
