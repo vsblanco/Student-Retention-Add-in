@@ -32,7 +32,7 @@ export const IMPORT_DEFINITIONS = [
         id: 'anthology',
         name: 'Anthology Student List',
         type: 'Student List',
-        matchColumns: ['studentname', 'SyStudentId'],
+        matchColumns: ['studentname', 'studentnumber'],
         action: 'Refresh',
         icon: AnthologyFile,
     },
