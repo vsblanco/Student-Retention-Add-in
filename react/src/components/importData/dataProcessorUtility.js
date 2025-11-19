@@ -1,3 +1,6 @@
+// [2025-11-19] v1.2 - Optimized DataProcessor Utility (Fix ID Lookup)
+// Changes: computeIdentifierListFromValues now uses findColumnIndex to checking Name AND Aliases.
+
 // PERF: small in-memory cache for normalized keys to avoid repeated work
 const _normCache = new Map();
 
@@ -113,7 +116,6 @@ export function renameHeaderArray(headerArr = [], aliasMap = new Map()) {
 export function gatherIdentifierColumn(settingsCols = []) {
 	const cols = Array.isArray(settingsCols) ? settingsCols : [];
 	if (!cols || cols.length === 0) {
-		console.log('gatherIdentifierColumn: no settings columns provided');
 		return null;
 	}
 	// support boolean true, string "true", and common misspelling 'identifer'
@@ -123,7 +125,6 @@ export function gatherIdentifierColumn(settingsCols = []) {
 		const idMiss = c.identifer; // tolerate misspelling seen elsewhere
 		return id === true || id === 'true' || idMiss === true || idMiss === 'true';
 	}) || null;
-	console.log('gatherIdentifierColumn found:', found);
 	return found;
 }
 
@@ -161,13 +162,11 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 		? sheetHeaders.map((v) => (v == null ? '' : String(v).trim()))
 		: (Array.isArray(values[0]) ? values[0].map((v) => (v == null ? '' : String(v).trim())) : []);
 
-	const headerIndexMap = getHeaderIndexMap(headerRow);
-
-	const identifierIndex = headerIndexMap.has(normalizeKey(identifierSetting.name))
-		? headerIndexMap.get(normalizeKey(identifierSetting.name))
-		: -1;
+	// Use findColumnIndex to locate the ID (checks aliases)
+	const identifierIndex = findColumnIndex(headerRow, identifierSetting);
 	if (identifierIndex === -1) return null;
 
+	const headerIndexMap = getHeaderIndexMap(headerRow);
 	const staticIndices = staticCols.map((colName) => (headerIndexMap.has(normalizeKey(colName)) ? headerIndexMap.get(normalizeKey(colName)) : -1));
 
 	const saved = new Map();
@@ -212,13 +211,6 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 		}
 	}
 
-	// LOG: report computeSavedStaticFromValues summary
-	if (saved.size > 0) {
-		console.log(`computeSavedStaticFromValues: captured ${saved.size} static row entries for cols: ${staticCols.join(', ')}`);
-	} else {
-		console.log('computeSavedStaticFromValues: no static values captured');
-	}
-
 	return {
 		identifierIndex,
 		staticCols,
@@ -236,11 +228,9 @@ export function computeIdentifierListFromValues(values = [], sheetHeaders = [], 
 		? sheetHeaders.map((v) => (v == null ? '' : String(v).trim()))
 		: (Array.isArray(values[0]) ? values[0].map((v) => (v == null ? '' : String(v).trim())) : []);
 
-	const headerIndexMap = getHeaderIndexMap(headerRow);
+	// Use findColumnIndex so it checks aliases too, not just canonical Name
+	const identifierIndex = findColumnIndex(headerRow, identifierSetting);
 
-	const identifierIndex = headerIndexMap.has(normalizeKey(identifierSetting.name))
-		? headerIndexMap.get(normalizeKey(identifierSetting.name))
-		: -1;
 	if (identifierIndex === -1) return { identifierIndex: -1, identifiers: new Set() };
 
 	const ids = new Set();
