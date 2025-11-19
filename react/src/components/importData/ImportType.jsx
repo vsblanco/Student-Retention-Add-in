@@ -5,63 +5,89 @@ import AttendanceFile from '../../assets/icons/MyNUC-icon.png';
 
 const CanvasId = 'canvas id';
 const CourseId = 'course id';
-export const CanvasImport = ['student sis', 'course', CourseId, 'current score']// note: not sure if to use canonical from settings or not.
-// Add: mapping of detected Canvas column -> desired renamed column
+
 export const CanvasRename = {
 	'student id': CanvasId,
 };
 
-export const AnthologyImport = ['studentname', 'studentnumber']; // for ssome reason it has to be lowercase and no spaces
-export const DropoutDetectiveImport = ['email', 'risk trend', 'course grade','course missing assignments','course zero assignments'];
-export const AttendanceImport = ['issued id', 'date of attendance'];
-// new: helper that returns an object with the detected type, the array it used to match (case-insensitive),
-// and an "action" indicating whether to use Update or Refresh
+// Centralized Definition for UI and Logic
+export const IMPORT_DEFINITIONS = [
+    {
+        id: 'canvas',
+        name: 'Canvas Gradebook',
+        type: 'Gradebook Link',
+        matchColumns: ['student sis', 'course', CourseId, 'current score'],
+        action: 'Update',
+        icon: CanvasFile,
+        rename: CanvasRename,
+        excludeFilter: { column: 'course', value: 'CAPV' },
+        hyperLink: {
+            column: 'Grade Book',
+            friendlyName: 'Grade Book',
+            linkLocation: 'https://nuc.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
+            parameter: [CourseId, CanvasId]
+        }
+    },
+    {
+        id: 'anthology',
+        name: 'Anthology Student List',
+        type: 'Student List',
+        matchColumns: ['studentname', 'SyStudentId'],
+        action: 'Refresh',
+        icon: AnthologyFile,
+    },
+    {
+        id: 'dropout',
+        name: 'Dropout Detective',
+        type: 'Grade',
+        matchColumns: ['email', 'risk trend', 'course grade', 'course missing assignments', 'course zero assignments'],
+        action: 'Update',
+        icon: DropoutDetectiveFile,
+    },
+    {
+        id: 'attendance',
+        name: 'MyNUC Attendance',
+        type: 'LDA',
+        matchColumns: ['issued id', 'date of attendance'],
+        action: 'Update',
+        icon: AttendanceFile,
+    }
+];
+
+// Legacy exports for compatibility with other components if they use them
+export const CanvasImport = IMPORT_DEFINITIONS.find(d => d.id === 'canvas').matchColumns;
+export const AnthologyImport = IMPORT_DEFINITIONS.find(d => d.id === 'anthology').matchColumns;
+export const DropoutDetectiveImport = IMPORT_DEFINITIONS.find(d => d.id === 'dropout').matchColumns;
+export const AttendanceImport = IMPORT_DEFINITIONS.find(d => d.id === 'attendance').matchColumns;
+
 export function getImportType(columns = []) {
-	// normalize input to lowercase trimmed strings
 	const cols = (columns || []).map((c) => String(c || '').toLowerCase().trim());
+    
+    // Iterate through definitions to find a match
+    for (const def of IMPORT_DEFINITIONS) {
+        // Check if every required column exists in the input columns
+        const isMatch = def.matchColumns.every(req => cols.includes(req));
+        if (isMatch) {
+            return {
+                type: def.type,
+                matched: def.matchColumns,
+                action: def.action,
+                icon: def.icon,
+                hyperLink: def.hyperLink || null,
+                rename: def.rename || null,
+                excludeFilter: def.excludeFilter || null
+            };
+        }
+    }
 
-	const isCanvas = CanvasImport.every((col) => cols.includes(col));
-	const isAnthology = AnthologyImport.every((col) => cols.includes(col));
-	const isDropoutDetective = DropoutDetectiveImport.every((col) => cols.includes(col));
-	const isAttendance = AttendanceImport.every((col) => cols.includes(col));
-
-	let type = 'Standard';
-	let matched = [];
-	let action = 'Refresh';
-	let icon = null; // -> new: icon to return
-	let hyperLink = null; // -> new: hyperlink info when applicable
-	let rename = null; // -> new: rename mapping when applicable
-	let excludeFilter = null; // -> new: optional exclusion filter { column, value }
-
-	if (isCanvas) {
-		type = 'Gradebook Link';
-		matched = CanvasImport;
-		action = 'Update';
-		icon = CanvasFile;
-		rename = CanvasRename; // return the mapping to rename detected columns
-		excludeFilter = { column: 'course', value: 'CAPV' }; // exclude CAPV course rows
-		hyperLink = {column: 'Grade Book', // Create hyperlink to grade book
-			friendlyName: 'Grade Book', 
-			linkLocation: 'https://nuc.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
-			parameter: [CourseId, CanvasId]
-		};
-	} else if (isAnthology) {
-		type = 'Student List';
-		matched = AnthologyImport;
-		action = 'Refresh';
-		icon = AnthologyFile;
-	} else if (isDropoutDetective) {
-		type = 'Grade';
-		matched = DropoutDetectiveImport;
-		action = 'Update';
-		icon = DropoutDetectiveFile;
-	} else if (isAttendance) {
-		type = 'LDA';
-		matched = AttendanceImport;
-		action = 'Update';
-		icon = AttendanceFile;
-	}
-
-	return { type, matched, action, icon, hyperLink, rename, excludeFilter };
+    // Default fallback
+	return { 
+        type: 'Standard', 
+        matched: [], 
+        action: 'Refresh', 
+        icon: null, 
+        hyperLink: null, 
+        rename: null, 
+        excludeFilter: null 
+    };
 }
-

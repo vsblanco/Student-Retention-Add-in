@@ -1,20 +1,19 @@
-/* * Timestamp: 2025-11-19 13:40:00 EST
- * Version: 5.1.0
+/* * Timestamp: 2025-11-19 14:30:00 EST
+ * Version: 5.4.0
  * Author: Gemini (for Victor)
  * Description: Optimized ImportManager.
  * Improvements:
- * - Replaced O(N*M) row scanning with O(1) key lookups using normalized header maps.
- * - Extracted heavy logic outside component for cleaner readability and stability.
- * - Unified CSV preview logic to reduce code duplication.
+ * - Added rounded corners to Import Type icons.
+ * - Implemented CSS Grid transition for the collapsible section to keep images pre-loaded in DOM (prevents pop-in/flicker).
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
 import styles from './importManagerStyles'; 
-import { getImportType } from './ImportType';
+import { getImportType, IMPORT_DEFINITIONS } from './ImportType';
 import { getWorkbookSettings } from '../utility/getSettings';
-import { CloudUpload, FileText, Table, ArrowRight, Plus } from 'lucide-react';
+import { CloudUpload, FileText, Table, ArrowRight, Plus, Info, ChevronDown, ChevronUp } from 'lucide-react';
 import FileCard from './FileCard';
 import ImportIcon from '../../assets/icons/import-icon.png';
 
@@ -50,9 +49,6 @@ const applyRenames = (dataInput, headersInput, renameMap) => {
         const first = dataInput[0];
         // Only rename object rows; array rows rely on index/headers which are already handled
         if (first && typeof first === 'object' && !Array.isArray(first)) {
-            // Optimization: Create a fast lookup for row keys
-            // Since object keys might differ in casing row-to-row in bad CSVs, we unfortunately 
-            // still need to map keys, but we can do it efficiently.
             newData = dataInput.map((row) => {
                 const out = {};
                 Object.keys(row).forEach((k) => {
@@ -95,12 +91,9 @@ const applyHyperlink = (renamedObj, hyper) => {
     const isObjectRows = first && typeof first === 'object' && !Array.isArray(first);
 
     // Optimization: Pre-calculate parameter lookups
-    // For objects: map lowercase param name -> actual key logic handled per row or via map
-    // For arrays: map param name -> index
     let paramIndices = []; 
     
     if (!isObjectRows) {
-        // Pre-calc indices for array rows
         paramIndices = paramsDef.map(p => {
             const needle = String(p).toLowerCase().trim();
             return headersIn.findIndex(h => String(h).toLowerCase().trim() === needle);
@@ -120,18 +113,13 @@ const applyHyperlink = (renamedObj, hyper) => {
 
         // Extract values
         if (isObjectRows) {
-            // Fast lookup using a temporary key map for this row is overkill if consistent, 
-            // but assuming row keys are consistent, we scan once.
-            // To be safe and fast:
             paramValues = paramsDef.map(p => {
                 const needle = String(p).toLowerCase().trim();
-                // Fast search: check exact first, then scan keys
                 if (row[p] !== undefined) return row[p];
                 const foundKey = Object.keys(row).find(k => String(k).toLowerCase().trim() === needle);
                 return foundKey ? row[foundKey] : '';
             });
         } else {
-            // Array rows: direct index access (O(1))
             paramValues = paramIndices.map(idx => (idx !== -1 && row[idx] !== undefined ? row[idx] : ''));
         }
 
@@ -141,7 +129,6 @@ const applyHyperlink = (renamedObj, hyper) => {
             let usedTemplate = false;
             paramsDef.forEach((p, i) => {
                 const val = paramValues[i] == null ? '' : String(paramValues[i]);
-                // Replace exact token matches
                 const regex = new RegExp(escapeRegExp(String(p)), 'g');
                 if (regex.test(url)) {
                     url = url.replace(regex, encodeURIComponent(val));
@@ -149,7 +136,6 @@ const applyHyperlink = (renamedObj, hyper) => {
                 }
             });
             
-            // Fallback logic if template didn't consume params via tokens
             if (!usedTemplate || url === template) {
                  const suffix = paramValues.map(v => encodeURIComponent(String(v || ''))).join('/');
                  url = template.endsWith('/') ? (template + suffix) : (template + (template.includes('?') ? '&' : '/') + suffix);
@@ -164,7 +150,6 @@ const applyHyperlink = (renamedObj, hyper) => {
         if (isObjectRows) {
             newRow[colName] = formula;
         } else {
-            // Ensure row length
             while (newRow.length < headerIdx) newRow.push('');
             newRow[headerIdx] = formula;
         }
@@ -192,27 +177,22 @@ const applyExclusion = (dataInput, headersInput, filter) => {
 
     if (isObjectRows) {
         result = dataInput.filter(row => {
-            // Find key efficiently
             let val = undefined;
-            // Check exact match first (Fast Path)
             if (row[filter.column] !== undefined) val = row[filter.column];
             else {
-                // Scan keys (Slow Path - only if keys are messy)
                 const foundKey = Object.keys(row).find(k => String(k).toLowerCase().trim() === colName);
                 if (foundKey) val = row[foundKey];
             }
             
-            if (val == null) return true; // keep if missing
+            if (val == null) return true;
             return String(val).toLowerCase().indexOf(excludeText) === -1;
         });
     } else {
-        // Array rows
         let idx = -1;
         if (Array.isArray(headersInput)) {
             idx = headersInput.findIndex(h => String(h).toLowerCase().trim() === colName);
         }
         if (idx === -1 && Array.isArray(dataInput[0])) {
-            // Fallback to checking first row of data as header
             idx = dataInput[0].findIndex(h => String(h).toLowerCase().trim() === colName);
         }
 
@@ -224,11 +204,6 @@ const applyExclusion = (dataInput, headersInput, filter) => {
             });
         }
     }
-
-    const excludedCount = dataInput.length - result.length;
-    if (excludedCount > 0) {
-         // console.log(`ImportManager: excluded ${excludedCount} row(s)`);
-    }
     return result;
 };
 
@@ -238,7 +213,6 @@ const readCsvInfo = (file, callback) => {
     reader.onload = (e) => {
         try {
             const text = e.target.result;
-            // Parse just enough to get headers (first few lines)
             const data = parseCSV(text); 
             let extractedHeaders = [];
             if (Array.isArray(data) && data.length > 0) {
@@ -255,7 +229,7 @@ const readCsvInfo = (file, callback) => {
         }
     };
     reader.onerror = () => callback(null);
-    reader.readAsText(file.slice(0, 64 * 1024)); // Read first 64KB only
+    reader.readAsText(file.slice(0, 64 * 1024)); 
 };
 
 
@@ -275,6 +249,9 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
     const [processingIndex, setProcessingIndex] = useState(-1);
     const [lastEmittedIndex, setLastEmittedIndex] = useState(-1);
     const [importCompleted, setImportCompleted] = useState(false);
+    
+    // UI State
+    const [showInfo, setShowInfo] = useState(false);
 
     const inputRef = useRef(null);
     const [dragActive, setDragActive] = useState(false);
@@ -321,7 +298,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 setParsedData(data);
                 setActiveIndex(index);
 
-                // Update info for this file specifically now that we have full headers
                 try {
                     const info = getImportType(extractedHeaders);
                     setFileInfos((prev) => {
@@ -362,7 +338,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             setIsImported(false);
             setImportCompleted(false);
 
-            // Async read info for all new files
             uniques.forEach((f, i) => {
                 if (/\.csv$/i.test(f.name)) {
                     readCsvInfo(f, (info) => {
@@ -375,7 +350,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 }
             });
 
-            // Automatically select first CSV
             const firstCsvIdx = uniques.findIndex((f) => /\.csv$/i.test(f.name));
             if (firstCsvIdx !== -1) {
                 parseCSVFile(uniques[firstCsvIdx], firstCsvIdx);
@@ -392,9 +366,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 const existingIndex = copy.findIndex((p) => p.name === f.name);
                 
                 if (existingIndex !== -1) {
-                    // Replace
                     copy[existingIndex] = f;
-                    // Reset info placeholder
                     setFileInfos(prevInfos => {
                         const infos = [...prevInfos];
                         infos[existingIndex] = null;
@@ -409,14 +381,11 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                                 return copy2;
                             });
                         });
-                        // Also fully parse this replacement to make it active
                         parseCSVFile(f, existingIndex);
                     }
                 } else {
-                    // Append
                     const newIndex = copy.length;
                     copy.push(f);
-                    // Expand info array
                     setFileInfos(prevInfos => [...prevInfos, null]);
 
                     if (/\.csv$/i.test(f.name)) {
@@ -428,7 +397,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                             });
                         });
 
-                        // Parse first NEW csv found
                         if (!parsedNewCsv) {
                             parsedNewCsv = true;
                             parseCSVFile(f, newIndex);
@@ -445,7 +413,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
     const columns = headers;
 
-    // Stable import info
     const importInfo = useMemo(() => getImportType(columns), [Array.isArray(columns) ? columns.join('|') : String(columns)]);
 
     const effectiveExcludeFilter = useMemo(() => {
@@ -458,38 +425,28 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         return importInfo && importInfo.hyperLink;
     }, [hyperLink, importInfo]);
 
-    // 1. Rename
     const renamed = useMemo(() => {
         return applyRenames(parsedData, headers, importInfo && importInfo.rename);
     }, [parsedData, headers, importInfo]);
 
-    // 2. Hyperlink
     const enriched = useMemo(() => {
         return applyHyperlink(renamed, effectiveHyperLink);
     }, [renamed, effectiveHyperLink]);
 
-    // 3. Filter
     const filteredData = useMemo(() => {
         return applyExclusion(enriched.data, enriched.headers, effectiveExcludeFilter);
     }, [enriched, effectiveExcludeFilter]);
 
-    // 4. Matched Columns (for UI/DataProcessor)
     const matchedWithLink = useMemo(() => {
-        // Merge matched + renames + hyperlink col
         const base = Array.isArray(importInfo && importInfo.matched) ? [...importInfo.matched] : [];
-        
-        // Add Rename targets
         const rename = importInfo && importInfo.rename;
         if (rename) {
             Object.values(rename).forEach(target => {
                 if (target && !base.includes(target)) base.push(target);
             });
         }
-
-        // Add Hyperlink col
         const hyperCol = effectiveHyperLink && effectiveHyperLink.column;
         if (hyperCol && !base.includes(String(hyperCol))) base.push(String(hyperCol));
-
         return base;
     }, [importInfo, effectiveHyperLink]);
 
@@ -513,7 +470,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         setImportCompleted(false);
         setStatus(`Starting import 1 of ${uploadedFiles.length}...`);
 
-        // Activate the file to ensure state (headers/data) is ready
         parseCSVFile(uploadedFiles[firstCsvIdx], firstCsvIdx);
     };
 
@@ -525,7 +481,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             setStatus(`Import ${processingIndex + 1} failed: ${msg}`);
         }
 
-        // Find next CSV
         const total = uploadedFiles.length;
         let next = processingIndex + 1;
         while (next < total && !(/\.csv$/i.test(uploadedFiles[next]?.name))) {
@@ -546,15 +501,11 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         }
     }, [uploadedFiles, processingIndex, parseCSVFile]);
 
-    // Orchestrator Effect: Emits 'onImport' when ready
     useEffect(() => {
         if (!isImported || processingIndex === -1) return;
-        // Wait for active index to match processing index (ensures parse is done)
         if (activeIndex !== processingIndex) return;
-        // Dedup emission
         if (lastEmittedIndex === processingIndex) return;
 
-        // Validate Settings & Identifiers (Quick Check)
         const wbSettings = getWorkbookSettings(headers);
         try {
             if (wbSettings) {
@@ -582,7 +533,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             }
         } catch (e) { /* ignore */ }
 
-        // Emit Data
         const payload = {
             file: uploadedFiles[processingIndex],
             data: filteredData,
@@ -617,7 +567,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-white overflow-hidden p-6 transition-all duration-300">
             
             {/* Header */}
-            <div className="flex justify-between items-end mb-6">
+            <div className="mb-6">
                 <div>
                     <h2 className="text-2xl text-slate-800 font-bold tracking-tight">Import Data</h2>
                     <p className="text-slate-400 text-sm mt-1">
@@ -625,8 +575,10 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     </p>
                 </div>
                 {status && (
-                    <div className="text-xs font-medium px-3 py-1 bg-slate-100 text-slate-500 rounded-full animate-pulse max-w-[200px] truncate">
-                        {status}
+                    <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="inline-block text-xs font-medium px-3 py-1 bg-slate-100 text-slate-500 rounded-full animate-pulse">
+                            {status}
+                        </div>
                     </div>
                 )}
             </div>
@@ -654,7 +606,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                             <div className={`transition-colors duration-300 ${dragActive ? 'text-indigo-500' : 'text-slate-300'}`}>
                                 <CloudUpload size={64} strokeWidth={1.5} />
                             </div>
-                            {/* Decorative Icons */}
                             <div className="absolute -top-4 -left-12 bg-white p-2.5 rounded-xl shadow-lg border border-slate-50 transform -rotate-12 transition-transform duration-500 group-hover:-translate-x-2 group-hover:-rotate-12">
                                 <FileText size={24} className="text-emerald-500" />
                             </div>
@@ -691,6 +642,55 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     </div>
                 )}
                 <input ref={inputRef} type="file" accept=".csv" multiple className="hidden" onChange={(e) => e.target.files?.length && handleAddFiles(e.target.files)} />
+            </div>
+
+            {/* Collapsible Import Types Info */}
+            <div className="mt-8 border-t border-slate-100 pt-4">
+                <button 
+                    onClick={() => setShowInfo(!showInfo)}
+                    className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors w-full justify-between group outline-none"
+                >
+                    <span className="flex items-center gap-2">
+                        <Info size={16} className="group-hover:text-indigo-500 transition-colors" />
+                        Supported Import Types
+                    </span>
+                    {showInfo ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                
+                {/* CSS Grid Transition Wrapper */}
+                <div className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-in-out ${showInfo ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0 mt-0'}`}>
+                    <div className="overflow-hidden">
+                        <div className="grid gap-3">
+                            {IMPORT_DEFINITIONS.map((def) => (
+                                <div key={def.id} className="flex items-start gap-3 p-3 bg-slate-50/80 rounded-xl border border-slate-100 hover:border-indigo-100 transition-colors">
+                                    {def.icon ? (
+                                        <img src={def.icon} alt="" className="w-8 h-8 object-contain opacity-90 mt-1 rounded-lg" />
+                                    ) : (
+                                        <div className="w-8 h-8 bg-white rounded-lg border border-slate-100 flex items-center justify-center mt-1 shadow-sm">
+                                            <FileText size={16} className="text-slate-400" />
+                                        </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-sm font-semibold text-slate-700 truncate">{def.name}</h4>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${def.action === 'Update' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>
+                                                {def.action} Mode
+                                             </span>
+                                             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500">
+                                                {def.type}
+                                             </span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                                            <span className="font-medium text-slate-600">Required Columns:</span> <span className="font-mono text-indigo-500/90">{def.matchColumns.join(', ')}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Action Button */}
