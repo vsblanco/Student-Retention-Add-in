@@ -1,8 +1,7 @@
-// [2025-11-19] v1.9 - Final Production Version
+// [2025-11-19] v2.1 - Exclude Identifier from Update
 // Changes:
-// - Removed all "Step X" debugging console logs.
-// - Retained the critical fix from v1.8 (decoupled Sheet/Data normalization).
-// - Code is now clean and optimized for production use.
+// - In Update(), filtered out the identifier column from the list of columns to update.
+// - This prevents overwriting the ID cell with the same value, which is redundant.
 
 import React, { useEffect } from 'react';
 import {
@@ -22,7 +21,7 @@ import {
 	getHeaderIndexMap,
 } from './dataProcessorUtility';
 
-export default function DataProcessor({ data, sheetName, settingsColumns, matched, onComplete, onStatus, action }) {
+export default function DataProcessor({ data, sheetName, refreshSheetName, settingsColumns, matched, onComplete, onStatus, action }) {
 	const notifyComplete = (payload) => {
 		if (typeof onComplete === 'function') {
 			try { onComplete(payload); } catch (e) { /* swallow callback errors */ }
@@ -52,23 +51,27 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 		}
 	}
 
-	// Refresh: write `data` to the worksheet named `sheetName`
-	async function Refresh(dataToWrite) {
-		notifyStatus('Starting DataProcessor refresh...');
+	// Refresh: write `data` to the target worksheet.
+	// Added suppressCompletion so it can be reused by Hybrid without ending the process early.
+	async function Refresh(dataToWrite, targetSheetName = sheetName, suppressCompletion = false) {
+		notifyStatus(`Starting refresh on ${targetSheetName}...`);
 		if (!dataToWrite || !dataToWrite.length) {
 			notifyStatus('No data to write.');
-			notifyComplete({ success: false, reason: 'no-data' });
-			return;
+			const result = { success: false, reason: 'no-data' };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
-		if (!sheetName) {
+		if (!targetSheetName) {
 			notifyStatus('Missing sheet name.');
-			notifyComplete({ success: false, reason: 'missing-sheetName' });
-			return;
+			const result = { success: false, reason: 'missing-sheetName' };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
 		if (!window.Excel || !window.Excel.run) {
 			notifyStatus('Excel JS API not available.');
-			notifyComplete({ success: false, reason: 'no-excel-api' });
-			return;
+			const result = { success: false, reason: 'no-excel-api' };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
 
 		let rowCount = 0;
@@ -82,7 +85,7 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 
 			await Excel.run(async (context) => {
 				const sheets = context.workbook.worksheets;
-				const sheet = sheets.getItemOrNullObject(sheetName);
+				const sheet = sheets.getItemOrNullObject(targetSheetName);
 				await context.sync();
 				if (!sheet.isNullObject) {
 					sheetExisted = true;
@@ -218,8 +221,9 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 			rowCount = rows.length;
 			let colCount = rows[0] ? rows[0].length : 0;
 			if (rowCount === 0) {
-				notifyComplete({ success: false, reason: 'nothing-to-write' });
-				return;
+				const result = { success: false, reason: 'nothing-to-write' };
+				if (!suppressCompletion) notifyComplete(result);
+				return result;
 			}
 
 			// PRE-CALCULATE HIGHLIGHTING RANGES (In-Memory)
@@ -288,10 +292,10 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 
 			await Excel.run(async (context) => {
 				const sheets = context.workbook.worksheets;
-				let sheet = sheets.getItemOrNullObject(sheetName);
+				let sheet = sheets.getItemOrNullObject(targetSheetName);
 				await context.sync();
 				if (sheet.isNullObject) {
-					sheet = sheets.add(sheetName);
+					sheet = sheets.add(targetSheetName);
 				}
 
 				const used = sheet.getUsedRangeOrNullObject();
@@ -324,7 +328,7 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 
 				// Restore Static Columns
 				if (savedStatic && savedStatic.savedMap && savedStatic.savedMap.size > 0) {
-					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, sheetName);
+					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, targetSheetName);
 				}
 
 				// Apply Highlighting
@@ -338,28 +342,34 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 				await context.sync();
 			});
 
-			notifyStatus(`Refresh completed (${rowCount} rows).`);
-			notifyComplete({ success: true, rowsWritten: rowCount });
+			notifyStatus(`Refresh completed (${rowCount} rows) on ${targetSheetName}.`);
+			const result = { success: true, rowsWritten: rowCount };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 
 		} catch (err) {
 			console.error('Refresh error', err);
 			notifyStatus(`Refresh error: ${String(err)}`);
-			notifyComplete({ success: false, error: String(err) });
+			const result = { success: false, error: String(err) };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
 	}
 
 	// Update: update matched columns in existing rows
-	async function Update(dataToWrite) {
+	async function Update(dataToWrite, suppressCompletion = false) {
 		notifyStatus('Starting DataProcessor update...');
 		
 		if (!dataToWrite || !dataToWrite.length) {
-			notifyComplete({ success: false, reason: 'no-data' });
-			return;
+			const result = { success: false, reason: 'no-data' };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
 		
 		if (!sheetName || !window.Excel || !window.Excel.run) {
-			notifyComplete({ success: false, reason: 'missing-requirements' });
-			return;
+			const result = { success: false, reason: 'missing-requirements' };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
 
 		try {
@@ -391,8 +401,9 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 
 			if (!usedValues || usedValues.length === 0) {
 				notifyStatus('Sheet empty, nothing to update.');
-				notifyComplete({ success: false, reason: 'empty-sheet' });
-				return;
+				const result = { success: false, reason: 'empty-sheet' };
+				if (!suppressCompletion) notifyComplete(result);
+				return result;
 			}
 
 			// Derive Headers and Normalize Data
@@ -457,8 +468,9 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 
 			if (identifierIndex === -1) {
 				notifyStatus('Could not match identifier between file and sheet.');
-				notifyComplete({ success: false, reason: 'no-identifier-match' });
-				return;
+				const result = { success: false, reason: 'no-identifier-match' };
+				if (!suppressCompletion) notifyComplete(result);
+				return result;
 			}
 
 			// 4. Map Update Columns
@@ -488,6 +500,11 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 				const resolvedDataKey = normalizedDataKeyMap.get(normCanonical);
 
 				if (sheetIdx !== undefined && resolvedDataKey !== undefined) {
+					// --- NEW CHANGE v2.1: Skip Identifier Column ---
+					if (sheetIdx === identifierIndex) {
+						return;
+					}
+					
 					updateCols.push({ 
 						index: sheetIdx, 
 						dataLookup: resolvedDataKey,
@@ -497,8 +514,9 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 			});
 
 			if (updateCols.length === 0) {
-				notifyComplete({ success: false, reason: 'no-update-columns' });
-				return;
+				const result = { success: false, reason: 'no-update-columns' };
+				if (!suppressCompletion) notifyComplete(result);
+				return result;
 			}
 
 			// 5. BUILD UPDATES (IN MEMORY)
@@ -564,8 +582,9 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 			// 6. WRITE BACK
 			if (updatedCount === 0) {
 				notifyStatus(`Update finished but 0 rows matched. Checked ${dataToWrite.length} rows, skipped ${skippedCount}.`);
-				notifyComplete({ success: true, rowsUpdated: 0, rowsSkipped: skippedCount, warning: 'No rows matched' });
-				return;
+				const result = { success: true, rowsUpdated: 0, rowsSkipped: skippedCount, warning: 'No rows matched' };
+				if (!suppressCompletion) notifyComplete(result);
+				return result;
 			}
 
 			notifyStatus(`Applying ${updatedCount} row updates across ${updateCols.length} columns...`);
@@ -585,24 +604,69 @@ export default function DataProcessor({ data, sheetName, settingsColumns, matche
 			});
 
 			notifyStatus(`Update complete.`);
-			notifyComplete({ success: true, rowsUpdated: updatedCount, rowsSkipped: skippedCount });
+			const result = { success: true, rowsUpdated: updatedCount, rowsSkipped: skippedCount };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 
 		} catch (err) {
 			console.error('Update error', err);
 			notifyStatus(`Update error: ${String(err)}`);
-			notifyComplete({ success: false, error: String(err) });
+			const result = { success: false, error: String(err) };
+			if (!suppressCompletion) notifyComplete(result);
+			return result;
 		}
+	}
+
+	// Hybrid: Refresh separate sheet -> Update current sheet
+	async function Hybrid(dataToWrite) {
+		if (!refreshSheetName) {
+			notifyStatus('Hybrid action failed: No refresh sheet specified.');
+			notifyComplete({ success: false, reason: 'missing-refresh-sheet' });
+			return;
+		}
+
+		notifyStatus(`Hybrid Step 1: Refreshing "${refreshSheetName}"...`);
+		const refreshResult = await Refresh(dataToWrite, refreshSheetName, true); // Suppress completion
+
+		if (!refreshResult || !refreshResult.success) {
+			notifyStatus(`Hybrid failed during Refresh phase: ${refreshResult?.error || refreshResult?.reason}`);
+			notifyComplete(refreshResult);
+			return;
+		}
+
+		notifyStatus(`Hybrid Step 2: Updating "${sheetName}"...`);
+		const updateResult = await Update(dataToWrite, true); // Suppress completion
+
+		// Merge results for final notification
+		const finalResult = {
+			success: updateResult.success,
+			refreshResult: refreshResult,
+			updateResult: updateResult,
+			rowsWritten: refreshResult.rowsWritten,
+			rowsUpdated: updateResult.rowsUpdated,
+			rowsSkipped: updateResult.rowsSkipped
+		};
+
+		if (updateResult.success) {
+			notifyStatus('Hybrid action completed successfully.');
+		} else {
+			notifyStatus(`Hybrid failed during Update phase: ${updateResult.error || updateResult.reason}`);
+		}
+		
+		notifyComplete(finalResult);
 	}
 
 	useEffect(() => {
 		if (action === 'Refresh') {
-			Refresh(data);
+			Refresh(data, sheetName, false); // Normal refresh, target = sheetName
 		} else if (action === 'Update') {
-			Update(data);
+			Update(data, false); // Normal update
+		} else if (action === 'Hybrid') {
+			Hybrid(data);
 		} else {
 			if (action && action !== 'None') notifyStatus(`Unknown action: ${action}`);
 		}
-	}, [data, sheetName, action]);
+	}, [data, sheetName, refreshSheetName, action]);
 
 	return null;
 }

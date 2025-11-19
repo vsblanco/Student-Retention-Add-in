@@ -1,3 +1,7 @@
+// [2025-11-19] v5.6.1 - Added refreshSheet to getImportType return object
+// Changes: 
+// - Included refreshSheet in the returned object so Hybrid actions know where to refresh.
+
 import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
 import CanvasFile from '../../assets/icons/CanvasLogo.png';
 import DropoutDetectiveFile from '../../assets/icons/DropoutDetectiveLogo.png';
@@ -51,7 +55,7 @@ export const IMPORT_DEFINITIONS = [
         type: 'Missing Assignments',
         matchColumns: ['current grade', 'total missing','grade book'],
         action: 'Hybrid',
-		refreshSheet: 'Missing Assignments',
+		refreshSheet: 'MA Test',
         icon: MissingAssignmentFile,
     },
     {
@@ -88,7 +92,8 @@ export function getImportType(columns = []) {
                 icon: def.icon,
                 hyperLink: def.hyperLink || null,
                 rename: def.rename || null,
-                excludeFilter: def.excludeFilter || null
+                excludeFilter: def.excludeFilter || null,
+                refreshSheet: def.refreshSheet || null // Added this line
             };
         }
     }
@@ -101,6 +106,7 @@ export function getImportType(columns = []) {
         icon: null, 
         hyperLink: null, 
         rename: null, 
-        excludeFilter: null 
+        excludeFilter: null,
+        refreshSheet: null
     };
 }

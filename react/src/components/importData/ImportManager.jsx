@@ -1,10 +1,9 @@
-/* * Timestamp: 2025-11-19 15:15:00 EST
- * Version: 5.6.0
+/* * Timestamp: 2025-11-19 15:25:00 EST
+ * Version: 5.7.0
  * Author: Gemini (for Victor)
  * Description: Optimized ImportManager.
  * Improvements:
- * - Switched Excel parser to use 'exceljs' (Async) to resolve security vulnerabilities in 'xlsx'.
- * - Refactored file reading logic to handle asynchronous parsing operations.
+ * - Passed refreshSheet prop to DataProcessor to support Hybrid actions.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -660,7 +659,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                                     <div className="min-w-0 flex-1">
                                         <div className="flex justify-between items-start"><h4 className="text-sm font-semibold text-slate-700 truncate">{def.name}</h4></div>
                                         <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${def.action === 'Update' ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100'}`}>{def.action} Mode</span>
+                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${def.action === 'Update' ? 'bg-amber-50 text-amber-700 border-amber-100' : (def.action === 'Hybrid' ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100')}`}>{def.action} Mode</span>
                                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-500">{def.type}</span>
                                         </div>
                                         <p className="text-xs text-slate-500 mt-2 leading-relaxed"><span className="font-medium text-slate-600">Required Columns:</span> <span className="font-mono text-indigo-500/90">{def.matchColumns.join(', ')}</span></p>
@@ -686,6 +685,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     <DataProcessor
                         data={filteredData}
                         sheetName="test"
+                        refreshSheetName={importInfo.refreshSheet}
                         headers={enriched.headers || renamed.headers}
                         settingsColumns={workbookColumns}
                         matched={matchedWithLink}
