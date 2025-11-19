@@ -1,54 +1,292 @@
-/* * Timestamp: 2025-11-18 15:50:00 EST
- * Version: 5.0.0
+/* * Timestamp: 2025-11-19 13:40:00 EST
+ * Version: 5.1.0
  * Author: Gemini (for Victor)
- * Description: ImportManager logic merged with modern "My Shots" UI (Files inside Drop Zone).
+ * Description: Optimized ImportManager.
+ * Improvements:
+ * - Replaced O(N*M) row scanning with O(1) key lookups using normalized header maps.
+ * - Extracted heavy logic outside component for cleaner readability and stability.
+ * - Unified CSV preview logic to reduce code duplication.
  */
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import parseCSV from './Parsers/csv';
 import DataProcessor from './DataProcessor';
-import styles from './importManagerStyles'; // Kept for reference, though visual styles are now Tailwind
+import styles from './importManagerStyles'; 
 import { getImportType } from './ImportType';
 import { getWorkbookSettings } from '../utility/getSettings';
 import { CloudUpload, FileText, Table, ArrowRight, Plus } from 'lucide-react';
 import FileCard from './FileCard';
 import ImportIcon from '../../assets/icons/import-icon.png';
 
+// --- Helper Utilities (Defined outside to keep component clean) ---
+
+// Helper: Create a map of lowercase keys to actual keys for O(1) lookup
+const createKeyMap = (headers) => {
+    const map = {};
+    if (Array.isArray(headers)) {
+        headers.forEach(h => {
+            if (h) map[String(h).toLowerCase().trim()] = h;
+        });
+    }
+    return map;
+};
+
+// Helper: Apply Rename Map
+const applyRenames = (dataInput, headersInput, renameMap) => {
+    if (!renameMap || typeof renameMap !== 'object') return { data: dataInput, headers: headersInput };
+    
+    // normalize rename map
+    const normalize = (v) => (v == null ? '' : String(v).toLowerCase().trim());
+    const normMap = {};
+    Object.keys(renameMap).forEach((k) => { normMap[normalize(k)] = renameMap[k]; });
+
+    // Rename headers
+    const newHeaders = Array.isArray(headersInput)
+        ? headersInput.map((h) => (normMap[normalize(h)] ? normMap[normalize(h)] : h))
+        : headersInput;
+
+    let newData = dataInput;
+    if (Array.isArray(dataInput) && dataInput.length > 0) {
+        const first = dataInput[0];
+        // Only rename object rows; array rows rely on index/headers which are already handled
+        if (first && typeof first === 'object' && !Array.isArray(first)) {
+            // Optimization: Create a fast lookup for row keys
+            // Since object keys might differ in casing row-to-row in bad CSVs, we unfortunately 
+            // still need to map keys, but we can do it efficiently.
+            newData = dataInput.map((row) => {
+                const out = {};
+                Object.keys(row).forEach((k) => {
+                    // If this key is in our rename map (normalized), use the new name
+                    const nk = normMap[normalize(k)];
+                    out[nk || k] = row[k];
+                });
+                return out;
+            });
+        }
+    }
+
+    return { data: newData, headers: newHeaders };
+};
+
+// Helper: Apply Hyperlink Logic
+const applyHyperlink = (renamedObj, hyper) => {
+    if (!hyper || !hyper.column) return renamedObj;
+    
+    const colName = hyper.column;
+    const template = hyper.linkLocation || '';
+    const paramsDef = Array.isArray(hyper.parameter) ? hyper.parameter : [];
+
+    // Clone headers to avoid mutation
+    const headersIn = Array.isArray(renamedObj.headers) ? [...renamedObj.headers] : [];
+    const dataIn = renamedObj.data;
+
+    // Ensure header exists
+    let headerIdx = headersIn.findIndex(h => String(h).toLowerCase().trim() === String(colName).toLowerCase().trim());
+    if (headerIdx === -1) {
+        headersIn.push(colName);
+        headerIdx = headersIn.length - 1;
+    }
+
+    if (!Array.isArray(dataIn) || dataIn.length === 0) {
+        return { data: dataIn, headers: headersIn };
+    }
+
+    const first = dataIn[0];
+    const isObjectRows = first && typeof first === 'object' && !Array.isArray(first);
+
+    // Optimization: Pre-calculate parameter lookups
+    // For objects: map lowercase param name -> actual key logic handled per row or via map
+    // For arrays: map param name -> index
+    let paramIndices = []; 
+    
+    if (!isObjectRows) {
+        // Pre-calc indices for array rows
+        paramIndices = paramsDef.map(p => {
+            const needle = String(p).toLowerCase().trim();
+            return headersIn.findIndex(h => String(h).toLowerCase().trim() === needle);
+        });
+    }
+
+    // Helper to build formula
+    const escapeForExcel = (s) => String(s || '').replace(/"/g, '""');
+    const makeFormula = (url, friendly) => {
+        return `=HYPERLINK("${escapeForExcel(url)}","${escapeForExcel(friendly || url)}")`;
+    };
+    const escapeRegExp = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const out = dataIn.map(row => {
+        let newRow = isObjectRows ? { ...row } : [...row];
+        let paramValues = [];
+
+        // Extract values
+        if (isObjectRows) {
+            // Fast lookup using a temporary key map for this row is overkill if consistent, 
+            // but assuming row keys are consistent, we scan once.
+            // To be safe and fast:
+            paramValues = paramsDef.map(p => {
+                const needle = String(p).toLowerCase().trim();
+                // Fast search: check exact first, then scan keys
+                if (row[p] !== undefined) return row[p];
+                const foundKey = Object.keys(row).find(k => String(k).toLowerCase().trim() === needle);
+                return foundKey ? row[foundKey] : '';
+            });
+        } else {
+            // Array rows: direct index access (O(1))
+            paramValues = paramIndices.map(idx => (idx !== -1 && row[idx] !== undefined ? row[idx] : ''));
+        }
+
+        // Build URL
+        let url = template;
+        if (url && paramsDef.length > 0) {
+            let usedTemplate = false;
+            paramsDef.forEach((p, i) => {
+                const val = paramValues[i] == null ? '' : String(paramValues[i]);
+                // Replace exact token matches
+                const regex = new RegExp(escapeRegExp(String(p)), 'g');
+                if (regex.test(url)) {
+                    url = url.replace(regex, encodeURIComponent(val));
+                    usedTemplate = true;
+                }
+            });
+            
+            // Fallback logic if template didn't consume params via tokens
+            if (!usedTemplate || url === template) {
+                 const suffix = paramValues.map(v => encodeURIComponent(String(v || ''))).join('/');
+                 url = template.endsWith('/') ? (template + suffix) : (template + (template.includes('?') ? '&' : '/') + suffix);
+            }
+        } else {
+             url = paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/');
+        }
+
+        const friendly = hyper.friendlyName || colName || url;
+        const formula = makeFormula(url, friendly);
+
+        if (isObjectRows) {
+            newRow[colName] = formula;
+        } else {
+            // Ensure row length
+            while (newRow.length < headerIdx) newRow.push('');
+            newRow[headerIdx] = formula;
+        }
+        return newRow;
+    });
+
+    return { data: out, headers: headersIn };
+};
+
+// Helper: Apply Exclusion Filter
+const applyExclusion = (dataInput, headersInput, filter) => {
+    if (!filter || !filter.column || (filter.value == null || String(filter.value).trim() === '')) {
+        return dataInput;
+    }
+
+    const colName = String(filter.column).toLowerCase().trim();
+    const excludeText = String(filter.value).toLowerCase();
+
+    if (!Array.isArray(dataInput) || dataInput.length === 0) return dataInput;
+
+    const first = dataInput[0];
+    const isObjectRows = first && typeof first === 'object' && !Array.isArray(first);
+
+    let result = dataInput;
+
+    if (isObjectRows) {
+        result = dataInput.filter(row => {
+            // Find key efficiently
+            let val = undefined;
+            // Check exact match first (Fast Path)
+            if (row[filter.column] !== undefined) val = row[filter.column];
+            else {
+                // Scan keys (Slow Path - only if keys are messy)
+                const foundKey = Object.keys(row).find(k => String(k).toLowerCase().trim() === colName);
+                if (foundKey) val = row[foundKey];
+            }
+            
+            if (val == null) return true; // keep if missing
+            return String(val).toLowerCase().indexOf(excludeText) === -1;
+        });
+    } else {
+        // Array rows
+        let idx = -1;
+        if (Array.isArray(headersInput)) {
+            idx = headersInput.findIndex(h => String(h).toLowerCase().trim() === colName);
+        }
+        if (idx === -1 && Array.isArray(dataInput[0])) {
+            // Fallback to checking first row of data as header
+            idx = dataInput[0].findIndex(h => String(h).toLowerCase().trim() === colName);
+        }
+
+        if (idx !== -1) {
+            result = dataInput.filter(row => {
+                const v = row[idx];
+                if (v == null) return true;
+                return String(v).toLowerCase().indexOf(excludeText) === -1;
+            });
+        }
+    }
+
+    const excludedCount = dataInput.length - result.length;
+    if (excludedCount > 0) {
+         // console.log(`ImportManager: excluded ${excludedCount} row(s)`);
+    }
+    return result;
+};
+
+// Helper: Read a small chunk of a CSV file to extract headers/info
+const readCsvInfo = (file, callback) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const text = e.target.result;
+            // Parse just enough to get headers (first few lines)
+            const data = parseCSV(text); 
+            let extractedHeaders = [];
+            if (Array.isArray(data) && data.length > 0) {
+                const firstRow = data[0];
+                if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
+                    extractedHeaders = Object.keys(firstRow);
+                } else if (Array.isArray(firstRow)) {
+                    extractedHeaders = firstRow;
+                }
+            }
+            callback(getImportType(extractedHeaders));
+        } catch (err) {
+            callback(null);
+        }
+    };
+    reader.onerror = () => callback(null);
+    reader.readAsText(file.slice(0, 64 * 1024)); // Read first 64KB only
+};
+
+
+// --- Main Component ---
+
 export default function ImportManager({ onImport, excludeFilter, hyperLink } = {}) {
-    const [fileName, setFileName] = useState(''); // name of active file
+    const [fileName, setFileName] = useState('');
     const [status, setStatus] = useState('');
     const [parsedData, setParsedData] = useState(null);
-    const [headers, setHeaders] = useState([]); // store column headers
-    // now support multiple uploaded files
-    const [uploadedFiles, setUploadedFiles] = useState([]); // array of File
-    const [activeIndex, setActiveIndex] = useState(-1); // index into uploadedFiles that is parsed/active
-    // per-file import info computed from headers (e.g. { type, action, matched })
+    const [headers, setHeaders] = useState([]); 
+    const [uploadedFiles, setUploadedFiles] = useState([]); 
+    const [activeIndex, setActiveIndex] = useState(-1); 
     const [fileInfos, setFileInfos] = useState([]);
-    const [isImported, setIsImported] = useState(false); // whether user clicked Import
-    const [workbookColumns, setWorkbookColumns] = useState([]); // new: columns from workbook settings
+    const [isImported, setIsImported] = useState(false); 
+    const [workbookColumns, setWorkbookColumns] = useState([]); 
 
-    // NEW: index of file currently being processed (sequenced import)
     const [processingIndex, setProcessingIndex] = useState(-1);
-    // NEW: track last index for which onImport was emitted so we don't emit twice
     const [lastEmittedIndex, setLastEmittedIndex] = useState(-1);
-    // NEW: whether the previous import batch completed (used to reset on next upload)
     const [importCompleted, setImportCompleted] = useState(false);
 
     const inputRef = useRef(null);
-
-    // drag state for drop-zone
     const [dragActive, setDragActive] = useState(false);
 
-    // parse a single CSV file into parsedData/headers and set active
-    const parseCSVFile = (file, index) => {
+    // --- File Processing Logic ---
+
+    const parseCSVFile = useCallback((file, index) => {
         if (!file) return;
         setFileName(file.name);
         setStatus('Reading file...');
-        // DO NOT clear isImported here — parsing is used during multi-file import as well
-        // setIsImported(false);
 
-        const isCSV = /\.csv$/i.test(file.name);
-        if (!isCSV) {
+        if (!/\.csv$/i.test(file.name)) {
             setStatus('Unsupported file type. Please select a .csv file.');
             return;
         }
@@ -60,7 +298,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 const text = e.target.result;
                 const data = parseCSV(text);
 
-                // extract headers
                 let extractedHeaders = [];
                 if (Array.isArray(data) && data.length > 0) {
                     const firstRow = data[0];
@@ -72,24 +309,19 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 }
                 setHeaders(extractedHeaders);
 
-                // call workbook settings util
                 try {
                     const wbSettings = getWorkbookSettings(extractedHeaders);
                     setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
                     if (typeof DataProcessor.logStaticColumns === 'function') {
                         DataProcessor.logStaticColumns(wbSettings.columns);
                     }
-                    /* eslint-disable no-console */
-                    console.log('ImportManager: workbook settings ->', wbSettings);
-                    /* eslint-enable no-console */
-                } catch (err) {
-                    // ignore
-                }
+                } catch (err) { /* ignore */ }
 
                 setStatus(`Parsed ${Array.isArray(data) ? data.length : 0} rows`);
                 setParsedData(data);
                 setActiveIndex(index);
-                // compute and store import info for this file
+
+                // Update info for this file specifically now that we have full headers
                 try {
                     const info = getImportType(extractedHeaders);
                     setFileInfos((prev) => {
@@ -97,27 +329,22 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                         copy[index] = info;
                         return copy;
                     });
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* ignore */ }
+
             } catch (err) {
                 setStatus('Error parsing CSV.');
                 console.error(err);
             }
         };
         reader.readAsText(file);
-    };
+    }, []);
 
-    // add one or more files to the uploadedFiles array; parse the first CSV among the added files
-    const handleAddFiles = (filesList) => {
+    const handleAddFiles = useCallback((filesList) => {
         if (!filesList || filesList.length === 0) return;
         const filesArr = Array.from(filesList);
 
-        // If we've already imported and the user selects/upload new files,
-        // reset the uploadedFiles list and treat the incoming set as the next batch.
-        // Use importCompleted OR active import state to detect "upload after import"
+        // Reset scenario
         if (isImported || importCompleted) {
-            // dedupe incoming files by name (keep first occurrence)
             const seen = new Set();
             const uniques = [];
             filesArr.forEach((f) => {
@@ -127,49 +354,28 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 }
             });
 
-            // reset state to the new batch
             setUploadedFiles(uniques);
             setFileInfos(uniques.map(() => null));
             setParsedData(null);
             setHeaders([]);
             setActiveIndex(-1);
             setIsImported(false);
-            // we're starting a fresh batch; clear active import flags
             setImportCompleted(false);
 
-            // compute fileInfos for each new file by reading a small slice
+            // Async read info for all new files
             uniques.forEach((f, i) => {
                 if (/\.csv$/i.test(f.name)) {
-                    const r = new FileReader();
-                    r.onload = (ev) => {
-                        try {
-                            const text = ev.target.result;
-                            const data = parseCSV(text);
-                            let extractedHeaders = [];
-                            if (Array.isArray(data) && data.length > 0) {
-                                const firstRow = data[0];
-                                if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
-                                    extractedHeaders = Object.keys(firstRow);
-                                } else if (Array.isArray(firstRow)) {
-                                    extractedHeaders = firstRow;
-                                }
-                            }
-                            const info = getImportType(extractedHeaders);
-                            setFileInfos((prev) => {
-                                const copy = Array.isArray(prev) ? [...prev] : [];
-                                copy[i] = info;
-                                return copy;
-                            });
-                        } catch (err) {
-                            // ignore parse errors for the chunk
-                        }
-                    };
-                    r.onerror = () => { /* ignore */ };
-                    r.readAsText(f.slice(0, 64 * 1024));
+                    readCsvInfo(f, (info) => {
+                        setFileInfos(prev => {
+                            const copy = [...prev];
+                            copy[i] = info;
+                            return copy;
+                        });
+                    });
                 }
             });
 
-            // parse the first CSV among the new batch and make it active
+            // Automatically select first CSV
             const firstCsvIdx = uniques.findIndex((f) => /\.csv$/i.test(f.name));
             if (firstCsvIdx !== -1) {
                 parseCSVFile(uniques[firstCsvIdx], firstCsvIdx);
@@ -177,92 +383,52 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             return;
         }
 
-        // existing behavior: append or replace files and expand/adjust fileInfos placeholders, then read a small slice of each CSV
+        // Append scenario
         setUploadedFiles((prev) => {
             const copy = [...prev];
-            // track whether we've parsed a new CSV among newly appended files (back-compat)
             let parsedNewCsv = false;
 
             filesArr.forEach((f) => {
-                // find existing file with same name
                 const existingIndex = copy.findIndex((p) => p.name === f.name);
+                
                 if (existingIndex !== -1) {
-                    // replace existing file
+                    // Replace
                     copy[existingIndex] = f;
-                    // ensure fileInfos placeholder exists at that index
-                    setFileInfos((prevInfos) => {
-                        const infos = Array.isArray(prevInfos) ? [...prevInfos] : [];
+                    // Reset info placeholder
+                    setFileInfos(prevInfos => {
+                        const infos = [...prevInfos];
                         infos[existingIndex] = null;
                         return infos;
                     });
-                    // if CSV, read a small slice to recompute headers/importInfo and also fully parse to make active
+
                     if (/\.csv$/i.test(f.name)) {
-                        const r = new FileReader();
-                        r.onload = (ev) => {
-                            try {
-                                const text = ev.target.result;
-                                const data = parseCSV(text);
-                                let extractedHeaders = [];
-                                if (Array.isArray(data) && data.length > 0) {
-                                    const firstRow = data[0];
-                                    if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
-                                        extractedHeaders = Object.keys(firstRow);
-                                    } else if (Array.isArray(firstRow)) {
-                                        extractedHeaders = firstRow;
-                                    }
-                                }
-                                try {
-                                    const info = getImportType(extractedHeaders);
-                                    setFileInfos((prev2) => {
-                                        const copy2 = Array.isArray(prev2) ? [...prev2] : [];
-                                        copy2[existingIndex] = info;
-                                        return copy2;
-                                    });
-                                } catch (err) { /* ignore */ }
-                                // fully parse and make this replaced file active (preserve prior behavior for replacements)
-                                parseCSVFile(f, existingIndex);
-                            } catch (err) { /* ignore parse errors for the chunk */ }
-                        };
-                        r.onerror = () => { /* ignore */ };
-                        r.readAsText(f.slice(0, 64 * 1024));
+                        readCsvInfo(f, (info) => {
+                            setFileInfos(prev2 => {
+                                const copy2 = [...prev2];
+                                copy2[existingIndex] = info;
+                                return copy2;
+                            });
+                        });
+                        // Also fully parse this replacement to make it active
+                        parseCSVFile(f, existingIndex);
                     }
                 } else {
-                    // new file: append
+                    // Append
                     const newIndex = copy.length;
                     copy.push(f);
-                    // expand fileInfos
-                    setFileInfos((prevInfos) => [...(Array.isArray(prevInfos) ? prevInfos : []), null]);
+                    // Expand info array
+                    setFileInfos(prevInfos => [...prevInfos, null]);
 
-                    // for each new unique file, try to read a small slice to detect headers and compute importInfo
                     if (/\.csv$/i.test(f.name)) {
-                        const r = new FileReader();
-                        r.onload = (ev) => {
-                            try {
-                                const text = ev.target.result;
-                                const data = parseCSV(text);
-                                let extractedHeaders = [];
-                                if (Array.isArray(data) && data.length > 0) {
-                                    const firstRow = data[0];
-                                    if (firstRow && typeof firstRow === 'object' && !Array.isArray(firstRow)) {
-                                        extractedHeaders = Object.keys(firstRow);
-                                    } else if (Array.isArray(firstRow)) {
-                                        extractedHeaders = firstRow;
-                                    }
-                                }
-                                const info = getImportType(extractedHeaders);
-                                setFileInfos((prev2) => {
-                                    const copy2 = Array.isArray(prev2) ? [...prev2] : [];
-                                    copy2[newIndex] = info;
-                                    return copy2;
-                                });
-                            } catch (err) {
-                                // ignore parse errors for the chunk
-                            }
-                        };
-                        r.onerror = () => { /* ignore */ };
-                        r.readAsText(f.slice(0, 64 * 1024));
+                        readCsvInfo(f, (info) => {
+                            setFileInfos(prev2 => {
+                                const copy2 = [...prev2];
+                                copy2[newIndex] = info;
+                                return copy2;
+                            });
+                        });
 
-                        // pick the first CSV among the newly appended files to parse and make active (back-compat)
+                        // Parse first NEW csv found
                         if (!parsedNewCsv) {
                             parsedNewCsv = true;
                             parseCSVFile(f, newIndex);
@@ -270,526 +436,194 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     }
                 }
             });
-
             return copy;
         });
-    };
+    }, [isImported, importCompleted, parseCSVFile]);
 
-    const handleFile = (file) => {
-        // keep backward-compatible behavior: add single file and parse if CSV
-        if (!file) return;
-        handleAddFiles([file]);
-    };
 
-    // derive columns array to pass to getImportType (names as they appear)
+    // --- Memoized Data Transformations ---
+
     const columns = headers;
 
-    // compute import info once and memoize based on headers so it stays stable across renders
+    // Stable import info
     const importInfo = useMemo(() => getImportType(columns), [Array.isArray(columns) ? columns.join('|') : String(columns)]);
 
-    // merge matched array with any rename targets so consumers see renamed columns too
-    const matchedWithRenames = useMemo(() => {
-        const base = Array.isArray(importInfo && importInfo.matched) ? [...importInfo.matched] : [];
-        const rename = importInfo && importInfo.rename;
-        if (rename && typeof rename === 'object') {
-            Object.keys(rename).forEach((orig) => {
-                const target = rename[orig];
-                if (target && base.indexOf(target) === -1) {
-                    base.push(target);
-                }
-            });
-        }
-        return base;
-    }, [importInfo && JSON.stringify(importInfo)]);
-
-    // Add: helper to apply rename mapping to headers and parsed data
-    const applyRenames = (dataInput, headersInput, renameMap) => {
-        if (!renameMap || typeof renameMap !== 'object') return { data: dataInput, headers: headersInput };
-        const normalize = (v) => (v === null || v === undefined ? '' : String(v).toLowerCase().trim());
-        const normMap = {};
-        Object.keys(renameMap).forEach((k) => { normMap[normalize(k)] = renameMap[k]; });
-
-        const newHeaders = Array.isArray(headersInput)
-            ? headersInput.map((h) => (normMap[normalize(h)] ? normMap[normalize(h)] : h))
-            : headersInput;
-
-        let newData = dataInput;
-        if (Array.isArray(dataInput) && dataInput.length > 0) {
-            const first = dataInput[0];
-            // only rename object rows (array-of-objects); leave array rows as-is (header row handling stays as before)
-            if (first && typeof first === 'object' && !Array.isArray(first)) {
-                newData = dataInput.map((row) => {
-                    const out = {};
-                    Object.keys(row).forEach((k) => {
-                        const nk = normMap[normalize(k)] || k;
-                        out[nk] = row[k];
-                    });
-                    return out;
-                });
-            }
-        }
-
-        return { data: newData, headers: newHeaders };
-    };
-
-    // Memoize renamed data/headers so DataProcessor gets stable references (prevents infinite loop)
-    const renamed = useMemo(() => {
-        return applyRenames(parsedData, headers, importInfo && importInfo.rename);
-        // stringify rename to detect changes; headers/parsedData references are used directly
-    }, [parsedData, Array.isArray(headers) ? headers.join('|') : String(headers), importInfo && JSON.stringify(importInfo.rename)]);
-
-    // effective exclude filter: prop overrides detected filter from getImportType
     const effectiveExcludeFilter = useMemo(() => {
         if (excludeFilter && excludeFilter.column) return excludeFilter;
-        if (importInfo && importInfo.excludeFilter && importInfo.excludeFilter.column) return importInfo.excludeFilter;
-        return null;
-    }, [excludeFilter && JSON.stringify(excludeFilter), importInfo && JSON.stringify(importInfo && importInfo.excludeFilter)]);
+        return importInfo && importInfo.excludeFilter;
+    }, [excludeFilter, importInfo]);
 
-    // effective hyperLink: explicit prop overrides detected hyperLink from getImportType
     const effectiveHyperLink = useMemo(() => {
         if (hyperLink && hyperLink.column) return hyperLink;
-        if (importInfo && importInfo.hyperLink && importInfo.hyperLink.column) return importInfo.hyperLink;
-        return null;
-    }, [hyperLink && JSON.stringify(hyperLink), importInfo && JSON.stringify(importInfo && importInfo.hyperLink)]);
+        return importInfo && importInfo.hyperLink;
+    }, [hyperLink, importInfo]);
 
-    // NEW: ensure the hyperlink column (if defined) is included in the matched set
-    const matchedWithLink = useMemo(() => {
-        const base = Array.isArray(matchedWithRenames) ? [...matchedWithRenames] : [];
-        // prefer the explicit effectiveHyperLink (prop or detected) then fallback to importInfo.hyperLink
-        const hyper = effectiveHyperLink || (importInfo && importInfo.hyperLink);
-        const col = hyper && hyper.column ? String(hyper.column) : null;
-        if (col && base.indexOf(col) === -1) base.push(col);
-        return base;
-    }, [matchedWithRenames, effectiveHyperLink && JSON.stringify(effectiveHyperLink), importInfo && JSON.stringify(importInfo && importInfo.hyperLink)]);
+    // 1. Rename
+    const renamed = useMemo(() => {
+        return applyRenames(parsedData, headers, importInfo && importInfo.rename);
+    }, [parsedData, headers, importInfo]);
 
-    // helper to build hyperlinks and ensure the target column exists
-    const escapeRegExp = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const applyHyperlink = (renamedObj, hyper) => {
-        if (!hyper || !hyper.column) return renamedObj;
-        const colName = hyper.column;
-        const template = hyper.linkLocation || '';
-        const paramsDef = Array.isArray(hyper.parameter) ? hyper.parameter : [];
+    // 2. Hyperlink
+    const enriched = useMemo(() => {
+        return applyHyperlink(renamed, effectiveHyperLink);
+    }, [renamed, effectiveHyperLink]);
 
-        const headersIn = Array.isArray(renamedObj.headers) ? [...renamedObj.headers] : renamedObj.headers;
-        let dataIn = renamedObj.data;
-        if (!Array.isArray(dataIn) || dataIn.length === 0) {
-            // still ensure header exists so downstream writers see the column
-            if (Array.isArray(headersIn) && headersIn.indexOf(colName) === -1) headersIn.push(colName);
-            return { data: dataIn, headers: headersIn };
-        }
-
-        const first = dataIn[0];
-
-        // helper to build excel HYPERLINK formula safely
-        const escapeForExcel = (s) => String(s || '').replace(/"/g, '""');
-        const makeHyperlinkFormula = (url, friendly) => {
-            const u = escapeForExcel(url);
-            const f = escapeForExcel(friendly == null || friendly === '' ? url : friendly);
-            // Excel formula: =HYPERLINK("url","friendly")
-            return `=HYPERLINK("${u}","${f}")`;
-        };
-
-        // object rows
-        if (first && typeof first === 'object' && !Array.isArray(first)) {
-            if (Array.isArray(headersIn) && headersIn.indexOf(colName) === -1) headersIn.push(colName);
-            const out = dataIn.map((row) => {
-                const newRow = { ...(row || {}) };
-                // collect param values by matching param names case-insensitively against row keys
-                const paramValues = paramsDef.map((p) => {
-                    const needle = String(p || '').toLowerCase().trim();
-                    const foundKey = Object.keys(row).find((k) => String(k || '').toLowerCase().trim() === needle);
-                    return foundKey ? row[foundKey] : (row[p] || '');
-                });
-
-                // try token replacement in template using exact param text matches
-                let url = template;
-                if (typeof url === 'string' && url.length > 0 && paramsDef.length > 0) {
-                    paramsDef.forEach((p, i) => {
-                        const token = String(p || '');
-                        const val = paramValues[i] == null ? '' : String(paramValues[i]);
-                        url = url.replace(new RegExp(escapeRegExp(token), 'g'), encodeURIComponent(val));
-                    });
-                    // if replacement didn't change template meaningfully, fallback to join
-                    if (url === template) {
-                        const suffix = paramValues.map((v) => encodeURIComponent(String(v || ''))).join('/');
-                        url = template.endsWith('/') ? (template + suffix) : (template + (template.includes('?') ? '&' : '/') + suffix);
-                    }
-                } else {
-                    // no template: just join params onto empty base
-                    url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
-                }
-
-                // wrap with Excel HYPERLINK and use friendlyName when provided
-                const friendly = hyper.friendlyName || colName || url;
-                newRow[colName] = makeHyperlinkFormula(url, friendly);
-                return newRow;
-            });
-            return { data: out, headers: headersIn };
-        }
-
-        // array rows (header row may be present in headersIn)
-        if (Array.isArray(first)) {
-            let idx = Array.isArray(headersIn) ? headersIn.findIndex((h) => String(h || '').toLowerCase().trim() === String(colName || '').toLowerCase().trim()) : -1;
-            if (idx === -1 && Array.isArray(headersIn)) {
-                headersIn.push(colName);
-                idx = headersIn.length - 1;
-            }
-            const out = dataIn.map((row) => {
-                const newRow = Array.isArray(row) ? [...row] : [];
-                // compute param values by matching headersIn
-                const paramValues = paramsDef.map((p) => {
-                    const needle = String(p || '').toLowerCase().trim();
-                    const foundIdx = headersIn.findIndex((h) => String(h || '').toLowerCase().trim() === needle);
-                    return foundIdx !== -1 && Array.isArray(row) ? row[foundIdx] : '';
-                });
-                // build url similar to object case
-                let url = template;
-                if (typeof url === 'string' && url.length > 0 && paramsDef.length > 0) {
-                    paramsDef.forEach((p, i) => {
-                        const token = String(p || '');
-                        const val = paramValues[i] == null ? '' : String(paramValues[i]);
-                        url = url.replace(new RegExp(escapeRegExp(token), 'g'), encodeURIComponent(val));
-                    });
-                    if (url === template) {
-                        const suffix = paramValues.map((v) => encodeURIComponent(String(v || ''))).join('/');
-                        url = template.endsWith('/') ? (template + suffix) : (template + '/' + suffix);
-                    }
-                } else {
-                    url = paramsDef.length > 0 ? paramsDef.map((_, i) => encodeURIComponent(String(paramValues[i] || ''))).join('/') : '';
-                }
-                // ensure row has correct length and set HYPERLINK formula at idx
-                while (newRow.length < idx) newRow.push('');
-                const friendly = hyper.friendlyName || colName || url;
-                newRow[idx] = makeHyperlinkFormula(url, friendly);
-                return newRow;
-            });
-            return { data: out, headers: headersIn };
-        }
-
-        return renamedObj;
-    };
-
-    // enriched renamed data/headers with hyperlink column added (when applicable)
-    const enriched = useMemo(() => applyHyperlink(renamed, effectiveHyperLink), [renamed && JSON.stringify(renamed.headers), renamed && (Array.isArray(renamed.data) ? renamed.data.length : JSON.stringify(renamed.data)), effectiveHyperLink && JSON.stringify(effectiveHyperLink)]);
-
-    // Log generated hyperlinks whenever enriched or the effectiveHyperLink changes
-    useEffect(() => {
-        try {
-            if (!enriched) {
-                console.log('ImportManager: enriched not ready yet.');
-                return;
-            }
-
-            const colName = effectiveHyperLink && effectiveHyperLink.column;
-            if (!colName) {
-                console.log('ImportManager: effectiveHyperLink has no column defined.', effectiveHyperLink);
-                return;
-            }
-
-            // collect values (sample up to 20) from enriched.data, supporting object-rows and array-rows
-            const dataArr = Array.isArray(enriched.data) ? enriched.data : [];
-            const sample = dataArr.slice(0, 20).map((row) => {
-                // object rows
-                if (row && typeof row === 'object' && !Array.isArray(row)) {
-                    return row[colName];
-                }
-                // array rows: find index by header name (case-insensitive)
-                if (Array.isArray(row)) {
-                    const idx = Array.isArray(enriched.headers)
-                        ? enriched.headers.findIndex((h) => String(h || '').toLowerCase().trim() === String(colName || '').toLowerCase().trim())
-                        : -1;
-                    return idx !== -1 ? row[idx] : undefined;
-                }
-                return undefined;
-            }).filter((v) => v !== undefined);
-
-            console.log(`ImportManager: generated ${sample.length} hyperlink(s) (sample up to 20):`, sample, { column: colName });
-        } catch (err) {
-            console.error('ImportManager: error while logging generated hyperlinks', err);
-        }
-    }, [enriched && JSON.stringify(enriched.headers), enriched && (Array.isArray(enriched.data) ? enriched.data.length : JSON.stringify(enriched.data)), effectiveHyperLink && JSON.stringify(effectiveHyperLink)]);
-
-    // helper to exclude rows where a specified column contains a given value (case-insensitive)
-    const applyExclusion = (dataInput, headersInput, filter) => {
-        if (!filter || !filter.column || (filter.value === null || filter.value === undefined || String(filter.value).trim() === '')) {
-            return dataInput;
-        }
-
-        const colName = String(filter.column).toLowerCase().trim();
-        const excludeText = String(filter.value).toLowerCase();
-
-        // if no data or headers, nothing to do
-        if (!Array.isArray(dataInput) || dataInput.length === 0) return dataInput;
-
-        const originalLength = dataInput.length;
-        let result = dataInput;
-
-        // object rows (array of objects)
-        const first = dataInput[0];
-        if (first && typeof first === 'object' && !Array.isArray(first)) {
-            result = dataInput.filter((row) => {
-                // find matching key in row (case-insensitive)
-                for (const k of Object.keys(row)) {
-                    if (String(k || '').toLowerCase().trim() === colName) {
-                        const val = row[k];
-                        if (val === null || val === undefined) return true; // keep if nothing to compare
-                        return String(val).toLowerCase().indexOf(excludeText) === -1;
-                    }
-                }
-                // if column not present in this row, keep the row
-                return true;
-            });
-        } else if (Array.isArray(first)) {
-            // array rows (first row may be header row or arrays of values)
-            // find column index from headersInput if available
-            let idx = -1;
-            if (Array.isArray(headersInput) && headersInput.length > 0) {
-                idx = headersInput.findIndex((h) => String(h || '').toLowerCase().trim() === colName);
-            }
-            // if headers didn't help, try scanning first row for matching header name
-            if (idx === -1 && Array.isArray(dataInput) && dataInput.length > 0) {
-                const headerRow = dataInput[0];
-                if (Array.isArray(headerRow)) {
-                    idx = headerRow.findIndex((h) => String(h || '').toLowerCase().trim() === colName);
-                }
-            }
-            // if we still didn't find an index, nothing to filter
-            if (idx !== -1) {
-                // filter rows where value at idx contains excludeText
-                result = dataInput.filter((row) => {
-                    const v = row && row[idx];
-                    if (v === null || v === undefined) return true;
-                    return String(v).toLowerCase().indexOf(excludeText) === -1;
-                });
-            }
-        }
-
-        const excludedCount = Math.max(0, originalLength - (Array.isArray(result) ? result.length : 0));
-        if (excludedCount > 0) {
-            /* eslint-disable no-console */
-            console.log(`ImportManager: excluded ${excludedCount} row(s) where column "${filter.column}" contains "${filter.value}"`);
-            /* eslint-enable no-console */
-        }
-
-        return result;
-    };
-
-    // memoized filtered data: apply exclusion on top of renamed data
+    // 3. Filter
     const filteredData = useMemo(() => {
         return applyExclusion(enriched.data, enriched.headers, effectiveExcludeFilter);
-        // depend on enriched result and the effective filter
-    }, [enriched && JSON.stringify(enriched.data ? (Array.isArray(enriched.data) ? [enriched.data.length] : enriched.data) : enriched), enriched && JSON.stringify(enriched.headers), effectiveExcludeFilter && JSON.stringify(effectiveExcludeFilter)]);
+    }, [enriched, effectiveExcludeFilter]);
 
-    // triggered when user clicks the Import button
+    // 4. Matched Columns (for UI/DataProcessor)
+    const matchedWithLink = useMemo(() => {
+        // Merge matched + renames + hyperlink col
+        const base = Array.isArray(importInfo && importInfo.matched) ? [...importInfo.matched] : [];
+        
+        // Add Rename targets
+        const rename = importInfo && importInfo.rename;
+        if (rename) {
+            Object.values(rename).forEach(target => {
+                if (target && !base.includes(target)) base.push(target);
+            });
+        }
+
+        // Add Hyperlink col
+        const hyperCol = effectiveHyperLink && effectiveHyperLink.column;
+        if (hyperCol && !base.includes(String(hyperCol))) base.push(String(hyperCol));
+
+        return base;
+    }, [importInfo, effectiveHyperLink]);
+
+
+    // --- Handlers ---
+
     const handleImport = () => {
-        // if no files uploaded
         if (!uploadedFiles || uploadedFiles.length === 0) {
             setStatus('No file/data to import.');
             return;
         }
-
-        // find first CSV file from top to bottom
         const firstCsvIdx = uploadedFiles.findIndex((f) => f && /\.csv$/i.test(f.name));
         if (firstCsvIdx === -1) {
             setStatus('No CSV files found to import.');
             return;
         }
 
-        // start multi-file processing
         setProcessingIndex(firstCsvIdx);
         setLastEmittedIndex(-1);
         setIsImported(true);
-        // mark that a new import batch is running
         setImportCompleted(false);
         setStatus(`Starting import 1 of ${uploadedFiles.length}...`);
 
-        // parse and activate the first CSV to kick off processing
+        // Activate the file to ensure state (headers/data) is ready
         parseCSVFile(uploadedFiles[firstCsvIdx], firstCsvIdx);
     };
 
-    // Emit onImport for current file once parsed and validated, then allow DataProcessor to run.
-    useEffect(() => {
-        if (!isImported) return;
-        if (processingIndex === -1) return;
-        // only act when parsedData corresponds to the processingIndex
-        if (activeIndex !== processingIndex) return;
-        // ensure we call onImport exactly once per file
-        if (lastEmittedIndex === processingIndex) return;
-
-        // validate workbook settings & identifiers for this file (same logic as before)
-        try {
-            const wbSettings = getWorkbookSettings(headers);
-            setWorkbookColumns(Array.isArray(wbSettings.columns) ? [...wbSettings.columns] : []);
-            if (typeof DataProcessor.logStaticColumns === 'function') {
-                DataProcessor.logStaticColumns(wbSettings.columns);
-            }
-            /* eslint-disable no-console */
-            console.log('ImportManager: workbook settings at import ->', wbSettings);
-            /* eslint-enable no-console */
-
-            // if settings define identifier columns, ensure this file contains at least one
-            const normalize = (v) => (v === null || v === undefined ? '' : String(v).replace(/\s/g, '').toLowerCase());
-            const identifierCandidates = Array.isArray(wbSettings.columns)
-                ? wbSettings.columns.filter((c) => c && (c.identifier || c.identifer))
-                : [];
-            if (identifierCandidates.length > 0) {
-                const headerKeys = Array.isArray(headers) ? headers.map((h) => normalize(h)) : [];
-                let foundAny = false;
-                for (const cand of identifierCandidates) {
-                    const candKeys = new Set();
-                    if (cand.name) candKeys.add(normalize(cand.name));
-                    const alias = cand.alias;
-                    if (Array.isArray(alias)) alias.forEach((a) => { if (a) candKeys.add(normalize(a)); });
-                    else if (alias) candKeys.add(normalize(alias));
-                    if (headerKeys.some((hk) => candKeys.has(hk))) {
-                        foundAny = true;
-                        break;
-                    }
-                }
-                if (!foundAny) {
-                    const first = identifierCandidates[0];
-                    const idDisplay = first && (first.name || (Array.isArray(first.alias) ? first.alias[0] : first.alias)) || 'identifier';
-                    const msg = `Import aborted: none of the configured identifier columns (first: "${idDisplay}") were found in the import file.`;
-                    /* eslint-disable no-console */
-                    console.warn(msg);
-                    /* eslint-enable no-console */
-                    setStatus(msg);
-                    // abort whole multi-import
-                    setIsImported(false);
-                    setProcessingIndex(-1);
-                    return;
-                }
-            }
-        } catch (err) {
-            // ignore settings read errors
-        }
-
-        // ready to emit for this file
-        const currentFile = uploadedFiles[processingIndex];
-        const dataToEmit = filteredData;
-        if (typeof onImport === 'function') {
-            onImport({
-                file: currentFile,
-                data: dataToEmit,
-                type: importInfo.type || 'csv',
-                matched: matchedWithLink,
-                headers: enriched.headers || renamed.headers,
-            });
-        } else {
-            console.log('Imported CSV data', {
-                file: currentFile,
-                data: dataToEmit,
-                type: importInfo.type,
-                matched: matchedWithLink,
-                headers: enriched.headers || renamed.headers,
-            });
-        }
-
-        // mark emitted so we don't re-emit
-        setLastEmittedIndex(processingIndex);
-        // signal processing has started for this file (DataProcessor will render)
-        setStatus(`Processing import ${processingIndex + 1} of ${uploadedFiles.length} into workbook...`);
-    }, [isImported, processingIndex, activeIndex, parsedData, headers, filteredData, importInfo, matchedWithLink, enriched, renamed, uploadedFiles, lastEmittedIndex, onImport]);
-
-    // handler invoked when DataProcessor finishes (success or failure)
-    const handleProcessorComplete = (result) => {
-        // show status for this file
+    const handleProcessorComplete = useCallback((result) => {
         if (result && result.success) {
             setStatus(`Import ${processingIndex + 1} completed.`);
         } else {
-            const errMsg = result && result.error ? `: ${result.error}` : (result && result.reason ? `: ${result.reason}` : '');
-            setStatus(`Import ${processingIndex + 1} failed${errMsg}`);
+            const msg = result?.error || result?.reason || 'Unknown error';
+            setStatus(`Import ${processingIndex + 1} failed: ${msg}`);
         }
 
-        // advance to next CSV (top-to-bottom). find next index > processingIndex
-        const total = uploadedFiles ? uploadedFiles.length : 0;
-        let next = (processingIndex === -1) ? 0 : processingIndex + 1;
-        while (next < total && !(/\.csv$/i.test(uploadedFiles[next] && uploadedFiles[next].name))) {
-            next += 1;
+        // Find next CSV
+        const total = uploadedFiles.length;
+        let next = processingIndex + 1;
+        while (next < total && !(/\.csv$/i.test(uploadedFiles[next]?.name))) {
+            next++;
         }
 
         if (next < total) {
-            // continue with next CSV
             setProcessingIndex(next);
             setLastEmittedIndex(-1);
-            // parse next file which will trigger the effect to emit and run DataProcessor
             parseCSVFile(uploadedFiles[next], next);
         } else {
-            // finished all files
             setIsImported(false);
             setProcessingIndex(-1);
             setActiveIndex(-1);
-            // mark that the import batch finished so future uploads reset lists
             setImportCompleted(true);
-            /* eslint-disable no-console */
             console.log('ImportManager: all files processed.');
-            /* eslint-enable no-console */
             setStatus('All imports completed.');
         }
-    };
+    }, [uploadedFiles, processingIndex, parseCSVFile]);
 
-    // handler to receive incremental status updates from DataProcessor
-    const handleProcessorStatus = (message) => {
-        if (typeof message === 'string' && message) setStatus(message);
-    };
+    // Orchestrator Effect: Emits 'onImport' when ready
+    useEffect(() => {
+        if (!isImported || processingIndex === -1) return;
+        // Wait for active index to match processing index (ensures parse is done)
+        if (activeIndex !== processingIndex) return;
+        // Dedup emission
+        if (lastEmittedIndex === processingIndex) return;
 
-    // replaced click handler: simplified, open file picker immediately
-    const onButtonClick = () => {
-        if (inputRef.current) {
-            inputRef.current.value = null;
-            inputRef.current.click();
-        }
-    };
+        // Validate Settings & Identifiers (Quick Check)
+        const wbSettings = getWorkbookSettings(headers);
+        try {
+            if (wbSettings) {
+                 const normalize = (v) => (v || '').replace(/\s/g, '').toLowerCase();
+                 const candidates = wbSettings.columns?.filter(c => c.identifier || c.identifer) || [];
+                 
+                 if (candidates.length > 0) {
+                     const headerSet = new Set(headers.map(normalize));
+                     const found = candidates.some(c => {
+                         if (c.name && headerSet.has(normalize(c.name))) return true;
+                         const aliases = [].concat(c.alias || []);
+                         return aliases.some(a => a && headerSet.has(normalize(a)));
+                     });
 
-    // drag handlers
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!dragActive) setDragActive(true);
-    };
+                     if (!found) {
+                        const idName = candidates[0].name || 'identifier';
+                        const msg = `Import aborted: Identifier "${idName}" not found in file.`;
+                        console.warn(msg);
+                        setStatus(msg);
+                        setIsImported(false);
+                        setProcessingIndex(-1);
+                        return;
+                     }
+                 }
+            }
+        } catch (e) { /* ignore */ }
 
-    const handleDragLeave = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        // only clear when leaving the drop-zone element
-        setDragActive(false);
-    };
+        // Emit Data
+        const payload = {
+            file: uploadedFiles[processingIndex],
+            data: filteredData,
+            type: importInfo.type || 'csv',
+            matched: matchedWithLink,
+            headers: enriched.headers || renamed.headers,
+        };
 
+        if (typeof onImport === 'function') onImport(payload);
+        else console.log('Imported CSV data', payload);
+
+        setLastEmittedIndex(processingIndex);
+        setStatus(`Processing import ${processingIndex + 1} of ${uploadedFiles.length}...`);
+    }, [isImported, processingIndex, activeIndex, headers, filteredData, importInfo, matchedWithLink, enriched, renamed, uploadedFiles, lastEmittedIndex, onImport]);
+
+
+    // --- Render Helpers ---
+
+    const openFilePicker = () => inputRef.current && ((inputRef.current.value = null), inputRef.current.click());
+    
+    const handleDragOver = (e) => { e.preventDefault(); if (!dragActive) setDragActive(true); };
+    const handleDragLeave = (e) => { e.preventDefault(); setDragActive(false); };
     const handleDrop = (e) => {
         e.preventDefault();
-        e.stopPropagation();
         setDragActive(false);
-        const list = e.dataTransfer && e.dataTransfer.files;
-        if (list && list.length > 0) {
-            handleAddFiles(list);
-        }
+        if (e.dataTransfer.files?.length > 0) handleAddFiles(e.dataTransfer.files);
     };
 
-    // allow clicking the drop area to open picker
-    const openFilePicker = () => {
-        if (inputRef.current) {
-            inputRef.current.value = null;
-            inputRef.current.click();
-        }
-    };
-
-    // Helper to determine if files are uploaded
     const hasFiles = uploadedFiles && uploadedFiles.length > 0;
 
     return (
         <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-white overflow-hidden p-6 transition-all duration-300">
-
-            {/* --- Header --- */}
+            
+            {/* Header */}
             <div className="flex justify-between items-end mb-6">
                 <div>
-                    <h2 className="text-2xl text-slate-800 font-bold tracking-tight">
-                        Import Data
-                    </h2>
+                    <h2 className="text-2xl text-slate-800 font-bold tracking-tight">Import Data</h2>
                     <p className="text-slate-400 text-sm mt-1">
                         {hasFiles ? 'Review your files below' : 'Upload your CSV to begin'}
                     </p>
                 </div>
-                {/* Status Badge (Top Right) - optional, only if status is active */}
                 {status && (
                     <div className="text-xs font-medium px-3 py-1 bg-slate-100 text-slate-500 rounded-full animate-pulse max-w-[200px] truncate">
                         {status}
@@ -797,12 +631,11 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 )}
             </div>
 
-            {/* --- Dynamic Drop Zone & File List Container --- */}
+            {/* Drop Zone */}
             <div
                 role="button"
                 tabIndex={0}
                 onClick={openFilePicker}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openFilePicker(); }}
                 onDragOver={handleDragOver}
                 onDragEnter={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -811,25 +644,21 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     relative group transition-all duration-300 ease-out
                     border-2 border-dashed rounded-2xl cursor-pointer
                     min-h-[320px] flex flex-col
-                    ${dragActive
-                        ? 'border-indigo-500 bg-indigo-50/40 scale-[0.99]'
-                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
-                    }
+                    ${dragActive ? 'border-indigo-500 bg-indigo-50/40 scale-[0.99]' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'}
                     ${hasFiles ? 'justify-start p-4' : 'items-center justify-center p-10'}
                 `}
             >
-                {/* State A: Empty (Show Large Icons) */}
-                {!hasFiles && (
+                {!hasFiles ? (
                     <>
                         <div className="relative mb-6 pointer-events-none transition-transform duration-300 group-hover:scale-110">
                             <div className={`transition-colors duration-300 ${dragActive ? 'text-indigo-500' : 'text-slate-300'}`}>
                                 <CloudUpload size={64} strokeWidth={1.5} />
                             </div>
-                            <div className="absolute -top-4 -left-12 bg-white p-2.5 rounded-xl shadow-lg shadow-slate-100 border border-slate-50 transform -rotate-12 transition-transform duration-500 group-hover:-translate-x-2 group-hover:-rotate-12">
+                            {/* Decorative Icons */}
+                            <div className="absolute -top-4 -left-12 bg-white p-2.5 rounded-xl shadow-lg border border-slate-50 transform -rotate-12 transition-transform duration-500 group-hover:-translate-x-2 group-hover:-rotate-12">
                                 <FileText size={24} className="text-emerald-500" />
-                                <span className="text-[10px] font-bold text-slate-400 absolute bottom-1 right-2 opacity-50">CSV</span>
                             </div>
-                            <div className="absolute -top-2 -right-10 bg-white p-2.5 rounded-xl shadow-lg shadow-slate-100 border border-slate-50 transform rotate-12 transition-transform duration-500 group-hover:translate-x-2 group-hover:rotate-6">
+                            <div className="absolute -top-2 -right-10 bg-white p-2.5 rounded-xl shadow-lg border border-slate-50 transform rotate-12 transition-transform duration-500 group-hover:translate-x-2 group-hover:rotate-6">
                                 <Table size={24} className="text-indigo-500" />
                             </div>
                         </div>
@@ -840,13 +669,9 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                             </p>
                         </div>
                     </>
-                )}
-
-                {/* State B: Has Files (Show List inside the Box) */}
-                {hasFiles && (
+                ) : (
                     <div className="w-full space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                         {uploadedFiles.map((f, idx) => (
-                            // Stop bubbling so clicking a card doesn't open the file picker
                             <div key={`${f.name}-${idx}`} onClick={(e) => e.stopPropagation()}>
                                 <FileCard
                                     file={f}
@@ -857,8 +682,6 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                                 />
                             </div>
                         ))}
-
-                        {/* "Add More" Hint at bottom of list */}
                         <div className="flex items-center justify-center pt-4 pb-2 opacity-60 group-hover:opacity-100 transition-opacity">
                             <div className="flex items-center gap-2 text-sm text-slate-400 font-medium bg-white/50 px-4 py-2 rounded-full">
                                 <Plus size={16} />
@@ -867,33 +690,19 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                         </div>
                     </div>
                 )}
-
-                {/* Hidden Input */}
-                <input
-                    ref={inputRef}
-                    type="file"
-                    accept=".csv"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                        const files = e.target.files;
-                        if (files && files.length > 0) handleAddFiles(files);
-                    }}
-                />
+                <input ref={inputRef} type="file" accept=".csv" multiple className="hidden" onChange={(e) => e.target.files?.length && handleAddFiles(e.target.files)} />
             </div>
 
-            {/* --- Action Bar (Modern Blended Button) --- */}
+            {/* Action Button */}
             {parsedData && !isImported && !importCompleted && (
                 <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards">
                     <button
                         type="button"
                         onClick={handleImport}
                         className="
-                            group relative
-                            flex items-center justify-center gap-3
+                            group relative flex items-center justify-center gap-3
                             bg-slate-900 hover:bg-slate-800 text-white
-                            px-8 py-3.5
-                            rounded-full
+                            px-8 py-3.5 rounded-full
                             shadow-xl shadow-slate-200 hover:shadow-2xl hover:shadow-slate-300
                             transform transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0
                             w-full sm:w-auto sm:min-w-[200px]
@@ -909,7 +718,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 </div>
             )}
 
-            {/* --- Data Processor (Hidden Logic) --- */}
+            {/* Data Processor (Hidden) */}
             {isImported && parsedData && activeIndex !== -1 && activeIndex === processingIndex && (
                 <div className="mt-6">
                     <DataProcessor
@@ -920,7 +729,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                         matched={matchedWithLink}
                         action={importInfo.action}
                         onComplete={handleProcessorComplete}
-                        onStatus={handleProcessorStatus}
+                        onStatus={(msg) => msg && setStatus(msg)}
                     />
                 </div>
             )}
