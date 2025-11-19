@@ -1,9 +1,9 @@
-/* * Timestamp: 2025-11-19 15:25:00 EST
- * Version: 5.7.0
+/* * Timestamp: 2025-11-19 15:55:00 EST
+ * Version: 5.8.0
  * Author: Gemini (for Victor)
  * Description: Optimized ImportManager.
  * Improvements:
- * - Passed refreshSheet prop to DataProcessor to support Hybrid actions.
+ * - Passed conditionalFormat prop to DataProcessor.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -690,6 +690,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                         settingsColumns={workbookColumns}
                         matched={matchedWithLink}
                         action={importInfo.action}
+                        conditionalFormat={importInfo.conditionalFormat}
                         onComplete={handleProcessorComplete}
                         onStatus={(msg) => msg && setStatus(msg)}
                     />

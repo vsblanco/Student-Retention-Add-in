@@ -1,7 +1,8 @@
-// [2025-11-19] v2.1 - Exclude Identifier from Update
+// [2025-11-19] v2.5 - Fix Silent Failure in Refresh & Add Logging
 // Changes:
-// - In Update(), filtered out the identifier column from the list of columns to update.
-// - This prevents overwriting the ID cell with the same value, which is redundant.
+// - Fixed logic in Refresh() to populate `sheetHeaders` from data if the sheet is new/empty. 
+//   (This ensures getHeaderIndexMap finds the column index for Conditional Formatting).
+// - Added console logs to applyConditionalFormatting for easier debugging.
 
 import React, { useEffect } from 'react';
 import {
@@ -21,7 +22,7 @@ import {
 	getHeaderIndexMap,
 } from './dataProcessorUtility';
 
-export default function DataProcessor({ data, sheetName, refreshSheetName, settingsColumns, matched, onComplete, onStatus, action }) {
+export default function DataProcessor({ data, sheetName, refreshSheetName, settingsColumns, matched, onComplete, onStatus, action, conditionalFormat }) {
 	const notifyComplete = (payload) => {
 		if (typeof onComplete === 'function') {
 			try { onComplete(payload); } catch (e) { /* swallow callback errors */ }
@@ -51,8 +52,75 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 	}
 
+	// NEW Helper: Apply Conditional Formatting (Synchronous Command Queueing)
+	// Applies to the ENTIRE column.
+	function applyConditionalFormatting(sheet, columnIndex, formatRule) {
+		console.log(`[DataProcessor] Applying Conditional Format: Rule=`, formatRule, ` Index=${columnIndex}`);
+		
+		if (!formatRule || !formatRule.column || columnIndex < 0) {
+			console.warn('[DataProcessor] Skipped CF: Invalid rule or index');
+			return;
+		}
+
+		try {
+			// Define Range: Whole Column (e.g., A:A)
+			const range = sheet.getRangeByIndexes(0, columnIndex, 1, 1).getEntireColumn();
+			
+			// Clear existing formats on this column
+			range.conditionalFormats.clearAll();
+
+			// Apply Rules
+			if (formatRule.condition === 'Color Scales' && formatRule.format === 'G-Y-R Color Scale') {
+				console.log('[DataProcessor] Applying Color Scale');
+				const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+				cf.colorScale.criteria = {
+					minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
+					midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" }, // Yellow
+					maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" } // Green
+				};
+				if (formatRule.column.toLowerCase().includes('missing')) {
+					// Invert for missing assignments: Low is Good (Green), High is Bad (Red)
+					cf.colorScale.criteria = {
+						minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#63BE7B" }, // Green
+						midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" }, // Yellow
+						maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#F8696B" } // Red
+					};
+				}
+			} else if (formatRule.condition === 'Highlight Cells with' && Array.isArray(formatRule.format)) {
+				// format: ['Specific text', 'Beginning with', '0', 'Green Fill with Dark Green Text']
+				const type = formatRule.format[0];
+				const operator = formatRule.format[1];
+				const val = formatRule.format[2];
+				const style = formatRule.format[3];
+
+				console.log(`[DataProcessor] Applying Highlight: ${type} ${operator} "${val}"`);
+
+				if (type === 'Specific text' && operator === 'Beginning with') {
+					const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+					
+					// Set Style
+					cf.textComparison.format.font.color = "#006100"; // Default Dark Green
+					cf.textComparison.format.fill.color = "#C6EFCE"; // Default Light Green
+
+					if (style.includes('Red')) {
+						cf.textComparison.format.font.color = "#9C0006";
+						cf.textComparison.format.fill.color = "#FFC7CE";
+					} else if (style.includes('Yellow')) {
+						cf.textComparison.format.font.color = "#9C6500";
+						cf.textComparison.format.fill.color = "#FFEB9C";
+					}
+
+					// Set Rule
+					cf.textComparison.rule = { operator: Excel.ConditionalTextOperator.beginsWith, text: val };
+				}
+			}
+		} catch (err) {
+			console.error('[DataProcessor] Error queuing conditional formatting', err);
+		}
+	}
+
+
 	// Refresh: write `data` to the target worksheet.
-	// Added suppressCompletion so it can be reused by Hybrid without ending the process early.
 	async function Refresh(dataToWrite, targetSheetName = sheetName, suppressCompletion = false) {
 		notifyStatus(`Starting refresh on ${targetSheetName}...`);
 		if (!dataToWrite || !dataToWrite.length) {
@@ -102,18 +170,28 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			notifyStatus('Processing data structure...');
 
 			// derived headers
+			// FIX: If sheet is empty/new, default sheetHeaders to the keys of the incoming data
+			// This ensures we have a header map to look up the CF column index later.
 			let sheetHeaders = (sheetExisted && usedValues.length > 0)
 				? usedValues[0].map(v => (v == null ? '' : String(v).trim()))
 				: [];
-			const hasHeaders = sheetHeaders.some(h => h !== '');
-			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
 
-			// incoming data headers
 			const dataFirst = dataToWrite[0];
-			let dataHeaders = (dataFirst && typeof dataFirst === 'object' && !Array.isArray(dataFirst))
+			const isObjectRows = (dataFirst && typeof dataFirst === 'object' && !Array.isArray(dataFirst));
+			let dataHeaders = isObjectRows 
 				? Object.keys(dataFirst).map(h => (h == null ? '' : String(h).trim()))
 				: (Array.isArray(dataFirst) ? dataFirst.map(h => (h == null ? '' : String(h).trim())) : []);
+			
 			const dataHeaderIndexMap = getHeaderIndexMap(dataHeaders);
+
+			// If the sheet didn't exist or was empty, assume the dataHeaders will become the sheetHeaders
+			if (sheetHeaders.length === 0 && dataHeaders.length > 0) {
+				sheetHeaders = [...dataHeaders];
+			}
+			
+			const hasHeaders = sheetHeaders.some(h => h !== '');
+			// Update index map with the (potentially new) sheetHeaders
+			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
 
 			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
 			const identifierSetting = gatherIdentifierColumn(settingsCols);
@@ -184,7 +262,7 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 
 			// Prepare Matrix for Writing
 			notifyStatus('Constructing write matrix...');
-			const isObjectRows = (firstAfter && typeof firstAfter === 'object' && !Array.isArray(firstAfter));
+			
 			let rows;
 			let writeStartRow = 0;
 
@@ -337,6 +415,22 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 				if (rangesToClear.length > 0) {
 					queueFormatRanges(sheet, rangesToClear, null);
+				}
+
+				// Apply Conditional Formatting
+				if (conditionalFormat && conditionalFormat.column) {
+					const normCol = normalizeKey(conditionalFormat.column);
+					const cfColIndex = getHeaderIndexMap(sheetHeaders).get(normCol);
+					
+					console.log(`[DataProcessor] Checking CF. Header map has keys:`, Array.from(getHeaderIndexMap(sheetHeaders).keys()));
+					console.log(`[DataProcessor] Looking for "${normCol}". Found index: ${cfColIndex}`);
+
+					if (cfColIndex !== undefined && cfColIndex >= 0) {
+						// Passed index is enough; helper now uses .getEntireColumn()
+						applyConditionalFormatting(sheet, cfColIndex, conditionalFormat);
+					} else {
+						console.warn(`[DataProcessor] Column "${conditionalFormat.column}" not found for Conditional Formatting.`);
+					}
 				}
 
 				await context.sync();
@@ -600,6 +694,24 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 					const rng = sheet.getRangeByIndexes(sheetRangeRowIndex, absoluteColIndex, colMatrix.length, 1);
 					rng.formulas = colMatrix; 
 				}
+
+				// Apply Conditional Formatting
+				if (conditionalFormat && conditionalFormat.column) {
+					const normCol = normalizeKey(conditionalFormat.column);
+					const cfColIndex = effectiveHeaderIndexMap.get(normCol);
+					
+					console.log(`[DataProcessor - Update] Checking CF. Header map keys:`, Array.from(effectiveHeaderIndexMap.keys()));
+					console.log(`[DataProcessor - Update] Looking for "${normCol}". Found index: ${cfColIndex}`);
+
+					if (cfColIndex !== undefined && cfColIndex >= 0) {
+						const absColIndex = sheetRangeColIndex + cfColIndex;
+						// Passed index is enough; helper now uses .getEntireColumn()
+						applyConditionalFormatting(sheet, absColIndex, conditionalFormat);
+					} else {
+						console.warn(`[DataProcessor - Update] Column "${conditionalFormat.column}" not found for Conditional Formatting.`);
+					}
+				}
+
 				await context.sync();
 			});
 

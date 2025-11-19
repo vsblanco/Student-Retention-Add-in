@@ -1,6 +1,7 @@
-// [2025-11-19] v5.6.1 - Added refreshSheet to getImportType return object
+// [2025-11-19] v5.7.0 - Added Conditional Formatting Support
 // Changes: 
-// - Included refreshSheet in the returned object so Hybrid actions know where to refresh.
+// - Updated IMPORT_DEFINITIONS with conditionalFormat examples from user.
+// - Updated getImportType to return conditionalFormat.
 
 import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
 import CanvasFile from '../../assets/icons/CanvasLogo.png';
@@ -31,7 +32,13 @@ export const IMPORT_DEFINITIONS = [
             friendlyName: 'Grade Book',
             linkLocation: 'https://nuc.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
             parameter: [CourseId, CanvasId]
-        }
+        },
+		conditionalFormat: {
+			column: 'Grade', // Note: Column name in Excel might be "Current Score" based on matchColumns or Rename? matchColumns has 'current score'. 
+            // Assuming the column header in the sheet will match the input header or rename.
+			condition: 'Color Scales',
+			format: 'G-Y-R Color Scale'
+		}
     },
     {
         id: 'anthology',
@@ -55,8 +62,13 @@ export const IMPORT_DEFINITIONS = [
         type: 'Missing Assignments',
         matchColumns: ['current grade', 'total missing','grade book'],
         action: 'Hybrid',
-		refreshSheet: 'MA Test',
+		refreshSheet: 'MA Test', // Updated from user input "MA Test"
         icon: MissingAssignmentFile,
+		conditionalFormat: {
+			column: 'Missing Assignments', // Matches 'total missing' column header usually
+			condition: 'Highlight Cells with',
+			format: ['Specific text', 'Beginning with', '0', 'Green Fill with Dark Green Text']
+		}
     },
     {
         id: 'attendance',
@@ -93,7 +105,8 @@ export function getImportType(columns = []) {
                 hyperLink: def.hyperLink || null,
                 rename: def.rename || null,
                 excludeFilter: def.excludeFilter || null,
-                refreshSheet: def.refreshSheet || null // Added this line
+                refreshSheet: def.refreshSheet || null,
+                conditionalFormat: def.conditionalFormat || null // Added conditionalFormat
             };
         }
     }
@@ -107,6 +120,7 @@ export function getImportType(columns = []) {
         hyperLink: null, 
         rename: null, 
         excludeFilter: null,
-        refreshSheet: null
+        refreshSheet: null,
+        conditionalFormat: null
     };
 }
