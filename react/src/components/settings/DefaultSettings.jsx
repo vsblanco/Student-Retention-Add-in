@@ -15,9 +15,10 @@ export const defaultColumns =[
 	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
 	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, identifier: true, format: ['=HYPERLINK']},
 	{ name: 'Grade', alias: ['Course Grade','current score']  },
-	{ name: 'LDA', alias: ['Last Date of Attendance','Date of Attendance'], format: ['MM/DD/YYYY']},
+	{ name: 'LDA', alias: ['Last Date of Attendance','Date of Attendance', 'CurrentLDA'], format: ['MM/DD/YYYY']},
 	{ name: 'Days Out', alias: ['Days Out'], format: ['G-Y-R Color Scale']},
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
+	{ name: 'Shift', alias: ['ShiftDescrip'] },
 	{ name: 'Missing Assignments', alias: ['Total Missing'] },
 ];
 

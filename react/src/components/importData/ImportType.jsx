@@ -11,6 +11,7 @@ import MissingAssignmentFile from '../../assets/icons/MissingAssignmentsLogo.png
 
 const CanvasId = 'canvas id';
 const CourseId = 'course id';
+const DaysOut = 'days out';
 
 export const CanvasRename = {
 	'student id': CanvasId,
@@ -47,6 +48,11 @@ export const IMPORT_DEFINITIONS = [
         matchColumns: ['studentname', 'studentnumber'],
         action: 'Refresh',
         icon: AnthologyFile,
+		customFunction: {
+			column: DaysOut,
+			function: calculateDaysOut,
+			parameter: ['LDA']
+		}
     },
     {
         id: 'dropout',
@@ -110,6 +116,7 @@ export function getImportType(columns = []) {
             };
         }
     }
+	
 
     // Default fallback
 	return { 
@@ -124,3 +131,12 @@ export function getImportType(columns = []) {
         conditionalFormat: null
     };
 }
+
+export function calculateDaysOut(ldaDate) {
+		if (!ldaDate) return null;
+		const today = new Date();
+		const lda = new Date(ldaDate);
+		const diffTime = today - lda;
+		const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+		return diffDays;
+	}
