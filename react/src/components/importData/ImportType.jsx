@@ -1,7 +1,6 @@
-// [2025-11-19] v5.7.0 - Added Conditional Formatting Support
+// [2025-11-22] v5.7.1 - Added Custom Function Support
 // Changes: 
-// - Updated IMPORT_DEFINITIONS with conditionalFormat examples from user.
-// - Updated getImportType to return conditionalFormat.
+// - Updated getImportType to return customFunction from definitions.
 
 import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
 import CanvasFile from '../../assets/icons/CanvasLogo.png';
@@ -51,7 +50,7 @@ export const IMPORT_DEFINITIONS = [
 		customFunction: {
 			column: DaysOut,
 			function: calculateDaysOut,
-			parameter: ['LDA']
+			parameter: ['LDA'] // Column name in the source file
 		}
     },
     {
@@ -112,7 +111,8 @@ export function getImportType(columns = []) {
                 rename: def.rename || null,
                 excludeFilter: def.excludeFilter || null,
                 refreshSheet: def.refreshSheet || null,
-                conditionalFormat: def.conditionalFormat || null // Added conditionalFormat
+                conditionalFormat: def.conditionalFormat || null,
+                customFunction: def.customFunction || null // Added customFunction return
             };
         }
     }
@@ -128,15 +128,19 @@ export function getImportType(columns = []) {
         rename: null, 
         excludeFilter: null,
         refreshSheet: null,
-        conditionalFormat: null
+        conditionalFormat: null,
+        customFunction: null
     };
 }
 
 export function calculateDaysOut(ldaDate) {
-		if (!ldaDate) return null;
-		const today = new Date();
-		const lda = new Date(ldaDate);
-		const diffTime = today - lda;
-		const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-		return diffDays;
-	}
+    if (!ldaDate) return null;
+    const today = new Date();
+    const lda = new Date(ldaDate);
+    // Validate date
+    if (isNaN(lda.getTime())) return null;
+    
+    const diffTime = today - lda;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}

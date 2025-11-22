@@ -1,9 +1,11 @@
-/* * Timestamp: 2025-11-19 15:55:00 EST
- * Version: 5.8.0
+/* * Timestamp: 2025-11-22 12:45:00 EST
+ * Version: 5.9.0
  * Author: Gemini (for Victor)
- * Description: Optimized ImportManager.
+ * Description: Optimized ImportManager with Custom Function Support.
  * Improvements:
- * - Passed conditionalFormat prop to DataProcessor.
+ * - Added applyCustomFunction utility to process data based on customFunction prop.
+ * - Integrated customFunction into the useMemo data processing pipeline.
+ * - Updated matched columns logic to include custom function columns.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -138,6 +140,81 @@ const applyHyperlink = (renamedObj, hyper) => {
         } else {
             while (newRow.length < headerIdx) newRow.push('');
             newRow[headerIdx] = formula;
+        }
+        return newRow;
+    });
+
+    return { data: out, headers: headersIn };
+};
+
+// NEW: Utility to apply Custom Function calculations
+const applyCustomFunction = (dataObj, customFunc) => {
+    if (!customFunc || !customFunc.column || typeof customFunc.function !== 'function') {
+        return dataObj;
+    }
+
+    const colName = customFunc.column;
+    const calcFunction = customFunc.function;
+    const paramsDef = Array.isArray(customFunc.parameter) ? customFunc.parameter : [];
+
+    const headersIn = Array.isArray(dataObj.headers) ? [...dataObj.headers] : [];
+    const dataIn = dataObj.data;
+
+    // Ensure header exists
+    let headerIdx = headersIn.findIndex(h => String(h).toLowerCase().trim() === String(colName).toLowerCase().trim());
+    if (headerIdx === -1) {
+        headersIn.push(colName);
+        headerIdx = headersIn.length - 1;
+    }
+
+    if (!Array.isArray(dataIn) || dataIn.length === 0) {
+        return { data: dataIn, headers: headersIn };
+    }
+
+    const first = dataIn[0];
+    const isObjectRows = first && typeof first === 'object' && !Array.isArray(first);
+
+    // Pre-calculate parameter indices for array-based rows
+    let paramIndices = [];
+    if (!isObjectRows) {
+        paramIndices = paramsDef.map(p => {
+            const needle = String(p).toLowerCase().trim();
+            return headersIn.findIndex(h => String(h).toLowerCase().trim() === needle);
+        });
+    }
+
+    const out = dataIn.map(row => {
+        let newRow = isObjectRows ? { ...row } : [...row];
+        let paramValues = [];
+
+        // Extract parameter values from the row
+        if (isObjectRows) {
+            paramValues = paramsDef.map(p => {
+                const needle = String(p).toLowerCase().trim();
+                if (row[p] !== undefined) return row[p];
+                const foundKey = Object.keys(row).find(k => String(k).toLowerCase().trim() === needle);
+                return foundKey ? row[foundKey] : null;
+            });
+        } else {
+            paramValues = paramIndices.map(idx => (idx !== -1 && row[idx] !== undefined ? row[idx] : null));
+        }
+
+        // Calculate result
+        let result = '';
+        try {
+            result = calcFunction(...paramValues);
+            if (result === null || result === undefined) result = '';
+        } catch (e) {
+            console.warn(`Custom function error for column ${colName}:`, e);
+            result = '#ERROR';
+        }
+
+        // Assign result to row
+        if (isObjectRows) {
+            newRow[colName] = result;
+        } else {
+            while (newRow.length < headerIdx) newRow.push('');
+            newRow[headerIdx] = result;
         }
         return newRow;
     });
@@ -438,19 +515,42 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
     const columns = headers;
     const importInfo = useMemo(() => getImportType(columns), [Array.isArray(columns) ? columns.join('|') : String(columns)]);
+    
     const effectiveExcludeFilter = useMemo(() => (excludeFilter && excludeFilter.column) ? excludeFilter : (importInfo && importInfo.excludeFilter), [excludeFilter, importInfo]);
     const effectiveHyperLink = useMemo(() => (hyperLink && hyperLink.column) ? hyperLink : (importInfo && importInfo.hyperLink), [hyperLink, importInfo]);
+    
+    // Extract custom function prop from import info
+    const effectiveCustomFunction = useMemo(() => (importInfo && importInfo.customFunction), [importInfo]);
+
+    // 1. Rename
     const renamed = useMemo(() => applyRenames(parsedData, headers, importInfo && importInfo.rename), [parsedData, headers, importInfo]);
+    
+    // 2. Enrich (Hyperlinks)
     const enriched = useMemo(() => applyHyperlink(renamed, effectiveHyperLink), [renamed, effectiveHyperLink]);
-    const filteredData = useMemo(() => applyExclusion(enriched.data, enriched.headers, effectiveExcludeFilter), [enriched, effectiveExcludeFilter]);
+    
+    // 3. NEW: Calculate (Custom Function)
+    const calculated = useMemo(() => applyCustomFunction(enriched, effectiveCustomFunction), [enriched, effectiveCustomFunction]);
+
+    // 4. Filter (Exclusion)
+    const filteredData = useMemo(() => applyExclusion(calculated.data, calculated.headers, effectiveExcludeFilter), [calculated, effectiveExcludeFilter]);
+
     const matchedWithLink = useMemo(() => {
         const base = Array.isArray(importInfo && importInfo.matched) ? [...importInfo.matched] : [];
+        
+        // Add rename targets
         const rename = importInfo && importInfo.rename;
         if (rename) Object.values(rename).forEach(target => { if (target && !base.includes(target)) base.push(target); });
+        
+        // Add Hyperlink column
         const hyperCol = effectiveHyperLink && effectiveHyperLink.column;
         if (hyperCol && !base.includes(String(hyperCol))) base.push(String(hyperCol));
+        
+        // NEW: Add Custom Function column to matched list (so DataProcessor knows to write it)
+        const customCol = effectiveCustomFunction && effectiveCustomFunction.column;
+        if (customCol && !base.includes(String(customCol))) base.push(String(customCol));
+
         return base;
-    }, [importInfo, effectiveHyperLink]);
+    }, [importInfo, effectiveHyperLink, effectiveCustomFunction]);
 
 
     // --- Handlers ---
@@ -539,7 +639,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             data: filteredData,
             type: importInfo.type || 'csv',
             matched: matchedWithLink,
-            headers: enriched.headers || renamed.headers,
+            headers: calculated.headers || renamed.headers, // Use calculated headers
         };
 
         if (typeof onImport === 'function') onImport(payload);
@@ -547,7 +647,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
         setLastEmittedIndex(processingIndex);
         setStatus(`Processing import ${processingIndex + 1} of ${uploadedFiles.length}...`);
-    }, [isImported, processingIndex, activeIndex, headers, filteredData, importInfo, matchedWithLink, enriched, renamed, uploadedFiles, lastEmittedIndex, onImport]);
+    }, [isImported, processingIndex, activeIndex, headers, filteredData, importInfo, matchedWithLink, calculated, renamed, uploadedFiles, lastEmittedIndex, onImport]);
 
 
     // --- Render ---
@@ -686,7 +786,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                         data={filteredData}
                         sheetName="test"
                         refreshSheetName={importInfo.refreshSheet}
-                        headers={enriched.headers || renamed.headers}
+                        headers={calculated.headers || renamed.headers}
                         settingsColumns={workbookColumns}
                         matched={matchedWithLink}
                         action={importInfo.action}
