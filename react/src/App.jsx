@@ -32,7 +32,7 @@ function App() {
         return <About />;
       case 'student-view':
       default:
-        return <StudentView />;
+        return <About />;
     }
   };
 
