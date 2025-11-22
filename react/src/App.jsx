@@ -12,7 +12,7 @@ import ImportManager from './components/importData/ImportManager.jsx';
 function App() {
   return (
     <>
-      <ImportManager />
+      <StudentView />
       <ToastContainer
       position="bottom-left"
       pauseOnFocusLoss={false}
