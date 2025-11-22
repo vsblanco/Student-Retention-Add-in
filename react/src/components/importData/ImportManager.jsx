@@ -1,9 +1,9 @@
-/* * Timestamp: 2025-11-22 13:40:00 EST
- * Version: 6.0.0
+/* * Timestamp: 2025-11-22 14:05:00 EST
+ * Version: 6.1.0
  * Author: Gemini (for Victor)
- * Description: Optimized ImportManager with Priority Sorting.
+ * Description: Optimized ImportManager with Priority Sorting and Dynamic UI Status.
  * Improvements:
- * - handleImport now sorts uploaded files based on 'priority' defined in ImportType before processing.
+ * - FileCards now dynamically update status (Normal -> Pending -> Loading -> Completed) during the import process.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -744,17 +744,30 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                     </>
                 ) : (
                     <div className="w-full space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        {uploadedFiles.map((f, idx) => (
-                            <div key={`${f.name}-${idx}`} onClick={(e) => e.stopPropagation()}>
-                                <FileCard
-                                    file={f}
-                                    rows={idx === activeIndex && Array.isArray(parsedData) ? parsedData.length : undefined}
-                                    type={fileInfos[idx] && fileInfos[idx].type}
-                                    action={fileInfos[idx] && fileInfos[idx].action}
-                                    icon={fileInfos[idx] && fileInfos[idx].icon}
-                                />
-                            </div>
-                        ))}
+                        {uploadedFiles.map((f, idx) => {
+                            // Calculate Status Dynamically
+                            let currentStatus = 'normal';
+                            if (importCompleted) {
+                                currentStatus = 'completed';
+                            } else if (isImported) {
+                                if (idx < processingIndex) currentStatus = 'completed';
+                                else if (idx === processingIndex) currentStatus = 'loading';
+                                else currentStatus = 'pending';
+                            }
+
+                            return (
+                                <div key={`${f.name}-${idx}`} onClick={(e) => e.stopPropagation()}>
+                                    <FileCard
+                                        file={f}
+                                        rows={idx === activeIndex && Array.isArray(parsedData) ? parsedData.length : undefined}
+                                        type={fileInfos[idx] && fileInfos[idx].type}
+                                        action={fileInfos[idx] && fileInfos[idx].action}
+                                        icon={fileInfos[idx] && fileInfos[idx].icon}
+                                        status={currentStatus}
+                                    />
+                                </div>
+                            );
+                        })}
                         <div className="flex items-center justify-center pt-4 pb-2 opacity-60 group-hover:opacity-100 transition-opacity">
                             <div className="flex items-center gap-2 text-sm text-slate-400 font-medium bg-white/50 px-4 py-2 rounded-full">
                                 <Plus size={16} />
