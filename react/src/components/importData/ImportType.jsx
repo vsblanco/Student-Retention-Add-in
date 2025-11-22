@@ -1,6 +1,7 @@
-// [2025-11-22] v5.7.1 - Added Custom Function Support
+// [2025-11-22] v5.8.0 - Added Import Priority
 // Changes: 
-// - Updated getImportType to return customFunction from definitions.
+// - Added 'priority' field to IMPORT_DEFINITIONS (1=High, 5=Low).
+// - Updated getImportType to return priority.
 
 import AnthologyFile from '../../assets/icons/AnthologyLogo.png';
 import CanvasFile from '../../assets/icons/CanvasLogo.png';
@@ -19,9 +20,24 @@ export const CanvasRename = {
 // Centralized Definition for UI and Logic
 export const IMPORT_DEFINITIONS = [
     {
+        id: 'anthology',
+        name: 'Anthology Student List',
+        type: 'Student List',
+        priority: 1, // Highest Priority
+        matchColumns: ['studentname', 'studentnumber'],
+        action: 'Refresh',
+        icon: AnthologyFile,
+		customFunction: {
+			column: DaysOut,
+			function: calculateDaysOut,
+			parameter: ['LDA'] // Column name in the source file
+		}
+    },
+    {
         id: 'canvas',
         name: 'Canvas Gradebook',
         type: 'Gradebook Link',
+        priority: 2,
         matchColumns: ['student sis', 'course', CourseId, 'current score'],
         action: 'Update',
         icon: CanvasFile,
@@ -41,22 +57,10 @@ export const IMPORT_DEFINITIONS = [
 		}
     },
     {
-        id: 'anthology',
-        name: 'Anthology Student List',
-        type: 'Student List',
-        matchColumns: ['studentname', 'studentnumber'],
-        action: 'Refresh',
-        icon: AnthologyFile,
-		customFunction: {
-			column: DaysOut,
-			function: calculateDaysOut,
-			parameter: ['LDA'] // Column name in the source file
-		}
-    },
-    {
         id: 'dropout',
         name: 'Dropout Detective',
         type: 'Grade',
+        priority: 3,
         matchColumns: ['email', 'risk trend', 'course grade', 'course missing assignments', 'course zero assignments'],
         action: 'Update',
         icon: DropoutDetectiveFile,
@@ -65,6 +69,7 @@ export const IMPORT_DEFINITIONS = [
         id: 'missingassignments',
         name: 'Missing Assignments Report',
         type: 'Missing Assignments',
+        priority: 4,
         matchColumns: ['current grade', 'total missing','grade book'],
         action: 'Hybrid',
 		refreshSheet: 'MA Test', // Updated from user input "MA Test"
@@ -79,6 +84,7 @@ export const IMPORT_DEFINITIONS = [
         id: 'attendance',
         name: 'MyNUC Attendance',
         type: 'LDA',
+        priority: 5, // Lowest Priority
         matchColumns: ['issued id', 'date of attendance'],
         action: 'Update',
         icon: AttendanceFile,
@@ -107,12 +113,13 @@ export function getImportType(columns = []) {
                 matched: def.matchColumns,
                 action: def.action,
                 icon: def.icon,
+                priority: def.priority || 99, // Default to 99 if undefined
                 hyperLink: def.hyperLink || null,
                 rename: def.rename || null,
                 excludeFilter: def.excludeFilter || null,
                 refreshSheet: def.refreshSheet || null,
                 conditionalFormat: def.conditionalFormat || null,
-                customFunction: def.customFunction || null // Added customFunction return
+                customFunction: def.customFunction || null 
             };
         }
     }
@@ -124,6 +131,7 @@ export function getImportType(columns = []) {
         matched: [], 
         action: 'Refresh', 
         icon: null, 
+        priority: 99,
         hyperLink: null, 
         rename: null, 
         excludeFilter: null,

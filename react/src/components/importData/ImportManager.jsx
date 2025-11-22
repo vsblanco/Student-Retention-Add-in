@@ -1,11 +1,9 @@
-/* * Timestamp: 2025-11-22 12:45:00 EST
- * Version: 5.9.0
+/* * Timestamp: 2025-11-22 13:40:00 EST
+ * Version: 6.0.0
  * Author: Gemini (for Victor)
- * Description: Optimized ImportManager with Custom Function Support.
+ * Description: Optimized ImportManager with Priority Sorting.
  * Improvements:
- * - Added applyCustomFunction utility to process data based on customFunction prop.
- * - Integrated customFunction into the useMemo data processing pipeline.
- * - Updated matched columns logic to include custom function columns.
+ * - handleImport now sorts uploaded files based on 'priority' defined in ImportType before processing.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -560,7 +558,32 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
             setStatus('No file/data to import.');
             return;
         }
-        const firstIdx = uploadedFiles.findIndex((f) => f && /\.(csv|xlsx?)$/i.test(f.name));
+
+        // 1. Combine files with their info to perform sorting
+        const combined = uploadedFiles.map((file, index) => ({
+            file,
+            info: fileInfos[index]
+        }));
+
+        // 2. Sort based on priority (Low number = High Priority)
+        combined.sort((a, b) => {
+            const pA = a.info && a.info.priority ? a.info.priority : 99;
+            const pB = b.info && b.info.priority ? b.info.priority : 99;
+            return pA - pB;
+        });
+
+        // 3. Separate back into arrays
+        const sortedFiles = combined.map(c => c.file);
+        const sortedInfos = combined.map(c => c.info);
+
+        // 4. Update state with the sorted order
+        // This ensures the processing loop follows the priority order
+        setUploadedFiles(sortedFiles);
+        setFileInfos(sortedInfos);
+
+        // 5. Find first valid file in the NEW sorted list
+        const firstIdx = sortedFiles.findIndex((f) => f && /\.(csv|xlsx?)$/i.test(f.name));
+        
         if (firstIdx === -1) {
             setStatus('No supported files found.');
             return;
@@ -570,9 +593,10 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         setLastEmittedIndex(-1);
         setIsImported(true);
         setImportCompleted(false);
-        setStatus(`Starting import 1 of ${uploadedFiles.length}...`);
+        setStatus(`Starting import 1 of ${sortedFiles.length}...`);
 
-        parseActiveFile(uploadedFiles[firstIdx], firstIdx);
+        // Process the first file from the SORTED list
+        parseActiveFile(sortedFiles[firstIdx], firstIdx);
     };
 
     const handleProcessorComplete = useCallback((result) => {
@@ -775,7 +799,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 <div className="mt-6 flex justify-center animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards">
                     <button type="button" onClick={handleImport} className="group relative flex items-center justify-center gap-3 bg-slate-900 hover:bg-slate-800 text-white px-8 py-3.5 rounded-full shadow-xl shadow-slate-200 hover:shadow-2xl hover:shadow-slate-300 transform transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 w-full sm:w-auto sm:min-w-[200px]">
                         <span className="font-semibold tracking-wide text-sm">Import Data</span>
-                        {ImportIcon ? <img src={ImportIcon} alt="" className="w-5 h-5 object-contain invert opacity-90 group-hover:opacity-100 transition-opacity" /> : <ArrowRight size={18} className="opacity-70 group-hover:translate-x-1 transition-transform" />}
+                        {ImportIcon ? <img src={ImportIcon} alt="" className="w-5 h-5 object-contain opacity-90 group-hover:opacity-100 transition-opacity" /> : <ArrowRight size={18} className="opacity-70 group-hover:translate-x-1 transition-transform" />}
                     </button>
                 </div>
             )}
