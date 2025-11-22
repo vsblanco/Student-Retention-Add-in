@@ -1,5 +1,6 @@
-// [2025-11-19] v1.2 - Optimized DataProcessor Utility (Fix ID Lookup)
-// Changes: computeIdentifierListFromValues now uses findColumnIndex to checking Name AND Aliases.
+// [2025-11-22] v1.7 - Optimized Color Application
+// Changes:
+// - applyStaticColumnsWithContext: Removed default white fill. Static columns now transparently inherit row background if no specific color is mapped.
 
 // PERF: small in-memory cache for normalized keys to avoid repeated work
 const _normCache = new Map();
@@ -153,10 +154,13 @@ export function renameArrayRows(rows = [], aliasMap = new Map()) {
 }
 
 // NEW helper: compute saved static data from a used-range values array (no Excel.run)
-export function computeSavedStaticFromValues(values = [], sheetHeaders = [], staticCols = [], identifierSetting = null, formulas = []) {
+// UPDATED: Added cellProps argument to capture formatting
+export function computeSavedStaticFromValues(values = [], sheetHeaders = [], staticCols = [], identifierSetting = null, formulas = [], cellProps = []) {
 	if (!Array.isArray(staticCols) || staticCols.length === 0) return null;
 	if (!identifierSetting || !identifierSetting.name) return null;
 	if (!Array.isArray(values) || values.length === 0) return null;
+
+    console.log('[Utility] computeSavedStaticFromValues started. Rows:', values.length, 'Static Cols:', staticCols);
 
 	const headerRow = (Array.isArray(sheetHeaders) && sheetHeaders.length > 0)
 		? sheetHeaders.map((v) => (v == null ? '' : String(v).trim()))
@@ -164,13 +168,27 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 
 	// Use findColumnIndex to locate the ID (checks aliases)
 	const identifierIndex = findColumnIndex(headerRow, identifierSetting);
-	if (identifierIndex === -1) return null;
+	if (identifierIndex === -1) {
+        console.warn('[Utility] Identifier column not found in header row:', headerRow);
+        return null;
+    }
 
 	const headerIndexMap = getHeaderIndexMap(headerRow);
 	const staticIndices = staticCols.map((colName) => (headerIndexMap.has(normalizeKey(colName)) ? headerIndexMap.get(normalizeKey(colName)) : -1));
 
+    console.log('[Utility] Static Indices mapped:', staticIndices);
+
 	const saved = new Map();
+	const colorMap = new Map(); // Store Map<ColName, Map<Value, Color>>
+	
+	// Initialize color map for each static col
+	staticCols.forEach(c => colorMap.set(c, new Map()));
+
 	const formulasIsArray = Array.isArray(formulas);
+	const hasProps = Array.isArray(cellProps) && cellProps.length > 0;
+
+    if (!hasProps) console.warn('[Utility] No cellProps (formatting) provided to computeSavedStaticFromValues.');
+    else console.log(`[Utility] Processing cellProps. Length: ${cellProps.length}`);
 
 	for (let r = 1; r < values.length; r++) {
 		const row = Array.isArray(values[r]) ? values[r] : [];
@@ -202,6 +220,20 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 				const asStr = String(rawVal).trim();
 				if (asStr !== '') {
 					obj[colName] = rawVal;
+
+					// Capture Color Mapping: Value -> Color
+					// We map the VALUE to the COLOR.
+					if (hasProps && cellProps[r] && cellProps[r][colIdx]) {
+						const fill = cellProps[r][colIdx].format.fill;
+						// FIX: Only store valid colors. Ignore '#FFFFFF' (white) so it doesn't overwrite existing colors.
+						if (fill && fill.color && fill.color !== '#FFFFFF') {
+                            // Log the first few captures to debug
+                            if (colorMap.get(colName).size < 5) {
+                                console.log(`[Utility] Stored color ${fill.color} for value "${asStr}" in col "${colName}" (Row ${r})`);
+                            }
+							colorMap.get(colName).set(asStr, fill.color);
+						}
+					}
 				}
 			}
 		}
@@ -211,11 +243,16 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 		}
 	}
 
+    staticCols.forEach(c => {
+        console.log(`[Utility] Final Color Map for "${c}": ${colorMap.get(c).size} unique value-color pairs.`);
+    });
+
 	return {
 		identifierIndex,
 		staticCols,
 		staticIndices,
 		savedMap: saved,
+		colorMap: colorMap // Return the color mapping
 	};
 }
 
@@ -256,6 +293,8 @@ export async function applyStaticColumnsWithContext(context, sheet, savedInfo, w
 	if (!savedInfo || !savedInfo.savedMap || savedInfo.savedMap.size === 0) return;
 	if (!sheet || rowCount <= 0) return;
 
+    console.log(`[Utility] applyStaticColumnsWithContext started. WriteStartRow: ${writeStartRow}, Count: ${rowCount}`);
+
 	// read identifiers for the newly written rows
 	const idRange = sheet.getRangeByIndexes(writeStartRow, savedInfo.identifierIndex, rowCount, 1);
 	idRange.load('values');
@@ -263,6 +302,7 @@ export async function applyStaticColumnsWithContext(context, sheet, savedInfo, w
 
 	const idValues = idRange.values || [];
 	const savedMap = savedInfo.savedMap;
+	const colorMap = savedInfo.colorMap;
 	const staticCols = savedInfo.staticCols || [];
 	const staticIndices = savedInfo.staticIndices || [];
 
@@ -271,41 +311,83 @@ export async function applyStaticColumnsWithContext(context, sheet, savedInfo, w
 		const colIndex = staticIndices[i];
 		if (colIndex === -1) continue;
 
+		// Get color lookup for this column
+		const valToColor = colorMap ? colorMap.get(colName) : null;
+        
+        if (valToColor && valToColor.size > 0) {
+            console.log(`[Utility] Applying static col "${colName}" with color map size: ${valToColor.size}`);
+        }
+
 		// Build column vector of values and formula flags
 		const valuesToWrite = new Array(rowCount);
 		const isFormula = new Array(rowCount);
+		const colorsToWrite = new Array(rowCount); // Parallel array for colors
+
+        let colorMatchCount = 0;
+
 		for (let r = 0; r < rowCount; r++) {
 			const rawId = idValues[r] && idValues[r][0] != null ? String(idValues[r][0]).trim() : '';
 			const savedRow = savedMap.get(String(rawId));
 			const v = savedRow && Object.prototype.hasOwnProperty.call(savedRow, colName) ? savedRow[colName] : '';
+			
 			valuesToWrite[r] = v;
 			isFormula[r] = (typeof v === 'string' && v.startsWith('='));
-		}
 
-		// Coalesce contiguous runs of same type and write each run once
+			// Optimization: Map Value -> Color
+			if (valToColor && v !== '') {
+				const cleanVal = String(v).trim();
+				if (valToColor.has(cleanVal)) {
+                    const c = valToColor.get(cleanVal);
+					colorsToWrite[r] = c;
+                    colorMatchCount++;
+				}
+			}
+		}
+        
+        if (colorMatchCount > 0) {
+            console.log(`[Utility] Col "${colName}": Matched ${colorMatchCount} rows with colors.`);
+        }
+
+		// Coalesce contiguous runs of same type AND color
 		let runStart = 0;
 		let runType = isFormula[0] || false; // false => values, true => formulas
+        let runColor = colorsToWrite[0]; // Track color of the run
+
 		for (let r = 0; r <= rowCount; r++) {
 			const curType = r < rowCount ? isFormula[r] : null;
-			if (r === rowCount || curType !== runType) {
+            const curColor = r < rowCount ? colorsToWrite[r] : null;
+
+			if (r === rowCount || curType !== runType || curColor !== runColor) {
 				const runLen = r - runStart;
 				if (runLen > 0) {
 					const startAbs = writeStartRow + runStart;
 					const range = sheet.getRangeByIndexes(startAbs, colIndex, runLen, 1);
+					
 					// build matrix for the run: [[v], [v], ...]
 					const runMatrix = [];
+					
 					for (let k = runStart; k < runStart + runLen; k++) {
 						runMatrix.push([valuesToWrite[k]]);
 					}
+					
 					if (runType) {
 						range.formulas = runMatrix;
 					} else {
 						range.values = runMatrix;
 					}
+
+					// Apply Format Grouped
+                    // Only apply if we actually have a color. 
+                    // If runColor is undefined (no map match), we do NOTHING.
+                    // This allows the underlying Row Highlight (or existing format) to remain.
+                    if (runColor) {
+                        range.format.fill.color = runColor;
+                    }
 				}
 				// start new run
 				runStart = r;
 				runType = curType;
+                runColor = curColor;
 			}
 		}
 	}

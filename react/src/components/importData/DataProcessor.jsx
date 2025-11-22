@@ -1,8 +1,7 @@
-// [2025-11-19] v2.5 - Fix Silent Failure in Refresh & Add Logging
+// [2025-11-22] v2.9 - Fix Color Overwrite Issue
 // Changes:
-// - Fixed logic in Refresh() to populate `sheetHeaders` from data if the sheet is new/empty. 
-//   (This ensures getHeaderIndexMap finds the column index for Conditional Formatting).
-// - Added console logs to applyConditionalFormatting for easier debugging.
+// - Refresh(): Moved 'queueFormatRanges' (Highlight/Clear) BEFORE 'applyStaticColumnsWithContext'.
+//   This ensures static column colors overlay the row styles instead of being cleared by them.
 
 import React, { useEffect } from 'react';
 import {
@@ -149,6 +148,7 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			// 1. READ PHASE
 			let usedValues = [];
 			let usedFormulas = [];
+			let usedProps = []; // To store cell properties (colors)
 			let sheetExisted = false;
 
 			await Excel.run(async (context) => {
@@ -158,11 +158,29 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				if (!sheet.isNullObject) {
 					sheetExisted = true;
 					const used = sheet.getUsedRangeOrNullObject();
+					
+					// Load standard values/formulas
 					used.load(['values', 'formulas']);
+					
+					// Efficiently Load Cell Properties (fill color)
+					// This returns a 2D array of properties matching the range
+					const propsResult = used.getCellProperties({
+						format: {
+							fill: {
+								color: true
+							}
+						}
+					});
+
 					await context.sync();
 					if (!used.isNullObject) {
 						usedValues = used.values || [];
 						usedFormulas = used.formulas || [];
+						usedProps = propsResult.value || [];
+                        console.log(`[DataProcessor] Cell Props Loaded. Rows: ${usedProps.length}`);
+                        if (usedProps.length > 0) {
+                            console.log('[DataProcessor] Sample Cell Prop Row 0:', usedProps[0]);
+                        }
 					}
 				}
 			});
@@ -257,7 +275,8 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 
 			let savedStatic = null;
 			if (staticCols.length > 0 && identifierSetting) {
-				savedStatic = computeSavedStaticFromValues(usedValues, sheetHeaders, staticCols, identifierSetting, usedFormulas);
+				// UPDATED: Pass usedProps (formatting) to the calculator
+				savedStatic = computeSavedStaticFromValues(usedValues, sheetHeaders, staticCols, identifierSetting, usedFormulas, usedProps);
 			}
 
 			// Prepare Matrix for Writing
@@ -404,17 +423,21 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 					writeRange.values = rows;
 				}
 
-				// Restore Static Columns
-				if (savedStatic && savedStatic.savedMap && savedStatic.savedMap.size > 0) {
-					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, targetSheetName);
-				}
-
-				// Apply Highlighting
+                // ----------------------------------------------------------
+                // REORDERED: Apply Row Highlighting/Clearing FIRST
+                // ----------------------------------------------------------
 				if (rangesToHighlight.length > 0) {
 					queueFormatRanges(sheet, rangesToHighlight, 'lightblue');
 				}
 				if (rangesToClear.length > 0) {
 					queueFormatRanges(sheet, rangesToClear, null);
+				}
+
+                // ----------------------------------------------------------
+                // REORDERED: Restore Static Columns (Overlaying Row Styles)
+                // ----------------------------------------------------------
+				if (savedStatic && savedStatic.savedMap && savedStatic.savedMap.size > 0) {
+					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, targetSheetName);
 				}
 
 				// Apply Conditional Formatting
