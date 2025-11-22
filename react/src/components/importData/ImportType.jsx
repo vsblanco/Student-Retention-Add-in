@@ -72,7 +72,7 @@ export const IMPORT_DEFINITIONS = [
         priority: 4,
         matchColumns: ['current grade', 'total missing','grade book'],
         action: 'Hybrid',
-		refreshSheet: 'MA Test', // Updated from user input "MA Test"
+		refreshSheet: 'Missing Assignments', // Updated from user input "MA Test"
         icon: MissingAssignmentFile,
 		conditionalFormat: {
 			column: 'Missing Assignments', // Matches 'total missing' column header usually

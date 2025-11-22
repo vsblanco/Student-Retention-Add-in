@@ -821,7 +821,7 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
                 <div className="mt-6">
                     <DataProcessor
                         data={filteredData}
-                        sheetName="test"
+                        sheetName="Master List"
                         refreshSheetName={importInfo.refreshSheet}
                         headers={calculated.headers || renamed.headers}
                         settingsColumns={workbookColumns}
