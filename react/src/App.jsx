@@ -8,6 +8,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { Slide, Zoom, Flip, Bounce } from 'react-toastify';
 import Settings from './components/settings/Settings.jsx';
 import ImportManager from './components/importData/ImportManager.jsx';
+import LDAManager from './components/createLDA/LDAManager.jsx';
 
 function App() {
   const [page, setPage] = useState('none');
@@ -32,8 +33,10 @@ function App() {
         return <About />;
       case 'student-view':
         return <StudentView />;
+      case 'create-lda':
+        return <LDAManager />;
       default:
-        return <ImportManager />;
+        return <Settings />;
     }
   };
 

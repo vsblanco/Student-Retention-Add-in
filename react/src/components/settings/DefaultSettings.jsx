@@ -23,11 +23,7 @@ export const defaultColumns =[
 ];
 
 export const Options = [
-	{ option: 'static', label: 'Static', type: 'boolean'},
 	{ option: 'hidden', label: 'Hidden in LDA', type: 'boolean' },
-	{ option: 'colors', label: 'Colors', type: 'string', values: ['G-Y-R Color Scale', 'R-Y-G Color Scale'] },
-	{ option: 'function', label: 'Function', type: 'string', values: ['=HYPERLINK', '=XLOOKUP'] },
-	{ option: 'dateFormat', label: 'Date Format', type: 'string', values: ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] },
 	{ option: 'identifier', label: 'Identifier', type: 'boolean' },
 	{ option: 'alias', label: 'Aliases', type: 'string' },
 ];
