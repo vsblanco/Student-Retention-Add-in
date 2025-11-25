@@ -1,8 +1,9 @@
 /*
- * Timestamp: 2025-11-25 17:50:00
- * Version: 2.0.0
+ * Timestamp: 2025-11-25 18:30:00
+ * Version: 2.1.1
  * Author: Gemini (for Victor)
- * Description: Core logic for creating LDA reports. Replaces old lda.js dialog logic with a module that integrates with the React UI and Workbook Settings.
+ * Description: Core logic for creating LDA reports.
+ * Update: Fixed table starting position to Row 1 (index 0).
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -237,10 +238,22 @@ export async function createLDA(userOverrides, onProgress) {
             // --- STEP 7: Formatting LDA Table ---
             if (onProgress) onProgress('format', 'active');
 
-            // Define output columns based on settings (filtering out hidden/static ones if needed, 
-            // but usually we want to print what is in the columns setting)
-            // The user settings.columns array defines the ORDER and VISIBILITY.
-            const outputColumns = settings.columns.filter(c => !c.hidden);
+            // Define output columns based on settings, but RE-ORDERED by Master List position
+            // 1. Get enabled columns
+            let outputColumns = settings.columns.filter(c => !c.hidden);
+            
+            // 2. Sort them based on where they appear in the Master List
+            outputColumns.sort((a, b) => {
+                const indexA = getColIndex(a.name);
+                const indexB = getColIndex(b.name);
+                
+                // If a column isn't found in Master List (-1), push it to the end
+                if (indexA === -1 && indexB === -1) return 0;
+                if (indexA === -1) return 1; 
+                if (indexB === -1) return -1;
+                
+                return indexA - indexB;
+            });
             
             // Helper to build a table row
             const buildOutputRow = (rowObj) => {
@@ -286,7 +299,8 @@ export async function createLDA(userOverrides, onProgress) {
 
             // 7a. Write Main LDA Table
             if (dataRows.length > 0) {
-                await writeTable(context, newSheet, 1, "LDA_Table", outputColumns.map(c => c.name), dataRows.map(buildOutputRow));
+                // CHANGED: startRow is now 0 (Row 1 in Excel)
+                await writeTable(context, newSheet, 0, "LDA_Table", outputColumns.map(c => c.name), dataRows.map(buildOutputRow));
             } else {
                 // Write header only if empty
                 const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);

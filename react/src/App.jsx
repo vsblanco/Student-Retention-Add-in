@@ -36,7 +36,7 @@ function App() {
       case 'create-lda':
         return <LDAManager />;
       default:
-        return <Settings />;
+        return <LDAManager />;
     }
   };
 

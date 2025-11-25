@@ -20,6 +20,7 @@ export const defaultColumns =[
 	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
 	{ name: 'Shift', alias: ['ShiftDescrip'] },
 	{ name: 'Missing Assignments', alias: ['Total Missing'] },
+	{ name: 'Outreach', alias: ['Comments','Comment'] },
 ];
 
 export const Options = [
