@@ -10,7 +10,7 @@ import Settings from './components/settings/Settings.jsx';
 import ImportManager from './components/importData/ImportManager.jsx';
 
 function App() {
-  const [page, setPage] = useState('student-view');
+  const [page, setPage] = useState('none');
 
   useEffect(() => {
     // Parse the query parameter ?page=... from the URL
@@ -31,6 +31,7 @@ function App() {
       case 'about':
         return <About />;
       case 'student-view':
+        return <StudentView />;
       default:
         return <About />;
     }
