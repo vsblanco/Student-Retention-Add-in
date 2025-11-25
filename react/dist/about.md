@@ -1,19 +1,14 @@
-# 🎓 About This Project
+# 🎓 Student Retention Add-in
 
-This application helps track and improve student retention. 📈
+Welcome to the documentation center. Select a topic below to learn more.
 
-## ✨ Features
+## 📚 Documentation Chapters
 
-- 📊 View student statistics
-- 📉 Analyze retention trends
-- 📤 Export reports
+- [📖 **User Tutorial**](tutorial.md)  
+  *Learn how to import data, analyze risks, and generate reports.*
 
-## 🛠️ Technologies Used
-
-- ⚛️ React
-- 🟩 Node.js
-- 📝 Markdown rendering
+- [⚙️ **Technical Overview**](technical.md)  
+  *For developers: understanding the architecture and data models.*
 
 ---
-
-For more information, visit our [GitHub repository](https://github.com/your-repo) 🌐.
+*Version 2.0 | Built with React & ExcelJS*
