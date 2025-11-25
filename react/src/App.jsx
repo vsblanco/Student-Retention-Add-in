@@ -33,7 +33,7 @@ function App() {
       case 'student-view':
         return <StudentView />;
       default:
-        return <About />;
+        return <ImportManager />;
     }
   };
 

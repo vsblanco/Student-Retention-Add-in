@@ -1,9 +1,7 @@
-/* * Timestamp: 2025-11-22 14:05:00 EST
- * Version: 6.1.0
+/* * Timestamp: 2025-11-25 16:05:00 EST
+ * Version: 6.2.1
  * Author: Gemini (for Victor)
- * Description: Optimized ImportManager with Priority Sorting and Dynamic UI Status.
- * Improvements:
- * - FileCards now dynamically update status (Normal -> Pending -> Loading -> Completed) during the import process.
+ * Description: Enhanced Date Formatting to catch String representations of dates (e.g. "Mon Nov...") in addition to Date objects.
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -27,6 +25,52 @@ const createKeyMap = (headers) => {
         });
     }
     return map;
+};
+
+// NEW: Helper to format dates to MM/DD/YY
+// Updated v6.2.1: Now handles string representations of dates (long format)
+const formatDateValue = (val) => {
+    // 1. Handle actual JS Date objects
+    if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val)) {
+        const mm = String(val.getMonth() + 1).padStart(2, '0');
+        const dd = String(val.getDate()).padStart(2, '0');
+        const yy = String(val.getFullYear()).slice(-2);
+        return `${mm}/${dd}/${yy}`;
+    }
+
+    // 2. Handle Strings that look like the verbose JS Date string (e.g. "Mon Nov 24...")
+    if (typeof val === 'string' && val.length > 20) {
+         // Check for common Date string markers to avoid false positives (ISO strings or Long Text format)
+         // Matches: "Mon Nov..." or "2025-11-22T..."
+         if ((val.includes('GMT') || val.includes('Standard Time') || val.includes('T')) && !isNaN(Date.parse(val))) {
+             const d = new Date(val);
+             if (!isNaN(d.getTime())) {
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                const yy = String(d.getFullYear()).slice(-2);
+                return `${mm}/${dd}/${yy}`;
+             }
+         }
+    }
+    
+    return val;
+};
+
+// NEW: Sanitizer to run on imported data immediately
+const sanitizeImportData = (data) => {
+    if (!Array.isArray(data)) return data;
+    return data.map(row => {
+        if (Array.isArray(row)) {
+            return row.map(formatDateValue);
+        } else if (typeof row === 'object' && row !== null) {
+            const newRow = { ...row };
+            Object.keys(newRow).forEach(k => {
+                newRow[k] = formatDateValue(newRow[k]);
+            });
+            return newRow;
+        }
+        return row;
+    });
 };
 
 const applyRenames = (dataInput, headersInput, renameMap) => {
@@ -367,11 +411,13 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
 
                 if (isCsv) {
                     const text = e.target.result;
-                    data = parseCSV(text);
+                    // Sanitize CSV data just in case smart parsing produced Dates
+                    data = sanitizeImportData(parseCSV(text));
                 } else {
-                    // Async Excel Parse
+                    // Async Excel Parse - SANITIZE HERE to fix Dates
                     const buffer = e.target.result;
-                    data = await parseExcel(buffer);
+                    const rawData = await parseExcel(buffer);
+                    data = sanitizeImportData(rawData);
                 }
 
                 if (Array.isArray(data) && data.length > 0) {

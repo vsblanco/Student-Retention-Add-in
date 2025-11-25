@@ -1,6 +1,7 @@
-// [2025-11-22] v1.7 - Optimized Color Application
+// [2025-11-25] v1.8 - Fix "New Row" Highlight Persistence
 // Changes:
-// - applyStaticColumnsWithContext: Removed default white fill. Static columns now transparently inherit row background if no specific color is mapped.
+// - computeSavedStaticFromValues: Now explicitly ignores 'lightblue' (#ADD8E6) when capturing static colors.
+//   This prevents the temporary "New Row" highlight from becoming permanently saved as a static cell color.
 
 // PERF: small in-memory cache for normalized keys to avoid repeated work
 const _normCache = new Map();
@@ -225,14 +226,19 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 					// We map the VALUE to the COLOR.
 					if (hasProps && cellProps[r] && cellProps[r][colIdx]) {
 						const fill = cellProps[r][colIdx].format.fill;
-						// FIX: Only store valid colors. Ignore '#FFFFFF' (white) so it doesn't overwrite existing colors.
-						if (fill && fill.color && fill.color !== '#FFFFFF') {
-                            // Log the first few captures to debug
-                            if (colorMap.get(colName).size < 5) {
-                                console.log(`[Utility] Stored color ${fill.color} for value "${asStr}" in col "${colName}" (Row ${r})`);
+						
+                        // v1.8 FIX: We must IGNORE 'lightblue' (#ADD8E6) because that is the automatic 
+                        // "New Row" highlight. If we save it, it becomes permanent.
+                        if (fill && fill.color) {
+                            const hexColor = fill.color.toUpperCase();
+                            if (hexColor !== '#FFFFFF' && hexColor !== '#ADD8E6') {
+                                // Log the first few captures to debug
+                                if (colorMap.get(colName).size < 5) {
+                                    console.log(`[Utility] Stored color ${fill.color} for value "${asStr}" in col "${colName}" (Row ${r})`);
+                                }
+                                colorMap.get(colName).set(asStr, fill.color);
                             }
-							colorMap.get(colName).set(asStr, fill.color);
-						}
+                        }
 					}
 				}
 			}
