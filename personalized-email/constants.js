@@ -35,15 +35,15 @@ export const MINI_QUILL_EDITOR_CONFIG = {
 // -- DATA MAPPING --
 // Maps internal data keys to possible column header names in the Excel sheet.
 export const COLUMN_MAPPINGS = {
-    StudentName: ["studentname", "student name"],
-    StudentEmail: ["student email", "school email", "email"],
-    PersonalEmail: ["personal email", "otheremail"],
-    Grade: ["grade", "course grade"],
-    DaysOut: ["days out", "daysout"],
-    Assigned: ['assigned', 'advisor', 'counselor', 'assigned to'],
-    Tags: ['history', 'tags', 'tag'],
-    StudentIdentifier: ['student identifier','studentnumber'],
-    Outreach: ['outreach']
+    StudentName: ["studentname", "student name", "Student Name"],
+    StudentEmail: ["student email", "school email", "email", "Student Email"],
+    PersonalEmail: ["personal email", "otheremail", "Personal Email"],
+    Grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
+    DaysOut: ["days out", "daysout", "Days Out"],
+    Assigned: ['assigned', 'advisor', 'counselor', 'assigned to', "Assigned", "Advisor"],
+    Tags: ['history', 'tags', 'tag', "Tag", "Tags"],
+    StudentIdentifier: ['student identifier','studentnumber', "Student Identifier", "Student Number"],
+    Outreach: ['outreach', "Outreach"]
 };
 
 // Defines the operators available for creating custom parameter mapping rules.
