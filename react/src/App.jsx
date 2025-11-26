@@ -11,19 +11,21 @@ import ImportManager from './components/importData/ImportManager.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
 
 function App() {
-  const [page, setPage] = useState('none');
+  // start as null so no page mounts until we parse the URL
+  const [page, setPage] = useState(null);
 
   useEffect(() => {
     // Parse the query parameter ?page=... from the URL
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page');
-    if (pageParam) {
-      setPage(pageParam);
-    }
+    // set parsed page or default to 'student-view'
+    setPage(pageParam || 'student-view');
   }, []);
 
   // Determine which component to render based on the current page state
   const renderPage = () => {
+    // while null, don't mount any page (prevents StudentView background work)
+    if (page === null) return null;
     switch (page) {
       case 'settings':
         return <Settings />;
