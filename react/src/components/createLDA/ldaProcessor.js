@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-26 20:00:00
- * Version: 2.9.0
+ * Timestamp: 2025-11-26 22:00:00
+ * Version: 2.13.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Refactored Retention Comment logic into a reusable function. Applied Orange Highlight to ALL retention rows (LDA or Waiting for Grade).
+ * Update: Enhanced String Matching V2. Now ignores whitespace entirely (internal and external) when matching Config Names, Aliases, and Excel Headers (e.g. "studentname" matches "Student Name").
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -27,20 +27,30 @@ function formatExcelDate(serial) {
 
 /**
  * Helper to generate the Retention Outreach Message.
- * Centralized logic for both LDA tags and Missing Assignment overrides.
- * * @param {string} sId - Student ID
+ * Centralized logic for LDA tags, Missing Assignments, and Explicit DNC.
+ * @param {string} sId - Student ID
  * @param {Map} ldaMap - The map of LDA data
  * @param {number} missingVal - The value from "Missing Assignments" column
  * @param {string} tableContext - 'LDA_Table' or 'Failing_Table'
+ * @param {Map} dncMap - Map of ID -> Tag Text
  * @returns {string|null} - The formatted message or null
  */
-function getRetentionMessage(sId, ldaMap, missingVal, tableContext) {
-    // Priority 1: Waiting for Grade (Strictly for Failing Table)
+function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
+    // Priority 1: Explicit DNC (Highest Priority - Stop everything)
+    if (sId && dncMap.has(sId)) {
+        const dncTag = dncMap.get(sId);
+        // Check if tag is "dnc" by itself (trimmed and lowered)
+        if (dncTag && dncTag.trim() === 'dnc') {
+            return "[Retention] DNC - Student explicitly opted out";
+        }
+    }
+
+    // Priority 2: Waiting for Grade (Strictly for Failing Table)
     if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
         return "[Retention] Waiting for Prof. to grade";
     }
 
-    // Priority 2: LDA Tag (Applies to any table)
+    // Priority 3: LDA Tag (Applies to any table)
     if (sId && ldaMap.has(sId)) {
         const ldaObj = ldaMap.get(sId);
         if (ldaObj && ldaObj.date) {
@@ -123,13 +133,40 @@ export async function createLDA(userOverrides, onProgress) {
             const masterColors = masterCellProps.value; 
             const headers = masterValues[0];
             
+            // --- UPDATED: Space-Insensitive Matching ---
             const getColIndex = (settingName) => {
+                // Helpers: clean (trim/lower) and strip (remove all spaces)
+                const cleanStr = (s) => String(s || '').trim().toLowerCase();
+                const stripStr = (s) => cleanStr(s).replace(/\s+/g, '');
+
+                const targetNameStripped = stripStr(settingName);
+
+                // 1. Find Config: Compare stripped setting name with stripped config name
                 const colConfig = settings.columns.find(c => 
-                    c.name.toLowerCase() === settingName.toLowerCase()
+                    stripStr(c.name) === targetNameStripped
                 );
                 if (!colConfig) return -1;
-                const candidates = [colConfig.name, ...(colConfig.alias || [])].map(s => String(s).trim().toLowerCase());
-                return headers.findIndex(h => candidates.includes(String(h).trim().toLowerCase()));
+
+                // 2. Prepare candidates list: [Name, Alias1, Alias2, ...]
+                let aliases = [];
+                if (Array.isArray(colConfig.alias)) {
+                    aliases = colConfig.alias;
+                } else if (colConfig.alias) {
+                    aliases = [colConfig.alias];
+                }
+
+                const candidates = [colConfig.name, ...aliases];
+
+                // 3. Find match in Excel Headers
+                // Priority: Name -> Alias 1 -> Alias 2 (Checking stripped strings)
+                for (const rawCand of candidates) {
+                    const candStripped = stripStr(rawCand);
+
+                    const idx = headers.findIndex(h => stripStr(h) === candStripped);
+                    if (idx !== -1) return idx;
+                }
+
+                return -1;
             };
 
             const daysOutIdx = getColIndex('Days Out');
@@ -139,7 +176,8 @@ export async function createLDA(userOverrides, onProgress) {
             // Look for "Missing Assignments" column
             let missingIdx = getColIndex('Missing Assignments');
             if (missingIdx === -1) {
-                 missingIdx = headers.findIndex(h => String(h).toLowerCase().includes('missing'));
+                 // Fallback scan
+                 missingIdx = headers.findIndex(h => String(h).trim().toLowerCase().includes('missing'));
             }
 
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
@@ -252,7 +290,7 @@ export async function createLDA(userOverrides, onProgress) {
             // --- STEP 6: Applying Tags (Data Processing) ---
             if (onProgress) onProgress('tags', 'active');
 
-            const dncMap = new Set();
+            const dncMap = new Map();
             const ldaFollowUpMap = new Map();
             
             if (historyData && studentIdIdx !== -1) {
@@ -265,9 +303,11 @@ export async function createLDA(userOverrides, onProgress) {
                     if (hIdIdx !== -1 && hTagIdx !== -1) {
                         for (let i = 1; i < hValues.length; i++) {
                             const hid = hValues[i][hIdIdx];
-                            const htag = String(hValues[i][hTagIdx] || '').toLowerCase();
-                            if (hid && htag.includes('dnc')) {
-                                dncMap.add(hid);
+                            const htagRaw = String(hValues[i][hTagIdx] || '');
+                            const htagLower = htagRaw.toLowerCase();
+                            
+                            if (hid && htagLower.includes('dnc')) {
+                                dncMap.set(hid, htagLower);
                             }
                         }
 
@@ -344,16 +384,21 @@ export async function createLDA(userOverrides, onProgress) {
                 const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
 
                 // 2. Generate Retention Message using helper
-                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext);
+                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap);
                 
                 // 3. Determine Highlighting Logic
-                // Highlight if LDA tag exists OR if a retention message was generated (implies Waiting for Grade)
                 const isLda = sId && ldaFollowUpMap.has(sId);
-                const isRetentionActive = isLda || !!retentionMsg;
+                const isRetentionActive = !!retentionMsg;
+                
+                // Determine Row/Partial Color:
+                let partialRowColor = "#FFEDD5"; // Orange Default
+                if (retentionMsg && retentionMsg.includes("DNC")) {
+                    partialRowColor = "#FFC7CE"; // Red for DNC
+                }
 
                 // Fallback row color if Outreach column is missing
                 if (isRetentionActive && outreachColIndex === -1) {
-                     rowColor = "#FFEDD5";
+                     rowColor = partialRowColor;
                 }
 
                 outputColumns.forEach((colConfig, colOutIdx) => {
@@ -369,11 +414,10 @@ export async function createLDA(userOverrides, onProgress) {
                     }
 
                     // --- Apply Retention Highlight (Partial Row) ---
-                    // Highlights from start (0) up to Outreach Column
                     if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
                         cellHighlights.push({
                             colIndex: colOutIdx,
-                            color: "#FFEDD5" // Light Orange
+                            color: partialRowColor 
                         });
                     }
 
@@ -393,7 +437,7 @@ export async function createLDA(userOverrides, onProgress) {
                         val = retentionMsg;
                     }
 
-                    // --- DNC Highlight (Highest Priority) ---
+                    // --- DNC Highlight (Highest Priority - Phone Columns) ---
                     if (settings.includeDNCTag && dncMap.has(sId)) {
                          if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
                              cellHighlights.push({ 
