@@ -18,16 +18,18 @@ export const CONSTANTS = {
         courseId: ["course id"],
         courseLastAccess: ["course last access"],
         currentScore: ["current score", "grade", "course grade"],
-        grade: ["grade", "course grade"],
-        gradeBook: ["grade book", "gradebook"],
-        daysOut: ["days out"],
-        lastLda: ["lda", "last lda"],
-        assigned: ["assigned"],
+        grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
+        gradeBook: ["grade book", "gradebook", "Grade Book", "Gradebook", "GradeBook", "gradebooklink", "GradebookLink", "Gradelink"],
+        daysOut: ["days out", "Days Out"],
+        lastLda: ["lda", "last lda", "LDA", "Last LDA"],
+        assigned: ["assigned", "Assigned"],
         programVersion: ["programversion", "program version"],
         courseMissingAssignments: ["course missing assignments"],
         courseZeroAssignments: ["course zero assignments"],
-        primaryPhone: ["primary phone", "phone"],
-        otherPhone: ["other phone", "otherphone"]
+        primaryPhone: ["primary phone", "phone", "phonenumber", "contact number", "Phone", "Phone Number", "Contact Number"],
+        otherPhone: ["other phone", "otherphone", "Other Phone", "OtherPhone"],
+        PersonalEmail: ["personal email", "otheremail", "Personal Email"],
+        StudentEmail: ["student email", "school email", "email", "Email","Student Email"]
     }
 };
 
