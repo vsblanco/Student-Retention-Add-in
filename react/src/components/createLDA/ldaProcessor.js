@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-26 18:30:00
- * Version: 2.5.2
+ * Timestamp: 2025-11-26 20:00:00
+ * Version: 2.9.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Moved hidden column logic to the very end of execution (after autofit) to ensure columns remain hidden.
+ * Update: Refactored Retention Comment logic into a reusable function. Applied Orange Highlight to ALL retention rows (LDA or Waiting for Grade).
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -11,6 +11,48 @@ const SHEET_NAMES = {
     MASTER_LIST: "Master List",
     HISTORY: "Student History"
 };
+
+/**
+ * Helper to convert Excel serial date to MM-DD-YY string
+ */
+function formatExcelDate(serial) {
+    if (!serial || isNaN(serial)) return serial;
+    const date = new Date(Math.round((serial - 25569) * 86400 * 1000));
+    const utcDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
+    const mm = String(utcDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(utcDate.getDate()).padStart(2, '0');
+    const yy = String(utcDate.getFullYear()).slice(-2);
+    return `${mm}-${dd}-${yy}`;
+}
+
+/**
+ * Helper to generate the Retention Outreach Message.
+ * Centralized logic for both LDA tags and Missing Assignment overrides.
+ * * @param {string} sId - Student ID
+ * @param {Map} ldaMap - The map of LDA data
+ * @param {number} missingVal - The value from "Missing Assignments" column
+ * @param {string} tableContext - 'LDA_Table' or 'Failing_Table'
+ * @returns {string|null} - The formatted message or null
+ */
+function getRetentionMessage(sId, ldaMap, missingVal, tableContext) {
+    // Priority 1: Waiting for Grade (Strictly for Failing Table)
+    if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
+        return "[Retention] Waiting for Prof. to grade";
+    }
+
+    // Priority 2: LDA Tag (Applies to any table)
+    if (sId && ldaMap.has(sId)) {
+        const ldaObj = ldaMap.get(sId);
+        if (ldaObj && ldaObj.date) {
+            const mm = String(ldaObj.date.getMonth() + 1).padStart(2, '0');
+            const dd = String(ldaObj.date.getDate()).padStart(2, '0');
+            const yy = String(ldaObj.date.getFullYear()).slice(-2);
+            return `[Retention] Student will engage on ${mm}-${dd}-${yy}`;
+        }
+    }
+
+    return null;
+}
 
 /**
  * Main function to create the LDA report.
@@ -59,16 +101,10 @@ export async function createLDA(userOverrides, onProgress) {
             const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
             const masterRange = masterSheet.getUsedRange();
             
-            // Standard load for values/formulas
             masterRange.load("values, formulas, rowIndex, columnIndex, rowCount, columnCount");
             
-            // Load Cell Properties to detect fill colors
             const masterCellProps = masterRange.getCellProperties({
-                format: {
-                    fill: {
-                        color: true
-                    }
-                }
+                format: { fill: { color: true } }
             });
 
             let historyData = null;
@@ -100,6 +136,12 @@ export async function createLDA(userOverrides, onProgress) {
             const gradeIdx = getColIndex('Grade');
             const studentIdIdx = getColIndex('Student Number');
             
+            // Look for "Missing Assignments" column
+            let missingIdx = getColIndex('Missing Assignments');
+            if (missingIdx === -1) {
+                 missingIdx = headers.findIndex(h => String(h).toLowerCase().includes('missing'));
+            }
+
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
 
             if (onProgress) onProgress('read', 'completed');
@@ -107,11 +149,8 @@ export async function createLDA(userOverrides, onProgress) {
 
             // --- STEP 2b: Build Color Map (Value -> Color) ---
             const columnColorMaps = new Map();
-
-            // We use ALL columns defined in settings.
             const outputColumns = settings.columns; 
 
-            // Re-sort columns based on Master List order
             outputColumns.sort((a, b) => {
                 const indexA = getColIndex(a.name);
                 const indexB = getColIndex(b.name);
@@ -121,12 +160,10 @@ export async function createLDA(userOverrides, onProgress) {
                 return indexA - indexB;
             });
 
-            // Map Indices for Color Scan
             const outputColIndices = outputColumns
                 .map(c => getColIndex(c.name))
                 .filter(idx => idx !== -1);
 
-            // Iterate rows (skip header)
             for (let r = 1; r < masterValues.length; r++) {
                 outputColIndices.forEach(cIdx => {
                     const val = masterValues[r][cIdx];
@@ -140,6 +177,13 @@ export async function createLDA(userOverrides, onProgress) {
                     }
                 });
             }
+
+            // --- STEP 2c: Identify Hidden Columns based on Settings ---
+            const hiddenColumnsSet = new Set();
+            outputColumns.forEach(c => {
+                if (c.hidden) hiddenColumnsSet.add(c.name);
+            });
+
 
             // --- STEP 3: Filtering by Days Out ---
             if (onProgress) onProgress('filter', 'active');
@@ -283,8 +327,12 @@ export async function createLDA(userOverrides, onProgress) {
                     dateColumnIndices.add(colConfig.name);
                 }
             });
+
+            // Determine Outreach Column Index
+            const outreachColIndex = outputColumns.findIndex(c => c.name === 'Outreach');
             
-            const buildOutputRow = (rowObj) => {
+            // Row Builder
+            const buildOutputRow = (rowObj, tableContext) => {
                 const cells = [];
                 const formulas = [];
                 let rowColor = null;
@@ -292,7 +340,19 @@ export async function createLDA(userOverrides, onProgress) {
 
                 const sId = rowObj.values[studentIdIdx];
 
-                if (sId && ldaFollowUpMap.has(sId)) {
+                // 1. Get critical values
+                const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
+
+                // 2. Generate Retention Message using helper
+                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext);
+                
+                // 3. Determine Highlighting Logic
+                // Highlight if LDA tag exists OR if a retention message was generated (implies Waiting for Grade)
+                const isLda = sId && ldaFollowUpMap.has(sId);
+                const isRetentionActive = isLda || !!retentionMsg;
+
+                // Fallback row color if Outreach column is missing
+                if (isRetentionActive && outreachColIndex === -1) {
                      rowColor = "#FFEDD5";
                 }
 
@@ -308,7 +368,16 @@ export async function createLDA(userOverrides, onProgress) {
                         val = "Link";
                     }
 
-                    // --- Value-Based Color Mapping ---
+                    // --- Apply Retention Highlight (Partial Row) ---
+                    // Highlights from start (0) up to Outreach Column
+                    if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
+                        cellHighlights.push({
+                            colIndex: colOutIdx,
+                            color: "#FFEDD5" // Light Orange
+                        });
+                    }
+
+                    // --- Value-Based Color Mapping (Overrides Retention Highlight) ---
                     if (masterIdx !== -1 && val) {
                          const colMap = columnColorMaps.get(masterIdx);
                          if (colMap && colMap.has(String(val))) {
@@ -318,7 +387,13 @@ export async function createLDA(userOverrides, onProgress) {
                              });
                          }
                     }
+                    
+                    // --- Outreach Message Injection ---
+                    if (colConfig.name === 'Outreach' && retentionMsg) {
+                        val = retentionMsg;
+                    }
 
+                    // --- DNC Highlight (Highest Priority) ---
                     if (settings.includeDNCTag && dncMap.has(sId)) {
                          if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
                              cellHighlights.push({ 
@@ -344,7 +419,7 @@ export async function createLDA(userOverrides, onProgress) {
                     0, 
                     "LDA_Table", 
                     outputColumns, 
-                    dataRows.map(buildOutputRow),
+                    dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
                     masterSheet,
                     getColIndex,
                     dateColumnIndices
@@ -367,7 +442,7 @@ export async function createLDA(userOverrides, onProgress) {
                     nextRow, 
                     "Failing_Table", 
                     outputColumns, 
-                    failingRows.map(buildOutputRow),
+                    failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
                     masterSheet,
                     getColIndex,
                     dateColumnIndices
@@ -380,7 +455,6 @@ export async function createLDA(userOverrides, onProgress) {
             // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
             outputColumns.forEach((colConfig, idx) => {
                 if (colConfig.hidden) {
-                    // Start row 0, column idx, 1 row, 1 column -> get entire column -> hide
                     newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
                 }
             });
