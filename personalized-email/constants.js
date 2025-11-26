@@ -36,8 +36,8 @@ export const MINI_QUILL_EDITOR_CONFIG = {
 // Maps internal data keys to possible column header names in the Excel sheet.
 export const COLUMN_MAPPINGS = {
     StudentName: ["studentname", "student name", "Student Name"],
-    StudentEmail: ["student email", "school email", "email", "Student Email"],
-    PersonalEmail: ["personal email", "otheremail", "Personal Email"],
+    StudentEmail: ["student email", "school email", "email", "Student Email", "StudentEmail"],
+    PersonalEmail: ["personal email", "otheremail", "Personal Email", "PersonalEmail"],
     Grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
     DaysOut: ["days out", "daysout", "Days Out"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to', "Assigned", "Advisor"],
