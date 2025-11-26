@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-26 17:35:00
- * Version: 2.3.2
+ * Timestamp: 2025-11-26 18:30:00
+ * Version: 2.5.2
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Added Dark Red text color to DNC tags (matches standard Excel warning style).
+ * Update: Moved hidden column logic to the very end of execution (after autofit) to ensure columns remain hidden.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -53,12 +53,23 @@ export async function createLDA(userOverrides, onProgress) {
             }
             if (onProgress) onProgress('validate', 'completed');
 
-            // --- STEP 2: Read Master List ---
+            // --- STEP 2: Read Master List & Scan Colors ---
             if (onProgress) onProgress('read', 'active');
 
             const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
             const masterRange = masterSheet.getUsedRange();
+            
+            // Standard load for values/formulas
             masterRange.load("values, formulas, rowIndex, columnIndex, rowCount, columnCount");
+            
+            // Load Cell Properties to detect fill colors
+            const masterCellProps = masterRange.getCellProperties({
+                format: {
+                    fill: {
+                        color: true
+                    }
+                }
+            });
 
             let historyData = null;
             const hasHistory = sheets.items.some(s => s.name === SHEET_NAMES.HISTORY);
@@ -73,6 +84,7 @@ export async function createLDA(userOverrides, onProgress) {
             
             const masterValues = masterRange.values;
             const masterFormulas = masterRange.formulas;
+            const masterColors = masterCellProps.value; 
             const headers = masterValues[0];
             
             const getColIndex = (settingName) => {
@@ -91,6 +103,43 @@ export async function createLDA(userOverrides, onProgress) {
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
 
             if (onProgress) onProgress('read', 'completed');
+
+
+            // --- STEP 2b: Build Color Map (Value -> Color) ---
+            const columnColorMaps = new Map();
+
+            // We use ALL columns defined in settings.
+            const outputColumns = settings.columns; 
+
+            // Re-sort columns based on Master List order
+            outputColumns.sort((a, b) => {
+                const indexA = getColIndex(a.name);
+                const indexB = getColIndex(b.name);
+                if (indexA === -1 && indexB === -1) return 0;
+                if (indexA === -1) return 1; 
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+            });
+
+            // Map Indices for Color Scan
+            const outputColIndices = outputColumns
+                .map(c => getColIndex(c.name))
+                .filter(idx => idx !== -1);
+
+            // Iterate rows (skip header)
+            for (let r = 1; r < masterValues.length; r++) {
+                outputColIndices.forEach(cIdx => {
+                    const val = masterValues[r][cIdx];
+                    const color = masterColors[r]?.[cIdx]?.format?.fill?.color;
+
+                    if (val && color && color !== '#FFFFFF' && color.toLowerCase() !== '#ffffff') {
+                        if (!columnColorMaps.has(cIdx)) {
+                            columnColorMaps.set(cIdx, new Map());
+                        }
+                        columnColorMaps.get(cIdx).set(String(val), color);
+                    }
+                });
+            }
 
             // --- STEP 3: Filtering by Days Out ---
             if (onProgress) onProgress('filter', 'active');
@@ -208,16 +257,6 @@ export async function createLDA(userOverrides, onProgress) {
             // --- STEP 7: Formatting LDA Table ---
             if (onProgress) onProgress('format', 'active');
 
-            let outputColumns = settings.columns.filter(c => !c.hidden);
-            outputColumns.sort((a, b) => {
-                const indexA = getColIndex(a.name);
-                const indexB = getColIndex(b.name);
-                if (indexA === -1 && indexB === -1) return 0;
-                if (indexA === -1) return 1; 
-                if (indexB === -1) return -1;
-                return indexA - indexB;
-            });
-
             // --- 7a. Data-Driven Date Column Detection ---
             const dateColumnIndices = new Set();
             outputColumns.forEach((colConfig) => {
@@ -269,9 +308,19 @@ export async function createLDA(userOverrides, onProgress) {
                         val = "Link";
                     }
 
+                    // --- Value-Based Color Mapping ---
+                    if (masterIdx !== -1 && val) {
+                         const colMap = columnColorMaps.get(masterIdx);
+                         if (colMap && colMap.has(String(val))) {
+                             cellHighlights.push({
+                                 colIndex: colOutIdx,
+                                 color: colMap.get(String(val))
+                             });
+                         }
+                    }
+
                     if (settings.includeDNCTag && dncMap.has(sId)) {
                          if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
-                             // Added strikethrough property here
                              cellHighlights.push({ 
                                  colIndex: colOutIdx, 
                                  color: "#FFC7CE", 
@@ -298,7 +347,7 @@ export async function createLDA(userOverrides, onProgress) {
                     dataRows.map(buildOutputRow),
                     masterSheet,
                     getColIndex,
-                    dateColumnIndices 
+                    dateColumnIndices
                 );
             } else {
                 const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
@@ -327,6 +376,14 @@ export async function createLDA(userOverrides, onProgress) {
 
             // Autofit
             newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+
+            // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
+            outputColumns.forEach((colConfig, idx) => {
+                if (colConfig.hidden) {
+                    // Start row 0, column idx, 1 row, 1 column -> get entire column -> hide
+                    newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
+                }
+            });
 
             if (onProgress) onProgress('format', 'completed');
 
@@ -409,7 +466,7 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         r.cellHighlights.forEach(h => {
              const cell = bodyRange.getCell(idx, h.colIndex);
              cell.format.fill.color = h.color;
-             // Apply strikethrough and dark red text if flag is present
+             
              if (h.strikethrough) {
                  cell.format.font.strikethrough = true;
                  cell.format.font.color = "#9C0006"; // Dark Red Text
