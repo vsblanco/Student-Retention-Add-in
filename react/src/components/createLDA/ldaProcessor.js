@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-26 22:00:00
- * Version: 2.13.0
+ * Timestamp: 2025-11-26 22:15:00
+ * Version: 2.14.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Enhanced String Matching V2. Now ignores whitespace entirely (internal and external) when matching Config Names, Aliases, and Excel Headers (e.g. "studentname" matches "Student Name").
+ * Update: Added Color Exclusion Logic. Now ignores Light Blue background colors (common for new student rows) when building the color map.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -141,13 +141,13 @@ export async function createLDA(userOverrides, onProgress) {
 
                 const targetNameStripped = stripStr(settingName);
 
-                // 1. Find Config: Compare stripped setting name with stripped config name
+                // 1. Find Config
                 const colConfig = settings.columns.find(c => 
                     stripStr(c.name) === targetNameStripped
                 );
                 if (!colConfig) return -1;
 
-                // 2. Prepare candidates list: [Name, Alias1, Alias2, ...]
+                // 2. Prepare candidates list
                 let aliases = [];
                 if (Array.isArray(colConfig.alias)) {
                     aliases = colConfig.alias;
@@ -158,10 +158,8 @@ export async function createLDA(userOverrides, onProgress) {
                 const candidates = [colConfig.name, ...aliases];
 
                 // 3. Find match in Excel Headers
-                // Priority: Name -> Alias 1 -> Alias 2 (Checking stripped strings)
                 for (const rawCand of candidates) {
                     const candStripped = stripStr(rawCand);
-
                     const idx = headers.findIndex(h => stripStr(h) === candStripped);
                     if (idx !== -1) return idx;
                 }
@@ -202,16 +200,26 @@ export async function createLDA(userOverrides, onProgress) {
                 .map(c => getColIndex(c.name))
                 .filter(idx => idx !== -1);
 
+            // --- EXCLUDED COLORS SET ---
+            // Add any other hex codes you want to ignore here.
+            // Currently ignoring: White, and common Excel Light Blues
+            const EXCLUDED_COLORS = new Set([
+                '#ffffff', // White
+                '#ADD8E6'  // Another common Google/Excel blue
+            ]);
+
             for (let r = 1; r < masterValues.length; r++) {
                 outputColIndices.forEach(cIdx => {
                     const val = masterValues[r][cIdx];
-                    const color = masterColors[r]?.[cIdx]?.format?.fill?.color;
+                    const rawColor = masterColors[r]?.[cIdx]?.format?.fill?.color;
+                    const normColor = String(rawColor || '').toLowerCase();
 
-                    if (val && color && color !== '#FFFFFF' && color.toLowerCase() !== '#ffffff') {
+                    // Check if value exists, color exists, and color is NOT in the excluded list
+                    if (val && rawColor && !EXCLUDED_COLORS.has(normColor)) {
                         if (!columnColorMaps.has(cIdx)) {
                             columnColorMaps.set(cIdx, new Map());
                         }
-                        columnColorMaps.get(cIdx).set(String(val), color);
+                        columnColorMaps.get(cIdx).set(String(val), rawColor);
                     }
                 });
             }
