@@ -566,8 +566,13 @@ async function findStudentRow(context, sheet, studentName) {
     await context.sync();
     if (!usedRange.values || usedRange.values.length === 0) throw new Error(`Sheet '${sheet.name}' is empty.`);
     const headers = usedRange.values[0].map(h => String(h || '').toLowerCase());
-    const nameColumnIndex = headers.indexOf("studentname");
-    if (nameColumnIndex === -1) throw new Error(`'StudentName' column not found in '${sheet.name}'.`);
+    // Accept headers like "studentname", "student name", or variants with spaces/casing
+    const nameColumnIndex = headers.findIndex(h => {
+        if (!h) return false;
+        const raw = h.trim().toLowerCase();
+        return raw === 'studentname' || raw === 'student name' || raw.replace(/\s+/g, '') === 'studentname';
+    });
+    if (nameColumnIndex === -1) throw new Error(`'Student Name' column not found in '${sheet.name}'.`);
     
     const nameColumn = usedRange.getColumn(nameColumnIndex);
     let searchResult;
@@ -604,7 +609,7 @@ async function findStudentRow(context, sheet, studentName) {
             throw error;
         }
     }
-    return { foundRowIndex: searchResult.rowIndex, headers, usedRange };
+    return { foundRowIndex: searchResult.rowIndex, headers, usedRange, nameColumnIndex };
 }
 
 
@@ -621,7 +626,7 @@ async function highlightStudentInSheet(eventData, actionConfig, connectionId, ac
             autoFilter.load("enabled");
             await context.sync();
             if (autoFilter.enabled) { logToUI(`Active filter on '${sheetName}'. Clearing.`); autoFilter.clearCriteria(); }
-            const { foundRowIndex, headers, usedRange } = await findStudentRow(context, sheet, studentName);
+            const { foundRowIndex, headers, usedRange, nameColumnIndex } = await findStudentRow(context, sheet, studentName);
             const ignoredHeaders = new Set((config.ignoreColumns || '').toLowerCase().split(',').map(h => h.trim()).filter(Boolean));
             const ignoredColumnIndices = new Set(headers.map((h, i) => ignoredHeaders.has(h) ? i : -1).filter(i => i !== -1));
             let startCol = -1;
@@ -633,7 +638,7 @@ async function highlightStudentInSheet(eventData, actionConfig, connectionId, ac
                 }
             }
             if (startCol !== -1) sheet.getRangeByIndexes(foundRowIndex, startCol, 1, headers.length - startCol).format.fill.color = config.color;
-            sheet.getCell(foundRowIndex, headers.indexOf("studentname")).select();
+            sheet.getCell(foundRowIndex, nameColumnIndex).select();
             await context.sync();
             historyEntry.status = 'Success';
             logToUI(`Successfully highlighted row for '${studentName}'.`, "SUCCESS");
