@@ -19,7 +19,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page');
     // set parsed page or default to 'student-view'
-    setPage(pageParam || 'ImportManager');
+    setPage(pageParam || 'student-view');
   }, []);
 
   // Determine which component to render based on the current page state
@@ -38,7 +38,7 @@ function App() {
       case 'create-lda':
         return <LDAManager />;
       default:
-        return <ImportManager />;
+        return <StudentView />;
     }
   };
 
