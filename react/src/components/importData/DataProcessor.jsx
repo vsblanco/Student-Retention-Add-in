@@ -1,7 +1,8 @@
-// [2025-11-22] v2.9 - Fix Color Overwrite Issue
+// [2025-11-29] v2.11 - Fix Date Highlighting Mismatch
 // Changes:
-// - Refresh(): Moved 'queueFormatRanges' (Highlight/Clear) BEFORE 'applyStaticColumnsWithContext'.
-//   This ensures static column colors overlay the row styles instead of being cleared by them.
+// - Added 'areValuesEquivalent' helper to handle Excel Serial Numbers vs Date Strings.
+// - Comparison logic now normalizes dates to 'MM/DD/YY' before flagging changes.
+// - Prevents false positive highlighting when formats differ (e.g. "11/25/2025" vs "11/25/25").
 
 import React, { useEffect } from 'react';
 import {
@@ -34,25 +35,94 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 	};
 
+    // --- NEW: Comparison Helpers ---
+
+    // Convert Excel Serial Number (e.g. 45615) to JS Date
+    const excelSerialToDate = (serial) => {
+        // Excel base date is Dec 30, 1899
+        const utc_days  = Math.floor(serial - 25569);
+        const utc_value = utc_days * 86400;                                        
+        const date_info = new Date(utc_value * 1000);
+        return date_info;
+    };
+
+    // Normalize values for comparison (Handles Dates, Numbers vs Strings, etc.)
+    const areValuesEquivalent = (val1, val2) => {
+        // 1. Handle Nulls/Undefined
+        const v1 = val1 == null ? '' : val1;
+        const v2 = val2 == null ? '' : val2;
+
+        if (v1 === v2) return true;
+
+        // 2. Loose Equality (for 5 vs "5")
+        // eslint-disable-next-line eqeqeq
+        if (v1 == v2) return true;
+
+        // 3. Date Intelligence
+        // We want to normalize everything to MM/DD/YY for comparison if it looks like a date.
+        
+        const toDateString = (v) => {
+            if (typeof v === 'number' && v > 20000 && v < 60000) {
+                // Likely an Excel Serial Number
+                const d = excelSerialToDate(v);
+                if (!isNaN(d.getTime())) {
+                    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getUTCDate()).padStart(2, '0');
+                    const yy = String(d.getUTCFullYear()).slice(-2);
+                    return `${mm}/${dd}/${yy}`;
+                }
+            }
+            
+            if (typeof v === 'string') {
+                // Check if it looks like a date (MM/DD/YY or YYYY-MM-DD)
+                if (v.match(/^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/) || v.match(/^\d{4}[\/-]\d{1,2}[\/-]\d{1,2}$/)) {
+                   const d = new Date(v);
+                   if (!isNaN(d.getTime())) {
+                        // Use UTC methods to align with ImportManager's logic
+                        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getUTCDate()).padStart(2, '0');
+                        const yy = String(d.getUTCFullYear()).slice(-2);
+                        return `${mm}/${dd}/${yy}`;
+                   }
+                }
+            }
+            return null; // Not a date
+        };
+
+        const d1 = toDateString(v1);
+        const d2 = toDateString(v2);
+
+        if (d1 && d2) {
+            return d1 === d2;
+        }
+
+        // 4. String trim fallback
+        return String(v1).trim() === String(v2).trim();
+    };
+
 	// Helper to queue formatting commands for a list of addresses.
 	function queueFormatRanges(sheet, addresses, color) {
 		if (!addresses || addresses.length === 0) return;
-		for (const addr of addresses) {
-			try {
-				const range = sheet.getRange(addr);
-				if (color) {
-					range.format.fill.color = color;
-				} else {
-					range.format.fill.clear();
-				}
-			} catch (e) {
-				console.warn('Skipping invalid range address:', addr);
-			}
-		}
+		
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+            const batch = addresses.slice(i, i + BATCH_SIZE);
+            batch.forEach(addr => {
+                try {
+                    const range = sheet.getRange(addr);
+                    if (color) {
+                        range.format.fill.color = color;
+                    } else {
+                        range.format.fill.clear();
+                    }
+                } catch (e) {
+                    console.warn('Skipping invalid range address:', addr);
+                }
+            });
+        }
 	}
 
-	// NEW Helper: Apply Conditional Formatting (Synchronous Command Queueing)
-	// Applies to the ENTIRE column.
+	// Helper: Apply Conditional Formatting
 	function applyConditionalFormatting(sheet, columnIndex, formatRule) {
 		console.log(`[DataProcessor] Applying Conditional Format: Rule=`, formatRule, ` Index=${columnIndex}`);
 		
@@ -62,44 +132,33 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 
 		try {
-			// Define Range: Whole Column (e.g., A:A)
 			const range = sheet.getRangeByIndexes(0, columnIndex, 1, 1).getEntireColumn();
-			
-			// Clear existing formats on this column
 			range.conditionalFormats.clearAll();
 
-			// Apply Rules
 			if (formatRule.condition === 'Color Scales' && formatRule.format === 'G-Y-R Color Scale') {
-				console.log('[DataProcessor] Applying Color Scale');
 				const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
 				cf.colorScale.criteria = {
-					minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
-					midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" }, // Yellow
-					maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" } // Green
+					minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+					midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" },
+					maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
 				};
 				if (formatRule.column.toLowerCase().includes('missing')) {
-					// Invert for missing assignments: Low is Good (Green), High is Bad (Red)
 					cf.colorScale.criteria = {
-						minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#63BE7B" }, // Green
-						midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" }, // Yellow
-						maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#F8696B" } // Red
+						minimum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#63BE7B" },
+						midpoint: { formula: null, type: Excel.ConditionalFormatColorCriterionType.percentile, value: 50, color: "#FFEB84" },
+						maximum: { formula: null, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#F8696B" }
 					};
 				}
 			} else if (formatRule.condition === 'Highlight Cells with' && Array.isArray(formatRule.format)) {
-				// format: ['Specific text', 'Beginning with', '0', 'Green Fill with Dark Green Text']
 				const type = formatRule.format[0];
 				const operator = formatRule.format[1];
 				const val = formatRule.format[2];
 				const style = formatRule.format[3];
 
-				console.log(`[DataProcessor] Applying Highlight: ${type} ${operator} "${val}"`);
-
 				if (type === 'Specific text' && operator === 'Beginning with') {
 					const cf = range.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
-					
-					// Set Style
-					cf.textComparison.format.font.color = "#006100"; // Default Dark Green
-					cf.textComparison.format.fill.color = "#C6EFCE"; // Default Light Green
+					cf.textComparison.format.font.color = "#006100"; 
+					cf.textComparison.format.fill.color = "#C6EFCE"; 
 
 					if (style.includes('Red')) {
 						cf.textComparison.format.font.color = "#9C0006";
@@ -108,8 +167,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 						cf.textComparison.format.font.color = "#9C6500";
 						cf.textComparison.format.fill.color = "#FFEB9C";
 					}
-
-					// Set Rule
 					cf.textComparison.rule = { operator: Excel.ConditionalTextOperator.beginsWith, text: val };
 				}
 			}
@@ -148,7 +205,7 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			// 1. READ PHASE
 			let usedValues = [];
 			let usedFormulas = [];
-			let usedProps = []; // To store cell properties (colors)
+			let usedProps = [];
 			let sheetExisted = false;
 
 			await Excel.run(async (context) => {
@@ -158,29 +215,13 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				if (!sheet.isNullObject) {
 					sheetExisted = true;
 					const used = sheet.getUsedRangeOrNullObject();
-					
-					// Load standard values/formulas
 					used.load(['values', 'formulas']);
-					
-					// Efficiently Load Cell Properties (fill color)
-					// This returns a 2D array of properties matching the range
-					const propsResult = used.getCellProperties({
-						format: {
-							fill: {
-								color: true
-							}
-						}
-					});
-
+					const propsResult = used.getCellProperties({ format: { fill: { color: true } } });
 					await context.sync();
 					if (!used.isNullObject) {
 						usedValues = used.values || [];
 						usedFormulas = used.formulas || [];
 						usedProps = propsResult.value || [];
-                        console.log(`[DataProcessor] Cell Props Loaded. Rows: ${usedProps.length}`);
-                        if (usedProps.length > 0) {
-                            console.log('[DataProcessor] Sample Cell Prop Row 0:', usedProps[0]);
-                        }
 					}
 				}
 			});
@@ -188,8 +229,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			notifyStatus('Processing data structure...');
 
 			// derived headers
-			// FIX: If sheet is empty/new, default sheetHeaders to the keys of the incoming data
-			// This ensures we have a header map to look up the CF column index later.
 			let sheetHeaders = (sheetExisted && usedValues.length > 0)
 				? usedValues[0].map(v => (v == null ? '' : String(v).trim()))
 				: [];
@@ -202,23 +241,37 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			
 			const dataHeaderIndexMap = getHeaderIndexMap(dataHeaders);
 
-			// If the sheet didn't exist or was empty, assume the dataHeaders will become the sheetHeaders
 			if (sheetHeaders.length === 0 && dataHeaders.length > 0) {
 				sheetHeaders = [...dataHeaders];
 			}
 			
 			const hasHeaders = sheetHeaders.some(h => h !== '');
-			// Update index map with the (potentially new) sheetHeaders
 			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
 
 			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
 			const identifierSetting = gatherIdentifierColumn(settingsCols);
 
-			// Capture PRE-EXISTING identifiers for diffing
-			let beforeIdentifiers = new Set();
+			// Capture PRE-EXISTING identifiers AND Data
+			const beforeIdentifiers = new Set();
+            const beforeDataMap = new Map(); // Map<ID, RowArray>
+
 			if (identifierSetting && usedValues.length > 0) {
 				const beforeInfo = computeIdentifierListFromValues(usedValues, sheetHeaders, identifierSetting, usedFormulas);
-				beforeIdentifiers = beforeInfo.identifiers;
+                if (beforeInfo.identifierIndex !== -1) {
+                    beforeInfo.identifiers.forEach(id => beforeIdentifiers.add(id));
+                    for (let r = 1; r < usedValues.length; r++) {
+                        const row = usedValues[r];
+                        let rawId = row[beforeInfo.identifierIndex];
+                        if (usedFormulas[r] && typeof usedFormulas[r][beforeInfo.identifierIndex] === 'string' && usedFormulas[r][beforeInfo.identifierIndex].startsWith('=')) {
+                            const parsed = parseHyperlink(usedFormulas[r][beforeInfo.identifierIndex]);
+                            if (parsed.url) rawId = parsed.url;
+                        }
+                        const idStr = rawId == null ? '' : String(rawId).trim();
+                        if (idStr) {
+                            beforeDataMap.set(idStr, row);
+                        }
+                    }
+                }
 			}
 
 			// Normalization & Aliasing Logic
@@ -235,7 +288,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			const sheetAliasMap = buildAliasMap(remainingSettings, sheetHeaders);
 			const dataAliasMap = buildAliasMap(remainingSettings, dataHeaders);
 
-			// Apply aliases to headers
 			if (matchedByName.size > 0) {
 				sheetHeaders = sheetHeaders.map(h => {
 					const key = normalizeKey(h);
@@ -247,7 +299,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				sheetHeaders = renameHeaderArray(sheetHeaders, sheetAliasMap);
 			}
 
-			// Normalize Data Rows
 			const combinedDataAliasMap = new Map([...matchedByName, ...dataAliasMap]);
 			if (combinedDataAliasMap.size > 0) {
 				const firstRow = dataToWrite[0];
@@ -258,7 +309,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 			}
 
-			// Static Columns Calculation
 			let dataFieldSet = new Set();
 			const firstAfter = dataToWrite[0];
 			if (firstAfter && typeof firstAfter === 'object' && !Array.isArray(firstAfter)) {
@@ -266,6 +316,14 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			} else if (Array.isArray(firstAfter)) {
 				firstAfter.forEach(v => dataFieldSet.add(normalizeKey(v)));
 			}
+
+            const columnsInImport = new Set();
+            sheetHeaders.forEach((h, i) => {
+                const key = normalizeKey(h);
+                if (key && dataFieldSet.has(key)) {
+                    columnsInImport.add(i);
+                }
+            });
 
 			const staticCols = [];
 			sheetHeaders.forEach(h => {
@@ -275,11 +333,10 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 
 			let savedStatic = null;
 			if (staticCols.length > 0 && identifierSetting) {
-				// UPDATED: Pass usedProps (formatting) to the calculator
 				savedStatic = computeSavedStaticFromValues(usedValues, sheetHeaders, staticCols, identifierSetting, usedFormulas, usedProps);
 			}
 
-			// Prepare Matrix for Writing
+			// Prepare Matrix
 			notifyStatus('Constructing write matrix...');
 			
 			let rows;
@@ -300,7 +357,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 				writeStartRow = 1;
 			} else {
-				// No headers, just dump data
 				if (isObjectRows) {
 					const headers = Object.keys(firstAfter || {});
 					rows = new Array(dataToWrite.length + 1);
@@ -323,8 +379,9 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				return result;
 			}
 
-			// PRE-CALCULATE HIGHLIGHTING RANGES (In-Memory)
+			// Calculate Highlights
 			const rangesToHighlight = [];
+            const cellsToHighlight = [];
 			const rangesToClear = [];
 			
 			if (identifierSetting) {
@@ -372,7 +429,8 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 							continue;
 						}
 
-						const type = !beforeIdentifiers.has(id) ? 'highlight' : 'clear';
+						const isExisting = beforeIdentifiers.has(id);
+						const type = !isExisting ? 'highlight' : 'clear';
 						const absRowIndex = writeStartRow + r;
 
 						if (type !== currentBlockType) {
@@ -380,6 +438,26 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 							currentBlockType = type;
 							currentBlockStart = absRowIndex;
 						}
+
+                        // Check specific cells in existing rows
+                        if (isExisting) {
+                            const oldRow = beforeDataMap.get(id);
+                            if (oldRow) {
+                                for (let c = 0; c < rowData.length; c++) {
+                                    if (!columnsInImport.has(c)) continue;
+
+                                    const newVal = rowData[c];
+                                    let oldVal = '';
+                                    if (c < oldRow.length) oldVal = oldRow[c];
+
+                                    // V2.11 Fix: Use smart comparison
+                                    if (!areValuesEquivalent(newVal, oldVal)) {
+                                        const cellAddr = `${getColLetter(c)}${absRowIndex + 1}`;
+                                        cellsToHighlight.push(cellAddr);
+                                    }
+                                }
+                            }
+                        }
 					}
 					closeBlock(writeStartRow + rows.length - 1);
 				}
@@ -399,7 +477,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				used.load(['rowCount', 'columnCount']);
 				await context.sync();
 
-				// Clear existing data (below header if exists)
 				if (!used.isNullObject) {
 					const existingRows = used.rowCount || 0;
 					const existingCols = used.columnCount || 0;
@@ -411,48 +488,35 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 					}
 				}
 
-				// Write Headers
 				if (hasHeaders && sheetHeaders.length > 0) {
 					const headerRange = sheet.getRangeByIndexes(0, 0, 1, sheetHeaders.length);
 					headerRange.values = [sheetHeaders];
 				}
 
-				// Write Data
 				if (rows.length > 0) {
 					const writeRange = sheet.getRangeByIndexes(writeStartRow, 0, rows.length, colCount);
 					writeRange.values = rows;
 				}
 
-                // ----------------------------------------------------------
-                // REORDERED: Apply Row Highlighting/Clearing FIRST
-                // ----------------------------------------------------------
 				if (rangesToHighlight.length > 0) {
-					queueFormatRanges(sheet, rangesToHighlight, 'lightblue');
+					queueFormatRanges(sheet, rangesToHighlight, '#ADD8E6'); 
 				}
 				if (rangesToClear.length > 0) {
 					queueFormatRanges(sheet, rangesToClear, null);
 				}
+                if (cellsToHighlight.length > 0) {
+                    queueFormatRanges(sheet, cellsToHighlight, '#ADD8E6'); 
+                }
 
-                // ----------------------------------------------------------
-                // REORDERED: Restore Static Columns (Overlaying Row Styles)
-                // ----------------------------------------------------------
 				if (savedStatic && savedStatic.savedMap && savedStatic.savedMap.size > 0) {
 					await applyStaticColumnsWithContext(context, sheet, savedStatic, writeStartRow, rowCount, targetSheetName);
 				}
 
-				// Apply Conditional Formatting
 				if (conditionalFormat && conditionalFormat.column) {
 					const normCol = normalizeKey(conditionalFormat.column);
 					const cfColIndex = getHeaderIndexMap(sheetHeaders).get(normCol);
-					
-					console.log(`[DataProcessor] Checking CF. Header map has keys:`, Array.from(getHeaderIndexMap(sheetHeaders).keys()));
-					console.log(`[DataProcessor] Looking for "${normCol}". Found index: ${cfColIndex}`);
-
 					if (cfColIndex !== undefined && cfColIndex >= 0) {
-						// Passed index is enough; helper now uses .getEntireColumn()
 						applyConditionalFormatting(sheet, cfColIndex, conditionalFormat);
-					} else {
-						console.warn(`[DataProcessor] Column "${conditionalFormat.column}" not found for Conditional Formatting.`);
 					}
 				}
 
@@ -473,7 +537,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 	}
 
-	// Update: update matched columns in existing rows
 	async function Update(dataToWrite, suppressCompletion = false) {
 		notifyStatus('Starting DataProcessor update...');
 		
@@ -492,7 +555,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		try {
 			notifyStatus('Reading current sheet state...');
 			
-			// 1. PREPARE & READ
 			let usedValues = [];
 			let usedFormulas = [];
 			let sheetRangeRowIndex = 0;
@@ -523,28 +585,21 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				return result;
 			}
 
-			// Derive Headers and Normalize Data
 			let sheetHeaders = usedValues[0].map(v => (v == null ? '' : String(v).trim()));
 			const sheetHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
 			
-			// Identify headers in incoming data
 			const dataFirst = dataToWrite[0];
 			const isObjectRows = (dataFirst && typeof dataFirst === 'object' && !Array.isArray(dataFirst));
 			let dataHeaders = isObjectRows ? Object.keys(dataFirst) : (Array.isArray(dataFirst) ? dataFirst : []);
 
 			const settingsCols = Array.isArray(settingsColumns) ? settingsColumns : [];
 
-			// 2. NORMALIZE HEADERS (Decoupled Sheet vs Data)
-			
-			// A. Normalize SHEET Headers (Rename Alias -> Canonical)
 			const sheetAliasMap = buildAliasMap(settingsCols, sheetHeaders);
 			if (sheetAliasMap.size > 0) {
 				sheetHeaders = renameHeaderArray(sheetHeaders, sheetAliasMap);
 			}
 			const effectiveHeaderIndexMap = getHeaderIndexMap(sheetHeaders);
 
-			// B. Normalize DATA Headers (Rename Alias -> Canonical)
-			// We check ALL settings against Data, regardless of whether they matched on the Sheet.
 			const dataAliasMap = buildAliasMap(settingsCols, dataHeaders);
 			if (dataAliasMap.size > 0) {
 				if (isObjectRows) {
@@ -554,7 +609,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 			}
 			
-			// 3. Find Identifier in File
 			const fileHeaderKeySet = new Set((isObjectRows ? Object.keys(dataToWrite[0] || {}) : dataHeaders).map(h => normalizeKey(h)));
 			
 			const matchedSettings = settingsCols.filter(sc => {
@@ -574,7 +628,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			let identifierSetting = null;
 			
 			for (const candidate of matchedSettings) {
-				// Check if this candidate exists on the SHEET
 				const info = computeIdentifierListFromValues(usedValues, sheetHeaders, candidate, usedFormulas);
 				if (info.identifierIndex !== -1) {
 					identifierIndex = info.identifierIndex;
@@ -590,7 +643,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				return result;
 			}
 
-			// 4. Map Update Columns
 			const normalizedDataKeyMap = new Map();
 			if (isObjectRows && dataToWrite.length > 0) {
 				Object.keys(dataToWrite[0]).forEach(k => normalizedDataKeyMap.set(normalizeKey(k), k));
@@ -599,10 +651,9 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			}
 
 			let providedHeaders = Array.isArray(matched) ? matched : [];
-			const updateCols = []; // { index, dataKey/dataIndex, name }
+			const updateCols = []; 
 			
 			providedHeaders.forEach(ph => {
-				// Resolve 'ph' (File Header) to 'Canonical Name' via Data Map
 				let canonicalName = ph;
 				const normPH = normalizeKey(ph);
 				
@@ -617,11 +668,9 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				const resolvedDataKey = normalizedDataKeyMap.get(normCanonical);
 
 				if (sheetIdx !== undefined && resolvedDataKey !== undefined) {
-					// --- NEW CHANGE v2.1: Skip Identifier Column ---
 					if (sheetIdx === identifierIndex) {
 						return;
 					}
-					
 					updateCols.push({ 
 						index: sheetIdx, 
 						dataLookup: resolvedDataKey,
@@ -636,7 +685,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				return result;
 			}
 
-			// 5. BUILD UPDATES (IN MEMORY)
 			const updatesByColIndex = new Map(); 
 
 			for (const col of updateCols) {
@@ -658,11 +706,9 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 			let updatedCount = 0;
 			let skippedCount = 0;
 
-			// Resolve identifier key for incoming data
 			const idKeyNorm = normalizeKey(identifierSetting.name);
 			let idLookup = normalizedDataKeyMap.get(idKeyNorm);
 			
-			// Fallback: Check alias keys if main key missing in data
 			if (idLookup === undefined && identifierSetting.alias) {
 				const aliases = Array.isArray(identifierSetting.alias) ? identifierSetting.alias : [identifierSetting.alias];
 				for (const a of aliases) {
@@ -674,7 +720,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 			}
 
-			// Iterate incoming data
 			for (const rowIn of dataToWrite) {
 				let incomingId = '';
 				if (idLookup !== undefined) {
@@ -696,7 +741,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 			}
 
-			// 6. WRITE BACK
 			if (updatedCount === 0) {
 				notifyStatus(`Update finished but 0 rows matched. Checked ${dataToWrite.length} rows, skipped ${skippedCount}.`);
 				const result = { success: true, rowsUpdated: 0, rowsSkipped: skippedCount, warning: 'No rows matched' };
@@ -718,20 +762,13 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 					rng.formulas = colMatrix; 
 				}
 
-				// Apply Conditional Formatting
 				if (conditionalFormat && conditionalFormat.column) {
 					const normCol = normalizeKey(conditionalFormat.column);
 					const cfColIndex = effectiveHeaderIndexMap.get(normCol);
 					
-					console.log(`[DataProcessor - Update] Checking CF. Header map keys:`, Array.from(effectiveHeaderIndexMap.keys()));
-					console.log(`[DataProcessor - Update] Looking for "${normCol}". Found index: ${cfColIndex}`);
-
 					if (cfColIndex !== undefined && cfColIndex >= 0) {
 						const absColIndex = sheetRangeColIndex + cfColIndex;
-						// Passed index is enough; helper now uses .getEntireColumn()
 						applyConditionalFormatting(sheet, absColIndex, conditionalFormat);
-					} else {
-						console.warn(`[DataProcessor - Update] Column "${conditionalFormat.column}" not found for Conditional Formatting.`);
 					}
 				}
 
@@ -752,7 +789,6 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 	}
 
-	// Hybrid: Refresh separate sheet -> Update current sheet
 	async function Hybrid(dataToWrite) {
 		if (!refreshSheetName) {
 			notifyStatus('Hybrid action failed: No refresh sheet specified.');
@@ -761,7 +797,7 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 
 		notifyStatus(`Hybrid Step 1: Refreshing "${refreshSheetName}"...`);
-		const refreshResult = await Refresh(dataToWrite, refreshSheetName, true); // Suppress completion
+		const refreshResult = await Refresh(dataToWrite, refreshSheetName, true); 
 
 		if (!refreshResult || !refreshResult.success) {
 			notifyStatus(`Hybrid failed during Refresh phase: ${refreshResult?.error || refreshResult?.reason}`);
@@ -770,9 +806,8 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 		}
 
 		notifyStatus(`Hybrid Step 2: Updating "${sheetName}"...`);
-		const updateResult = await Update(dataToWrite, true); // Suppress completion
+		const updateResult = await Update(dataToWrite, true); 
 
-		// Merge results for final notification
 		const finalResult = {
 			success: updateResult.success,
 			refreshResult: refreshResult,
@@ -793,9 +828,9 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 
 	useEffect(() => {
 		if (action === 'Refresh') {
-			Refresh(data, sheetName, false); // Normal refresh, target = sheetName
+			Refresh(data, sheetName, false); 
 		} else if (action === 'Update') {
-			Update(data, false); // Normal update
+			Update(data, false); 
 		} else if (action === 'Hybrid') {
 			Hybrid(data);
 		} else {

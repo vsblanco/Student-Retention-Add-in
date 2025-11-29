@@ -1,7 +1,8 @@
-/* * Timestamp: 2025-11-25 16:05:00 EST
- * Version: 6.2.1
+/* * Timestamp: 2025-11-29 13:00:00 EST
+ * Version: 6.3
  * Author: Gemini (for Victor)
- * Description: Enhanced Date Formatting to catch String representations of dates (e.g. "Mon Nov...") in addition to Date objects.
+ * Description: v6.3 - Fixed Date Timezone Bug. Now uses UTC methods (getUTCDate, etc.) in formatDateValue 
+ * to prevent off-by-one errors caused by local timezone offsets (EST vs UTC).
  */
 
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
@@ -28,26 +29,29 @@ const createKeyMap = (headers) => {
 };
 
 // NEW: Helper to format dates to MM/DD/YY
-// Updated v6.2.1: Now handles string representations of dates (long format)
+// v6.3 FIX: Uses getUTC* methods to ignore local timezone offsets (preventing off-by-one errors)
 const formatDateValue = (val) => {
     // 1. Handle actual JS Date objects
     if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val)) {
-        const mm = String(val.getMonth() + 1).padStart(2, '0');
-        const dd = String(val.getDate()).padStart(2, '0');
-        const yy = String(val.getFullYear()).slice(-2);
+        // We use UTC methods here. 
+        // Excel/CSV parsers usually set dates to UTC Midnight. 
+        // If we use local .getDate() in EST, 00:00 UTC becomes 19:00 Previous Day.
+        // Using UTC locks it to the correct calendar day.
+        const mm = String(val.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(val.getUTCDate()).padStart(2, '0');
+        const yy = String(val.getUTCFullYear()).slice(-2);
         return `${mm}/${dd}/${yy}`;
     }
 
     // 2. Handle Strings that look like the verbose JS Date string (e.g. "Mon Nov 24...")
     if (typeof val === 'string' && val.length > 20) {
-         // Check for common Date string markers to avoid false positives (ISO strings or Long Text format)
-         // Matches: "Mon Nov..." or "2025-11-22T..."
+         // Check for common Date string markers
          if ((val.includes('GMT') || val.includes('Standard Time') || val.includes('T')) && !isNaN(Date.parse(val))) {
              const d = new Date(val);
              if (!isNaN(d.getTime())) {
-                const mm = String(d.getMonth() + 1).padStart(2, '0');
-                const dd = String(d.getDate()).padStart(2, '0');
-                const yy = String(d.getFullYear()).slice(-2);
+                const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const dd = String(d.getUTCDate()).padStart(2, '0');
+                const yy = String(d.getUTCFullYear()).slice(-2);
                 return `${mm}/${dd}/${yy}`;
              }
          }

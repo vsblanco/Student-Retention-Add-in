@@ -78,6 +78,12 @@ export const IMPORT_DEFINITIONS = [
 			column: 'Missing Assignments', // Matches 'total missing' column header usually
 			condition: 'Highlight Cells with',
 			format: ['Specific text', 'Beginning with', '0', 'Green Fill with Dark Green Text']
+		},
+        conditionalFormat: {
+			column: 'Grade', // Note: Column name in Excel might be "Current Score" based on matchColumns or Rename? matchColumns has 'current score'. 
+            // Assuming the column header in the sheet will match the input header or rename.
+			condition: 'Color Scales',
+			format: 'G-Y-R Color Scale'
 		}
     },
     {

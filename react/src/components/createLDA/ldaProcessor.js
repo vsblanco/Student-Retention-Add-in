@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-26 22:15:00
- * Version: 2.14.0
+ * Timestamp: 2025-11-29 13:30:00
+ * Version: 2.15.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Added Color Exclusion Logic. Now ignores Light Blue background colors (common for new student rows) when building the color map.
+ * Update: Auto-detects columns present in Master List but missing from Settings. Appends them to the report as hidden columns.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -41,7 +41,7 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
         const dncTag = dncMap.get(sId);
         // Check if tag is "dnc" by itself (trimmed and lowered)
         if (dncTag && dncTag.trim() === 'dnc') {
-            return "[Retention] DNC - Student explicitly opted out";
+            return "[Retention] DNC";
         }
     }
 
@@ -145,19 +145,19 @@ export async function createLDA(userOverrides, onProgress) {
                 const colConfig = settings.columns.find(c => 
                     stripStr(c.name) === targetNameStripped
                 );
-                if (!colConfig) return -1;
-
-                // 2. Prepare candidates list
+                // If checking for a raw header that isn't in settings config but passed as a name
                 let aliases = [];
-                if (Array.isArray(colConfig.alias)) {
-                    aliases = colConfig.alias;
-                } else if (colConfig.alias) {
-                    aliases = [colConfig.alias];
+                if (colConfig) {
+                    if (Array.isArray(colConfig.alias)) {
+                        aliases = colConfig.alias;
+                    } else if (colConfig.alias) {
+                        aliases = [colConfig.alias];
+                    }
                 }
+                
+                const candidates = [settingName, ...aliases]; // settingName might be a raw header now
 
-                const candidates = [colConfig.name, ...aliases];
-
-                // 3. Find match in Excel Headers
+                // 2. Find match in Excel Headers
                 for (const rawCand of candidates) {
                     const candStripped = stripStr(rawCand);
                     const idx = headers.findIndex(h => stripStr(h) === candStripped);
@@ -167,6 +167,29 @@ export async function createLDA(userOverrides, onProgress) {
                 return -1;
             };
 
+            // --- NEW: Implicit Column Detection ---
+            // 1. Mark which Master List indices are covered by User Settings
+            const usedMasterIndices = new Set();
+            settings.columns.forEach(col => {
+                const idx = getColIndex(col.name);
+                if (idx !== -1) usedMasterIndices.add(idx);
+            });
+
+            // 2. Find unused Master List headers and append them as hidden
+            const outputColumns = [...settings.columns]; // Start with user config
+            
+            headers.forEach((h, idx) => {
+                if (!usedMasterIndices.has(idx) && h && String(h).trim() !== "") {
+                    // This is a column in Master List not in settings.
+                    // Add it, but hide it.
+                    outputColumns.push({
+                        name: h,
+                        hidden: true
+                    });
+                }
+            });
+
+            // --- Retrieve Key Indices ---
             const daysOutIdx = getColIndex('Days Out');
             const gradeIdx = getColIndex('Grade');
             const studentIdIdx = getColIndex('Student Number');
@@ -185,27 +208,18 @@ export async function createLDA(userOverrides, onProgress) {
 
             // --- STEP 2b: Build Color Map (Value -> Color) ---
             const columnColorMaps = new Map();
-            const outputColumns = settings.columns; 
 
-            outputColumns.sort((a, b) => {
-                const indexA = getColIndex(a.name);
-                const indexB = getColIndex(b.name);
-                if (indexA === -1 && indexB === -1) return 0;
-                if (indexA === -1) return 1; 
-                if (indexB === -1) return -1;
-                return indexA - indexB;
-            });
-
+            // Re-sort outputColumns to ensure processing order (though less critical now)
+            // We only really care about mapping indices for color scanning
+            
             const outputColIndices = outputColumns
                 .map(c => getColIndex(c.name))
                 .filter(idx => idx !== -1);
 
             // --- EXCLUDED COLORS SET ---
-            // Add any other hex codes you want to ignore here.
-            // Currently ignoring: White, and common Excel Light Blues
             const EXCLUDED_COLORS = new Set([
                 '#ffffff', // White
-                '#ADD8E6'  // Another common Google/Excel blue
+                '#add8e6'  // LightBlue (Standard Excel/HTML name)
             ]);
 
             for (let r = 1; r < masterValues.length; r++) {
@@ -223,13 +237,6 @@ export async function createLDA(userOverrides, onProgress) {
                     }
                 });
             }
-
-            // --- STEP 2c: Identify Hidden Columns based on Settings ---
-            const hiddenColumnsSet = new Set();
-            outputColumns.forEach(c => {
-                if (c.hidden) hiddenColumnsSet.add(c.name);
-            });
-
 
             // --- STEP 3: Filtering by Days Out ---
             if (onProgress) onProgress('filter', 'active');
@@ -376,7 +383,7 @@ export async function createLDA(userOverrides, onProgress) {
                 }
             });
 
-            // Determine Outreach Column Index
+            // Determine Outreach Column Index (It might be missing if implicit columns pushed it)
             const outreachColIndex = outputColumns.findIndex(c => c.name === 'Outreach');
             
             // Row Builder
@@ -422,6 +429,7 @@ export async function createLDA(userOverrides, onProgress) {
                     }
 
                     // --- Apply Retention Highlight (Partial Row) ---
+                    // Only apply up to outreach column if it exists and this column is within range
                     if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
                         cellHighlights.push({
                             colIndex: colOutIdx,
@@ -571,8 +579,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
 
     cfChecks.forEach(check => {
         const targetColRange = table.columns.getItemAt(check.targetIndex).getDataBodyRange();
+        
+        // 1. Copy everything (Backgrounds + CF) from master list source cell
         targetColRange.copyFrom(check.sourceCell, Excel.RangeCopyType.formats);
         
+        // 2. FIX: Explicitly clear the static background color.
+        targetColRange.format.fill.clear();
+
         // --- Apply Smart Date Formatting ---
         if (dateColumnNames.has(check.colName)) {
             targetColRange.numberFormat = [["mm-dd-yy;@"]];
