@@ -5,8 +5,8 @@ import emailIcon from '../../assets/icons/email-icon.png';
 
 export const defaultColumns =[
 	{ name: 'Assigned', alias: ['advisor'], static: true },
-	{ name: 'Student Name', alias: ['Student']},
 	{ name: 'Student Number', alias: ['Student Numbers','Issued ID'], hidden: true },
+	{ name: 'Student Name', alias: ['Student']},
 	{ name: 'SyStudentId', alias: ['student sis'], hidden: true, identifier: true },
 	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, identifier: true, format: ['=HYPERLINK']},
 	{ name: 'ProgramVersion', alias: ['Program','ProgVersDescrip'] },

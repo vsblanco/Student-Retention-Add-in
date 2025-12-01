@@ -38,7 +38,7 @@ export const IMPORT_DEFINITIONS = [
         name: 'Canvas Gradebook',
         type: 'Gradebook Link',
         priority: 2,
-        matchColumns: ['student sis', 'course', CourseId, 'current score'],
+        matchColumns: ['student sis', 'course', CourseId],
         action: 'Update',
         icon: CanvasFile,
         rename: CanvasRename,
@@ -48,13 +48,7 @@ export const IMPORT_DEFINITIONS = [
             friendlyName: 'Grade Book',
             linkLocation: 'https://nuc.instructure.com/courses/' + CourseId + '/grades/' + CanvasId,
             parameter: [CourseId, CanvasId]
-        },
-		conditionalFormat: {
-			column: 'Grade', // Note: Column name in Excel might be "Current Score" based on matchColumns or Rename? matchColumns has 'current score'. 
-            // Assuming the column header in the sheet will match the input header or rename.
-			condition: 'Color Scales',
-			format: 'G-Y-R Color Scale'
-		}
+        }
     },
     {
         id: 'dropout',
