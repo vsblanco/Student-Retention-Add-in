@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 04:45 PM | Version: 1.2.1
+// Timestamp: 2025-12-03 12:45:00 | Version: 1.2.2
 import React, { useState, useEffect } from 'react';
 // The import path is updated to look inside the new folder.
 import StudentView from './components/studentView/StudentView.jsx';
@@ -21,6 +21,36 @@ function App() {
     // set parsed page or default to 'student-view'
     setPage(pageParam || 'student-view');
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // GLOBAL FIX: Keep-Alive Heartbeat
+  // ---------------------------------------------------------------------------
+  // This effect runs once on mount. It pings the runtime environment every 20s
+  // to prevent the background script/service worker from going to sleep.
+  useEffect(() => {
+    const keepAliveInterval = setInterval(() => {
+      // Check if the chrome runtime API is available
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+        
+        // Send a lightweight 'ping' message
+        chrome.runtime.sendMessage({ type: 'keep_alive_ping' }, (response) => {
+          
+          // CRITICAL: We must check chrome.runtime.lastError in the callback.
+          // Accessing this property marks the error as "checked" and prevents the
+          // "Unchecked runtime.lastError: Could not establish connection" noise in the console.
+          if (chrome.runtime.lastError) {
+            // Context is likely invalid or background is dead. 
+            // We swallow the error here so it doesn't crash the UI logic.
+            // console.warn("Background connection lost (handled):", chrome.runtime.lastError.message);
+          }
+        });
+      }
+    }, 20000); // 20 seconds is usually frequent enough to prevent sleep
+
+    // Cleanup interval on unmount
+    return () => clearInterval(keepAliveInterval);
+  }, []);
+  // ---------------------------------------------------------------------------
 
   // Determine which component to render based on the current page state
   const renderPage = () => {

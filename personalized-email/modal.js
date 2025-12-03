@@ -559,11 +559,6 @@ export default class ModalManager {
         const logicType = document.getElementById('logic-type-dropdown').value;
         const status = document.getElementById('save-param-status');
 
-        if (!name || !sourceColumn) {
-            status.textContent = 'Parameter Name and Source Column are required.';
-            status.style.color = 'red';
-            return;
-        }
         if (!/^[a-zA-Z0-9_]+$/.test(name)) {
             status.textContent = 'Parameter Name can only contain letters, numbers, and underscores.';
             status.style.color = 'red';
