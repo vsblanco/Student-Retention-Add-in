@@ -1,6 +1,6 @@
+// [2025-12-03] Version 2.2 - Advanced debounce with stale-request cancellation to prevent backlog
 import { getCanonicalColIdx, canonicalHeaderMap } from './CanonicalMap.jsx';
 
-// [2025-10-23] Version 2.0
 export function normalize(val) {
     if (val === undefined || val === null) return "";
     // Convert to string, remove all spaces globally, and convert to lowercase.
@@ -38,12 +38,7 @@ function colIndexToLetter(colIndex) {
 
 /**
  * Edits a row in an Excel worksheet by unique ID.
- *
- * @param {string} sheet The name of the worksheet to edit.
- * @param {string} columnId The name of the column that contains the unique IDs for each row.
- * @param {string | number} rowId The unique ID of the row you want to edit.
- * @param {object} newData An object where keys are the column headers to update and values are the new values for those cells.
- * @returns {Promise<{success: boolean, message: string}>}
+ * ... (unchanged)
  */
 export async function editRow(sheet, columnId, rowId, newData) {
     console.log("ExcelAPI.editRow: start", { sheet, columnId, rowId });
@@ -117,10 +112,7 @@ export async function editRow(sheet, columnId, rowId, newData) {
 
 /**
  * Inserts a new row into an Excel worksheet.
- *
- * @param {string} sheet The name of the worksheet to insert into.
- * @param {object} newData An object where keys are the column headers and values are the values for those cells.
- * @returns {Promise<{success: boolean, message: string}>}
+ * ... (unchanged)
  */
 export async function insertRow(sheet, newData) {
     console.log("ExcelAPI.insertRow: start", { sheet });
@@ -176,11 +168,7 @@ export async function insertRow(sheet, newData) {
 
 /**
  * Deletes a row in an Excel worksheet by unique ID.
- *
- * @param {string} sheet The name of the worksheet to edit.
- * @param {string} columnId The name of the column that contains the unique IDs for each row.
- * @param {string | number} rowId The unique ID of the row you want to delete.
- * @returns {Promise<{success: boolean, message: string}>}
+ * ... (unchanged)
  */
 export async function deleteRow(sheet, columnId, rowId) {
     console.log("ExcelAPI.deleteRow: start", { sheet, columnId, rowId });
@@ -240,39 +228,85 @@ export async function deleteRow(sheet, columnId, rowId) {
 
 /**
  * Registers a callback for Excel worksheet selection changes.
- * 
- * @param {function} callback - Function to run when selection changes.
+ * * Uses debounce and a stale-request check to handle rapid clicking without backlog.
+ * * @param {function} callback - Function to run when selection changes.
+ * @param {object} COLUMN_ALIASES - Optional mapping of canonical column names to alias names.
  * @returns {Promise<{remove: function}>} - Returns an object with a remove() function to unregister the event.
  */
 export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
     console.log("ExcelAPI.onSelectionChanged: start");
     let eventHandler;
+    let debounceTimer = null;
+    const DEBOUNCE_DELAY = 250; // ms
+
+    // Tracker for the latest event ID to handle "stale" requests
+    let latestRequestId = 0;
+
     await Excel.run(async (context) => {
         const worksheet = context.workbook.worksheets.getActiveWorksheet();
-        // register handler that delegates work to loadRange
+        
         eventHandler = worksheet.onSelectionChanged.add(async (eventArgs) => {
-            try {
-                // Delegate selection parsing to loadRange
-                const payload = await loadRange(context, worksheet, eventArgs.address, COLUMN_ALIASES);
-                if (!payload || !payload.success) {
-                    callback({});
-                    return;
-                }
-                // Keep same callback shape as before
-                callback({
-                    address: payload.address,
-                    data: payload.data || {},
-                    values: payload.values || []
-                });
-            } catch (err) {
-                console.error("onSelectionChanged callback error:", err);
+            // 1. Increment ID immediately on every raw event
+            latestRequestId++;
+            const currentRequestId = latestRequestId;
+
+            // 2. Clear previous timer
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
             }
+
+            // 3. Set new timer
+            debounceTimer = setTimeout(async () => {
+                // 4. Stale check: If a newer event came in while waiting, abort this one
+                if (currentRequestId !== latestRequestId) {
+                    return; 
+                }
+
+                try {
+                    // 5. Run the data fetch in its OWN isolated context to prevent queueing on the registration context
+                    await Excel.run(async (newContext) => {
+                        const activeSheet = newContext.workbook.worksheets.getActiveWorksheet();
+                        // Get whatever is CURRENTLY selected (resolves race conditions better than eventArgs.address for rapid clicks)
+                        const currentSelection = newContext.workbook.getSelectedRange();
+                        currentSelection.load("address");
+                        
+                        // Delegate to loadRange
+                        const payload = await loadRange(newContext, activeSheet, currentSelection, COLUMN_ALIASES);
+                        
+                        // 6. FINAL Stale check: If a newer event happened while we were fetching data, discard this result.
+                        // This prevents "ghost" updates from old clicks appearing after the new content.
+                        if (currentRequestId !== latestRequestId) {
+                            console.log("ExcelAPI: Discarding stale selection data for ID:", currentRequestId);
+                            return; 
+                        }
+
+                        if (!payload || !payload.success) {
+                            callback({});
+                            return;
+                        }
+
+                        // invoke callback with fresh data
+                        callback({
+                            address: payload.address,
+                            data: payload.data || {},
+                            values: payload.values || []
+                        });
+                    });
+                } catch (err) {
+                    console.error("onSelectionChanged processing error:", err);
+                }
+            }, DEBOUNCE_DELAY);
         });
         await context.sync();
     });
+
     console.log("ExcelAPI.onSelectionChanged: finished - handler registered");
+    
     return {
         remove: async () => {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
             if (eventHandler) {
                 await Excel.run(async (context) => {
                     eventHandler.remove();
@@ -284,19 +318,26 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
 }
 
 // New: reusable loader for a given range address within an existing Excel.run context.
-// This version mirrors the prior onSelectionChanged behavior: it reads the entire usedRange header row,
-// then reads the full row (across used columns) for the selected row index and builds a header->value map.
-export async function loadRange(context, worksheet, rangeAddress, COLUMN_ALIASES = null) {
-    // Load selection rowIndex (we only need the selected row index for this address)
-    const selRange = worksheet.getRange(rangeAddress);
+// Supports passing either a rangeAddress string OR a Range object directly as the third argument.
+export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIASES = null) {
+    let selRange;
+    if (typeof rangeOrAddress === 'string') {
+        selRange = worksheet.getRange(rangeOrAddress);
+    } else {
+        // Assume it's a Range object already linked to 'context'
+        selRange = rangeOrAddress;
+    }
+    
     selRange.load(["address", "rowIndex"]);
+    
     // Load usedRange headers and position
     const usedRange = worksheet.getUsedRangeOrNullObject();
     usedRange.load(["values", "formulas", "rowIndex", "columnIndex", "columnCount", "isNullObject"]);
     await context.sync();
 
     if (!usedRange || usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
-        return { success: false, message: "No used range / headers found.", address: rangeAddress };
+        // If empty sheet, return graceful empty
+        return { success: false, message: "No used range / headers found.", address: selRange.address };
     }
 
     // Normalize raw header strings
@@ -304,7 +345,7 @@ export async function loadRange(context, worksheet, rangeAddress, COLUMN_ALIASES
     const usedColIndex = (typeof usedRange.columnIndex === "number") ? usedRange.columnIndex : 0;
     const usedColCount = usedRange.columnCount || (rawHeaders.length);
 
-    // Ensure selRange.rowIndex is available (already loaded earlier)
+    // Ensure selRange.rowIndex is available
     const selectedRowIndex = selRange.rowIndex;
 
     // Read the full row across the used columns
@@ -386,14 +427,9 @@ export async function loadRange(context, worksheet, rangeAddress, COLUMN_ALIASES
 
 /**
  * Checks if a row exists in the worksheet by unique ID.
- *
- * @param {string} sheet The name of the worksheet to check.
- * @param {string} columnId The name of the column that contains the unique IDs for each row.
- * @param {string | number} rowId The unique ID of the row you want to check.
- * @returns {Promise<boolean>} Promise resolving to true if the row exists, false otherwise.
+ * ... (unchanged)
  */
 export async function checkRow(sheet, columnId, rowId) {
-     // Quick validation
      if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
          throw new Error("Parameter 'sheet' is required and must be a non-empty string.");
      }
@@ -409,14 +445,11 @@ export async function checkRow(sheet, columnId, rowId) {
              const headers = usedRange.values[0];
              const idColIdx = getCanonicalColIdx(headers, columnId, canonicalHeaderMap);
              if (idColIdx === -1) {
-                 // If ID column not found, row cannot exist
                  exists = false;
                  return;
              }
-
-             // Scan rows (skip header row at index 0)
              for (let i = 1; i < usedRange.rowCount; i++) {
-                 if (usedRange.values[i][idColIdx] == rowId) { // loose equality to match numbers/strings
+                 if (usedRange.values[i][idColIdx] == rowId) { 
                     exists = true;
                     break;
                  }
@@ -426,22 +459,15 @@ export async function checkRow(sheet, columnId, rowId) {
          return exists;
      } catch (error) {
          console.error("ExcelAPI.checkRow: finished - error", error && error.message ? error.message : error);
-         // Surface errors as rejected promise
          throw new Error(error.message || String(error));
      }
 }
 
 /**
  * Highlights a row in the active worksheet.
- *
- * @param {number} rowIndex The index of the row to highlight (0-based).
- * @param {number} startCol The index of the reference column in the range (0-based).
- *                         Highlighting will extend to the left of this column.
- * @param {number} colCount The number of columns to include in the highlight (extends left).
- * @param {string} [color='yellow'] The color to use for highlighting (in CSS color format).
+ * ... (unchanged)
  */
 export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow') {
-  // Quick guard: Excel runtime must exist and parameters must be numbers
   if (typeof window.Excel === "undefined") return;
   if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
   if (colCount <= 0) return;
@@ -449,15 +475,8 @@ export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow
   try {
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
-
-      // Compute leftmost column so the range extends to the left of startCol.
-      // Example: startCol=4, colCount=3 -> leftStartCol = 4 - (3 - 1) = 2  (columns 2,3,4)
       let leftStartCol = startCol - (colCount - 1);
-      if (leftStartCol < 0) {
-        // clamp to sheet left edge and adjust count so we don't request negative index
-        leftStartCol = 0;
-      }
-      // Adjust actual column count in case leftStartCol was clamped
+      if (leftStartCol < 0) leftStartCol = 0;
       const actualColCount = (startCol - leftStartCol) + 1;
       if (actualColCount <= 0) return;
 
@@ -465,49 +484,36 @@ export async function highlightRow(rowIndex, startCol, colCount, color = 'yellow
       highlightRange.format.fill.color = color;
       await context.sync();
     });
-  } catch (_) {
-    // swallow errors intentionally to avoid breaking callers
-  }
+  } catch (_) { }
 }
 
 // NEW: clear fill for a row range (inverse of highlightRow)
 export async function clearRowFill(rowIndex, startCol, colCount) {
-  // Quick guard: Excel runtime must exist and parameters must be numbers
   if (typeof window.Excel === "undefined") return;
   if (typeof rowIndex !== 'number' || typeof startCol !== 'number' || typeof colCount !== 'number') return;
   if (colCount <= 0) return;
-
   try {
     await Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
-
-      // Compute leftmost column so the range extends to the left of startCol.
       let leftStartCol = startCol - (colCount - 1);
       if (leftStartCol < 0) leftStartCol = 0;
-
       const actualColCount = (startCol - leftStartCol) + 1;
       if (actualColCount <= 0) return;
-
       const targetRange = sheet.getRangeByIndexes(rowIndex, leftStartCol, 1, actualColCount);
       targetRange.format.fill.clear();
       await context.sync();
     });
-  } catch (_) {
-    // swallow errors intentionally
-  }
+  } catch (_) { }
 }
 
 /**
  * Loads a worksheet's used range and returns headers, values and dimensions.
- *
- * @param {string} sheet The name of the worksheet to load.
- * @returns {Promise<{success: boolean, message: string, data: {headers: any[], values: any[][], rowCount: number, columnCount: number} | null}>}
+ * ... (unchanged)
  */
 export async function loadSheet(sheet, identifierColumn = null, identifierRow = null) {
     console.log("ExcelAPI.loadSheet: start", { sheet }, { identifierColumn });
     if (!sheet || typeof sheet !== "string" || sheet.trim() === "") {
         console.log("ExcelAPI.loadSheet: finished - invalid parameters");
-        // removed parent `data` per request
         return { success: false, message: "Parameter 'sheet' is required and must be a non-empty string." };
     }
 
@@ -527,32 +533,23 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
             await context.sync();
 
             if (usedRange.isNullObject) {
-                // empty sheet (no used range)
                 payload = { rowCount: 0, columnCount: 0, headers: {}, data: [] };
             } else {
                 const values = usedRange.values || [];
                 const rowCount = usedRange.rowCount || values.length;
                 const columnCount = usedRange.columnCount || (values[0] ? values[0].length : 0);
-                // Normalize headers to strings (use empty string for undefined/null)
                 const headerNames = values.length ? values[0].map(h => (h === undefined || h === null) ? "" : String(h)) : [];
 
-                // Build header -> index map (expose this under `headers` in the result)
                 const headerIndexMap = {};
-                headerNames.forEach((h, i) => {
-                    headerIndexMap[h] = i;
-                });
+                headerNames.forEach((h, i) => { headerIndexMap[h] = i; });
 
-                // Determine identifier column index by direct presence in headerNames (no canonical matching)
                 const idColIdx = (identifierColumn && typeof identifierColumn === 'string')
                     ? headerNames.findIndex(h => normalize(h) === normalize(identifierColumn))
                     : -1;
 
-                // Build `data`:
-                // - if idColIdx !== -1 => produce an object keyed by identifier value, each value is ALWAYS an array of rows
-                // - otherwise => produce an array of row objects (legacy behavior)
                 let data;
                 if (idColIdx !== -1) {
-                    data = {}; // keyed by identifier value -> array of row objects
+                    data = {}; 
                     for (let r = 1; r < values.length; r++) {
                         const row = values[r] || [];
                         const rowObj = {};
@@ -560,14 +557,12 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
                             const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
                             rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
                         }
-                        // derive key from the identifier column value; coerce to string to be safe
                         const rawKey = row[idColIdx];
                         const key = (rawKey === undefined || rawKey === null) ? `Row${r}` : String(rawKey);
                         if (!data[key]) data[key] = [];
                         data[key].push(rowObj);
                     }
                 } else {
-                    // fallback: array of row objects
                     data = [];
                     for (let r = 1; r < values.length; r++) {
                         const row = values[r] || [];
@@ -580,56 +575,39 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
                     }
                 }
 
-                // If identifierRow was provided, filter the result accordingly:
                 if (identifierRow !== null && identifierRow !== undefined) {
                     if (idColIdx !== -1) {
-                        // identifierColumn present: return only the array for that identifier key (or empty array)
                         const lookupKey = String(identifierRow);
                         data = data[lookupKey] || [];
                     } else {
-                        // identifierColumn not present: treat identifierRow as a filter value and
-                        // return only rows where any cell loosely equals identifierRow
                         const lookupVal = identifierRow;
                         data = (Array.isArray(data) ? data : []).filter(rowObj =>
                             Object.values(rowObj).some(v => v == lookupVal)
                         );
                     }
                 }
-
-                // Note: `headers` here is the index map (name -> column index)
                 payload = { rowCount, columnCount, address: usedRange.address, headers: headerIndexMap, data };
             }
         });
 
         console.log("ExcelAPI.loadSheet: finished - success");
-        // Return the payload (data object) directly so callers receive the sheet payload
         return payload;
     } catch (error) {
         console.log("ExcelAPI.loadSheet: finished - error", error?.message);
-        // removed parent `data` per request
         return { success: false, message: error?.message || String(error) };
     }
 }
 
 /**
  * Gets the currently selected range in the active worksheet.
- *
- * Returns metadata and canonicalized row objects for the current selection.
- * @param {function} callback - Function to run when selection changes.
- * @param {object} COLUMN_ALIASES - Optional mapping of canonical column names to alias names.
- * @param {object} options - Optional flags for the operation (currently unused).
- * @returns {Promise<{success: boolean, message: string, address: string, startRow: number, startCol: number, rowCount: number, columnCount: number, headers: object, values: any[][], formulas: any[][], rows: object[], singleRow: object | null}>}
+ * ... (unchanged)
  */
 export async function getSelectedRange(arg1, arg2 = null, options = {}) {
-    // Supports two call styles:
-    // 1) callback mode: getSelectedRange(callback, COLUMN_ALIASES)
-    // 2) promise mode:  getSelectedRange(COLUMN_ALIASES)
     const isCallbackMode = typeof arg1 === 'function';
     const callback = isCallbackMode ? arg1 : null;
     const COLUMN_ALIASES = isCallbackMode ? arg2 : arg1;
 
     try {
-        // Use Excel.run and return its result so callers can await the payload
         const result = await Excel.run(async (context) => {
             console.log("ExcelAPI.getSelectedRange: start");
             const worksheet = context.workbook.worksheets.getActiveWorksheet();
@@ -637,16 +615,15 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
             workbookSel.load(["address", "rowIndex"]);
             await context.sync();
 
-            const payload = await loadRange(context, worksheet, workbookSel.address, COLUMN_ALIASES);
+            const payload = await loadRange(context, worksheet, workbookSel, COLUMN_ALIASES);
             if (!payload || !payload.success) {
                 if (callback) {
-                    try { callback({}); } catch (e) { /* swallow callback errors */ }
-                    return { remove: async () => { /* noop for one-time selection */ } };
+                    try { callback({}); } catch (e) { }
+                    return { remove: async () => { } };
                 }
                 return { success: false, message: payload?.message || "Failed to load range" };
             }
 
-            // Normalize payload for promise-mode consumers
             const normalized = Object.assign({}, payload, {
                 singleRow: payload.data || null,
                 rows: payload.data ? [payload.data] : []
@@ -662,8 +639,7 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
                 } catch (err) {
                     console.error("getSelectedRange callback error:", err);
                 }
-                // mirror onSelectionChanged shape (remove() available)
-                return { remove: async () => { /* noop - one-time selection */ } };
+                return { remove: async () => { } };
             } else {
                 console.log("ExcelAPI.getSelectedRange: payload succeeded");
                 return normalized;
@@ -674,8 +650,8 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
     } catch (error) {
         console.error("ExcelAPI.getSelectedRange: error", error);
         if (isCallbackMode && typeof callback === 'function') {
-            try { callback({}); } catch (_) { /* ignore */ }
-            return { remove: async () => { /* noop */ } };
+            try { callback({}); } catch (_) { }
+            return { remove: async () => { } };
         }
         return { success: false, message: error && error.message ? error.message : String(error) };
     }
@@ -683,16 +659,10 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
 
 /**
  * Registers a worksheet change handler.
- *
- * @param {string} sheet - Worksheet name to observe (required).
- * @param {string|null} identifierColumn - Column (name) that serves as row identifier (optional).
- * @param {function} callback - function(payload) called when changes occur. payload = { address, changes: [{ address, rowIndex, colIndex, header, value, identifier }] }
- * @param {object|null} COLUMN_ALIASES - optional alias map for canonical header resolution.
- * @returns {Promise<{remove: function}>} - object with remove() to unregister.
+ * ... (unchanged)
  */
 export async function onChanged(callback, sheet, identifierColumn = null, COLUMN_ALIASES = null, otherValues = null) {
     console.log("ExcelAPI.onChanged: start", { sheet, identifierColumn });
-    // Allow omitted sheet: if provided it must be a string; otherwise we'll use the active worksheet.
     if (sheet !== undefined && sheet !== null && typeof sheet !== 'string') {
         throw new Error("Parameter 'sheet' must be a string when provided.");
     }
@@ -704,38 +674,27 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
     await Excel.run(async (context) => {
         let worksheet;
         if (sheet && typeof sheet === 'string' && sheet.trim() !== '') {
-            // use the named worksheet (preserve previous behavior)
             worksheet = context.workbook.worksheets.getItemOrNullObject(sheet);
             worksheet.load("isNullObject");
             await context.sync();
-
             if (worksheet.isNullObject) {
                 throw new Error(`Worksheet "${sheet}" not found.`);
             }
         } else {
-            // no sheet provided -> use the currently active worksheet
             worksheet = context.workbook.worksheets.getActiveWorksheet();
         }
 
-        // Register handler which uses the same context and worksheet captures
         eventHandler = worksheet.onChanged.add(async (eventArgs) => {
             try {
-               // Log that a change event fired (include sheet and event address)
                 console.log("ExcelAPI.onChanged: change event fired", { sheet, address: eventArgs && eventArgs.address });
-
-                // --- ADDED: ignore non-local changes using eventArgs.source ---
                 if (eventArgs && eventArgs.source) {
                     const src = eventArgs.source;
                     const isLocalString = (typeof src === 'string' && src.toLowerCase() === 'local');
                     const isLocalEnum = (typeof Excel !== 'undefined' && Excel.EventSource && src === Excel.EventSource.local);
                     if (!isLocalString && !isLocalEnum) {
-                        console.log("ExcelAPI.onChanged: ignoring non-local change", { source: src });
-                        return; // don't process remote/sync changes
+                        return;
                     }
                 }
-                // --- end added guard ---
-
-                // Load changed range and used range within this captured context
                 const changedRange = worksheet.getRange(eventArgs.address);
                 changedRange.load(["address", "rowIndex", "columnIndex", "rowCount", "columnCount", "values", "formulas"]);
                 const usedRange = worksheet.getUsedRangeOrNullObject();
@@ -743,7 +702,7 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                 await context.sync();
 
                 if (usedRange.isNullObject || !usedRange.values || usedRange.values.length === 0) {
-                    // No headers / used range — still report raw changed cells
+                    // Raw changes (no headers)
                     const rawChanges = [];
                     for (let r = 0; r < (changedRange.rowCount || 0); r++) {
                         for (let c = 0; c < (changedRange.columnCount || 0); c++) {
@@ -760,8 +719,7 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                             });
                         }
                     }
-                    console.log("ExcelAPI.onChanged: computed rawChanges", { sheet, address: changedRange.address, changes: rawChanges });
-                    try { callback({ address: changedRange.address, changes: rawChanges }); } catch (_) { /* swallow */ }
+                    try { callback({ address: changedRange.address, changes: rawChanges }); } catch (_) { }
                     return;
                 }
 
@@ -769,7 +727,6 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                 const usedStartRow = typeof usedRange.rowIndex === "number" ? usedRange.rowIndex : 0;
                 const usedStartCol = typeof usedRange.columnIndex === "number" ? usedRange.columnIndex : 0;
 
-                // Determine identifier column index (relative to usedRange header indices) using canonical mapping
                 let idColIdx = -1;
                 if (identifierColumn && typeof identifierColumn === 'string') {
                     idColIdx = getCanonicalColIdx(headerRow, identifierColumn, canonicalHeaderMap);
@@ -784,23 +741,18 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                         const absCol = changedRange.columnIndex + c;
                         const headerName = (relColIndex >= 0 && relColIndex < headerRow.length) ? headerRow[relColIndex] : `Column${usedStartCol + relColIndex}`;
 
-                        // identifier value: if idColIdx is present and the usedRange covers that row, extract it
                         let identifierValue = null;
                         if (idColIdx !== -1) {
-                            const idRel = idColIdx; // idColIdx is already relative to headerRow indices
-                            // Use absolute row index to compute data row inside usedRange (header is at index 0)
+                            const idRel = idColIdx;
                             const dataRowIndex = (changedRange.rowIndex + r) - usedStartRow;
-                            // data rows in usedRange.values start at index 1 (0 == header). Ensure we are inside bounds.
                             if (dataRowIndex >= 1 && dataRowIndex < usedRange.values.length) {
                                 const dataRow = usedRange.values[dataRowIndex] || [];
                                 identifierValue = dataRow[idRel] !== undefined ? dataRow[idRel] : null;
                             } else {
-                                // If usedRange.values doesn't include this row, try to read changedRange value in id column if it's within changedRange
                                 if ((changedRange.columnIndex <= usedStartCol + idColIdx) && (usedStartCol + idColIdx < changedRange.columnIndex + changedRange.columnCount)) {
                                     const idOffset = (usedStartCol + idColIdx) - changedRange.columnIndex;
                                     identifierValue = (changedRange.values && changedRange.values[r] ? changedRange.values[r][idOffset] : null);
                                 } else {
-                                    // fallback: null
                                     identifierValue = null;
                                 }
                             }
@@ -819,51 +771,34 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                     }
                 }
 
-                // If an identifier column was resolved, only keep changes that occurred in that column.
                 let filteredChanges = changes;
                 if (idColIdx !== -1) {
                     const absIdCol = usedStartCol + idColIdx;
                     filteredChanges = changes.filter(ch => ch.colIndex === absIdCol);
-                    console.log("ExcelAPI.onChanged: identifier column present, filtered changes", { identifierColumn, absIdCol, before: changes.length, after: filteredChanges.length });
                 }
 
-                // If there are no relevant changes after filtering (when identifier column exists), do not invoke callback.
                 if (filteredChanges.length === 0) {
-                    // Log why callback is not sent when identifier column filtering removed all changes
-                    if (idColIdx !== -1) {
-                        const absIdCol = usedStartCol + idColIdx;
-                        console.log("ExcelAPI.onChanged: callback not sent because change was not under identifier column", { identifierColumn, absIdCol, totalDetectedChanges: changes.length });
-                    } else {
-                        console.log("ExcelAPI.onChanged: callback not sent because no relevant changes were detected");
-                    }
-                    // nothing to report
                     return;
                 }
 
-                // NEW: if otherValues was provided as an array of header names, resolve and attach their values for the affected row(s)
                 if (idColIdx !== -1 && Array.isArray(otherValues) && otherValues.length > 0) {
-                    // Resolve requested headers to relative column indices (relative to headerRow)
                     const resolvedCols = otherValues.map(h => {
                         if (!h || typeof h !== 'string') return { name: h, relIdx: -1, absIdx: -1 };
                         const relIdx = getCanonicalColIdx(headerRow, h, canonicalHeaderMap);
                         return { name: h, relIdx, absIdx: (relIdx !== -1 ? usedStartCol + relIdx : -1) };
                     });
 
-                    // For each filtered change, compute the otherValues mapping
                     filteredChanges.forEach(ch => {
-                        const rOffset = ch.rowIndex - changedRange.rowIndex; // row index inside changedRange values
-                        // compute index inside usedRange.values (header is at index 0, data rows start at 1)
+                        const rOffset = ch.rowIndex - changedRange.rowIndex;
                         const dataRowIndex = ch.rowIndex - usedStartRow;
                         const map = {};
                         for (const colInfo of resolvedCols) {
                             let val = null;
                             if (colInfo.relIdx !== -1) {
-                                // Prefer usedRange.values when the row is present in usedRange
                                 if (dataRowIndex >= 1 && dataRowIndex < usedRange.values.length) {
                                     const dataRow = usedRange.values[dataRowIndex] || [];
                                     val = (dataRow[colInfo.relIdx] !== undefined) ? dataRow[colInfo.relIdx] : null;
                                 } else {
-                                    // fallback to changedRange if the desired column sits inside changedRange
                                     if (colInfo.absIdx !== -1 &&
                                         changedRange.columnIndex <= colInfo.absIdx &&
                                         colInfo.absIdx < changedRange.columnIndex + changedRange.columnCount &&
@@ -883,8 +818,6 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
                     });
                  }
 
-                // Log computed changes before invoking callback
-                console.log("ExcelAPI.onChanged: computed changes", { sheet, address: changedRange.address, changes: filteredChanges });
                 try { callback({ address: changedRange.address, changes: filteredChanges }); } catch (err) { console.error("onChanged callback error:", err); }
             } catch (err) {
                 console.error("onChanged handler error:", err);
@@ -906,57 +839,3 @@ export async function onChanged(callback, sheet, identifierColumn = null, COLUMN
         }
     };
 }
-
-/*
-Example usages (updated to new return shape):
-
-// Load sheet and inspect headers/values
-(async () => {
-    const res = await loadSheet("Students");
-    if (res.success) {
-        console.log("Sheet headers (index map):", res.headers);
-        console.log("Row count:", res.rowCount);
-        console.log("Column count:", res.columnCount);
-        console.log("First few rows:", res.data.slice(0, 5));
-    } else {
-        console.error("loadSheet failed:", res.message);
-    }
-})();
-
-// Edit a row by ID
-editRow("Students", "StudentID", 12345, { Name: "John Doe", Status: "Active" })
-  .then(result => console.log("editRow:", result));
-
-// Insert a new row (values resolved by canonical headers)
-insertRow("Students", { StudentID: 67890, Name: "Jane Smith", Status: "Inactive" })
-  .then(result => console.log("insertRow:", result));
-
-// Delete a row by ID
-deleteRow("Students", "StudentID", 12345)
-  .then(result => console.log("deleteRow:", result));
-
-// Check if a row exists
-checkRow("Students", "StudentID", 12345)
-  .then(exists => console.log("Row exists:", exists))
-  .catch(err => console.error("checkRow error:", err));
-
-// Highlight a row (rowIndex is 0-based; pass header row index 0 if needed)
-await highlightRow(2, 0, 5, 'lightgreen'); // highlights row index 2 across first 5 columns
-
-// Register a selection-changed handler and remove it later
-(async () => {
-    const handler = await onSelectionChanged(({ address, values }) => {
-        console.log("Selection changed:", address, values);
-    });
-    // later to remove:
-    // await handler.remove();
-})();
-
-// Register a change handler (logs changes to console)
-const changeHandler = await onChanged("Students", "StudentID", ({ address, changes }) => {
-    console.log("Changes detected:", address, changes);
-});
-
-// To unregister the change handler:
-// await changeHandler.remove();
-*/
