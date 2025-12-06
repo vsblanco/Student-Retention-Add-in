@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-11-29 13:30:00
- * Version: 2.15.0
+ * Timestamp: 2025-12-06 12:45:00
+ * Version: 2.17.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Auto-detects columns present in Master List but missing from Settings. Appends them to the report as hidden columns.
+ * Update: Fixed DNC logic. DNC tags are now only processed if includeDNCTag setting is explicitly true.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -43,11 +43,6 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
         if (dncTag && dncTag.trim() === 'dnc') {
             return "[Retention] DNC";
         }
-    }
-
-    // Priority 2: Waiting for Grade (Strictly for Failing Table)
-    if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
-        return "[Retention] Waiting for Prof. to grade";
     }
 
     // Priority 3: LDA Tag (Applies to any table)
@@ -316,32 +311,37 @@ export async function createLDA(userOverrides, onProgress) {
                     const hTagIdx = hHeaders.indexOf('tag');
 
                     if (hIdIdx !== -1 && hTagIdx !== -1) {
-                        for (let i = 1; i < hValues.length; i++) {
+                        const todayTime = new Date().setHours(0,0,0,0);
+
+                        for (let i = hValues.length - 1; i > 0; i--) {
                             const hid = hValues[i][hIdIdx];
                             const htagRaw = String(hValues[i][hTagIdx] || '');
-                            const htagLower = htagRaw.toLowerCase();
+                            const htagLower = htagRaw.toLowerCase().trim();
                             
-                            if (hid && htagLower.includes('dnc')) {
+                            // Check for DNC (Only if toggle is ON)
+                            if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
                                 dncMap.set(hid, htagLower);
                             }
-                        }
 
-                        if (settings.includeLDATag) {
-                            const todayTime = new Date().setHours(0,0,0,0);
-                            for (let i = hValues.length - 1; i > 0; i--) {
-                                const hid = hValues[i][hIdIdx];
-                                const htagRaw = String(hValues[i][hTagIdx] || '');
-                                const htagLower = htagRaw.toLowerCase();
-                                
-                                if (hid && !ldaFollowUpMap.has(hid)) {
-                                    if (htagLower.startsWith('lda ')) {
-                                        const datePart = htagLower.substring(4);
-                                        const ldaDate = new Date(datePart);
-                                        if (!isNaN(ldaDate.getTime())) {
-                                            ldaDate.setHours(0,0,0,0);
-                                            if (ldaDate >= todayTime) {
-                                                ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
-                                            }
+                            // Check for LDA (Improved Logic)
+                            if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
+                                // Match any string starting with 'lda'
+                                if (htagLower.startsWith('lda')) {
+                                    // Remove 'lda', ':', '-' and trim spaces to find the date part
+                                    // Example: "lda: 10/25/2025" -> "10/25/2025"
+                                    const datePart = htagLower
+                                        .replace('lda', '')
+                                        .replace(/^[:\-\s]+/, '') // Remove leading colons, dashes, spaces
+                                        .trim();
+
+                                    const ldaDate = new Date(datePart);
+                                    
+                                    // Valid Date check & Future Date check
+                                    if (!isNaN(ldaDate.getTime())) {
+                                        ldaDate.setHours(0,0,0,0);
+                                        // Include Today or Future dates
+                                        if (ldaDate >= todayTime) {
+                                            ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
                                         }
                                     }
                                 }
