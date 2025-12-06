@@ -54,7 +54,6 @@
         </div>
     </div>
 
-    <!-- Modals -->
     <div id="select-service-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-20">
         <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
              <div class="modal-header flex justify-between items-center pb-3 border-b">
@@ -154,7 +153,6 @@
         <div class="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-gray-50">
             <div class="modal-header pb-3 border-b"><h3 id="action-settings-title" class="text-lg font-medium text-gray-900">Action Settings</h3></div>
             <div class="modal-body mt-4 space-y-4">
-                <!-- Auto Highlight Settings -->
                 <div id="auto-highlight-settings" class="hidden space-y-4">
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Highlight Color</label>
@@ -181,8 +179,16 @@
                         <p class="text-xs text-gray-500 mt-1">Comma-separated list of column headers to NOT highlight.</p>
                     </div>
                 </div>
-                <!-- Update Cell Settings -->
                 <div id="update-cell-settings" class="hidden space-y-4">
+                    <div id="update-sheet-options">
+                        <label class="block text-sm font-medium text-gray-700">Target Sheet</label>
+                        <div class="mt-2 space-y-2">
+                            <div class="flex items-center"><input id="update-sheet-today" type="radio" name="update-sheet-choice" value="today" class="h-4 w-4 text-blue-600 border-gray-300"><label for="update-sheet-today" class="ml-2 block text-sm text-gray-900">Today's LDA Sheet</label></div>
+                            <div class="flex items-center"><input id="update-sheet-master" type="radio" name="update-sheet-choice" value="master" class="h-4 w-4 text-blue-600 border-gray-300"><label for="update-sheet-master" class="ml-2 block text-sm text-gray-900">Master List</label></div>
+                            <div class="flex items-center"><input id="update-sheet-custom" type="radio" name="update-sheet-choice" value="custom" class="h-4 w-4 text-blue-600 border-gray-300"><label for="update-sheet-custom" class="ml-2 block text-sm text-gray-900">Other:</label></div>
+                            <input type="text" id="update-custom-sheet-name" class="hidden ml-6 w-1/2 px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Enter sheet name">
+                        </div>
+                    </div>
                     <div>
                         <label for="update-cell-target-column" class="block text-sm font-medium text-gray-700">Target Column</label>
                         <input type="text" id="update-cell-target-column" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="e.g., Status">
@@ -242,4 +248,3 @@
     <script type="text/javascript" src="connections.js"></script>
 </body>
 </html>
-

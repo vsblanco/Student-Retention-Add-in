@@ -1,7 +1,7 @@
 /*
- * Timestamp: 2025-12-06 12:40:00
- * Version: 1.1
- * Description: Added dynamic placeholder parsing (e.g., {assignment}) to updateCellValueInSheet.
+ * Timestamp: 2025-12-06 13:05:00
+ * Version: 1.2
+ * Description: Added Target Sheet selection support for Update Cell Value action.
  */
 
 'use strict';
@@ -51,6 +51,7 @@ function initializeEventListeners() {
     document.getElementById("save-action-settings-button").onclick = handleSaveActionSettings;
     document.getElementById("color-picker").addEventListener('click', handleColorPicker);
     document.getElementById("sheet-options").addEventListener('change', handleSheetOptions);
+    document.getElementById("update-sheet-options").addEventListener('change', handleUpdateSheetOptions);
     document.getElementById("close-history-modal-button").onclick = hideHistoryModal;
     document.getElementById("clear-history-button").onclick = handleClearHistory;
 
@@ -286,8 +287,14 @@ function populateAndShowActionSettingsModal(actionType, config) {
         highlightSettings.classList.remove('hidden');
     } else if (actionType === 'updateCell') {
         titleEl.textContent = 'Update Cell Settings';
-        const defaults = { targetColumn: '', value: '', append: false };
+        const defaults = { targetColumn: '', value: '', append: false, sheetType: 'master', customSheetName: '' };
         const settings = { ...defaults, ...config };
+        
+        document.getElementById(`update-sheet-${settings.sheetType}`).checked = true;
+        const customSheetInput = document.getElementById('update-custom-sheet-name');
+        customSheetInput.classList.toggle('hidden', settings.sheetType !== 'custom');
+        customSheetInput.value = settings.customSheetName;
+
         document.getElementById('update-cell-target-column').value = settings.targetColumn;
         document.getElementById('update-cell-value').value = settings.value;
         document.getElementById('update-cell-append-mode').checked = settings.append;
@@ -316,6 +323,8 @@ async function handleSaveActionSettings() {
     } else if (currentActionType === 'updateCell') {
         actionName = 'Update Cell Value';
         actionConfig = {
+            sheetType: document.querySelector('input[name="update-sheet-choice"]:checked').value,
+            customSheetName: document.getElementById('update-custom-sheet-name').value.trim(),
             targetColumn: document.getElementById('update-cell-target-column').value.trim(),
             value: document.getElementById('update-cell-value').value.trim(),
             append: document.getElementById('update-cell-append-mode').checked
@@ -398,6 +407,9 @@ function handleColorPicker(event) {
 }
 function handleSheetOptions(event) {
     document.getElementById('custom-sheet-name').classList.toggle('hidden', event.target.value !== 'custom');
+}
+function handleUpdateSheetOptions(event) {
+    document.getElementById('update-custom-sheet-name').classList.toggle('hidden', event.target.value !== 'custom');
 }
 function populateAndShowHistoryModal(history) {
     const container = document.getElementById('history-list-container');
@@ -665,8 +677,12 @@ async function highlightStudentInSheet(eventData, actionConfig, connectionId, ac
 
 async function updateCellValueInSheet(eventData, actionConfig, connectionId, actionId) {
     const { name: studentName, time, timestamp } = eventData;
-    const config = { targetColumn: '', value: '', append: false, ...actionConfig };
-    logToUI(`Updating cell for '${studentName}' in column '${config.targetColumn}'...`);
+    const config = { targetColumn: '', value: '', append: false, sheetType: 'master', ...actionConfig };
+    
+    // Determine sheet name (same logic as highlight)
+    let sheetName = config.sheetType === 'today' ? getTodaysLdaSheetName() : (config.sheetType === 'custom' && config.customSheetName ? config.customSheetName : "Master List");
+
+    logToUI(`Updating cell for '${studentName}' in column '${config.targetColumn}' on sheet '${sheetName}'...`);
     const historyEntry = { id: Date.now(), name: studentName, timestamp: timestamp || new Date().toISOString(), time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'Failed', reason: '' };
     
     try {
@@ -684,7 +700,7 @@ async function updateCellValueInSheet(eventData, actionConfig, connectionId, act
         });
 
         await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getItem("Master List");
+            const sheet = context.workbook.worksheets.getItem(sheetName);
             const { foundRowIndex, headers } = await findStudentRow(context, sheet, studentName);
             const targetColumnIndex = headers.indexOf(config.targetColumn.toLowerCase());
             if (targetColumnIndex === -1) throw new Error(`Column '${config.targetColumn}' not found.`);
@@ -706,6 +722,7 @@ async function updateCellValueInSheet(eventData, actionConfig, connectionId, act
         let errorMessage = error.message;
         if (error instanceof OfficeExtension.Error) {
             errorMessage = error.debugInfo?.message || error.message;
+            if (error.code === "WorksheetNotFound") errorMessage = `Worksheet '${sheetName}' not found.`;
         }
         historyEntry.reason = errorMessage;
         logToUI(`Error updating cell: ${errorMessage}`, "ERROR");
