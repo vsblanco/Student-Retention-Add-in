@@ -1,3 +1,9 @@
+/*
+ * Timestamp: 2025-12-06 12:40:00
+ * Version: 1.1
+ * Description: Added dynamic placeholder parsing (e.g., {assignment}) to updateCellValueInSheet.
+ */
+
 'use strict';
 
 // --- STATE & CONSTANTS ---
@@ -662,9 +668,21 @@ async function updateCellValueInSheet(eventData, actionConfig, connectionId, act
     const config = { targetColumn: '', value: '', append: false, ...actionConfig };
     logToUI(`Updating cell for '${studentName}' in column '${config.targetColumn}'...`);
     const historyEntry = { id: Date.now(), name: studentName, timestamp: timestamp || new Date().toISOString(), time: time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), status: 'Failed', reason: '' };
+    
     try {
         if (!config.targetColumn) throw new Error("Target Column is not specified in action settings.");
-        
+
+        // Parse value placeholders (e.g., {assignment})
+        let valueToSet = config.value;
+        valueToSet = valueToSet.replace(/{([^}]+)}/g, (match, key) => {
+            if (eventData && eventData.hasOwnProperty(key)) {
+                return eventData[key];
+            } else {
+                console.warn(`[Connections] Placeholder {${key}} not found in event payload.`);
+                return ''; // Omit missing key
+            }
+        });
+
         await Excel.run(async (context) => {
             const sheet = context.workbook.worksheets.getItem("Master List");
             const { foundRowIndex, headers } = await findStudentRow(context, sheet, studentName);
@@ -676,13 +694,13 @@ async function updateCellValueInSheet(eventData, actionConfig, connectionId, act
                 targetCell.load("values");
                 await context.sync();
                 const originalValue = targetCell.values[0][0];
-                targetCell.values = [[(originalValue ? originalValue + ' ' : '') + config.value]];
+                targetCell.values = [[(originalValue ? originalValue + ' ' : '') + valueToSet]];
             } else {
-                targetCell.values = [[config.value]];
+                targetCell.values = [[valueToSet]];
             }
             await context.sync();
             historyEntry.status = 'Success';
-            logToUI(`Successfully updated cell for '${studentName}'.`, "SUCCESS");
+            logToUI(`Successfully updated cell for '${studentName}' with '${valueToSet}'.`, "SUCCESS");
         });
     } catch (error) {
         let errorMessage = error.message;

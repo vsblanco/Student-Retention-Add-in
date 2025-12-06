@@ -19,7 +19,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page');
     // set parsed page or default to 'student-view'
-    setPage(pageParam || 'student-vd');
+    setPage(pageParam || 'student-view');
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ function App() {
       case 'create-lda':
         return <LDAManager />;
       default:
-        return <LDAManager  />;
+        return <StudentView />;
     }
   };
 
