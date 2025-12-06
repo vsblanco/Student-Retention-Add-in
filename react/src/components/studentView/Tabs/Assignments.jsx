@@ -1,5 +1,7 @@
+// 2025-12-06 13:35 EST - Version 2.5 - Excel whole numbers default to 11:59 PM
 import React, { useMemo, useState } from 'react';
 import { Clipboard } from 'lucide-react';
+import { formatExcelDate } from '../../utility/Conversion';
 
 const cardStyle =
   // made card slightly smaller (smaller padding and radius, base text-sm)
@@ -54,6 +56,7 @@ function StudentAssignments({ assignments, reload }) {
   }, [assignments]);
 
   // compute sorted assignments by due date (ascending)
+  // Also filters out assignments with no title or 'N/A'
   const sortedAssignments = useMemo(() => {
     if (!assignments || !assignments.length) return [];
 
@@ -64,6 +67,32 @@ function StudentAssignments({ assignments, reload }) {
 
     const parseDueToTimestamp = (val) => {
       if (!val) return Number.POSITIVE_INFINITY;
+
+      // 1. Attempt Excel Date conversion if value is numeric
+      // "45981" or 45981 would pass !isNaN
+      if (!isNaN(val) && String(val).trim() !== '') {
+        try {
+          let numVal = Number(val);
+          // If integer (no time fraction), default to 11:59 PM (0.9993055556)
+          if (Number.isInteger(numVal)) {
+            numVal += 0.9993055556;
+          }
+
+          const converted = formatExcelDate(numVal);
+          if (converted) {
+            // Assume utility returns a Date object or valid date string
+            const dt = new Date(converted);
+            if (!isNaN(dt.getTime())) {
+              return dt.getTime();
+            }
+          }
+        } catch (e) {
+          // ignore error and fall through to string parsing
+          console.warn("Excel date parse failed, falling back to string parse", e);
+        }
+      }
+
+      // 2. Fallback to custom string parsing (Canvas/LMS style)
       const s = String(val).trim();
       // match "Oct 21 by 11:59pm" or "October 21 11:59 pm" or "Oct 21"
       const m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:\s*(?:by)?\s*([\d:]+\s*[ap]m)?)?/i);
@@ -100,7 +129,18 @@ function StudentAssignments({ assignments, reload }) {
       return dt.getTime();
     };
 
-    const copy = [...assignments];
+    // FILTER: Exclude assignments with no title or title "N/A"
+    const filtered = assignments.filter(a => {
+        const titleVal = a[map.title];
+        // 1. Check if title exists (not null, undefined, or empty string)
+        if (!titleVal) return false;
+        // 2. Check if title is explicitly "N/A" (case insensitive)
+        if (String(titleVal).trim().toUpperCase() === 'N/A') return false;
+        
+        return true;
+    });
+
+    const copy = [...filtered];
     copy.sort((a, b) => {
       const ta = parseDueToTimestamp(a[map.dueDate]);
       const tb = parseDueToTimestamp(b[map.dueDate]);
@@ -212,8 +252,31 @@ function StudentAssignments({ assignments, reload }) {
     }
   };
 
-  // Safe check for empty/undefined assignments (moved below hooks so hooks order is stable)
-  if (!assignments || !assignments.length) {
+  // Helper to render the due date. Handles Excel numbers by converting them.
+  const renderDueDate = (val) => {
+    if (val === undefined || val === null || val === '') return '';
+    
+    // Check if it is a number (Excel date)
+    if (!isNaN(val) && String(val).trim() !== '') {
+      try {
+        let numVal = Number(val);
+        // If integer (no time fraction), default to 11:59 PM (0.9993055556)
+        if (Number.isInteger(numVal)) {
+          numVal += 0.9993055556;
+        }
+        return formatExcelDate(numVal);
+      } catch (e) {
+        // If conversion fails, return original
+        return val;
+      }
+    }
+    // Return standard string
+    return val;
+  };
+
+  // Safe check for empty/undefined assignments. 
+  // We check 'sortedAssignments' here because it contains the *filtered* list.
+  if (!sortedAssignments || sortedAssignments.length === 0) {
     return <div className="text-gray-500">No assignments found.</div>;
   }
 
@@ -318,7 +381,10 @@ function StudentAssignments({ assignments, reload }) {
                          </span>
                        )}
                      </div>
-                     <div className={dueStyle}>Due: {a[map.dueDate]}</div>
+                     <div className={dueStyle}>
+                       {/* UPDATED: Uses renderDueDate helper to format Excel numbers */}
+                       Due: {renderDueDate(a[map.dueDate])}
+                     </div>
                      {submission === false && (
                        <div className="mt-1">
                          {a[map.submissionLink] ? (
