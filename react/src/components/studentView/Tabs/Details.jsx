@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-02 04:37 PM | Version: 3.0.0
+// 2025-12-06 13:40 EST - Version 3.1.0 - Added clipboard fallback support
 import React, { useState } from 'react';
 import {
   IdCardLanyard,
@@ -9,7 +9,6 @@ import {
 import { formatExcelDate } from '../../utility/Conversion';
 
 // A small reusable component for displaying a single detail item.
-// This keeps our main component clean.
 const DetailItem = ({ label, value }) => {
   const itemStyles = {
     marginBottom: '10px'
@@ -34,10 +33,46 @@ const DetailItem = ({ label, value }) => {
   );
 };
 
-// Utility for copy-to-clipboard
-const copyToClipboard = (text) => {
-  if (navigator && navigator.clipboard) {
-    navigator.clipboard.writeText(text);
+// Utility for copy-to-clipboard with Fallback mechanism
+// This ensures functionality in environments where navigator.clipboard is restricted (e.g. Office Add-ins)
+const copyToClipboard = async (text) => {
+  if (!text) return;
+
+  // 1. Try Modern Async API
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      // Success, exit function
+      return;
+    } catch (err) {
+      console.warn('Clipboard API failed, attempting fallback...', err);
+    }
+  }
+
+  // 2. Fallback: document.execCommand('copy')
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    
+    // Ensure element is not visible but part of DOM
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.setAttribute('readonly', ''); // Prevent keyboard popping up on mobile
+    
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    
+    // Execute copy
+    const successful = document.execCommand('copy');
+    document.body.removeChild(ta);
+    
+    if (!successful) {
+        console.error('Fallback copy failed.');
+    }
+  } catch (err) {
+    console.error('All copy methods failed', err);
   }
 };
 
@@ -50,9 +85,12 @@ const style = `
 function CopyField({ label, value, id, Icon }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!value) return;
-    copyToClipboard(value);
+    
+    // Use the robust copy utility
+    await copyToClipboard(value);
+    
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -93,7 +131,6 @@ function CopyField({ label, value, id, Icon }) {
           <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
           <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>{value || 'N/A'}</p>
         </div>
-        {/* Removed Copied! text */}
       </div>
     </>
   );
@@ -168,6 +205,4 @@ function StudentDetails({ student }) {
   );
 }
 
-
 export default StudentDetails;
-

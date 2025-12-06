@@ -1,3 +1,4 @@
+// 2025-12-06 13:45 EST - Version 3.3.0 - Added green fade feedback on copy
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../utility/Modal.jsx';
 import InsertTagButton from '../Parts/InsertTagButton.jsx';
@@ -7,10 +8,42 @@ import { Pencil, ArrowLeft, Check, Trash2, Clipboard } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { deleteComment, editComment } from '../../utility/EditStudentHistory.jsx';
 
+// Utility for copy-to-clipboard with Fallback mechanism
+const copyToClipboard = async (text) => {
+  if (!text) return;
+
+  // 1. Try Modern Async API
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (err) {
+      console.warn('Clipboard API failed, attempting fallback...', err);
+    }
+  }
+
+  // 2. Fallback: document.execCommand('copy')
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.setAttribute('readonly', ''); 
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (!successful) console.error('Fallback copy failed.');
+  } catch (err) {
+    console.error('All copy methods failed', err);
+  }
+};
+
 function CommentModal({
   isOpen,
   onClose,
-  // called by modal after a successful delete to allow immediate local removal/animation
   onDeleted,
   onSaved,
   entry,
@@ -23,13 +56,10 @@ function CommentModal({
   formatExcelDate,
   quoteStyles = {},
 }) {
-  // Modal state and logic moved from Comment.jsx
   const [modalMode, setModalMode] = useState('view');
   const [modalComment, setModalComment] = useState(entry.comment || "");
-  // saved comment shown in view mode (finalized when Update is clicked)
   const [modalSavedComment, setModalSavedComment] = useState(entry.comment || "");
   const [modalTagContainer, setModalTagContainer] = useState({});
-  // Temporary edit container used only while in edit mode.
   const [editTagContainer, setEditTagContainer] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
@@ -38,7 +68,9 @@ function CommentModal({
   const [pendingDncTag, setPendingDncTag] = useState(null);
   const [showLDAModal, setShowLDAModal] = useState(false);
 
-  // Ensure modal has class strings for quote elements (use passed-in styles with fallbacks)
+  // New state for copy feedback
+  const [isCopied, setIsCopied] = useState(false);
+
   const blockClass = quoteStyles.block || "relative bg-blue-50 border-l-4 border-blue-200 pl-6 pr-2 py-3 mb-2 rounded";
   const textClass = quoteStyles.text || "text-base text-blue-900 font-serif";
   const markLeftClass = quoteStyles.markLeft || "absolute left-2 top-2 text-4xl text-blue-200 leading-none select-none";
@@ -53,26 +85,22 @@ function CommentModal({
     tags = tags.filter(t => t !== "Comment");
     const tagObj = {};
     tags.forEach(t => { tagObj[t] = true; });
-    // initialize both saved and edit containers from the entry
     setModalTagContainer(tagObj);
     setEditTagContainer(tagObj);
     setModalMode('view');
+    setIsCopied(false); // Reset copy state on open
   }, [entry.comment, entry.tag, isOpen]);
 
-  // When entering edit mode, ensure edit container is a copy of the saved tags
   useEffect(() => {
     if (modalMode === 'edit') {
       setEditTagContainer(modalTagContainer || {});
-      // start editing from the saved comment
       setModalComment(modalSavedComment || "");
     }
   }, [modalMode, modalTagContainer, modalSavedComment]);
 
-  // When returning to view mode without saving, discard tentative edits
   useEffect(() => {
     if (modalMode === 'view') {
       setEditTagContainer(modalTagContainer || {});
-      // ensure view shows the saved comment
       setModalComment(modalSavedComment || "");
     }
   }, [modalMode, modalTagContainer, modalSavedComment]);
@@ -82,12 +110,9 @@ function CommentModal({
   }, [isOpen, modalMode]);
 
   const handleSaveComment = async () => {
-    // Finalize edit tags into saved tags and switch back to view mode (do not close)
     setModalTagContainer(editTagContainer);
-    // finalize the edited text so view mode shows it
     setModalSavedComment(modalComment);
 
-    // Log the new comment entry object when Update is pressed
     const newCommentEntry = {
       commentid: entry.commentid,
       comment: modalComment,
@@ -97,7 +122,6 @@ function CommentModal({
     };
     console.log('Updated comment entry:', newCommentEntry);
 
-    // send update to shared edit implementation
     try {
       await editComment(entry.commentid, newCommentEntry);
       onSaved(entry.commentid);
@@ -105,7 +129,6 @@ function CommentModal({
       try { console.error('Edit comment failed:', err); } catch (_) {}
       return;
     }
-    // Switch back to view mode so the newly saved tags appear in the view
     setModalMode('view');
   };
 
@@ -122,9 +145,9 @@ function CommentModal({
 
   const handleInsertTag = tagLabel => {
     if (tagLabel === "DNC") {
-      setShowTagDropdown(false); // Close dropdown before opening DNC modal
+      setShowTagDropdown(false);
       setShowDNCModal(true);
-      setPendingDncTag(true); // mark that we're waiting for DNCModal
+      setPendingDncTag(true);
       return;
     }
     if (tagLabel === "LDA") {
@@ -132,7 +155,6 @@ function CommentModal({
       setShowLDAModal(true);
       return;
     }
-    // Only mutate the edit container so changes are tentative until Update is clicked
     setEditTagContainer(prev => ({
       ...prev,
       [tagLabel]: true
@@ -141,7 +163,6 @@ function CommentModal({
   };
 
   const handleRemoveTag = tagLabel => {
-    // Remove from the edit container only
     setEditTagContainer(prev => {
       const newObj = { ...prev };
       delete newObj[tagLabel];
@@ -218,7 +239,7 @@ function CommentModal({
                 marginLeft: 4,
                 background: 'transparent',
                 border: 'none',
-                color: textColor || '#888', // use tag text color if available
+                color: textColor || '#888',
                 cursor: 'pointer',
                 fontSize: '1em',
                 lineHeight: 1
@@ -299,11 +320,8 @@ function CommentModal({
     </div>
   );
 
-  // helper to compare tag containers
   const tagKeys = obj => Object.keys(obj || {}).sort().join(', ');
   const noTagChanges = tagKeys(editTagContainer) === tagKeys(modalTagContainer);
-
-  // new helper: true when entry has no comment ID
   const cannotModify = !entry?.commentid;
 
   // --- Modal content ---
@@ -313,7 +331,6 @@ function CommentModal({
     <div
       style={{ width: '100%' }}
       onClick={e => {
-        // Only close if NOT clicking edit or clipboard button
         if (
           e.target.closest('button[aria-label="Edit"]') ||
           e.target.closest('button[aria-label="Copy comment"]')
@@ -329,16 +346,18 @@ function CommentModal({
         onMouseEnter={() => setClipboardHover(true)}
         onMouseLeave={() => setClipboardHover(false)}
       >
-        {/* Clipboard icon */}
+        {/* Clipboard icon with feedback */}
         <button
           type="button"
-          aria-label="Copy comment"
-          title="Copy comment"
+          aria-label={isCopied ? "Copied" : "Copy comment"}
+          title={isCopied ? "Copied!" : "Copy comment"}
           style={{
             position: 'absolute',
             top: 8,
             right: 8,
-            background: clipboardHover ? '#e0e0e0' : '#e0f2fe',
+            // Green if copied, else hover logic
+            background: isCopied ? '#dcfce7' : (clipboardHover ? '#e0e0e0' : '#e0f2fe'),
+            color: isCopied ? '#166534' : '#000',
             border: 'none',
             borderRadius: 6,
             width: 32,
@@ -347,24 +366,29 @@ function CommentModal({
             alignItems: 'center',
             justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: clipboardHover
-              ? '0 2px 8px rgba(2,132,199,0.12)'
+            boxShadow: clipboardHover || isCopied
+              ? '0 2px 8px rgba(0,0,0,0.12)'
               : '0 1px 4px rgba(0,0,0,0.08)',
-            transition: 'background 0.15s, box-shadow 0.15s, opacity 0.15s',
-            opacity: clipboardHover ? 0.5 : 0,
+            // Added transition for the fade effect
+            transition: 'all 0.3s ease',
+            opacity: clipboardHover || isCopied ? 0.8 : 0,
             zIndex: 2
           }}
-          onClick={() => {
+          onClick={async () => {
             let textToCopy;
             if (hasQuoteTag && quoteText) {
               textToCopy = `${beforeQuote || ''}${quoteText}${afterQuote || ''}`;
             } else {
               textToCopy = modalSavedComment || '';
             }
-            navigator.clipboard.writeText(textToCopy);
+            await copyToClipboard(textToCopy);
+            
+            // Trigger animation state
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 1500);
           }}
         >
-          <Clipboard size={18} />
+          {isCopied ? <Check size={18} /> : <Clipboard size={18} />}
         </button>
         <div
           style={{
@@ -522,7 +546,6 @@ function CommentModal({
             <Trash2 size={20} />
           </button>
 
-          {/* Moved CommentID to sit to the right of the delete button */}
           <span style={{ fontSize: 12, color: '#6b7280', userSelect: 'text' }}>
             {entry?.commentid ? `Comment ID: ${entry.commentid}` : 'No Comment ID was found'}
           </span>
@@ -532,7 +555,6 @@ function CommentModal({
           <button
             type="button"
             onClick={() => {
-              // Discard edits and return to view mode
               setEditTagContainer(modalTagContainer || {});
               setModalMode('view');
             }}
@@ -628,12 +650,10 @@ function CommentModal({
      </div>
    );
 
-  // DNCModal callback
   const handleDncSelect = (dncString) => {
     setShowDNCModal(false);
     setPendingDncTag(false);
     if (dncString) {
-      // Add to the edit container so the tag is tentative and will be discarded on cancel
       setEditTagContainer(prev => ({
         ...prev,
         [dncString]: true
@@ -670,7 +690,6 @@ function CommentModal({
           onSelect={kw => {
             setShowLDAModal(false);
             if (kw) {
-              // Add to the edit container so the tag is tentative and will be discarded on cancel
               setEditTagContainer(prev => ({
                 ...prev,
                 [kw]: true
