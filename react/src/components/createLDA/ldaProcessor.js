@@ -1,9 +1,9 @@
 /*
- * Timestamp: 2025-12-06 12:45:00
- * Version: 2.17.0
+ * Timestamp: 2025-12-08 11:25:00
+ * Version: 2.18.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Fixed DNC logic. DNC tags are now only processed if includeDNCTag setting is explicitly true.
+ * Update: Robust LDA Date Parsing using Regex to handle complex tags like "Contacted, LDA 12/08/25, Outreach".
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -43,6 +43,11 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
         if (dncTag && dncTag.trim() === 'dnc') {
             return "[Retention] DNC";
         }
+    }
+
+    // Priority 2: Waiting for Grade (Strictly for Failing Table)
+    if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
+        return "[Retention] Waiting for Prof. to grade";
     }
 
     // Priority 3: LDA Tag (Applies to any table)
@@ -312,6 +317,12 @@ export async function createLDA(userOverrides, onProgress) {
 
                     if (hIdIdx !== -1 && hTagIdx !== -1) {
                         const todayTime = new Date().setHours(0,0,0,0);
+                        
+                        // Regex to find "LDA" followed by a Date (e.g., LDA 10/25/25, Contacted LDA 12-01-25)
+                        // \blda\b : Matches "lda" as a whole word (avoids matching "folder")
+                        // .*?     : Non-greedy match for any chars in between (spaces, colons, words)
+                        // (...)   : Captures the date part (digits, separator, digits, separator, digits)
+                        const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
                         for (let i = hValues.length - 1; i > 0; i--) {
                             const hid = hValues[i][hIdIdx];
@@ -323,19 +334,15 @@ export async function createLDA(userOverrides, onProgress) {
                                 dncMap.set(hid, htagLower);
                             }
 
-                            // Check for LDA (Improved Logic)
+                            // Check for LDA (Improved Regex Logic)
                             if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
-                                // Match any string starting with 'lda'
-                                if (htagLower.startsWith('lda')) {
-                                    // Remove 'lda', ':', '-' and trim spaces to find the date part
-                                    // Example: "lda: 10/25/2025" -> "10/25/2025"
-                                    const datePart = htagLower
-                                        .replace('lda', '')
-                                        .replace(/^[:\-\s]+/, '') // Remove leading colons, dashes, spaces
-                                        .trim();
+                                const match = htagRaw.match(ldaRegex); // Match against raw or lower, regex has /i flag
 
-                                    const ldaDate = new Date(datePart);
-                                    
+                                if (match) {
+                                    // match[1] contains the captured date string
+                                    const dateString = match[1];
+                                    const ldaDate = new Date(dateString);
+
                                     // Valid Date check & Future Date check
                                     if (!isNaN(ldaDate.getTime())) {
                                         ldaDate.setHours(0,0,0,0);
