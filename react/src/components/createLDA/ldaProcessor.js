@@ -46,9 +46,9 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
     }
 
     // Priority 2: Waiting for Grade (Strictly for Failing Table)
-    if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
-        return "[Retention] Waiting for Prof. to grade";
-    }
+    //if (tableContext === 'Failing_Table' && typeof missingVal === 'number' && missingVal === 0) {
+    //    return "[Retention] Waiting for Prof. to grade";
+    //}
 
     // Priority 3: LDA Tag (Applies to any table)
     if (sId && ldaMap.has(sId)) {
