@@ -9,6 +9,8 @@ import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 import { addComment } from '../utility/EditStudentHistory.jsx';
 
+/* global Excel */
+
 const activeStudent = {};
 export const COLUMN_ALIASES = {
   StudentName: ['Student Name', 'Student'],
@@ -39,99 +41,187 @@ export const COLUMN_ALIASES = {
 // add lazy SSO so its module (and any HTML it might insert) is only loaded when needed
 const SSO = lazy(() => import('../utility/SSO.jsx'));
 
+// Helper to detect if an Excel address is in the first row (Header)
+const isHeaderRowAddress = (address) => {
+  if (!address) return false;
+  const cleanAddress = address.includes('!') ? address.split('!')[1] : address;
+  if (cleanAddress === '1:1') return true;
+  return /^[A-Z]+1(:[A-Z]+1)?$/.test(cleanAddress);
+};
+
 function StudentView() {
-	const [activeTab, setActiveTab] = useState('history'); // default to 'history' tab
-	const [historyData, setHistory] = useState([]); // store array returned by loadSheet
-  	const [assignmentData, setAssignments] = useState([]); // store array returned by loadSheet
+	// Changed default to 'details' to be safe in case History sheet is missing
+	const [activeTab, setActiveTab] = useState('details'); 
+	const [historyData, setHistory] = useState([]); 
+  	const [assignmentData, setAssignments] = useState([]); 
 	const [activeStudentState, setActiveStudentState] = useState(activeStudent);
 	const [currentUserName, setCurrentUserName] = useState(null);
+  
+    // State to track if specific sheets exist in the workbook
+    const [availableTabs, setAvailableTabs] = useState({
+      history: true,    // default to true while checking
+      assignments: true // default to true while checking
+    });
 
 	// add a ref used elsewhere in the component
 	const sessionUserRef = useRef(null);
 
+    // Check for sheet existence on mount
+    useEffect(() => {
+      const checkSheets = async () => {
+        try {
+          await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            context.load(sheets, 'items/name');
+            await context.sync();
+            
+            const sheetNames = sheets.items.map(s => s.name);
+            
+            const hasHistory = sheetNames.includes('Student History');
+            // Check for either "Missing Assignments" OR "Assignments"
+            const hasAssignments = sheetNames.some(name => 
+              ['Missing Assignments', 'Assignments'].includes(name)
+            );
+
+            setAvailableTabs({
+              history: hasHistory,
+              assignments: hasAssignments
+            });
+            
+            console.log('Sheet existence check:', { hasHistory, hasAssignments });
+          });
+        } catch (error) {
+          console.warn('Failed to check sheet existence, defaulting to all visible:', error);
+        }
+      };
+
+      checkSheets();
+    }, []);
+
+    // Effect: If the active tab is set to a tab that doesn't exist, switch to Details
+    useEffect(() => {
+      if (activeTab === 'history' && !availableTabs.history) {
+        setActiveTab('details');
+      }
+      if (activeTab === 'assignments' && !availableTabs.assignments) {
+        setActiveTab('details');
+      }
+    }, [availableTabs, activeTab]);
+
+
 	const loadHistory = () => {
+    // Guard: Do not attempt load if we don't have a valid ID or if header row
+    if (!activeStudentState || !activeStudentState.ID || activeStudentState.ID === 'Student ID') return;
+    
+    // Guard: Do not attempt to load if History sheet is missing
+    if (!availableTabs.history) return;
+
     console.log('Loading history for', activeStudentState.StudentName);
 
-    // Trigger global/history loading skeleton before requesting the sheet
     setHistoryLoading(true);
-    // loadCache is invoked once on initialization (see selection-effect)
-    // Try to show cached studentHistory quickly, then always fetch fresh data
     loadSheetCache(activeStudentState.ID)
       .then((cached) => {
         if (cached) {
           setHistory(cached);
-          console.log('Loaded history from sheetCache:', activeStudentState.ID);
         }
       })
       .catch((cacheErr) => {
         console.warn('loadSheetCache failed:', cacheErr);
       })
       .then(() => {
-        // proceed to fetch freshest data regardless of cache result
         return loadSheet('Student History', 'StudentNumber', activeStudentState.ID);
       })
       .then((res) => {
         if (res && res.data) {
           setHistory(res.data);
-          console.log('Loaded history data:', res.data);
         }
       })
       .catch((err) => {
         console.error('Failed to load Student History sheet:', err);
       });
 	};
+
   const loadAssignments = () => {
+    if (!activeStudentState || !activeStudentState.Gradebook) return;
+    // Guard: Do not attempt load if Assignment sheet is missing
+    if (!availableTabs.assignments) return;
+
     console.log('Loading assignments for', activeStudentState.StudentName);
 		loadSheet('Missing Assignments', 'gradeBookLink', activeStudentState.Gradebook)
 			.then((res) => {
 				setAssignments(res.data);
-        console.log('Loaded assignments data:', res.data);
 			})
 			.catch((err) => {
+				// Fallback: try loading "Assignments" if "Missing Assignments" failed (optional)
 				console.error('Failed to load Student Assignments sheet:', err);
 			});
 	};
 
 	const renderActiveTab = () => {
-		console.log('Rendering tab:', activeTab);
+    // If blank row or header selected
+    if (!activeStudentState || !activeStudentState.ID) {
+      return (
+        <div className="p-8 text-center text-gray-500">
+          <p>Please select a student row to view details.</p>
+        </div>
+      );
+    }
+
 		switch (activeTab) {
 		case 'history':
-			return <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} />;
+			return availableTabs.history ? 
+        <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} /> : 
+        <StudentDetails student={activeStudentState} />;
 		case 'assignments':
-			return <StudentAssignments assignments={assignmentData} reload={loadAssignments} />;
+			return availableTabs.assignments ? 
+        <StudentAssignments assignments={assignmentData} reload={loadAssignments} /> : 
+        <StudentDetails student={activeStudentState} />;
 		case 'details':
 		default:
 			return <StudentDetails student={activeStudentState} />
 		}
 	};
 
-  // Register Excel selection-changed handler to log selection details.
+  // Register Excel selection-changed handler
   useEffect(() => {
 	let handlerRef = null;
 	(async () => {
 	  try {
-		// pass COLUMN_ALIASES so headers are canonicalized in the callback
 		handlerRef = await onSelectionChanged(({ address, values, data }) => {
-		  console.log('Excel selection changed:', {data});
-		  // merge selected row data into active student state
+		  console.log('Excel selection changed:', { address, data });
+
+      // 1. Check if the selection is the Header Row (Row 1)
+      if (isHeaderRowAddress(address)) {
+        console.log('Header row selected - clearing active student view.');
+        setActiveStudentState({}); 
+        return; 
+      }
+
 		  setActiveStudentState(prev => ({ ...prev, ...data }));
 		}, COLUMN_ALIASES);
 
-		// On initial load, attempt to read the current selection and populate active student
+		// On initial load
 		try {
 		  const sel = await getSelectedRange(COLUMN_ALIASES);
 		  if (sel && sel.success) {
 		    const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
 		    if (initialRow) {
-		      setActiveStudentState(prev => ({ ...prev, ...initialRow }));
-		      console.log('Initialized active student from current selection:', initialRow);
-		      // Call loadCache once during initialization with the initial row
-		      try {
-		        loadCache(initialRow);
-		        console.log('loadCache: invoked once for initialization');
-		      } catch (e) {
-		        console.warn('loadCache initial invocation failed', e);
-		      }
+          // Data check: If the values look like headers, ignore them.
+          if (
+            initialRow.ID === 'Student ID' || 
+            initialRow.StudentName === 'Student Name' || 
+            initialRow.Student === 'Student'
+          ) {
+             console.log('Initial selection is header row - ignoring.');
+             setActiveStudentState({});
+          } else {
+            setActiveStudentState(prev => ({ ...prev, ...initialRow }));
+            try {
+              loadCache(initialRow);
+            } catch (e) {
+              console.warn('loadCache initial invocation failed', e);
+            }
+          }
 		    }
 		  }
 		} catch (gErr) {
@@ -142,7 +232,6 @@ function StudentView() {
 	  }
 	})();
 
-	// Cleanup: unregister the handler when the component unmounts
 	return () => {
 	  if (handlerRef && typeof handlerRef.remove === 'function') {
 		try {
@@ -154,59 +243,44 @@ function StudentView() {
 	};
   }, []);
 
-// Register Excel cell-change handler to log cell changes for debugging.
+  // Register Excel cell-change handler
   useEffect(() => {
 	let changeHandlerRef = null;
 	(async () => {
 	  try {
-		// Register an onChanged callback that just logs the event for debugging.
 		changeHandlerRef = await onChanged(
-		  // callback receives the changeEvent payload from ExcelAPI.onChanged
 		  (changeEvent) => {
-		    console.log('Excel cell changed event:', changeEvent);
-		    // Safely extract changes array
 		    const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
-		    // Map each change to a boolean indicating whether its text triggers outreach
 		    const matches = changes.map(ch => {
               const rawVal = ch && ch.value;
               const text = (rawVal === undefined || rawVal === null) ? '' : String(rawVal);
               try {
-                const out = isOutreachTrigger(text); // { matched: boolean, tag: string|null }
+                const out = isOutreachTrigger(text); 
                 return { change: ch, text, match: Boolean(out && out.matched), tag: out && out.tag };
               } catch (e) {
-                console.warn('isOutreachTrigger threw for value:', text, e);
                 return { change: ch, text, match: false, tag: null };
               }
             });
-            // Log each change with its outreach match result and otherValues if provided
             matches.forEach(({ change, text, match, tag }) => {
-              console.log('Excel outreach per-change:', { address: change && change.address, text, outreachMatch: match, tag, otherValues: change && change.otherValues });
               try {
                 if (match) {
-                  // highlight the changed cell (rowIndex, startCol = colIndex, colCount = 1)
                   highlightRow(change.rowIndex, change.colIndex, 9);
-                  console.log('Adding outreach comment for (matched):', text, 'tag:', tag);
                   const tagString = tag ? `${tag}, Outreach` : 'Outreach';
                   addComment(String(text), tagString, undefined, change.otherValues?.ID, change.otherValues?.StudentName);
                 } else {
-                  // When the text does NOT match the outreach trigger, add a default Outreach comment
-                  console.log('Text did NOT match outreach trigger — adding Outreach comment for:', text);
                   addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
                 }
               } catch (e) {
-                console.warn('highlightRow/addComment failed for', change && change.address, e);
+                console.warn('highlightRow/addComment failed', e);
               }
             });
             const anyMatch = matches.some(m => m.match);
-            console.log('Excel outreach trigger match (any):', anyMatch);
-            // Return true if any changed cell matched the outreach trigger; otherwise false.
             return anyMatch;
 		  },
-		  null,               // sheet -> use active worksheet
-		  'Outreach',               // identifierColumn (canonical name, will be resolved via COLUMN_ALIASES)
-		  COLUMN_ALIASES,     // COLUMN_ALIASES for canonical matching
-		  ['StudentName','ID'] // otherValues: request StudentName and ID be returned for the affected row
-		  
+		  null,               
+		  'Outreach',               
+		  COLUMN_ALIASES,     
+		  ['StudentName','ID'] 
 		);
 	  } catch (err) {
 		console.error('Failed to register Excel cell-change handler:', err);
@@ -224,14 +298,12 @@ function StudentView() {
 	};
   }, []);
 
-  // Initialize currentUserName from cache/SSO on mount
   useEffect(() => {
     try {
       const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
       if (cached) {
         setCurrentUserName(cached);
         sessionUserRef.current = cached;
-		console.log('Loaded SSO user from cache:', cached);
         return;
       }
       if (window.SSO && typeof window.SSO.getUserName === 'function') {
@@ -244,17 +316,14 @@ function StudentView() {
     } catch (_) { /* ignore */ }
   }, []);
 
-  // When the active student changes, reload the history for that student.
   useEffect(() => {
-	// only load if there's a valid ID
 	if (!activeStudentState?.ID) return;
-	// Call the existing loader to update historyData
-	loadHistory();
-	loadAssignments();
+	// Only load if the tabs are available
+    if (availableTabs.history) loadHistory();
+	if (availableTabs.assignments) loadAssignments();
 	// eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStudentState?.ID]);
 
-  // Always show SSO first until currentUserName is set
   if (!currentUserName) {
     return (
       <div className="studentview-outer">
@@ -276,26 +345,34 @@ function StudentView() {
 				>
 					Details
 				</button>
-				<button
-					type="button"
-					className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`}
-					onClick={() => {
-            loadHistory();
-						setActiveTab('history');
-					}}
-				>
-					History
-				</button>
-				<button
-					type="button"
-					className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`}
-					onClick={() => {
-            loadAssignments();
-						setActiveTab('assignments');
-					}}
-				>
-					Assignments
-				</button>
+				
+                {/* Conditionally Render History Tab Button */}
+                {availableTabs.history && (
+                    <button
+                        type="button"
+                        className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`}
+                        onClick={() => {
+                            loadHistory();
+                            setActiveTab('history');
+                        }}
+                    >
+                        History
+                    </button>
+                )}
+
+                {/* Conditionally Render Assignments Tab Button */}
+                {availableTabs.assignments && (
+                    <button
+                        type="button"
+                        className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`}
+                        onClick={() => {
+                            loadAssignments();
+                            setActiveTab('assignments');
+                        }}
+                    >
+                        Assignments
+                    </button>
+                )}
 			</div>
 
 			<div className="studentview-tab-content">

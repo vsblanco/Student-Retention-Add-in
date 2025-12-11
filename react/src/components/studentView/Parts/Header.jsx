@@ -1,4 +1,4 @@
-// Timestamp: 2025-10-03 12:20 PM | Version: 1.2.0
+// Timestamp: 2025-12-11 11:20 AM | Version: 1.2.2
 import React from 'react';
 import { formatName } from '../../utility/Conversion';
 import BounceAnimation from '../../utility/BounceAnimation';
@@ -20,7 +20,10 @@ function StudentHeader({ student }) {
   const studentNameRaw = safeStudent.StudentName || 'Select a Student';
   const studentName = studentNameRaw.includes(',') ? formatName(studentNameRaw) : studentNameRaw;
   const initials = getInitials(studentName);
-  const assignedTo = safeStudent.Assigned || 'Unassigned';
+  
+  // Get assigned value; if missing, it remains undefined/null (so we can hide the pill)
+  const assignedTo = safeStudent.Assigned;
+
   const daysOut = safeStudent.DaysOut ?? '--'; // Using nullish coalescing to allow 0
   // Determine background color for Days Out
   let daysOutBg = 'bg-gray-200';
@@ -193,6 +196,25 @@ function StudentHeader({ student }) {
   const [showDaysModal, setShowDaysModal] = React.useState(false);
   const [bounce, setBounce] = React.useState(false);
 
+  // --- Dynamic Text Resizing Logic ---
+  const nameRef = React.useRef(null);
+  const [nameTextSize, setNameTextSize] = React.useState('text-lg');
+
+  // Reset to default large size whenever the student name changes
+  React.useLayoutEffect(() => {
+    setNameTextSize('text-lg');
+  }, [studentName]);
+
+  // Check for overflow after render. If overflowing at text-lg, shrink to text-sm.
+  React.useLayoutEffect(() => {
+    if (nameTextSize === 'text-lg' && nameRef.current) {
+      // scrollHeight > clientHeight indicates content is being truncated/clamped
+      if (nameRef.current.scrollHeight > nameRef.current.clientHeight) {
+        setNameTextSize('text-sm');
+      }
+    }
+  }, [nameTextSize, studentName]);
+
   return (
     <div className="p-4 bg-white border-b border-gray-200">
       {/* BounceAnimation injects bounce CSS */}
@@ -282,7 +304,8 @@ function StudentHeader({ student }) {
            </button>
           <div className="min-w-0">
             <h2
-              className="text-lg font-bold text-gray-800 break-words"
+              ref={nameRef}
+              className={`${nameTextSize} font-bold text-gray-800 break-words`}
               style={{
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
@@ -292,9 +315,12 @@ function StudentHeader({ student }) {
             >
               {studentName}
             </h2>
-            <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block truncate max-w-[120px]">
-              {assignedTo}
-            </span>
+            {/* Only render the Assigned pill if assignedTo has a value */}
+            {assignedTo && (
+              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-gray-200 text-gray-800 mt-1 inline-block truncate max-w-[120px]">
+                {assignedTo}
+              </span>
+            )}
           </div>
         </div>
         {/* Right side: Stats */}
