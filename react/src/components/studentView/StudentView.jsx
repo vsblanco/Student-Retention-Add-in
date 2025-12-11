@@ -1,3 +1,4 @@
+// 2025-12-11 13:15 EST - Version 4.4.0 - Fix premature ready signal race condition
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
@@ -35,13 +36,10 @@ export const COLUMN_ALIASES = {
   MissingAssignments: ['Missing Assignments', 'Missing'],
   Outreach: ['Outreach', 'Comments', 'Notes', 'Comment'],
   ProfilePicture: ['Profile Picture', 'Photo', 'Avatar']
-  // You can add more aliases for other columns here
 };
 
-// add lazy SSO so its module (and any HTML it might insert) is only loaded when needed
 const SSO = lazy(() => import('../utility/SSO.jsx'));
 
-// Helper to detect if an Excel address is in the first row (Header)
 const isHeaderRowAddress = (address) => {
   if (!address) return false;
   const cleanAddress = address.includes('!') ? address.split('!')[1] : address;
@@ -49,24 +47,24 @@ const isHeaderRowAddress = (address) => {
   return /^[A-Z]+1(:[A-Z]+1)?$/.test(cleanAddress);
 };
 
-function StudentView() {
-	// Changed default to 'details' to be safe in case History sheet is missing
-	const [activeTab, setActiveTab] = useState('details'); 
-	const [historyData, setHistory] = useState([]); 
-  	const [assignmentData, setAssignments] = useState([]); 
-	const [activeStudentState, setActiveStudentState] = useState(activeStudent);
-	const [currentUserName, setCurrentUserName] = useState(null);
-  
-    // State to track if specific sheets exist in the workbook
+function StudentView({ onReady }) {
+    const [activeTab, setActiveTab] = useState('details'); 
+    const [historyData, setHistory] = useState([]); 
+    const [assignmentData, setAssignments] = useState([]); 
+    const [activeStudentState, setActiveStudentState] = useState(activeStudent);
+    
+    // NEW: Initialize checking state to true so we don't fall through to SSO immediately
+    const [isCheckingUser, setIsCheckingUser] = useState(true);
+    const [currentUserName, setCurrentUserName] = useState(null);
+    
     const [availableTabs, setAvailableTabs] = useState({
-      history: true,    // default to true while checking
-      assignments: true // default to true while checking
+      history: true,
+      assignments: true
     });
 
-	// add a ref used elsewhere in the component
-	const sessionUserRef = useRef(null);
+    const sessionUserRef = useRef(null);
 
-    // Check for sheet existence on mount
+    // 1. Check for Sheet Existence
     useEffect(() => {
       const checkSheets = async () => {
         try {
@@ -74,184 +72,142 @@ function StudentView() {
             const sheets = context.workbook.worksheets;
             context.load(sheets, 'items/name');
             await context.sync();
-            
             const sheetNames = sheets.items.map(s => s.name);
-            
-            const hasHistory = sheetNames.includes('Student History');
-            // Check for either "Missing Assignments" OR "Assignments"
-            const hasAssignments = sheetNames.some(name => 
-              ['Missing Assignments', 'Assignments'].includes(name)
-            );
-
             setAvailableTabs({
-              history: hasHistory,
-              assignments: hasAssignments
+              history: sheetNames.includes('Student History'),
+              assignments: sheetNames.some(name => ['Missing Assignments', 'Assignments'].includes(name))
             });
-            
-            console.log('Sheet existence check:', { hasHistory, hasAssignments });
           });
         } catch (error) {
-          console.warn('Failed to check sheet existence, defaulting to all visible:', error);
+          console.warn('Failed to check sheet existence', error);
         }
       };
-
       checkSheets();
     }, []);
 
-    // Effect: If the active tab is set to a tab that doesn't exist, switch to Details
+    // 2. Tab Auto-Switch Logic
     useEffect(() => {
-      if (activeTab === 'history' && !availableTabs.history) {
-        setActiveTab('details');
-      }
-      if (activeTab === 'assignments' && !availableTabs.assignments) {
-        setActiveTab('details');
-      }
+      if (activeTab === 'history' && !availableTabs.history) setActiveTab('details');
+      if (activeTab === 'assignments' && !availableTabs.assignments) setActiveTab('details');
     }, [availableTabs, activeTab]);
 
+    const loadHistory = () => {
+        if (!activeStudentState || !activeStudentState.StudentNumber) return;
+        if (!availableTabs.history) return;
 
-	const loadHistory = () => {
-    // Guard: Do not attempt load if we don't have a valid ID or if header row
-    if (!activeStudentState || !activeStudentState.ID || activeStudentState.ID === 'Student ID') return;
-    
-    // Guard: Do not attempt to load if History sheet is missing
-    if (!availableTabs.history) return;
+        console.log('Loading history for', activeStudentState.StudentName, 'using Number:', activeStudentState.StudentNumber);
+        setHistoryLoading(true);
+        
+        loadSheetCache(activeStudentState.StudentNumber)
+            .then((cached) => { if (cached) setHistory(cached); })
+            .catch(() => {});
+            
+        loadSheet('Student History', 'StudentNumber', activeStudentState.StudentNumber)
+            .then((res) => { if (res && res.data) setHistory(res.data); })
+            .catch((err) => console.error('Failed to load Student History sheet:', err));
+    };
 
-    console.log('Loading history for', activeStudentState.StudentName);
+    const loadAssignments = () => {
+        if (!activeStudentState || !activeStudentState.Gradebook) return;
+        if (!availableTabs.assignments) return;
+        loadSheet('Missing Assignments', 'gradeBookLink', activeStudentState.Gradebook)
+            .then((res) => { setAssignments(res.data); })
+            .catch((err) => console.error(err));
+    };
 
-    setHistoryLoading(true);
-    loadSheetCache(activeStudentState.ID)
-      .then((cached) => {
-        if (cached) {
-          setHistory(cached);
+    // 3. AUTO-LOADER
+    useEffect(() => {
+        if (!activeStudentState?.StudentNumber) return;
+        if (availableTabs.history) loadHistory();
+        if (availableTabs.assignments) loadAssignments();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeStudentState?.StudentNumber]);
+
+    const renderActiveTab = () => {
+        if (!activeStudentState || !activeStudentState.ID) {
+            return (
+                <div className="p-8 text-center text-gray-500">
+                    <p>Please select a student row to view details.</p>
+                </div>
+            );
         }
-      })
-      .catch((cacheErr) => {
-        console.warn('loadSheetCache failed:', cacheErr);
-      })
-      .then(() => {
-        return loadSheet('Student History', 'StudentNumber', activeStudentState.ID);
-      })
-      .then((res) => {
-        if (res && res.data) {
-          setHistory(res.data);
+        switch (activeTab) {
+        case 'history':
+            return availableTabs.history ? <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} /> : <StudentDetails student={activeStudentState} />;
+        case 'assignments':
+            return availableTabs.assignments ? <StudentAssignments assignments={assignmentData} reload={loadAssignments} /> : <StudentDetails student={activeStudentState} />;
+        case 'details':
+        default:
+            return <StudentDetails student={activeStudentState} />
         }
-      })
-      .catch((err) => {
-        console.error('Failed to load Student History sheet:', err);
-      });
-	};
+    };
 
-  const loadAssignments = () => {
-    if (!activeStudentState || !activeStudentState.Gradebook) return;
-    // Guard: Do not attempt load if Assignment sheet is missing
-    if (!availableTabs.assignments) return;
-
-    console.log('Loading assignments for', activeStudentState.StudentName);
-		loadSheet('Missing Assignments', 'gradeBookLink', activeStudentState.Gradebook)
-			.then((res) => {
-				setAssignments(res.data);
-			})
-			.catch((err) => {
-				// Fallback: try loading "Assignments" if "Missing Assignments" failed (optional)
-				console.error('Failed to load Student Assignments sheet:', err);
-			});
-	};
-
-	const renderActiveTab = () => {
-    // If blank row or header selected
-    if (!activeStudentState || !activeStudentState.ID) {
-      return (
-        <div className="p-8 text-center text-gray-500">
-          <p>Please select a student row to view details.</p>
-        </div>
-      );
-    }
-
-		switch (activeTab) {
-		case 'history':
-			return availableTabs.history ? 
-        <StudentHistory history={historyData} student={activeStudentState} reload={loadHistory} /> : 
-        <StudentDetails student={activeStudentState} />;
-		case 'assignments':
-			return availableTabs.assignments ? 
-        <StudentAssignments assignments={assignmentData} reload={loadAssignments} /> : 
-        <StudentDetails student={activeStudentState} />;
-		case 'details':
-		default:
-			return <StudentDetails student={activeStudentState} />
-		}
-	};
-
-  // Register Excel selection-changed handler
+  // 4. Selection Handler & Initial Load
   useEffect(() => {
-	let handlerRef = null;
-	(async () => {
-	  try {
-		handlerRef = await onSelectionChanged(({ address, values, data }) => {
-		  console.log('Excel selection changed:', { address, data });
+    let handlerRef = null;
+    (async () => {
+      try {
+        handlerRef = await onSelectionChanged(({ address, values, data }) => {
+          if (isHeaderRowAddress(address)) {
+            setActiveStudentState({}); 
+            return; 
+          }
+          setActiveStudentState(prev => ({ ...prev, ...data }));
+        }, COLUMN_ALIASES);
 
-      // 1. Check if the selection is the Header Row (Row 1)
-      if (isHeaderRowAddress(address)) {
-        console.log('Header row selected - clearing active student view.');
-        setActiveStudentState({}); 
-        return; 
-      }
-
-		  setActiveStudentState(prev => ({ ...prev, ...data }));
-		}, COLUMN_ALIASES);
-
-		// On initial load
-		try {
-		  const sel = await getSelectedRange(COLUMN_ALIASES);
-		  if (sel && sel.success) {
-		    const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
-		    if (initialRow) {
-          // Data check: If the values look like headers, ignore them.
-          if (
-            initialRow.ID === 'Student ID' || 
-            initialRow.StudentName === 'Student Name' || 
-            initialRow.Student === 'Student'
-          ) {
-             console.log('Initial selection is header row - ignoring.');
-             setActiveStudentState({});
-          } else {
-            setActiveStudentState(prev => ({ ...prev, ...initialRow }));
-            try {
-              loadCache(initialRow);
-            } catch (e) {
-              console.warn('loadCache initial invocation failed', e);
+        try {
+          const sel = await getSelectedRange(COLUMN_ALIASES);
+          if (sel && sel.success) {
+            const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
+            if (initialRow) {
+                if (initialRow.ID === 'Student ID' || initialRow.StudentName === 'Student Name') {
+                    setActiveStudentState({});
+                } else {
+                    setActiveStudentState(prev => ({ ...prev, ...initialRow }));
+                    try { 
+                        // Await cache so we don't lift loader too early
+                        await loadCache(initialRow); 
+                    } catch (e) { 
+                        console.warn('loadCache failed', e); 
+                    }
+                }
             }
           }
-		    }
-		  }
-		} catch (gErr) {
-		  console.warn('getSelectedRange failed to initialize selection:', gErr);
-		}
-	  } catch (err) {
-		console.error('Failed to register Excel selection handler:', err);
-	  }
-	})();
+        } catch (gErr) {
+          console.warn('getSelectedRange failed to initialize selection:', gErr);
+        } finally {
+            // UPDATED LOGIC:
+            // Only signal ready here if we HAVE a user. 
+            // If we are not logged in, we let the SSO block below handle the ready signal.
+            if (sessionUserRef.current && onReady) {
+                console.log("StudentView Data Load Complete (User logged in) -> Signaling Ready");
+                onReady();
+            }
+        }
 
-	return () => {
-	  if (handlerRef && typeof handlerRef.remove === 'function') {
-		try {
-		  handlerRef.remove();
-		} catch (err) {
-		  console.warn('Failed to remove selection handler:', err);
-		}
-	  }
-	};
-  }, []);
+      } catch (err) {
+        console.error('Failed to register Excel selection handler:', err);
+        // Only force ready if we are logged in, otherwise let SSO handle it
+        if (sessionUserRef.current && onReady) onReady();
+      }
+    })();
 
-  // Register Excel cell-change handler
+    return () => {
+      if (handlerRef && typeof handlerRef.remove === 'function') {
+        handlerRef.remove();
+      }
+    };
+  }, []); 
+
+  // 5. Outreach Handler
   useEffect(() => {
-	let changeHandlerRef = null;
-	(async () => {
-	  try {
-		changeHandlerRef = await onChanged(
-		  (changeEvent) => {
-		    const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
-		    const matches = changes.map(ch => {
+    let changeHandlerRef = null;
+    (async () => {
+      try {
+        changeHandlerRef = await onChanged(
+          (changeEvent) => {
+            const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
+            const matches = changes.map(ch => {
               const rawVal = ch && ch.value;
               const text = (rawVal === undefined || rawVal === null) ? '' : String(rawVal);
               try {
@@ -276,55 +232,65 @@ function StudentView() {
             });
             const anyMatch = matches.some(m => m.match);
             return anyMatch;
-		  },
-		  null,               
-		  'Outreach',               
-		  COLUMN_ALIASES,     
-		  ['StudentName','ID'] 
-		);
-	  } catch (err) {
-		console.error('Failed to register Excel cell-change handler:', err);
-	  }
-	})();
-
-	return () => {
-	  if (changeHandlerRef && typeof changeHandlerRef.remove === 'function') {
-		try {
-		  changeHandlerRef.remove();
-		} catch (err) {
-		  console.warn('Failed to remove cell-change handler:', err);
-		}
-	  }
-	};
-  }, []);
-
-  useEffect(() => {
-    try {
-      const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
-      if (cached) {
-        setCurrentUserName(cached);
-        sessionUserRef.current = cached;
-        return;
+          },
+          null,               
+          'Outreach',               
+          COLUMN_ALIASES,     
+          ['StudentName','ID'] 
+        );
+      } catch (err) {
+        console.error('Failed to register Excel cell-change handler:', err);
       }
-      if (window.SSO && typeof window.SSO.getUserName === 'function') {
-        const n = window.SSO.getUserName();
-        if (n) {
-          setCurrentUserName(n);
-          sessionUserRef.current = n;
+    })();
+
+    return () => {
+      if (changeHandlerRef && typeof changeHandlerRef.remove === 'function') {
+        try {
+          changeHandlerRef.remove();
+        } catch (err) {
+          console.warn('Failed to remove cell-change handler:', err);
         }
       }
-    } catch (_) { /* ignore */ }
+    };
   }, []);
 
+  // 6. SSO Check (Updated)
   useEffect(() => {
-	if (!activeStudentState?.ID) return;
-	// Only load if the tabs are available
-    if (availableTabs.history) loadHistory();
-	if (availableTabs.assignments) loadAssignments();
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStudentState?.ID]);
+    const checkUser = () => {
+        try {
+            const cached = window.localStorage.getItem('ssoUserName') || window.localStorage.getItem('SSO_USER');
+            if (cached) {
+                setCurrentUserName(cached);
+                sessionUserRef.current = cached;
+            } else if (window.SSO && typeof window.SSO.getUserName === 'function') {
+                const n = window.SSO.getUserName();
+                if (n) {
+                    setCurrentUserName(n);
+                    sessionUserRef.current = n;
+                }
+            }
+        } catch (_) { 
+            // ignore
+        } finally {
+            // CRITICAL: We mark checking as done regardless of outcome
+            setIsCheckingUser(false);
+        }
+    };
+    checkUser();
+  }, []);
 
+  // CONDITION 1: Still checking user?
+  // Return null so we don't render SSO or calling onReady prematurely.
+  if (isCheckingUser) {
+    return null;
+  }
+
+  // CONDITION 2: User Check Done, but No User Found?
+  // Render SSO and signal ready (so loading screen lifts to reveal login form).
   if (!currentUserName) {
+    if (onReady) {
+        setTimeout(onReady, 100); 
+    }
     return (
       <div className="studentview-outer">
         <Suspense fallback={null}>
@@ -334,54 +300,22 @@ function StudentView() {
     );
   }
 
+  // CONDITION 3: User Logged In
+  // Render App. Ready signal is handled by the Excel Selection effect above.
   return (
-		<div className="studentview-outer">
-			<StudentHeader student={activeStudentState} />
-			<div className="studentview-tabs">
-				<button
-					type="button"
-					className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`}
-					onClick={() => setActiveTab('details')}
-				>
-					Details
-				</button>
-				
-                {/* Conditionally Render History Tab Button */}
-                {availableTabs.history && (
-                    <button
-                        type="button"
-                        className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`}
-                        onClick={() => {
-                            loadHistory();
-                            setActiveTab('history');
-                        }}
-                    >
-                        History
-                    </button>
-                )}
-
-                {/* Conditionally Render Assignments Tab Button */}
-                {availableTabs.assignments && (
-                    <button
-                        type="button"
-                        className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`}
-                        onClick={() => {
-                            loadAssignments();
-                            setActiveTab('assignments');
-                        }}
-                    >
-                        Assignments
-                    </button>
-                )}
-			</div>
-
-			<div className="studentview-tab-content">
-				{renderActiveTab()}
-			</div>
-		</div>
-	);
+        <div className="studentview-outer">
+            <StudentHeader student={activeStudentState} />
+            <div className="studentview-tabs">
+                <button type="button" className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
+                {availableTabs.history && ( <button type="button" className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { loadHistory(); setActiveTab('history'); }}>History</button> )}
+                {availableTabs.assignments && ( <button type="button" className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`} onClick={() => { loadAssignments(); setActiveTab('assignments'); }}>Assignments</button> )}
+            </div>
+            <div className="studentview-tab-content">
+                {renderActiveTab()}
+            </div>
+        </div>
+    );
 }
 
 StudentView.displayName = 'StudentView';
-
 export default React.memo(StudentView);
