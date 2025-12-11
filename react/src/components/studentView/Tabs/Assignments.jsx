@@ -274,12 +274,6 @@ function StudentAssignments({ assignments, reload }) {
     return val;
   };
 
-  // Safe check for empty/undefined assignments. 
-  // We check 'sortedAssignments' here because it contains the *filtered* list.
-  if (!sortedAssignments || sortedAssignments.length === 0) {
-    return <div className="text-gray-500">No assignments found.</div>;
-  }
-
   return (
     <>
       <style>
@@ -323,7 +317,7 @@ function StudentAssignments({ assignments, reload }) {
       </style>
 
       { /* New header inserted here */ }
-      <div className="sticky-header space-y-4 mb-2">
+      <div className="sticky-header space-y-4 mb-2 pl-2">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-800">Assignments</h3>
           <div className="flex items-center">
@@ -353,76 +347,80 @@ function StudentAssignments({ assignments, reload }) {
           scrollbarColor: 'rgba(0,0,0,0.15) rgba(0,0,0,0.03)'
         }}
       >
-        {sortedAssignments.map((a, idx) => {
-          // treat missing submission status as false (i.e. missing)
-          const submission = Object.prototype.hasOwnProperty.call(a, map.submission)
-            ? a[map.submission]
-            : false;
-          const borderColor = submission === false ? 'border-red-500' : 'border-blue-300';
-           return (
-             <div key={idx} className={`${cardStyle} group border-l-4 ${borderColor} pl-4`}>
-               <div className={`${mainRowStyle} w-full`}>
-                 <div className="flex-1 flex flex-col justify-between h-full">
-                   <div>
-                     <div className={titleRowStyle}>
-                       {a[map.assignmentLink] ? (
-                         <a
-                           href={a[map.assignmentLink]}
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           title="View Assignment"
-                           style={{ textDecoration: 'none' }}
-                         >
-                           {a[map.title]}
-                         </a>
-                       ) : (
-                         <span title="No Assignment">
-                           {a[map.title]}
-                         </span>
-                       )}
-                     </div>
-                     <div className={dueStyle}>
-                       {/* UPDATED: Uses renderDueDate helper to format Excel numbers */}
-                       Due: {renderDueDate(a[map.dueDate])}
-                     </div>
-                     {submission === false && (
-                       <div className="mt-1">
-                         {a[map.submissionLink] ? (
+        {sortedAssignments && sortedAssignments.length > 0 ? (
+          sortedAssignments.map((a, idx) => {
+            // treat missing submission status as false (i.e. missing)
+            const submission = Object.prototype.hasOwnProperty.call(a, map.submission)
+              ? a[map.submission]
+              : false;
+            const borderColor = submission === false ? 'border-red-500' : 'border-blue-300';
+             return (
+               <div key={idx} className={`${cardStyle} group border-l-4 ${borderColor} pl-4`}>
+                 <div className={`${mainRowStyle} w-full`}>
+                   <div className="flex-1 flex flex-col justify-between h-full">
+                     <div>
+                       <div className={titleRowStyle}>
+                         {a[map.assignmentLink] ? (
                            <a
-                             href={a[map.submissionLink]}
+                             href={a[map.assignmentLink]}
                              target="_blank"
                              rel="noopener noreferrer"
-                             className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 cursor-pointer"
-                             title="View Submission"
-                             style={{ width: '60px', justifyContent: 'center' }} // reduced width
+                             title="View Assignment"
+                             style={{ textDecoration: 'none' }}
                            >
-                             <div className="text-red-500 text-xs font-semibold">missing</div>
+                             {a[map.title]}
                            </a>
                          ) : (
-                           <div
-                             className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
-                             title="No Submission"
-                             style={{ width: '70px', justifyContent: 'center' }} // reduced width
-                           >
-                             <div className="text-red-500 text-xs font-semibold">missing</div>
-                           </div>
+                           <span title="No Assignment">
+                             {a[map.title]}
+                           </span>
                          )}
                        </div>
-                     )}
-                   </div>
-                   <div className="flex justify-end mt-2">
-                     <div className={scoreStyle + " flex items-center"}>
-                       Score: {a[map.score] === '' || a[map.score] === undefined || a[map.score] === null ? 0 : a[map.score]}
+                       <div className={dueStyle}>
+                         {/* UPDATED: Uses renderDueDate helper to format Excel numbers */}
+                         Due: {renderDueDate(a[map.dueDate])}
+                       </div>
+                       {submission === false && (
+                         <div className="mt-1">
+                           {a[map.submissionLink] ? (
+                             <a
+                               href={a[map.submissionLink]}
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 cursor-pointer"
+                               title="View Submission"
+                               style={{ width: '60px', justifyContent: 'center' }} // reduced width
+                             >
+                               <div className="text-red-500 text-xs font-semibold">missing</div>
+                             </a>
+                           ) : (
+                             <div
+                               className="rounded-full bg-white-500 px-2 py-0 flex items-center border border-red-500 opacity-50 cursor-not-allowed"
+                               title="No Submission"
+                               style={{ width: '70px', justifyContent: 'center' }} // reduced width
+                             >
+                               <div className="text-red-500 text-xs font-semibold">missing</div>
+                             </div>
+                           )}
+                         </div>
+                       )}
+                     </div>
+                     <div className="flex justify-end mt-2">
+                       <div className={scoreStyle + " flex items-center"}>
+                         Score: {a[map.score] === '' || a[map.score] === undefined || a[map.score] === null ? 0 : a[map.score]}
+                       </div>
                      </div>
                    </div>
-                 </div>
-                 <div className={`${iconGroupStyle} flex-shrink-0`}>
+                   <div className={`${iconGroupStyle} flex-shrink-0`}>
                    {/* Removed old view submission button */}
+                   </div>
                  </div>
                </div>
-             </div>
-           );
-         })}
+             );
+           })
+        ) : (
+          <div className="text-gray-500 pl-2">No assignments found.</div>
+        )}
        </div>
     </>
   );

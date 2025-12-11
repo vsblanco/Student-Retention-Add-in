@@ -390,7 +390,7 @@ useEffect(() => {
      <div>
        <style>{styles}</style>
        {/* History Header */}
-       <div className="sticky-header space-y-4">
+       <div className="sticky-header space-y-4 pl-2">
          <div className="flex justify-between items-center">
            <h3 className="text-lg font-bold text-gray-800">History</h3>
            <div className="flex items-center space-x-2">
