@@ -103,7 +103,7 @@ function App() {
       >
         <div className="flex flex-col items-center gap-4">
            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
-           <span className="text-gray-500 font-medium text-sm animate-pulse">Loading S.H.A.R.K...</span>
+           <span className="text-gray-500 font-medium text-sm animate-pulse">Loading Student Retention Kit...</span>
         </div>
       </div>
 

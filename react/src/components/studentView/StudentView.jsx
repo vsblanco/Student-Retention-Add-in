@@ -1,4 +1,4 @@
-// 2025-12-11 13:15 EST - Version 4.4.0 - Fix premature ready signal race condition
+// 2025-12-11 13:30 EST - Version 4.6.0 - Disable cache reload on sheet switch
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import './Styling/StudentView.css';
 import StudentHeader from './Parts/Header.jsx';
@@ -53,6 +53,9 @@ function StudentView({ onReady }) {
     const [assignmentData, setAssignments] = useState([]); 
     const [activeStudentState, setActiveStudentState] = useState(activeStudent);
     
+    // NEW: Track sheet version to force re-binding of listeners on sheet switch
+    const [sheetVersion, setSheetVersion] = useState(0);
+
     // NEW: Initialize checking state to true so we don't fall through to SSO immediately
     const [isCheckingUser, setIsCheckingUser] = useState(true);
     const [currentUserName, setCurrentUserName] = useState(null);
@@ -64,7 +67,27 @@ function StudentView({ onReady }) {
 
     const sessionUserRef = useRef(null);
 
-    // 1. Check for Sheet Existence
+    // 0. NEW: Global Sheet Switch Listener
+    useEffect(() => {
+      const registerSheetListener = async () => {
+        try {
+          await Excel.run(async (context) => {
+             // Listen for when a user activates a different worksheet
+             context.workbook.worksheets.onActivated.add(() => {
+                 // Increment version to trigger re-binding of selection handlers
+                 setSheetVersion(v => v + 1);
+                 return Promise.resolve();
+             });
+             await context.sync();
+          });
+        } catch (e) {
+          console.warn('Failed to register sheet activation listener', e);
+        }
+      };
+      registerSheetListener();
+    }, []);
+
+    // 1. Check for Sheet Existence (Runs on mount and on sheet switch just in case)
     useEffect(() => {
       const checkSheets = async () => {
         try {
@@ -83,7 +106,7 @@ function StudentView({ onReady }) {
         }
       };
       checkSheets();
-    }, []);
+    }, [sheetVersion]); // Re-check when sheet changes
 
     // 2. Tab Auto-Switch Logic
     useEffect(() => {
@@ -144,6 +167,11 @@ function StudentView({ onReady }) {
 
   // 4. Selection Handler & Initial Load
   useEffect(() => {
+    // If sheet changed, we can optionally clear old state to prevent confusion
+    if (sheetVersion > 0) {
+        setActiveStudentState({}); 
+    }
+
     let handlerRef = null;
     (async () => {
       try {
@@ -165,8 +193,10 @@ function StudentView({ onReady }) {
                 } else {
                     setActiveStudentState(prev => ({ ...prev, ...initialRow }));
                     try { 
-                        // Await cache so we don't lift loader too early
-                        await loadCache(initialRow); 
+                        // UPDATED: User requested no cache load on sheet switch (only on initial load)
+                        if (sheetVersion === 0) {
+                             await loadCache(initialRow); 
+                        }
                     } catch (e) { 
                         console.warn('loadCache failed', e); 
                     }
@@ -197,7 +227,7 @@ function StudentView({ onReady }) {
         handlerRef.remove();
       }
     };
-  }, []); 
+  }, [sheetVersion]); // DEPENDENCY ADDED: Re-runs when sheet switches
 
   // 5. Outreach Handler
   useEffect(() => {
@@ -252,7 +282,7 @@ function StudentView({ onReady }) {
         }
       }
     };
-  }, []);
+  }, [sheetVersion]); // DEPENDENCY ADDED: Re-runs when sheet switches
 
   // 6. SSO Check (Updated)
   useEffect(() => {
