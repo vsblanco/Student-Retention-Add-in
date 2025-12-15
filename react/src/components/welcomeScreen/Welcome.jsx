@@ -8,7 +8,7 @@ const styles = {
 		display: "flex",
 		alignItems: "center",
 		justifyContent: "center",
-		background: "rgba(0,0,0,0.35)",
+		background: "#ffffff", 
 		zIndex: 9999,
 		padding: 20,
 	},
@@ -18,7 +18,8 @@ const styles = {
 		padding: "28px 28px",
 		maxWidth: 720,
 		width: "100%",
-		boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+		boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+        border: "1px solid #eee", 
 	},
 	header: { margin: 0, fontSize: 24, fontWeight: 600, color: "#222" },
 	sub: { marginTop: 8, marginBottom: 16, color: "#555" },
@@ -32,12 +33,19 @@ const styles = {
 		borderRadius: 6,
 		cursor: "pointer",
 	},
+	secondaryButton: {
+		background: "transparent",
+		color: "#0b5cff",
+		border: "1px solid #0b5cff",
+		padding: "6px 12px",
+		borderRadius: 6,
+		cursor: "pointer",
+	},
 	tertiary: { background: "transparent", color: "#666", border: "none", padding: "6px 10px", cursor: "pointer" },
 };
 
-export default function Welcome({ onStart = () => {}, onClose = () => {}, docsUrl = "https://example.com/docs" }) {
+export default function Welcome({ onStart = () => {}, onClose = () => {}, user = "", docsUrl = "https://example.com/docs" }) {
 	const [showTutorial, setShowTutorial] = useState(false);
-	// New state to track if tutorial was completed
 	const [hasFinished, setHasFinished] = useState(false);
 
 	return (
@@ -50,7 +58,6 @@ export default function Welcome({ onStart = () => {}, onClose = () => {}, docsUr
 					onClose={() => {
 						onClose();
 					}}
-					// WHEN FINISHED: Close tutorial view, but stay in Welcome component and set finished state
 					onFinish={() => {
 						setShowTutorial(false);
 						setHasFinished(true);
@@ -58,20 +65,21 @@ export default function Welcome({ onStart = () => {}, onClose = () => {}, docsUr
 				/>
 			) : (
 				<div style={styles.card}>
-					{/* CHANGE TEXT BASED ON hasFinished STATE */}
 					<h2 style={styles.header}>
-						{hasFinished ? "You are all good to go!" : "Welcome!"}
+                        {hasFinished 
+                            ? "You are all good to go!" 
+                            : (user ? `Welcome, ${user}!` : "Welcome!")
+                        }
 					</h2>
 					
 					<p style={styles.sub}>
 						{hasFinished 
-							? "You can now start using the Student Retention Kit. You can review the tutorial via settings" 
+							? "Your workbook has been set up successfully. You can now start using the Student Retention Kit." 
 							: "Would you like a tutorial on how to use the Student Retention Kit?"
 						}
 					</p>
 
 					<div style={styles.buttonRow}>
-						{/* If finished, we only need one button to close the dialog */}
 						{hasFinished ? (
 							<button
 								type="button"

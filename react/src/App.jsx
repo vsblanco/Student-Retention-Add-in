@@ -1,24 +1,83 @@
-// Timestamp: 2025-12-11 12:30:00 | Version: 1.5.0
-import React, { useState, useEffect, useRef } from 'react';
+// Timestamp: 2025-12-15 12:05:00 | Version: 2.2.0
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import StudentView from './components/studentView/StudentView.jsx';
 import About from './components/about/About.jsx';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import { Slide } from 'react-toastify';
 import Settings from './components/settings/Settings.jsx';
 import ImportManager from './components/importData/ImportManager.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
+import { ToastContainer, Slide } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// Lazy load SSO to ensure it doesn't block initial render
+const SSO = lazy(() => import('./components/utility/SSO.jsx'));
 
 function App() {
   const [page, setPage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showWelcome, setShowWelcome] = useState(false); // State to control Welcome screen
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  // Tutorial/Welcome State
+  const [showWelcome, setShowWelcome] = useState(false);
 
-  // We use a ref to prevent double-firing the ready state
+  // Ref to track if we've already handled the "Ready" signal for the current page load
   const isReadyRef = useRef(false);
 
-  // The signal function that child components can call when they are fully loaded
+  // --- 1. AUTH CHECK ON MOUNT ---
+  useEffect(() => {
+    const checkAuth = () => {
+      try {
+        // Standardized to use 'SSO_USER'
+        const cachedUser = localStorage.getItem('SSO_USER');
+        
+        if (cachedUser) {
+          console.log("App: Auto-logged in as", cachedUser);
+          setCurrentUser(cachedUser);
+          // We keep isLoading = true here because we are about to mount StudentView,
+          // which will signal when it's ready via onReady.
+        } else {
+          console.log("App: No session found. Showing Login.");
+          // Stop loading so the SSO screen is visible
+          setIsLoading(false);
+        }
+      } catch (e) {
+        console.warn("Auth check failed", e);
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // --- 2. PAGE ROUTING & TUTORIAL CHECK ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get('page');
+    const targetPage = pageParam || 'student-view';
+    setPage(targetPage);
+
+    // Check if user has seen welcome screen (Simulating "New User" detection)
+    const hasSeenWelcome = localStorage.getItem('SRK_HAS_SEEN_WELCOME');
+    if (!hasSeenWelcome) {
+      setShowWelcome(true);
+    }
+
+    // Safety Timeout: If StudentView (or any feature) hangs, remove spinner after 8s
+    // Only applies if we are actually logged in and trying to load a feature
+    if (currentUser) {
+        const safetyTimer = setTimeout(() => {
+            if (!isReadyRef.current && isLoading) {
+                console.warn("Feature took too long. Forcing load.");
+                setIsLoading(false);
+            }
+        }, 8000);
+        return () => clearTimeout(safetyTimer);
+    }
+  }, [currentUser, isLoading]); 
+
+  // --- HANDLERS ---
+
+  // Called by Child Components (StudentView) when Excel data is bound
   const handleFeatureReady = () => {
     if (!isReadyRef.current) {
       isReadyRef.current = true;
@@ -26,43 +85,26 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const pageParam = params.get('page');
-    const targetPage = pageParam || 'student-view';
+  // Called by SSO component on successful login
+  const handleLoginSuccess = (username) => {
+    console.log("App: Login Successful ->", username);
+    setCurrentUser(username);
     
-    setPage(targetPage);
-
-    // --- NEW USER / WELCOME CHECK ---
-    // Check local storage to see if the user has completed the welcome flow before.
-    // If "SRK_HAS_SEEN_WELCOME" is null/false, we assume they are a new user (or no SSO history locally).
-    const hasSeenWelcome = localStorage.getItem('SRK_HAS_SEEN_WELCOME');
-    if (!hasSeenWelcome) {
-      setShowWelcome(true);
-    }
-
-    // LOGIC: Check if the target page provides its own "Ready" signal.
-    // Only 'student-view' implements the handshake. 
-    // All other pages continue as normal with a default timeout.
-    if (targetPage !== 'student-view') {
-      const timer = setTimeout(() => {
-        handleFeatureReady();
-      }, 600); 
-      return () => clearTimeout(timer);
-    }
+    // Set loading to TRUE to prevent UI flicker while StudentView mounts
+    setIsLoading(true);
+    isReadyRef.current = false; 
     
-    // Safety Fallback
-    const safetyTimer = setTimeout(() => {
-      if (!isReadyRef.current) {
-        console.warn("Feature took too long to report ready. Forcing load.");
-        handleFeatureReady();
-      }
-    }, 8000);
+    // Standardized save to 'SSO_USER'
+    localStorage.setItem('SSO_USER', username);
+  };
 
-    return () => clearTimeout(safetyTimer);
-  }, []);
+  const handleWelcomeClose = () => {
+    setShowWelcome(false);
+    // Mark as seen so it doesn't appear again
+    localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
+  };
 
-  // Keep-Alive Heartbeat
+  // Keep-Alive Heartbeat for Chrome Extension context
   useEffect(() => {
     const keepAliveInterval = setInterval(() => {
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
@@ -74,29 +116,31 @@ function App() {
     return () => clearInterval(keepAliveInterval);
   }, []);
 
-  // Handler for closing the Welcome screen
-  const handleWelcomeClose = () => {
-    // 1. Hide the welcome screen
-    setShowWelcome(false);
-    // 2. Set the flag in storage so they aren't asked again
-    localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
-  };
+  // --- RENDER HELPERS ---
+  const renderContent = () => {
+    // A. If no user, show SSO (Login)
+    if (!currentUser) {
+      return (
+        <Suspense fallback={<div className="p-10 text-center">Loading Login...</div>}>
+          <SSO onNameSelect={handleLoginSuccess} />
+        </Suspense>
+      );
+    }
 
-  const renderPage = () => {
-    if (page === null) return null;
+    // B. If user exists, show the requested page
     switch (page) {
       case 'settings':
-        return <Settings />;
+        return <Settings user={currentUser} />;
       case 'import':
-        return <ImportManager />;
+        return <ImportManager user={currentUser} />;
       case 'about':
         return <About />;
       case 'create-lda':
-        return <LDAManager />;
+        return <LDAManager user={currentUser} />;
       case 'student-view':
-        return <StudentView onReady={handleFeatureReady} />;
       default:
-        return <StudentView onReady={handleFeatureReady} />;
+        // Pass user and ready-handler to StudentView
+        return <StudentView user={currentUser} onReady={handleFeatureReady} />;
     }
   };
 
@@ -119,18 +163,23 @@ function App() {
       >
         <div className="flex flex-col items-center gap-4">
            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
-           <span className="text-gray-500 font-medium text-sm animate-pulse">Loading Student Retention Kit...</span>
+           <span className="text-gray-500 font-medium text-sm animate-pulse">
+             {currentUser ? "Loading your dashboard..." : "Preparing..."}
+           </span>
         </div>
       </div>
 
-      {/* RENDER THE REQUESTED PAGE (It loads behind the welcome screen) */}
-      {renderPage()}
+      {/* MAIN APP CONTENT (Login or Feature) */}
+      {renderContent()}
 
-      {/* WELCOME / TUTORIAL OVERLAY 
-          Only shows if showWelcome is true AND the app has finished loading 
+      {/* TUTORIAL / WELCOME OVERLAY 
+          Only shows if:
+          1. App is done loading (!isLoading)
+          2. User is logged in (currentUser exists)
+          3. User hasn't seen it yet (showWelcome is true)
       */}
-      {!isLoading && showWelcome && (
-        <Welcome onClose={handleWelcomeClose} />
+      {!isLoading && currentUser && showWelcome && (
+        <Welcome onClose={handleWelcomeClose} user={currentUser} />
       )}
       
       <ToastContainer
