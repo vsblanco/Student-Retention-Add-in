@@ -1,4 +1,4 @@
-// Timestamp: 2025-12-11 12:15:00 | Version: 1.4.0
+// Timestamp: 2025-12-11 12:30:00 | Version: 1.5.0
 import React, { useState, useEffect, useRef } from 'react';
 import StudentView from './components/studentView/StudentView.jsx';
 import About from './components/about/About.jsx';
@@ -8,10 +8,12 @@ import { Slide } from 'react-toastify';
 import Settings from './components/settings/Settings.jsx';
 import ImportManager from './components/importData/ImportManager.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
+import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
 
 function App() {
   const [page, setPage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false); // State to control Welcome screen
 
   // We use a ref to prevent double-firing the ready state
   const isReadyRef = useRef(false);
@@ -31,18 +33,25 @@ function App() {
     
     setPage(targetPage);
 
+    // --- NEW USER / WELCOME CHECK ---
+    // Check local storage to see if the user has completed the welcome flow before.
+    // If "SRK_HAS_SEEN_WELCOME" is null/false, we assume they are a new user (or no SSO history locally).
+    const hasSeenWelcome = localStorage.getItem('SRK_HAS_SEEN_WELCOME');
+    if (!hasSeenWelcome) {
+      setShowWelcome(true);
+    }
+
     // LOGIC: Check if the target page provides its own "Ready" signal.
     // Only 'student-view' implements the handshake. 
     // All other pages continue as normal with a default timeout.
     if (targetPage !== 'student-view') {
       const timer = setTimeout(() => {
         handleFeatureReady();
-      }, 600); // Default fade out for non-async pages
+      }, 600); 
       return () => clearTimeout(timer);
     }
     
-    // Safety Fallback: If StudentView crashes or takes too long (> 8 seconds),
-    // force remove the overlay so the user isn't stuck forever.
+    // Safety Fallback
     const safetyTimer = setTimeout(() => {
       if (!isReadyRef.current) {
         console.warn("Feature took too long to report ready. Forcing load.");
@@ -53,7 +62,7 @@ function App() {
     return () => clearTimeout(safetyTimer);
   }, []);
 
-  // Keep-Alive Heartbeat (Unchanged)
+  // Keep-Alive Heartbeat
   useEffect(() => {
     const keepAliveInterval = setInterval(() => {
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
@@ -64,6 +73,14 @@ function App() {
     }, 20000); 
     return () => clearInterval(keepAliveInterval);
   }, []);
+
+  // Handler for closing the Welcome screen
+  const handleWelcomeClose = () => {
+    // 1. Hide the welcome screen
+    setShowWelcome(false);
+    // 2. Set the flag in storage so they aren't asked again
+    localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
+  };
 
   const renderPage = () => {
     if (page === null) return null;
@@ -77,7 +94,6 @@ function App() {
       case 'create-lda':
         return <LDAManager />;
       case 'student-view':
-        // Pass the handshake prop ONLY to StudentView
         return <StudentView onReady={handleFeatureReady} />;
       default:
         return <StudentView onReady={handleFeatureReady} />;
@@ -107,7 +123,15 @@ function App() {
         </div>
       </div>
 
+      {/* RENDER THE REQUESTED PAGE (It loads behind the welcome screen) */}
       {renderPage()}
+
+      {/* WELCOME / TUTORIAL OVERLAY 
+          Only shows if showWelcome is true AND the app has finished loading 
+      */}
+      {!isLoading && showWelcome && (
+        <Welcome onClose={handleWelcomeClose} />
+      )}
       
       <ToastContainer
         position="bottom-left"
