@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Media from "./Media";
 import importdatataskpane from "../../assets/tutorial/importdatataskpane.png";
+import createlda from "../../assets/tutorial/createlda.gif";
 
 export default function Tutorial({ pages = null, onBack = () => {}, onClose = () => {}, onFinish = null }) {
     
@@ -35,6 +36,19 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
             ],
         },
         {
+            title: "Master List",
+           content: <p>This sheet holds the entire student population of your campus. It's the place where your imports will target and where your LDA will derive off of</p>,
+        },
+         {
+            title: "Student History",
+           content: <p>This sheet holds a history of student interactions and communications. A new entry is made via the Student View pannel.</p>,
+        },
+         {
+            title: "Missing Assignments",
+           content: <p>This sheet holds a list of missing assignments for students. The report is made via the Student Retention Kit - Chrome Extension. You then import the CSV back into the sheet via Import Data.</p>,
+        },
+       
+        {
             title: "Importing external reports",
             component: (
                 <>
@@ -42,7 +56,26 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
                         <p>You can import external reports by clicking on the Import Data button on the ribbon.</p>
                     </div>
                     <Media src={importdatataskpane} alt="Import Data taskpane" width="820px" fit="contain" clickable={false} />
+                 <div style={{ padding: 10 }}>
+                        <p>Imports will appear on the Master List sheet.</p>
+                    </div>
                 </>
+                
+            ),
+        },
+           {
+            title: "Creating the LDA sheet.",
+            component: (
+                <>
+                    <div style={{ padding: 10 }}>
+                        <p>You can create the LDA sheet by clicking on the Create LDA button on the ribbon.</p>
+                    </div>
+                    <Media src={createlda} alt="Import Data taskpane" width="820px" fit="contain" clickable={false} />
+                 <div style={{ padding: 10 }}>
+                        <p>Imports will appear on the Master List sheet.</p>
+                    </div>
+                </>
+                
             ),
         },
     ];
