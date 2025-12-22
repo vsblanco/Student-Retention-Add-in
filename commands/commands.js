@@ -17,12 +17,22 @@ function openAnalyticsPane(event) {
     event.completed();
 }
 
+// Called automatically when a new document is opened
+// This ensures the background service starts on document load
+function onDocumentOpen(event) {
+    console.log("Document opened - background services are active");
+    event.completed();
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
 Office.actions.associate("openAnalyticsPane", openAnalyticsPane);
+
+// Register autoload event handler
+Office.actions.associate("onDocumentOpen", onDocumentOpen);
 
 // Initialize background services when Office is ready
 Office.onReady(() => {
