@@ -6,6 +6,7 @@ import Settings from './components/settings/Settings.jsx';
 import ImportManager from './components/importData/ImportManager.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
+import chromeExtensionService from './services/chromeExtensionService.js'; // Chrome Extension Service
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -104,16 +105,31 @@ function App() {
     localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
   };
 
-  // Keep-Alive Heartbeat for Chrome Extension context
+  // --- CHROME EXTENSION MASTER RELAY ---
+  // App.jsx manages the Chrome extension connection for all child components
   useEffect(() => {
-    const keepAliveInterval = setInterval(() => {
-      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({ type: 'keep_alive_ping' }, (response) => {
-          if (chrome.runtime.lastError) { /* ignore */ }
-        });
+    console.log("App: Initializing Chrome Extension Service (Master Relay)");
+
+    // Start extension detection
+    chromeExtensionService.startPinging();
+
+    // Start keep-alive heartbeat
+    chromeExtensionService.startKeepAlive();
+
+    // Listen for extension events
+    const removeListener = chromeExtensionService.addListener((event) => {
+      if (event.type === "installed") {
+        console.log("App: Chrome Extension is installed and ready!");
       }
-    }, 20000); 
-    return () => clearInterval(keepAliveInterval);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      console.log("App: Cleaning up Chrome Extension Service");
+      removeListener();
+      chromeExtensionService.stopPinging();
+      chromeExtensionService.stopKeepAlive();
+    };
   }, []);
 
   // --- RENDER HELPERS ---
