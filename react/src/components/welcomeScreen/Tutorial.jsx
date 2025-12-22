@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Media from "./Media";
+import chromeExtensionService from "../../services/chromeExtensionService.js";
 import importdatataskpane from "../../assets/tutorial/importdatataskpane.png";
 import createlda from "../../assets/tutorial/createlda.gif";
 
@@ -83,15 +84,6 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
     const [tutorialPages, setTutorialPages] = useState(pages && pages.length ? pages : defaultPagesData);
     const [index, setIndex] = useState(0);
 
-    // --- HELPER: Universal Ping (Sends to current window AND parent window) ---
-    const sendPing = () => {
-        const message = { type: "SRK_CHECK_EXTENSION" };
-        window.postMessage(message, "*"); // Send to self
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage(message, "*"); // Send to parent
-        }
-    };
-
     // 2. Main Logic: Check for Sheets and Extension on mount
     useEffect(() => {
         const checkExistingSheets = async () => {
@@ -99,7 +91,7 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
                 await Excel.run(async (context) => {
                     const sheets = context.workbook.worksheets;
                     const sheetsToCheck = ["Master List", "Student History", "Missing Assignments"];
-                    
+
                     const sheetProxies = sheetsToCheck.map(name => ({
                         name: name,
                         proxy: sheets.getItemOrNullObject(name)
@@ -128,12 +120,28 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
         };
 
         const checkExtension = () => {
-            let intervalId = null;
+            // Check if extension is already detected (via App.jsx master relay)
+            if (chromeExtensionService.getInstallationStatus()) {
+                console.log("Tutorial: Extension already detected by master relay");
+                setTutorialPages(prev => {
+                    const newPages = [...prev];
+                    const setupIndex = newPages.findIndex(p => p.checklist);
+                    if (setupIndex !== -1) {
+                        const setupPage = { ...newPages[setupIndex] };
+                        setupPage.checklist = setupPage.checklist.map(item => {
+                            if (item.id === "extension-check") return { ...item, status: true };
+                            return item;
+                        });
+                        newPages[setupIndex] = setupPage;
+                    }
+                    return newPages;
+                });
+            }
 
-            const handleMessage = (event) => {
-                if (event.data && event.data.type === "SRK_EXTENSION_INSTALLED") {
-                    console.log("SRK Tutorial: Extension detected! Stopping ping.");
-                    if (intervalId) clearInterval(intervalId);
+            // Listen for extension installation events
+            const removeListener = chromeExtensionService.addListener((event) => {
+                if (event.type === "installed") {
+                    console.log("Tutorial: Extension installed event received from service");
                     setTutorialPages(prev => {
                         const newPages = [...prev];
                         const setupIndex = newPages.findIndex(p => p.checklist);
@@ -148,18 +156,9 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
                         return newPages;
                     });
                 }
-            };
+            });
 
-            window.addEventListener("message", handleMessage);
-            sendPing(); 
-            intervalId = setInterval(() => {
-                sendPing(); 
-            }, 2000);
-
-            return () => {
-                window.removeEventListener("message", handleMessage);
-                if (intervalId) clearInterval(intervalId);
-            };
+            return removeListener;
         };
 
         if (!pages) {
