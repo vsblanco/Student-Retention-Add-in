@@ -57,7 +57,7 @@ async function transferMasterList() {
             // Find column indices for all relevant columns
             const colIndices = {
                 studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
-                studentId: findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS),
+                syStudentId: findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS),
                 studentNumber: findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS),
                 gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
                 daysOut: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut),
@@ -87,8 +87,8 @@ async function transferMasterList() {
                     hasData = true;
 
                     // Add all other fields if they exist
-                    if (colIndices.studentId !== -1 && rowValues[colIndices.studentId]) {
-                        student.studentId = rowValues[colIndices.studentId];
+                    if (colIndices.syStudentId !== -1 && rowValues[colIndices.syStudentId]) {
+                        student.syStudentId = rowValues[colIndices.syStudentId];
                     }
                     if (colIndices.studentNumber !== -1 && rowValues[colIndices.studentNumber]) {
                         student.studentNumber = rowValues[colIndices.studentNumber];

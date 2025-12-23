@@ -80,7 +80,7 @@ interface MasterListPayload {
 
 interface ColumnMapping {
   studentName: number;      // Column index for Student Name
-  studentId: number;        // Column index for Student ID (Canvas)
+  syStudentId: number;      // Column index for SyStudentId (Canvas ID)
   studentNumber: number;    // Column index for Student Number (School ID)
   gradeBook: number;        // Column index for Gradebook link
   daysOut: number;          // Column index for Days Out
@@ -96,7 +96,7 @@ interface ColumnMapping {
 
 interface Student {
   studentName: string;           // Required - student's name
-  studentId?: string;            // Canvas student ID
+  syStudentId?: string;          // SyStudentId / Canvas student ID
   studentNumber?: string;        // School/internal student ID
   gradeBook?: string;            // URL to gradebook (extracted from HYPERLINK formula)
   daysOut?: number;              // Days since last attendance
@@ -120,7 +120,7 @@ interface Student {
     "sheetName": "Master List",
     "columnMapping": {
       "studentName": 0,
-      "studentId": 1,
+      "syStudentId": 1,
       "studentNumber": 2,
       "gradeBook": 5,
       "daysOut": 8,
@@ -136,7 +136,7 @@ interface Student {
     "students": [
       {
         "studentName": "Smith, John",
-        "studentId": "12345",
+        "syStudentId": "12345",
         "studentNumber": "STU001",
         "studentEmail": "john.smith@school.edu",
         "grade": 85.5,
@@ -151,7 +151,7 @@ interface Student {
       },
       {
         "studentName": "Doe, Jane",
-        "studentId": "67890",
+        "syStudentId": "67890",
         "studentNumber": "STU002",
         "studentEmail": "jane.doe@school.edu",
         "grade": 72,
