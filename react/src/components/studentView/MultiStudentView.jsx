@@ -113,7 +113,8 @@ function MultiStudentView({ students }) {
           title: 'Grade Distribution',
           unit: '%',
           scaleLabels: ['0%', '50%', '100%'],
-          isPercentage: true
+          isPercentage: true,
+          reverseColors: false  // Higher is better
         };
       case 'daysOut':
         return {
@@ -125,7 +126,8 @@ function MultiStudentView({ students }) {
             Math.round(daysOutStats.max / 2).toString(),
             Math.round(daysOutStats.max).toString()
           ] : ['0', '0', '0'],
-          isPercentage: false
+          isPercentage: false,
+          reverseColors: true  // Lower is better
         };
       case 'missingAssignments':
         return {
@@ -137,7 +139,8 @@ function MultiStudentView({ students }) {
             Math.round(missingAssignmentsStats.max / 2).toString(),
             Math.round(missingAssignmentsStats.max).toString()
           ] : ['0', '0', '0'],
-          isPercentage: false
+          isPercentage: false,
+          reverseColors: true  // Lower is better
         };
       default:
         return {
@@ -145,13 +148,14 @@ function MultiStudentView({ students }) {
           title: 'Grade Distribution',
           unit: '%',
           scaleLabels: ['0%', '50%', '100%'],
-          isPercentage: true
+          isPercentage: true,
+          reverseColors: false
         };
     }
   };
 
   // Generalized Whisker plot component
-  const WhiskerPlot = ({ stats, title, unit, scaleLabels, isPercentage }) => {
+  const WhiskerPlot = ({ stats, title, unit, scaleLabels, isPercentage, reverseColors }) => {
     if (!stats) {
       return (
         <div className="p-6 bg-gray-50 border border-gray-200 rounded-lg text-center text-gray-500">
@@ -162,6 +166,12 @@ function MultiStudentView({ students }) {
 
     const { min, q1, median, q3, max, mean, count } = stats;
     const range = max - min;
+
+    // Color scheme based on whether lower or higher is better
+    const minColor = reverseColors ? 'text-green-600' : 'text-red-600';
+    const maxColor = reverseColors ? 'text-red-600' : 'text-green-600';
+    const minStroke = reverseColors ? '#10b981' : '#ef4444';
+    const maxStroke = reverseColors ? '#ef4444' : '#10b981';
 
     // Calculate positions (0-100 scale) - for percentage, use absolute positioning
     const getPosition = (value) => {
@@ -184,17 +194,22 @@ function MultiStudentView({ students }) {
 
     return (
       <div className="p-6 bg-white border border-gray-200 rounded-lg">
-        {/* Header with dropdown */}
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-md font-bold text-gray-800">{title}</h3>
+        {/* Header with dropdown as title */}
+        <div className="mb-4">
           <select
             value={distributionType}
             onChange={(e) => setDistributionType(e.target.value)}
-            className="px-3 py-1 text-sm border border-gray-300 rounded-md bg-white text-gray-700 hover:border-blue-400 focus:outline-none focus:border-blue-500 cursor-pointer"
+            className="w-full text-md font-bold text-gray-800 bg-transparent border-none cursor-pointer hover:text-blue-600 focus:outline-none appearance-none"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right center',
+              paddingRight: '20px'
+            }}
           >
-            <option value="grade">Grade</option>
-            <option value="daysOut">Days Out</option>
-            <option value="missingAssignments">Missing Assignments</option>
+            <option value="grade">Grade Distribution</option>
+            <option value="daysOut">Days Out Distribution</option>
+            <option value="missingAssignments">Missing Assignments Distribution</option>
           </select>
         </div>
 
@@ -202,7 +217,7 @@ function MultiStudentView({ students }) {
         <div className="grid grid-cols-3 gap-2 mb-6 text-sm">
           <div className="text-center">
             <div className="text-gray-500">Min</div>
-            <div className="font-bold text-red-600">
+            <div className={`font-bold ${minColor}`}>
               {Math.round(min)}{unit}
             </div>
           </div>
@@ -214,7 +229,7 @@ function MultiStudentView({ students }) {
           </div>
           <div className="text-center">
             <div className="text-gray-500">Max</div>
-            <div className="font-bold text-green-600">
+            <div className={`font-bold ${maxColor}`}>
               {Math.round(max)}{unit}
             </div>
           </div>
@@ -250,7 +265,7 @@ function MultiStudentView({ students }) {
               y1="40%"
               x2={`${minPos}%`}
               y2="60%"
-              stroke="#ef4444"
+              stroke={minStroke}
               strokeWidth="2"
             />
 
@@ -312,7 +327,7 @@ function MultiStudentView({ students }) {
               y1="40%"
               x2={`${maxPos}%`}
               y2="60%"
-              stroke="#10b981"
+              stroke={maxStroke}
               strokeWidth="2"
             />
 
@@ -347,6 +362,7 @@ function MultiStudentView({ students }) {
         unit={currentDistribution.unit}
         scaleLabels={currentDistribution.scaleLabels}
         isPercentage={currentDistribution.isPercentage}
+        reverseColors={currentDistribution.reverseColors}
       />
 
       {/* Open All Gradebooks Button */}
