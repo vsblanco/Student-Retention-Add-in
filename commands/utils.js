@@ -4,12 +4,13 @@
 
 export const CONSTANTS = {
     // NOTE: "Student ID" and "Student Number" are treated as distinct values.
-    // "Student ID" refers to the Canvas ID, used for creating gradebook links.
-    // "Student Number" (and "Student Identifier") refers to the internal school ID.
+    // "Student ID" refers to SyStudentId - the school's SIS (Student Information System) ID.
+    // "Student Number" (and "Student Identifier") refers to another school-based student identifier.
+    // Note: SyStudentId is different from Canvas's internal Canvas ID.
     STUDENT_NAME_COLS: ["studentname", "student name","student"],
     OUTREACH_COLS: ["outreach"],
-    STUDENT_ID_COLS: ["student id"],
-    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
+    STUDENT_ID_COLS: ["student id", "systudentid", "id"],
+    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier", "student number"],
     MASTER_LIST_SHEET: "Master List",
     HISTORY_SHEET: "Student History",
     SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
