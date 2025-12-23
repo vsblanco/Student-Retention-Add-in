@@ -204,6 +204,35 @@ class ChromeExtensionService {
   }
 
   /**
+   * Send selected student data to the Chrome extension
+   * @param {Array|Object} students - Single student object or array of students
+   */
+  sendSelectedStudents(students) {
+    // Normalize to array format
+    const studentArray = Array.isArray(students) ? students : [students];
+
+    // Extract only the required fields
+    const payload = studentArray.map(student => ({
+      name: student.StudentName || student.name || "",
+      syStudentId: student.ID || student.syStudentId || "",
+      phone: student.Phone || student.phone || "",
+      otherPhone: student.OtherPhone || student.otherPhone || ""
+    }));
+
+    const message = {
+      type: "SRK_SELECTED_STUDENTS",
+      data: {
+        students: payload,
+        count: payload.length,
+        timestamp: new Date().toISOString()
+      }
+    };
+
+    console.log("ChromeExtensionService: Sending selected students:", message);
+    this.sendMessage(message);
+  }
+
+  /**
    * Get current extension installation status
    * @returns {boolean} Whether the extension is detected as installed
    */
