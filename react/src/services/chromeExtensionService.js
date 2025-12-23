@@ -77,6 +77,8 @@ class ChromeExtensionService {
    * @param {number} payload.endCol - Ending column index (0-based)
    * @param {string} payload.targetSheet - Name of the worksheet to highlight in
    * @param {string} [payload.color='yellow'] - Hex color code for highlight (optional)
+   * @param {number} [payload.editColumn] - Column index to edit (0-based, optional)
+   * @param {string} [payload.editText] - Text to set in the edit column (optional)
    */
   async handleHighlightStudentRow(payload) {
     // Validate Excel is available
@@ -91,7 +93,7 @@ class ChromeExtensionService {
       return;
     }
 
-    const { studentName, syStudentId, startCol, endCol, targetSheet, color = '#FFFF00' } = payload;
+    const { studentName, syStudentId, startCol, endCol, targetSheet, color = '#FFFF00', editColumn, editText } = payload;
 
     // Validate column indices
     if (typeof startCol !== 'number' || typeof endCol !== 'number') {
@@ -102,6 +104,22 @@ class ChromeExtensionService {
     if (startCol < 0 || endCol < 0 || startCol > endCol) {
       console.error("ChromeExtensionService: Invalid column range", { startCol, endCol });
       return;
+    }
+
+    // Validate edit column if provided
+    if (editColumn !== undefined && typeof editColumn !== 'number') {
+      console.error("ChromeExtensionService: Invalid editColumn type", { editColumn });
+      return;
+    }
+
+    if (editColumn !== undefined && editColumn < 0) {
+      console.error("ChromeExtensionService: editColumn must be >= 0", { editColumn });
+      return;
+    }
+
+    // If editColumn is provided, editText should also be provided
+    if (editColumn !== undefined && editText === undefined) {
+      console.warn("ChromeExtensionService: editColumn specified but editText is missing");
     }
 
     try {
@@ -175,6 +193,20 @@ class ChromeExtensionService {
         highlightRange.format.fill.color = color;
         await context.sync();
 
+        // Edit cell if editColumn and editText are provided
+        if (editColumn !== undefined && editText !== undefined) {
+          const editCell = worksheet.getRangeByIndexes(
+            actualRowIndex,
+            editColumn,
+            1, // One row
+            1  // One column
+          );
+          editCell.values = [[editText]];
+          await context.sync();
+
+          console.log(`ChromeExtensionService: Successfully edited cell at column ${editColumn} with text "${editText}"`);
+        }
+
         console.log(`ChromeExtensionService: Successfully highlighted student "${studentName}" (ID: ${syStudentId}) in "${targetSheet}" from column ${startCol} to ${endCol}`);
 
         // Notify listeners of successful highlight
@@ -187,6 +219,8 @@ class ChromeExtensionService {
             startCol,
             endCol,
             color,
+            editColumn,
+            editText,
             timestamp: new Date().toISOString()
           }
         });
@@ -200,6 +234,8 @@ class ChromeExtensionService {
         data: {
           studentName,
           syStudentId,
+          editColumn,
+          editText,
           error: error.message,
           timestamp: new Date().toISOString()
         }

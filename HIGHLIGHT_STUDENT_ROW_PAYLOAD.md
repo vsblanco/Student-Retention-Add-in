@@ -23,7 +23,9 @@ SRK_HIGHLIGHT_STUDENT_ROW
     startCol: number,          // Starting column index (0-based, required)
     endCol: number,            // Ending column index (0-based, required)
     targetSheet: string,       // Name of the worksheet (required)
-    color: string              // Hex color code (optional, defaults to #FFFF00 yellow)
+    color: string,             // Hex color code (optional, defaults to #FFFF00 yellow)
+    editColumn: number,        // Column index to edit (0-based, optional)
+    editText: string           // Text to set in the edit column (optional)
   }
 }
 ```
@@ -39,6 +41,8 @@ SRK_HIGHLIGHT_STUDENT_ROW
 | `data.endCol` | number | **Yes** | 0-based ending column index | `5` (Column F) |
 | `data.targetSheet` | string | **Yes** | Exact name of the worksheet | `"Fall 2024"` |
 | `data.color` | string | No | Hex color code for highlight | `"#FF6B6B"` (red) |
+| `data.editColumn` | number | No | Column index to edit (0-based) | `8` (Column I) |
+| `data.editText` | string | No | Text to write to the cell | `"Submitted Midterm"` |
 
 ### Column Index Reference
 
@@ -68,6 +72,38 @@ Colors must be in **hexadecimal format** with `#` prefix:
 // Invalid (will cause errors)
 "yellow"   // ❌ Color names not supported
 "rgb(255, 255, 0)"  // ❌ RGB format not supported
+```
+
+### Editing Cells (Optional)
+
+In addition to highlighting, you can **edit a specific cell** in the student's row by providing `editColumn` and `editText`.
+
+**Use Cases:**
+- Track assignment submissions: "Submitted Midterm"
+- Update outreach status: "Email Sent"
+- Mark attendance: "Present"
+- Record completion: "Completed Quiz 1"
+
+**How it works:**
+- Both `editColumn` (number) and `editText` (string) must be provided
+- `editColumn` uses the same 0-based indexing as columns (A=0, B=1, etc.)
+- The cell at the intersection of the student's row and `editColumn` will be updated with `editText`
+- Cell editing happens **after** highlighting in the same operation
+
+**Examples:**
+
+```javascript
+// Assuming column I (index 8) is the "Outreach" column
+editColumn: 8,
+editText: "Submitted Final Exam"
+
+// Column F (index 5) for "Status"
+editColumn: 5,
+editText: "Email Sent"
+
+// Column C (index 2) for "Attendance"
+editColumn: 2,
+editText: "Present"
 ```
 
 ## How to Send from Chrome Extension
@@ -177,7 +213,29 @@ window.postMessage({
 
 **Result:** Highlights only columns E-H in Bob Johnson's row with red.
 
-### Example 3: Minimal Required Payload
+### Example 3: Assignment Submission (Highlight + Edit Cell)
+
+```javascript
+// When a student submits an assignment, highlight their row green
+// and update the "Outreach" column with submission info
+window.postMessage({
+  type: "SRK_HIGHLIGHT_STUDENT_ROW",
+  data: {
+    studentName: "Sarah Williams",
+    syStudentId: "99887766",
+    startCol: 0,
+    endCol: 10,
+    targetSheet: "Fall 2024",
+    color: "#90EE90",  // Light green for success
+    editColumn: 8,     // Column I (Outreach column)
+    editText: "Submitted Midterm Exam"
+  }
+}, "*");
+```
+
+**Result:** Highlights Sarah Williams' row (columns A-K) in light green AND updates column I with "Submitted Midterm Exam".
+
+### Example 4: Minimal Required Payload
 
 ```javascript
 // Only required fields
@@ -194,7 +252,7 @@ window.postMessage({
 }, "*");
 ```
 
-### Example 4: Batch Highlighting Multiple Students
+### Example 5: Batch Highlighting Multiple Students
 
 ```javascript
 // Highlight multiple students with different colors
@@ -276,12 +334,12 @@ chromeExtensionService.addListener((event) => {
   switch (event.type) {
     case 'highlight_complete':
       console.log('✅ Highlight successful:', event.data);
-      // event.data contains: studentName, syStudentId, targetSheet, startCol, endCol, color, timestamp
+      // event.data contains: studentName, syStudentId, targetSheet, startCol, endCol, color, editColumn, editText, timestamp
       break;
 
     case 'highlight_error':
       console.error('❌ Highlight failed:', event.data);
-      // event.data contains: studentName, syStudentId, error, timestamp
+      // event.data contains: studentName, syStudentId, editColumn, editText, error, timestamp
       break;
   }
 });
@@ -299,6 +357,8 @@ chromeExtensionService.addListener((event) => {
     startCol: 0,
     endCol: 8,
     color: "#FFFF00",
+    editColumn: 8,              // Present if cell was edited
+    editText: "Submitted Quiz", // Present if cell was edited
     timestamp: "2025-12-23T10:30:00.000Z"
   }
 }
@@ -312,6 +372,8 @@ chromeExtensionService.addListener((event) => {
   data: {
     studentName: "John Doe",
     syStudentId: "12345678",
+    editColumn: 8,              // Present if editing was attempted
+    editText: "Submitted Quiz", // Present if editing was attempted
     error: "Sheet 'Fall 2024' not found",
     timestamp: "2025-12-23T10:30:00.000Z"
   }
@@ -333,16 +395,20 @@ chromeExtensionService.addListener((event) => {
 
 5. **Highlighting**: Uses `worksheet.getRangeByIndexes()` to select the specified column range and applies the fill color
 
-6. **Notification**: Emits success or error events to any registered listeners
+6. **Cell Editing (Optional)**: If `editColumn` and `editText` are provided, updates the cell at the specified column in the student's row
+
+7. **Notification**: Emits success or error events to any registered listeners
 
 ## Important Notes
 
 - ✅ **No side panel required** - Works completely in the background
 - ✅ **Automatic Student ID detection** - Supports multiple column name variations
 - ✅ **Case-insensitive matching** - Student IDs are compared after trimming and converting to strings
+- ✅ **Optional cell editing** - Can update a specific cell while highlighting the row
 - ⚠️ **Exact sheet name required** - Sheet names must match exactly (case-sensitive)
 - ⚠️ **Student must exist** - The student ID must be present in the specified sheet
 - ⚠️ **Column indices are 0-based** - Column A = 0, not 1
+- ⚠️ **Cell editing requires both parameters** - Both `editColumn` and `editText` must be provided to edit a cell
 
 ## Troubleshooting
 
@@ -373,6 +439,19 @@ targetSheet: "fall 2024"  // Sheet is actually named "Fall 2024"
 
 // ✅ CORRECT - Exact match
 targetSheet: "Fall 2024"
+
+// ❌ WRONG - Providing only editColumn without editText
+editColumn: 8  // Missing editText!
+
+// ✅ CORRECT - Both parameters provided
+editColumn: 8,
+editText: "Submitted Assignment"
+
+// ❌ WRONG - Using 1-based index for editColumn
+editColumn: 9  // This is column J, not I!
+
+// ✅ CORRECT - Using 0-based index
+editColumn: 8  // Column I
 ```
 
 ## Support
