@@ -141,7 +141,7 @@ class ChromeExtensionService {
 
         // Load the used range to search for student
         const usedRange = worksheet.getUsedRange();
-        usedRange.load(["values", "rowCount", "columnCount"]);
+        usedRange.load(["values", "rowCount", "columnCount", "rowIndex"]);
         await context.sync();
 
         const values = usedRange.values;
