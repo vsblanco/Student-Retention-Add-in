@@ -93,14 +93,10 @@ function MultiStudentView({ students }) {
       return;
     }
 
-    gradebookLinks.forEach((link, index) => {
-      setTimeout(() => {
-        if (window.Office && window.Office.context && window.Office.context.ui && window.Office.context.ui.openBrowserWindow) {
-          window.Office.context.ui.openBrowserWindow(link);
-        } else {
-          window.open(link, '_blank');
-        }
-      }, index * 100); // Stagger the opens slightly to avoid popup blockers
+    // For multiple links, always use window.open as Office API only supports single window
+    // Open all immediately - browsers allow multiple windows opened by user action
+    gradebookLinks.forEach((link) => {
+      window.open(link, '_blank', 'noopener,noreferrer');
     });
   };
 
