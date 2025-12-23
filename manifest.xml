@@ -236,9 +236,9 @@
         <bt:String id="StudentViewButton.Label" DefaultValue="Student View"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
-        <bt:String id="AboutButton.Label" DefaultValue="About"/>
+        <bt:String id="AboutButton.Label" DefaultValue="Help"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
-        <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Personalized Email"/>
+        <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Emails"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Your add-in loaded successfully. Go to the 'Retention' tab to get started."/>
