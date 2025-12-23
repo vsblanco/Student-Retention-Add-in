@@ -44,6 +44,11 @@ class ChromeExtensionService {
         this.handleExtensionDetected();
         break;
 
+      case "SRK_HIGHLIGHT_STUDENT_ROW":
+        console.log("ChromeExtensionService: Highlight student row request received:", event.data);
+        this.handleHighlightStudentRow(event.data.data);
+        break;
+
       // Add more message types here as needed
       default:
         // Forward unknown messages to listeners
@@ -59,6 +64,146 @@ class ChromeExtensionService {
       this.isExtensionInstalled = true;
       this.stopPinging();
       this.notifyListeners({ type: "installed", installed: true });
+    }
+  }
+
+  /**
+   * Handle highlighting a student row based on extension request
+   * Runs in the background - no side panel required
+   * @param {Object} payload - Highlight request payload
+   * @param {string} payload.studentName - Student's full name
+   * @param {string} payload.syStudentId - Student's SyStudentID
+   * @param {number} payload.startCol - Starting column index (0-based)
+   * @param {number} payload.endCol - Ending column index (0-based)
+   * @param {string} payload.targetSheet - Name of the worksheet to highlight in
+   * @param {string} [payload.color='yellow'] - Hex color code for highlight (optional)
+   */
+  async handleHighlightStudentRow(payload) {
+    // Validate Excel is available
+    if (typeof window.Excel === "undefined") {
+      console.warn("ChromeExtensionService: Excel API not available");
+      return;
+    }
+
+    // Validate required parameters
+    if (!payload || !payload.syStudentId || !payload.targetSheet) {
+      console.error("ChromeExtensionService: Missing required parameters for highlight", payload);
+      return;
+    }
+
+    const { studentName, syStudentId, startCol, endCol, targetSheet, color = '#FFFF00' } = payload;
+
+    // Validate column indices
+    if (typeof startCol !== 'number' || typeof endCol !== 'number') {
+      console.error("ChromeExtensionService: Invalid column indices", { startCol, endCol });
+      return;
+    }
+
+    if (startCol < 0 || endCol < 0 || startCol > endCol) {
+      console.error("ChromeExtensionService: Invalid column range", { startCol, endCol });
+      return;
+    }
+
+    try {
+      await Excel.run(async (context) => {
+        // Get the target worksheet
+        const worksheet = context.workbook.worksheets.getItemOrNullObject(targetSheet);
+        worksheet.load("isNullObject");
+        await context.sync();
+
+        if (worksheet.isNullObject) {
+          console.error(`ChromeExtensionService: Sheet "${targetSheet}" not found`);
+          return;
+        }
+
+        // Load the used range to search for student
+        const usedRange = worksheet.getUsedRange();
+        usedRange.load(["values", "rowCount", "columnCount"]);
+        await context.sync();
+
+        const values = usedRange.values;
+        const headers = values[0]; // First row is headers
+
+        // Find the ID column index
+        let idColumnIndex = -1;
+        const idAliases = ['Student ID', 'SyStudentID', 'Student identifier', 'ID'];
+
+        for (let col = 0; col < headers.length; col++) {
+          if (idAliases.some(alias =>
+            String(headers[col]).trim().toLowerCase() === alias.toLowerCase()
+          )) {
+            idColumnIndex = col;
+            break;
+          }
+        }
+
+        if (idColumnIndex === -1) {
+          console.error("ChromeExtensionService: Could not find Student ID column in sheet");
+          return;
+        }
+
+        // Find the row with matching syStudentId
+        let targetRowIndex = -1;
+        for (let row = 1; row < values.length; row++) { // Start from 1 to skip headers
+          const cellValue = String(values[row][idColumnIndex]).trim();
+          if (cellValue === String(syStudentId).trim()) {
+            targetRowIndex = row;
+            break;
+          }
+        }
+
+        if (targetRowIndex === -1) {
+          console.warn(`ChromeExtensionService: Student with ID "${syStudentId}" not found in sheet "${targetSheet}"`);
+          return;
+        }
+
+        // Calculate the actual row index in the worksheet (accounting for used range offset)
+        const actualRowIndex = usedRange.rowIndex + targetRowIndex;
+
+        // Calculate column count to highlight
+        const columnCount = endCol - startCol + 1;
+
+        // Get the range to highlight
+        const highlightRange = worksheet.getRangeByIndexes(
+          actualRowIndex,
+          startCol,
+          1, // Just one row
+          columnCount
+        );
+
+        // Apply the highlight color
+        highlightRange.format.fill.color = color;
+        await context.sync();
+
+        console.log(`ChromeExtensionService: Successfully highlighted student "${studentName}" (ID: ${syStudentId}) in "${targetSheet}" from column ${startCol} to ${endCol}`);
+
+        // Notify listeners of successful highlight
+        this.notifyListeners({
+          type: "highlight_complete",
+          data: {
+            studentName,
+            syStudentId,
+            targetSheet,
+            startCol,
+            endCol,
+            color,
+            timestamp: new Date().toISOString()
+          }
+        });
+      });
+    } catch (error) {
+      console.error("ChromeExtensionService: Error highlighting student row:", error);
+
+      // Notify listeners of error
+      this.notifyListeners({
+        type: "highlight_error",
+        data: {
+          studentName,
+          syStudentId,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        }
+      });
     }
   }
 
