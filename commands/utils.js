@@ -8,8 +8,8 @@ export const CONSTANTS = {
     // "Student Number" (and "Student Identifier") refers to the internal school ID.
     STUDENT_NAME_COLS: ["studentname", "student name","student"],
     OUTREACH_COLS: ["outreach"],
-    STUDENT_ID_COLS: ["student id"],
-    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier"],
+    STUDENT_ID_COLS: ["student id", "systudentid", "id"],
+    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier", "student number"],
     MASTER_LIST_SHEET: "Master List",
     HISTORY_SHEET: "Student History",
     SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
