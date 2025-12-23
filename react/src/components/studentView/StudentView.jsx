@@ -5,6 +5,7 @@ import StudentHeader from './Parts/Header.jsx';
 import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
+import MultiStudentView from './MultiStudentView.jsx';
 import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
@@ -52,6 +53,7 @@ function StudentView({ onReady, user }) {
     const [assignmentData, setAssignments] = useState([]);
     const [activeStudentState, setActiveStudentState] = useState(activeStudent);
     const [selectedRowCount, setSelectedRowCount] = useState(1);
+    const [selectedStudents, setSelectedStudents] = useState([]);
 
     // Track sheet version to force re-binding of listeners on sheet switch
     const [sheetVersion, setSheetVersion] = useState(0);
@@ -162,18 +164,21 @@ function StudentView({ onReady, user }) {
     if (sheetVersion > 0) {
       setActiveStudentState({});
       setSelectedRowCount(1);
+      setSelectedStudents([]);
     } 
 
     let handlerRef = null;
     (async () => {
       try {
-        handlerRef = await onSelectionChanged(({ address, values, data, rowCount }) => {
+        handlerRef = await onSelectionChanged(({ address, values, data, rowCount, allRows }) => {
           if (isHeaderRowAddress(address)) {
             setActiveStudentState({});
             setSelectedRowCount(1);
+            setSelectedStudents([]);
             return;
           }
           setSelectedRowCount(rowCount || 1);
+          setSelectedStudents(allRows || []);
           setActiveStudentState(prev => ({ ...prev, ...data }));
         }, COLUMN_ALIASES);
 
@@ -181,6 +186,7 @@ function StudentView({ onReady, user }) {
           const sel = await getSelectedRange(COLUMN_ALIASES);
           if (sel && sel.success) {
             setSelectedRowCount(sel.rowCount || 1);
+            setSelectedStudents(sel.allRows || []);
             const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
             if (initialRow) {
                 if (initialRow.ID === 'Student ID' || initialRow.StudentName === 'Student Name') {
@@ -268,7 +274,7 @@ function StudentView({ onReady, user }) {
   return (
         <div className="studentview-outer">
             <StudentHeader student={activeStudentState} selectedRowCount={selectedRowCount} />
-            {selectedRowCount === 1 && (
+            {selectedRowCount === 1 ? (
                 <>
                     <div className="studentview-tabs">
                         <button type="button" className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
@@ -279,6 +285,8 @@ function StudentView({ onReady, user }) {
                         {renderActiveTab()}
                     </div>
                 </>
+            ) : (
+                <MultiStudentView students={selectedStudents} />
             )}
         </div>
     );

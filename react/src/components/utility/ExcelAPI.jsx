@@ -290,7 +290,8 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                             address: payload.address,
                             data: payload.data || {},
                             values: payload.values || [],
-                            rowCount: payload.rowCount || 1
+                            rowCount: payload.rowCount || 1,
+                            allRows: payload.allRows || []
                         });
                     });
                 } catch (err) {
@@ -348,82 +349,102 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
 
     // Ensure selRange.rowIndex is available
     const selectedRowIndex = selRange.rowIndex;
+    const selectedRowCount = selRange.rowCount || 1;
 
-    // Read the full row across the used columns
-    const rowRange = worksheet.getRangeByIndexes(selectedRowIndex, usedColIndex, 1, usedColCount);
+    // Read the full selected range across the used columns (handles multiple rows)
+    const rowRange = worksheet.getRangeByIndexes(selectedRowIndex, usedColIndex, selectedRowCount, usedColCount);
     rowRange.load("values");
     await context.sync();
 
-    const rowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
-    // Compute relative row index into usedRange.formulas (if available)
     const usedRangeStartRow = (typeof usedRange.rowIndex === "number") ? usedRange.rowIndex : 0;
-    const relativeRowIdx = selectedRowIndex - usedRangeStartRow;
-    const formulasRow = (usedRange.formulas && usedRange.formulas[relativeRowIdx]) ? usedRange.formulas[relativeRowIdx] : [];
 
-    // Build header -> value map for the entire row, using COLUMN_ALIASES if provided
-    const rowObj = {};
-    for (let c = 0; c < usedColCount; c++) {
-        const headerRaw = (rawHeaders[c] !== undefined && rawHeaders[c] !== null) ? String(rawHeaders[c]) : "";
-        let headerKey = headerRaw;
+    // Helper function to build row object from values
+    const buildRowObject = (rowValues, relativeRowIdx) => {
+        const formulasRow = (usedRange.formulas && usedRange.formulas[relativeRowIdx]) ? usedRange.formulas[relativeRowIdx] : [];
+        const rowObj = {};
 
-        if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
-            const normalizedHeader = normalize(headerRaw);
-            const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
-                if (!canonical) return false;
-                const normalizedCanonical = normalize(canonical);
-                if (normalizedCanonical === normalizedHeader) return true;
-                const aliasesRaw = COLUMN_ALIASES[canonical];
-                const aliases = Array.isArray(aliasesRaw)
-                    ? aliasesRaw
-                    : (typeof aliasesRaw === "string" ? [aliasesRaw] : []);
-                return aliases.some(a => normalize(a) === normalizedHeader);
-            });
-            if (match) {
-                headerKey = match;
+        for (let c = 0; c < usedColCount; c++) {
+            const headerRaw = (rawHeaders[c] !== undefined && rawHeaders[c] !== null) ? String(rawHeaders[c]) : "";
+            let headerKey = headerRaw;
+
+            if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
+                const normalizedHeader = normalize(headerRaw);
+                const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
+                    if (!canonical) return false;
+                    const normalizedCanonical = normalize(canonical);
+                    if (normalizedCanonical === normalizedHeader) return true;
+                    const aliasesRaw = COLUMN_ALIASES[canonical];
+                    const aliases = Array.isArray(aliasesRaw)
+                        ? aliasesRaw
+                        : (typeof aliasesRaw === "string" ? [aliasesRaw] : []);
+                    return aliases.some(a => normalize(a) === normalizedHeader);
+                });
+                if (match) {
+                    headerKey = match;
+                }
             }
-        }
 
-        if (!headerKey || headerKey === "") {
-            headerKey = `Column${usedColIndex + c}`;
-        }
-
-        // Prefer formula text from usedRange.formulas for hyperlink extraction.
-        let cellVal = (rowValues[c] !== undefined) ? rowValues[c] : null;
-        const formulaCell = (formulasRow && formulasRow[c] !== undefined) ? formulasRow[c] : null;
-        if (typeof formulaCell === 'string' && formulaCell.trim().startsWith('=')) {
-            const link = extractHyperlink(formulaCell);
-            if (link) {
-                cellVal = link;
+            if (!headerKey || headerKey === "") {
+                headerKey = `Column${usedColIndex + c}`;
             }
-        } else if (typeof cellVal === 'string' && cellVal.trim() !== '') {
-            // Fallback: if value itself looks like a formula, handle it (rare if formulas were loaded)
-            const rawTrim = cellVal.trim();
-            if (rawTrim.startsWith('=')) {
-                const link = extractHyperlink(rawTrim);
+
+            // Prefer formula text from usedRange.formulas for hyperlink extraction.
+            let cellVal = (rowValues[c] !== undefined) ? rowValues[c] : null;
+            const formulaCell = (formulasRow && formulasRow[c] !== undefined) ? formulasRow[c] : null;
+            if (typeof formulaCell === 'string' && formulaCell.trim().startsWith('=')) {
+                const link = extractHyperlink(formulaCell);
                 if (link) {
                     cellVal = link;
                 }
+            } else if (typeof cellVal === 'string' && cellVal.trim() !== '') {
+                // Fallback: if value itself looks like a formula, handle it (rare if formulas were loaded)
+                const rawTrim = cellVal.trim();
+                if (rawTrim.startsWith('=')) {
+                    const link = extractHyperlink(rawTrim);
+                    if (link) {
+                        cellVal = link;
+                    }
+                }
             }
+
+            rowObj[headerKey] = cellVal;
         }
 
-        rowObj[headerKey] = cellVal;
+        return rowObj;
+    };
+
+    // Build all row objects
+    const allRows = [];
+    for (let r = 0; r < selectedRowCount; r++) {
+        const absoluteRowIndex = selectedRowIndex + r;
+        const relativeRowIdx = absoluteRowIndex - usedRangeStartRow;
+        const rowValues = (rowRange.values && rowRange.values[r]) ? rowRange.values[r] : [];
+        const rowObj = buildRowObject(rowValues, relativeRowIdx);
+        allRows.push(rowObj);
     }
 
     // Build headers index map
     const headerIndexMap = {};
     rawHeaders.forEach((h, i) => { headerIndexMap[h] = i; });
 
+    // For backward compatibility, keep first row as 'data' and first row values as 'values'
+    const firstRowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
+    const firstRowData = allRows.length > 0 ? allRows[0] : {};
+    const firstRelativeRowIdx = selectedRowIndex - usedRangeStartRow;
+    const formulasRow = (usedRange.formulas && usedRange.formulas[firstRelativeRowIdx]) ? usedRange.formulas[firstRelativeRowIdx] : [];
+
     return {
         success: true,
         address: selRange.address,
         rowIndex: selectedRowIndex,
-        rowCount: selRange.rowCount || 1,
+        rowCount: selectedRowCount,
         startCol: usedColIndex,
         columnCount: usedColCount,
         headers: headerIndexMap,
-        values: rowValues,
+        values: firstRowValues,
         formulas: formulasRow,
-        data: rowObj
+        data: firstRowData,
+        allRows: allRows  // NEW: all selected rows
     };
 }
 
@@ -637,7 +658,8 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
                         address: payload.address,
                         data: payload.data || {},
                         values: payload.values || [],
-                        rowCount: payload.rowCount || 1
+                        rowCount: payload.rowCount || 1,
+                        allRows: payload.allRows || []
                     });
                 } catch (err) {
                     console.error("getSelectedRange callback error:", err);
