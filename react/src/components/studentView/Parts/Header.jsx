@@ -227,7 +227,7 @@ function StudentHeader({ student, selectedRowCount = 1 }) {
             {selectedRowCount}
           </div>
           <h2 className="text-lg font-bold text-gray-800">
-            {selectedRowCount} Students Selected
+            Students Selected
           </h2>
         </div>
       </div>

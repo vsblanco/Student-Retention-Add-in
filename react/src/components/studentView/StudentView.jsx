@@ -268,14 +268,18 @@ function StudentView({ onReady, user }) {
   return (
         <div className="studentview-outer">
             <StudentHeader student={activeStudentState} selectedRowCount={selectedRowCount} />
-            <div className="studentview-tabs">
-                <button type="button" className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
-                {availableTabs.history && ( <button type="button" className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { loadHistory(); setActiveTab('history'); }}>History</button> )}
-                {availableTabs.assignments && ( <button type="button" className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`} onClick={() => { loadAssignments(); setActiveTab('assignments'); }}>Assignments</button> )}
-            </div>
-            <div className="studentview-tab-content">
-                {renderActiveTab()}
-            </div>
+            {selectedRowCount === 1 && (
+                <>
+                    <div className="studentview-tabs">
+                        <button type="button" className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
+                        {availableTabs.history && ( <button type="button" className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { loadHistory(); setActiveTab('history'); }}>History</button> )}
+                        {availableTabs.assignments && ( <button type="button" className={`studentview-tab ${activeTab === 'assignments' ? 'active' : ''}`} onClick={() => { loadAssignments(); setActiveTab('assignments'); }}>Assignments</button> )}
+                    </div>
+                    <div className="studentview-tab-content">
+                        {renderActiveTab()}
+                    </div>
+                </>
+            )}
         </div>
     );
 }
