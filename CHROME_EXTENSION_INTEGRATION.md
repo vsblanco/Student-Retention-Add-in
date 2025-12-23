@@ -80,7 +80,7 @@ interface MasterListPayload {
 
 interface ColumnMapping {
   studentName: number;      // Column index for Student Name
-  syStudentId: number;      // Column index for SyStudentId (Canvas ID)
+  syStudentId: number;      // Column index for SyStudentId (School SIS ID)
   studentNumber: number;    // Column index for Student Number (School ID)
   gradeBook: number;        // Column index for Gradebook link
   daysOut: number;          // Column index for Days Out
@@ -96,8 +96,8 @@ interface ColumnMapping {
 
 interface Student {
   studentName: string;           // Required - student's name
-  syStudentId?: string;          // SyStudentId / Canvas student ID
-  studentNumber?: string;        // School/internal student ID
+  syStudentId?: string;          // School's SIS (Student Information System) ID
+  studentNumber?: string;        // School's student identification number
   gradeBook?: string;            // URL to gradebook (extracted from HYPERLINK formula)
   daysOut?: number;              // Days since last attendance
   lastLda?: any;                 // Last LDA date/value
