@@ -10,6 +10,7 @@ import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChange
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 import { addComment } from '../utility/EditStudentHistory.jsx';
+import chromeExtensionService from '../../services/chromeExtensionService.js';
 
 /* global Excel */
 
@@ -269,6 +270,18 @@ function StudentView({ onReady, user }) {
       }
     };
   }, [sheetVersion]);
+
+  // 6. Sync selected students to Chrome Extension
+  useEffect(() => {
+    // Only send if we have valid student data
+    if (selectedRowCount > 1 && selectedStudents.length > 0) {
+      // Multiple students selected
+      chromeExtensionService.sendSelectedStudents(selectedStudents);
+    } else if (selectedRowCount === 1 && activeStudentState?.ID) {
+      // Single student selected
+      chromeExtensionService.sendSelectedStudents(activeStudentState);
+    }
+  }, [selectedRowCount, selectedStudents, activeStudentState]);
 
   // RENDER (User is guaranteed to be logged in by App.jsx)
   return (
