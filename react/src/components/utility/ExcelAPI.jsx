@@ -289,7 +289,8 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                         callback({
                             address: payload.address,
                             data: payload.data || {},
-                            values: payload.values || []
+                            values: payload.values || [],
+                            rowCount: payload.rowCount || 1
                         });
                     });
                 } catch (err) {
@@ -328,8 +329,8 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         selRange = rangeOrAddress;
     }
     
-    selRange.load(["address", "rowIndex"]);
-    
+    selRange.load(["address", "rowIndex", "rowCount"]);
+
     // Load usedRange headers and position
     const usedRange = worksheet.getUsedRangeOrNullObject();
     usedRange.load(["values", "formulas", "rowIndex", "columnIndex", "columnCount", "isNullObject"]);
@@ -416,6 +417,7 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         success: true,
         address: selRange.address,
         rowIndex: selectedRowIndex,
+        rowCount: selRange.rowCount || 1,
         startCol: usedColIndex,
         columnCount: usedColCount,
         headers: headerIndexMap,
@@ -634,7 +636,8 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
                     callback({
                         address: payload.address,
                         data: payload.data || {},
-                        values: payload.values || []
+                        values: payload.values || [],
+                        rowCount: payload.rowCount || 1
                     });
                 } catch (err) {
                     console.error("getSelectedRange callback error:", err);

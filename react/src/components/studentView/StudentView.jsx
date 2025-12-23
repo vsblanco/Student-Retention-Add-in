@@ -47,14 +47,15 @@ const isHeaderRowAddress = (address) => {
 
 // Now accepts 'user' prop from App.jsx
 function StudentView({ onReady, user }) {
-    const [activeTab, setActiveTab] = useState('details'); 
-    const [historyData, setHistory] = useState([]); 
-    const [assignmentData, setAssignments] = useState([]); 
+    const [activeTab, setActiveTab] = useState('details');
+    const [historyData, setHistory] = useState([]);
+    const [assignmentData, setAssignments] = useState([]);
     const [activeStudentState, setActiveStudentState] = useState(activeStudent);
-    
+    const [selectedRowCount, setSelectedRowCount] = useState(1);
+
     // Track sheet version to force re-binding of listeners on sheet switch
     const [sheetVersion, setSheetVersion] = useState(0);
-    
+
     const [availableTabs, setAvailableTabs] = useState({
       history: true,
       assignments: true
@@ -158,22 +159,28 @@ function StudentView({ onReady, user }) {
 
   // 4. Selection Handler & Initial Load
   useEffect(() => {
-    if (sheetVersion > 0) setActiveStudentState({}); 
+    if (sheetVersion > 0) {
+      setActiveStudentState({});
+      setSelectedRowCount(1);
+    } 
 
     let handlerRef = null;
     (async () => {
       try {
-        handlerRef = await onSelectionChanged(({ address, values, data }) => {
+        handlerRef = await onSelectionChanged(({ address, values, data, rowCount }) => {
           if (isHeaderRowAddress(address)) {
-            setActiveStudentState({}); 
-            return; 
+            setActiveStudentState({});
+            setSelectedRowCount(1);
+            return;
           }
+          setSelectedRowCount(rowCount || 1);
           setActiveStudentState(prev => ({ ...prev, ...data }));
         }, COLUMN_ALIASES);
 
         try {
           const sel = await getSelectedRange(COLUMN_ALIASES);
           if (sel && sel.success) {
+            setSelectedRowCount(sel.rowCount || 1);
             const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
             if (initialRow) {
                 if (initialRow.ID === 'Student ID' || initialRow.StudentName === 'Student Name') {
@@ -181,7 +188,7 @@ function StudentView({ onReady, user }) {
                 } else {
                     setActiveStudentState(prev => ({ ...prev, ...initialRow }));
                     if (sheetVersion === 0) {
-                        await loadCache(initialRow); 
+                        await loadCache(initialRow);
                     }
                 }
             }
@@ -260,7 +267,7 @@ function StudentView({ onReady, user }) {
   // RENDER (User is guaranteed to be logged in by App.jsx)
   return (
         <div className="studentview-outer">
-            <StudentHeader student={activeStudentState} />
+            <StudentHeader student={activeStudentState} selectedRowCount={selectedRowCount} />
             <div className="studentview-tabs">
                 <button type="button" className={`studentview-tab ${activeTab === 'details' ? 'active' : ''}`} onClick={() => setActiveTab('details')}>Details</button>
                 {availableTabs.history && ( <button type="button" className={`studentview-tab ${activeTab === 'history' ? 'active' : ''}`} onClick={() => { loadHistory(); setActiveTab('history'); }}>History</button> )}

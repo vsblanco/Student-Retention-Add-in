@@ -12,9 +12,12 @@ const getInitials = (name) => {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
-function StudentHeader({ student }) {
+function StudentHeader({ student, selectedRowCount = 1 }) {
   // Use a fallback student object to prevent errors if the prop is null or undefined
   const safeStudent = student || {};
+
+  // If multiple rows are selected, show a count instead of individual student details
+  const isMultipleSelected = selectedRowCount > 1;
 
   // Use formatName only if name is "Last, First"
   const studentNameRaw = safeStudent.StudentName || 'Select a Student';
@@ -214,6 +217,22 @@ function StudentHeader({ student }) {
       }
     }
   }, [nameTextSize, studentName]);
+
+  // Render simplified view for multiple selections
+  if (isMultipleSelected) {
+    return (
+      <div className="p-4 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-center space-x-2">
+          <div className="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white text-xl font-bold shrink-0">
+            {selectedRowCount}
+          </div>
+          <h2 className="text-lg font-bold text-gray-800">
+            {selectedRowCount} Students Selected
+          </h2>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 bg-white border-b border-gray-200">
