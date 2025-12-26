@@ -1,4 +1,18 @@
-// Timestamp: 2025-10-02 10:25 AM | Version: 1.4.0
+/*
+ * settings-manager.js
+ * Version: 1.4.0
+ *
+ * Main settings management for the Student Retention Add-in.
+ *
+ * Handles:
+ * - Settings UI initialization and population
+ * - User management (add, edit, remove users)
+ * - LDA report configuration
+ * - Column management with drag-and-drop
+ * - Settings persistence to Office document
+ * - Accordion/collapsible sections
+ */
+
 let settings = {};
 
 Office.onReady((info) => {

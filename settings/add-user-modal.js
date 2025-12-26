@@ -1,6 +1,10 @@
-// Timestamp: 2025-10-02 10:07 AM | Version: 1.0.0
-
-// Initializes and manages the "Add User" modal dialog.
+/*
+ * add-user-modal.js
+ * Version: 1.0.0
+ *
+ * Manages the "Add User" modal dialog functionality.
+ * Handles user input validation, duplicate checking, and user list updates.
+ */
 function initializeAddUserModal(settings, saveSettingsCallback) {
     // --- Get DOM Elements ---
     const addUserModal = document.getElementById(CONSTANTS.DOM.IDS.addUserModal);

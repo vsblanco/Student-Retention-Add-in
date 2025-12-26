@@ -1,5 +1,14 @@
 /*
- * This file contains shared constants and utility functions used across the add-in.
+ * shared-utilities.js
+ *
+ * Shared constants and utility functions used across the add-in.
+ *
+ * Includes:
+ * - CONSTANTS for column mappings, sheet names, and settings keys
+ * - Date parsing and formatting utilities
+ * - Name normalization and formatting functions
+ * - File parsing utilities (CSV, data URLs)
+ * - Settings management functions
  */
 
 export const CONSTANTS = {

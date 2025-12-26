@@ -1,7 +1,10 @@
 /*
- * This file contains the logic for the "Contacted" and "Transfer Data" buttons.
+ * ribbon-actions.js
+ *
+ * Handles ribbon button actions for the Student Retention Add-in.
+ * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
-import { CONSTANTS, findColumnIndex } from './utils.js';
+import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
 
 let transferDialog = null;
 
