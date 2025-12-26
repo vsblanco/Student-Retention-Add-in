@@ -429,10 +429,7 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 				style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
 			>
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-					<h1 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '6px 8px', borderRadius: 6 }}>Welcome to Settings</h1>
-					<p style={{ margin: '4px 0 12px 0' }}>
-						Work in progress.
-					</p>
+					<h1 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '6px 8px', borderRadius: 6 }}>Settings</h1>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
 					<div className="studentview-tabs" role="tablist" aria-label="Settings tabs" style={{ marginBottom: 8 }}>
@@ -509,10 +506,6 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 									<LicenseChecker accessToken={accessToken} />
 								</div>
 								*/}
-
-								{/* Render each default user setting as a label + button */}
-								{renderSettingsControls(defaultUserSettings, userSettingsState, updateSetting)}
-
 							</div>
 						)}
 					</div>
