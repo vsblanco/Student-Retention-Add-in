@@ -34,8 +34,8 @@
     For development/testing, the current configuration will fallback to the hardcoded user list.
   -->
   <WebApplicationInfo>
-    <Id>YOUR_AZURE_AD_APP_CLIENT_ID_HERE</Id>
-    <Resource>api://vsblanco.github.io/YOUR_AZURE_AD_APP_CLIENT_ID_HERE</Resource>
+    <Id>4cde5161-e594-4c7b-9842-d90af94dd4e3</Id>
+    <Resource>api://vsblanco.github.io/4cde5161-e594-4c7b-9842-d90af94dd4e3</Resource>
     <Scopes>
       <Scope>User.Read</Scope>
       <Scope>profile</Scope>
