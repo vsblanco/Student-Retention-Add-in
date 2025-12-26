@@ -1,30 +1,16 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * Decode JWT token to extract user claims
+ * UserInfoDisplay component
+ * Displays cached user information from SSO login
+ * Note: User info is cached by SSO.jsx during login
  */
-function decodeAccessToken(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    console.error('Failed to decode token:', e);
-    return null;
-  }
-}
-
 export default function UserInfoDisplay({ accessToken }) {
   const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
-    // Try to load cached user info first
+    // Load cached user info from localStorage
+    // This is cached by SSO.jsx during login, so it's available across all features
     const cachedInfo = localStorage.getItem('SSO_USER_INFO');
     if (cachedInfo) {
       try {
@@ -33,25 +19,7 @@ export default function UserInfoDisplay({ accessToken }) {
         console.error('Failed to parse cached user info:', e);
       }
     }
-
-    // If we have a fresh token, decode and update cache
-    if (accessToken) {
-      const claims = decodeAccessToken(accessToken);
-      if (claims) {
-        const info = {
-          name: claims.name || claims.preferred_username || 'Unknown',
-          email: claims.preferred_username || claims.upn || claims.email,
-          tenantId: claims.tid,
-          objectId: claims.oid,
-          roles: claims.roles || [],
-          // Note: License info is NOT in the token - requires Graph API call
-        };
-        setUserInfo(info);
-        // Cache the decoded info for persistence
-        localStorage.setItem('SSO_USER_INFO', JSON.stringify(info));
-      }
-    }
-  }, [accessToken]);
+  }, []); // Only run once on mount
 
   if (!userInfo) {
     return (

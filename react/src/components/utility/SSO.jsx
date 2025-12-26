@@ -5,7 +5,7 @@ import "react-toastify/dist/ReactToastify.css";
 import SSOtemp from "./SSOtemp";
 import { SSOConfig, shouldAttemptSSO } from "../../config/ssoConfig";
 
-// Helper function to decode the JWT token
+// Helper function to decode the JWT token and get user name
 function decodeJwt(token) {
   try {
     const base64Url = token.split(".")[1];
@@ -24,6 +24,44 @@ function decodeJwt(token) {
     return decoded.name || decoded.preferred_username || "Unknown User";
   } catch (e) {
     console.error("Failed to decode JWT:", e);
+    return null;
+  }
+}
+
+// Helper function to decode and cache full user info from token
+function cacheUserInfoFromToken(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map(function (c) {
+          return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join("")
+    );
+
+    const claims = JSON.parse(jsonPayload);
+
+    // Extract and cache user information
+    const userInfo = {
+      name: claims.name || claims.preferred_username || 'Unknown',
+      email: claims.preferred_username || claims.upn || claims.email,
+      tenantId: claims.tid,
+      objectId: claims.oid,
+      roles: claims.roles || [],
+    };
+
+    // Cache to localStorage for persistence across features
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem('SSO_USER_INFO', JSON.stringify(userInfo));
+      console.log('SSO: User info cached to localStorage');
+    }
+
+    return userInfo;
+  } catch (e) {
+    console.error("Failed to cache user info from token:", e);
     return null;
   }
 }
@@ -114,6 +152,7 @@ export default function SSO({ onNameSelect }) {
             if (userName) {
               console.log("SSO: Silent SSO succeeded");
               cacheUser(userName, "sso");
+              cacheUserInfoFromToken(accessToken); // Cache full user info
               toast.success(`Welcome back, ${userName}!`, { position: "bottom-center" });
               if (onNameSelect) {
                 onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
@@ -158,6 +197,7 @@ export default function SSO({ onNameSelect }) {
       const userName = decodeJwt(accessToken);
       if (userName) {
         cacheUser(userName, "sso");
+        cacheUserInfoFromToken(accessToken); // Cache full user info
         toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
         if (onNameSelect) {
           onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
