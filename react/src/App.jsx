@@ -17,7 +17,8 @@ function App() {
   const [page, setPage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  
+  const [accessToken, setAccessToken] = useState(null); // <-- ADDED: Store SSO access token
+
   // Tutorial/Welcome State
   const [showWelcome, setShowWelcome] = useState(false);
 
@@ -87,14 +88,15 @@ function App() {
   };
 
   // Called by SSO component on successful login
-  const handleLoginSuccess = (username) => {
+  const handleLoginSuccess = (username, token = null) => { // <-- ADDED: Accept token parameter
     console.log("App: Login Successful ->", username);
     setCurrentUser(username);
-    
+    setAccessToken(token); // <-- ADDED: Store access token
+
     // Set loading to TRUE to prevent UI flicker while StudentView mounts
     setIsLoading(true);
-    isReadyRef.current = false; 
-    
+    isReadyRef.current = false;
+
     // Standardized save to 'SSO_USER'
     localStorage.setItem('SSO_USER', username);
   };
@@ -146,7 +148,7 @@ function App() {
     // B. If user exists, show the requested page
     switch (page) {
       case 'settings':
-        return <Settings user={currentUser} />;
+        return <Settings user={currentUser} accessToken={accessToken} />; // <-- ADDED: Pass accessToken
       case 'import':
         return <ImportManager user={currentUser} />;
       case 'about':
