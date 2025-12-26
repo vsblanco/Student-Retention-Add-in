@@ -81,22 +81,6 @@
                     <SourceLocation resid="Settings.Url"/>
                   </Action>
                 </Control>
-                <Control xsi:type="Button" id="AboutButton">
-                  <Label resid="AboutButton.Label"/>
-                  <Supertip>
-                    <Title resid="AboutButton.Label"/>
-                    <Description resid="AboutButton.Tooltip"/>
-                  </Supertip>
-                  <Icon>
-                    <bt:Image size="16" resid="AboutIcon.16x16"/>
-                    <bt:Image size="32" resid="AboutIcon.32x32"/>
-                    <bt:Image size="80" resid="AboutIcon.80x80"/>
-                  </Icon>
-                  <Action xsi:type="ShowTaskpane">
-                    <TaskpaneId>AboutPane</TaskpaneId>
-                    <SourceLocation resid="About.Url"/>
-                  </Action>
-                </Control>
               </Group>
               <Group id="DataGroup">
                 <Label resid="DataGroup.Label"/>
@@ -205,9 +189,6 @@
         <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
         <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
         <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
-        <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
-        <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
-        <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
         <bt:Image id="SettingsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
         <bt:Image id="SettingsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
         <bt:Image id="SettingsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
@@ -219,7 +200,6 @@
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
         <bt:Url id="Commands.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/background-services/commands.html"/>
         <bt:Url id="StudentView.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=student-view"/>
-        <bt:Url id="About.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=about"/>
         <bt:Url id="Settings.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=settings"/>
         <bt:Url id="Import.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=import"/>
         <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/react/dist/index.html?page=create-lda"/>
@@ -236,7 +216,6 @@
         <bt:String id="StudentViewButton.Label" DefaultValue="Student View"/>
         <bt:String id="ImportDataButton.Label" DefaultValue="Import Data"/>
         <bt:String id="CreateLdaButton.Label" DefaultValue="Create LDA"/>
-        <bt:String id="AboutButton.Label" DefaultValue="Help"/>
         <bt:String id="SettingsButton.Label" DefaultValue="Settings"/>
         <bt:String id="PersonalizedEmailButton.Label" DefaultValue="Send Emails"/>
       </bt:ShortStrings>
@@ -245,7 +224,6 @@
         <bt:String id="StudentViewButton.Tooltip" DefaultValue="Click to show the student details pane."/>
         <bt:String id="ImportDataButton.Tooltip" DefaultValue="Import student data from a CSV or Excel file into the active sheet."/>
         <bt:String id="CreateLdaButton.Tooltip" DefaultValue="Creates a new LDA sheet for the current date."/>
-        <bt:String id="AboutButton.Tooltip" DefaultValue="Shows information about the add-in."/>
         <bt:String id="SettingsButton.Tooltip" DefaultValue="Click to configure add-in settings."/>
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
       </bt:LongStrings>
