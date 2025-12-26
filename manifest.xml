@@ -22,26 +22,6 @@
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
-  <!--
-    WebApplicationInfo: Required for Microsoft SSO (Single Sign-On)
-
-    To enable SSO, you need to:
-    1. Register an app in Azure AD (https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps)
-    2. Add API permissions: User.Read (Microsoft Graph)
-    3. Set redirect URIs to match your add-in URLs
-    4. Replace the placeholders below with your actual values
-
-    For development/testing, the current configuration will fallback to the hardcoded user list.
-  -->
-  <WebApplicationInfo>
-    <Id>4cde5161-e594-4c7b-9842-d90af94dd4e3</Id>
-    <Resource>api://vsblanco.github.io/YOUR_AZURE_AD_APP_CLIENT_ID_HERE</Resource>
-    <Scopes>
-      <Scope>User.Read</Scope>
-      <Scope>profile</Scope>
-    </Scopes>
-  </WebApplicationInfo>
-
   <!-- Requirements for autoload functionality -->
   <Requirements>
     <Sets DefaultMinVersion="1.1">
@@ -270,5 +250,24 @@
         <bt:String id="PersonalizedEmailButton.Tooltip" DefaultValue="Opens a task pane to send a personalized email to the selected student."/>
       </bt:LongStrings>
     </Resources>
+
+    <!--
+      WebApplicationInfo: Required for Microsoft SSO (Single Sign-On)
+      IMPORTANT: Must be the last child element of VersionOverrides
+
+      Configuration:
+      - Id: Azure AD Application (Client) ID
+      - Resource: Application ID URI (must match Azure AD configuration)
+      - Scopes: Required OAuth scopes (openid and profile are mandatory for SSO)
+    -->
+    <WebApplicationInfo>
+      <Id>4cde5161-e594-4c7b-9842-d90af94dd4e3</Id>
+      <Resource>api://vsblanco.github.io/4cde5161-e594-4c7b-9842-d90af94dd4e3</Resource>
+      <Scopes>
+        <Scope>openid</Scope>
+        <Scope>profile</Scope>
+        <Scope>User.Read</Scope>
+      </Scopes>
+    </WebApplicationInfo>
   </VersionOverrides>
 </OfficeApp>

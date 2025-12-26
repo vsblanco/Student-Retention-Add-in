@@ -58,12 +58,14 @@ To enable Microsoft SSO, you need to register an app in Azure AD:
 2. Click **"+ Add a permission"**
 3. Select **"Microsoft Graph"**
 4. Select **"Delegated permissions"**
-5. Add the following permissions:
-   - `User.Read` - Read user profile
-   - `profile` - View users' basic profile
-   - `openid` - Sign users in
+5. Add the following **required** permissions:
+   - `openid` - **Required** for SSO authentication
+   - `profile` - **Required** for SSO authentication
+   - `User.Read` - Read user profile information
 6. Click **"Add permissions"**
 7. Click **"Grant admin consent"** (requires admin privileges)
+
+**⚠️ Important:** Without `openid` and `profile` permissions, SSO will not work!
 
 ### Step 3: Configure Redirect URIs
 
@@ -88,23 +90,39 @@ To enable Microsoft SSO, you need to register an app in Azure AD:
 ### Step 5: Update the Manifest
 
 1. Open `/manifest.xml` in your project
-2. Find the `<WebApplicationInfo>` section
+2. Find the `<WebApplicationInfo>` section **at the end of VersionOverrides** (must be the last child element)
 3. Replace the placeholders with your actual values:
 
 ```xml
-<WebApplicationInfo>
-  <Id>YOUR_CLIENT_ID_HERE</Id>
-  <Resource>api://vsblanco.github.io/YOUR_CLIENT_ID_HERE</Resource>
-  <Scopes>
-    <Scope>User.Read</Scope>
-    <Scope>profile</Scope>
-  </Scopes>
-</WebApplicationInfo>
+<VersionOverrides>
+  <Hosts>
+    <!-- ... -->
+  </Hosts>
+  <Resources>
+    <!-- ... -->
+  </Resources>
+
+  <!-- WebApplicationInfo MUST be the last child of VersionOverrides -->
+  <WebApplicationInfo>
+    <Id>YOUR_CLIENT_ID_HERE</Id>
+    <Resource>api://vsblanco.github.io/YOUR_CLIENT_ID_HERE</Resource>
+    <Scopes>
+      <Scope>openid</Scope>
+      <Scope>profile</Scope>
+      <Scope>User.Read</Scope>
+    </Scopes>
+  </WebApplicationInfo>
+</VersionOverrides>
 ```
 
 **Replace:**
 - `YOUR_CLIENT_ID_HERE` with your Application (client) ID from Step 4
 - Both occurrences must match
+
+**⚠️ CRITICAL:**
+- `openid` scope is **required** for SSO to work
+- WebApplicationInfo **must** be the last child element of VersionOverrides
+- If placed incorrectly, your add-in will be rejected from AppSource
 
 ### Step 6: Expose an API (Optional but Recommended)
 
