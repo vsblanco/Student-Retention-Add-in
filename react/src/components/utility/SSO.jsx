@@ -1,11 +1,10 @@
-// 2025-12-26 - v2.0.0 - Microsoft SSO with Intelligent Fallback
+// 2025-12-26 - v2.1.0 - Microsoft SSO with Guest Fallback
 import React, { useState, useEffect } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import SSOtemp from "./SSOtemp";
 import { SSOConfig, shouldAttemptSSO } from "../../config/ssoConfig";
 
-// Helper function to decode the JWT token
+// Helper function to decode the JWT token and get user name
 function decodeJwt(token) {
   try {
     const base64Url = token.split(".")[1];
@@ -24,6 +23,44 @@ function decodeJwt(token) {
     return decoded.name || decoded.preferred_username || "Unknown User";
   } catch (e) {
     console.error("Failed to decode JWT:", e);
+    return null;
+  }
+}
+
+// Helper function to decode and cache full user info from token
+function cacheUserInfoFromToken(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map(function (c) {
+          return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join("")
+    );
+
+    const claims = JSON.parse(jsonPayload);
+
+    // Extract and cache user information
+    const userInfo = {
+      name: claims.name || claims.preferred_username || 'Unknown',
+      email: claims.preferred_username || claims.upn || claims.email,
+      tenantId: claims.tid,
+      objectId: claims.oid,
+      roles: claims.roles || [],
+    };
+
+    // Cache to localStorage for persistence across features
+    if (typeof window !== "undefined" && window.localStorage) {
+      localStorage.setItem('SSO_USER_INFO', JSON.stringify(userInfo));
+      console.log('SSO: User info cached to localStorage');
+    }
+
+    return userInfo;
+  } catch (e) {
+    console.error("Failed to cache user info from token:", e);
     return null;
   }
 }
@@ -87,7 +124,7 @@ const CACHE_MODE_KEY = "SSO_MODE"; // Track which mode was used for login
 
 export default function SSO({ onNameSelect }) {
   const { getAccessToken, error, isLoading } = useOfficeSSO();
-  const [mode, setMode] = useState("auto"); // "auto", "sso", "fallback"
+  const [mode, setMode] = useState("auto"); // "auto", "sso"
   const [ssoAttempted, setSsoAttempted] = useState(false);
   const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
 
@@ -101,38 +138,34 @@ export default function SSO({ onNameSelect }) {
       // Check if we should attempt SSO
       if (!shouldAttemptSSO()) {
         console.log("SSO: Force fallback mode enabled or SSO not configured");
-        setMode("fallback");
+        setMode("sso");
         return;
       }
 
-      if (SSOConfig.ENABLE_SSO_FALLBACK) {
-        console.log("SSO: Auto-attempting silent SSO...");
-        try {
-          const accessToken = await getAccessToken({ silent: true });
-          if (accessToken) {
-            const userName = decodeJwt(accessToken);
-            if (userName) {
-              console.log("SSO: Silent SSO succeeded");
-              cacheUser(userName, "sso");
-              toast.success(`Welcome back, ${userName}!`, { position: "bottom-center" });
-              if (onNameSelect) {
-                onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
-              }
-              setMode("sso");
-              return;
+      console.log("SSO: Auto-attempting silent SSO...");
+      try {
+        const accessToken = await getAccessToken({ silent: true });
+        if (accessToken) {
+          const userName = decodeJwt(accessToken);
+          if (userName) {
+            console.log("SSO: Silent SSO succeeded");
+            cacheUser(userName, "sso");
+            cacheUserInfoFromToken(accessToken); // Cache full user info
+            toast.success(`Welcome back, ${userName}!`, { position: "bottom-center" });
+            if (onNameSelect) {
+              onNameSelect(userName, accessToken); // Pass token to parent
             }
+            setMode("sso");
+            return;
           }
-        } catch (err) {
-          console.log("SSO: Silent SSO failed, falling back to user selection");
         }
-
-        // If silent SSO fails, show fallback
-        setMode("fallback");
-        setSsoAttempted(true);
-      } else {
-        // If fallback not enabled, show SSO UI
-        setMode("sso");
+      } catch (err) {
+        console.log("SSO: Silent SSO failed, showing login options");
       }
+
+      // If silent SSO fails, show SSO UI
+      setMode("sso");
+      setSsoAttempted(true);
     };
 
     attemptAutoSSO();
@@ -158,9 +191,10 @@ export default function SSO({ onNameSelect }) {
       const userName = decodeJwt(accessToken);
       if (userName) {
         cacheUser(userName, "sso");
+        cacheUserInfoFromToken(accessToken); // Cache full user info
         toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
         if (onNameSelect) {
-          onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
+          onNameSelect(userName, accessToken); // Pass token to parent
         }
         setMode("sso");
       } else {
@@ -168,51 +202,19 @@ export default function SSO({ onNameSelect }) {
       }
     } else {
       toast.error(`SSO login failed${error ? `: ${error}` : ""}`, { position: "bottom-center" });
-
-      // If SSO fails and fallback is enabled, offer fallback
-      if (SSOConfig.ENABLE_SSO_FALLBACK && !ssoAttempted) {
-        setSsoAttempted(true);
-        toast.info("Switching to fallback login method...", { position: "bottom-center" });
-        setTimeout(() => setMode("fallback"), 1500);
-      }
+      setSsoAttempted(true);
     }
   };
 
-  // Handle fallback user selection
-  const handleTempSelect = (userName) => {
-    cacheUser(userName, "fallback");
-    toast.success(`Welcome back, ${userName}`, { position: "bottom-center" });
+  // Handle Guest login
+  const handleGuestLogin = () => {
+    const guestName = "Guest";
+    cacheUser(guestName, "guest");
+    toast.success("Continuing as Guest", { position: "bottom-center" });
     if (onNameSelect) {
-      onNameSelect(userName);
+      onNameSelect(guestName, null); // No access token for guest
     }
   };
-
-  // Render fallback mode (hardcoded users)
-  if (mode === "fallback") {
-    const cachedUser = (typeof window !== "undefined" && window.localStorage)
-      ? localStorage.getItem(CACHE_KEY)
-      : null;
-
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <SSOtemp onSelect={handleTempSelect} defaultUser={cachedUser} />
-
-        {/* Show SSO option if enabled */}
-        {SSOConfig.SHOW_SSO_OPTION && (
-          <div className="mt-4">
-            <button
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 underline"
-              onClick={() => setMode("sso")}
-            >
-              Try Microsoft SSO instead
-            </button>
-          </div>
-        )}
-
-        <ToastContainer />
-      </div>
-    );
-  }
 
   // Render SSO mode
   return (
@@ -247,15 +249,13 @@ export default function SSO({ onNameSelect }) {
           )}
         </button>
 
-        {/* Show fallback option if SSO was attempted and failed */}
-        {SSOConfig.ENABLE_SSO_FALLBACK && ssoAttempted && (
-          <button
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
-            onClick={() => setMode("fallback")}
-          >
-            Use Demo Accounts
-          </button>
-        )}
+        {/* Guest login option - always available */}
+        <button
+          className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition font-medium"
+          onClick={handleGuestLogin}
+        >
+          Continue as Guest
+        </button>
       </div>
 
       {/* Show error if any */}
