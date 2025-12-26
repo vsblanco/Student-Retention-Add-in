@@ -21,7 +21,7 @@ const PROCESS_STEPS = [
   { id: 'finalize', label: 'Finalizing Report' },
 ];
 
-export default function CreateLDAManager() {
+export default function CreateLDAManager({ onReady } = {}) {
   // State for the settings
   const [ldaSettings, setLdaSettings] = useState({
     daysOut: 5,
@@ -72,6 +72,13 @@ export default function CreateLDAManager() {
       }
     };
   }, []);
+
+  // Signal that LDAManager is ready
+  useEffect(() => {
+    if (onReady) {
+      onReady();
+    }
+  }, [onReady]);
 
   const handleSettingChange = (key, value) => {
     setLdaSettings((prev) => ({ ...prev, [key]: value }));

@@ -148,13 +148,13 @@ function App() {
     // B. If user exists, show the requested page
     switch (page) {
       case 'settings':
-        return <Settings user={currentUser} accessToken={accessToken} />; // <-- ADDED: Pass accessToken
+        return <Settings user={currentUser} accessToken={accessToken} onReady={handleFeatureReady} />;
       case 'import':
-        return <ImportManager user={currentUser} />;
+        return <ImportManager user={currentUser} onReady={handleFeatureReady} />;
       case 'about':
-        return <About />;
+        return <About onReady={handleFeatureReady} />;
       case 'create-lda':
-        return <LDAManager user={currentUser} />;
+        return <LDAManager user={currentUser} onReady={handleFeatureReady} />;
       case 'student-view':
       default:
         // Pass user and ready-handler to StudentView

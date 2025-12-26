@@ -1,8 +1,8 @@
 // Timestamp: 2025-11-22 | Version: 3.0.0
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import MarkdownViewer from "../utility/MarkdownViewer";
 
-const About = () => {
+const About = ({ onReady } = {}) => {
   const BASE_URL = import.meta.env.BASE_URL;
   const HOME_FILE = "about.md";
 
@@ -19,6 +19,13 @@ const About = () => {
   };
 
   const goHome = () => setCurrentFileName(HOME_FILE);
+
+  // Signal that About is ready
+  useEffect(() => {
+    if (onReady) {
+      onReady();
+    }
+  }, [onReady]);
 
   return (
     <div className="p-4">
