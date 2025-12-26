@@ -371,7 +371,7 @@ const detectFileInfo = (file, callback) => {
 
 // --- Main Component ---
 
-export default function ImportManager({ onImport, excludeFilter, hyperLink } = {}) {
+export default function ImportManager({ onImport, excludeFilter, hyperLink, onReady } = {}) {
     const [fileName, setFileName] = useState('');
     const [status, setStatus] = useState('');
     const [parsedData, setParsedData] = useState(null);
@@ -723,6 +723,12 @@ export default function ImportManager({ onImport, excludeFilter, hyperLink } = {
         setStatus(`Processing import ${processingIndex + 1} of ${uploadedFiles.length}...`);
     }, [isImported, processingIndex, activeIndex, headers, filteredData, importInfo, matchedWithLink, calculated, renamed, uploadedFiles, lastEmittedIndex, onImport]);
 
+    // Signal that ImportManager is ready
+    useEffect(() => {
+        if (onReady) {
+            onReady();
+        }
+    }, [onReady]);
 
     // --- Render ---
 

@@ -7,7 +7,7 @@ import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 
-const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
+const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken and onReady props
 	const [activeTab, setActiveTab] = useState('workbook');
 
 	// initialize user settings state from defaults
@@ -148,6 +148,13 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 		saveWorkbookSettingsToDocument(initial);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []); // run once on mount
+
+	// Signal that Settings is ready
+	useEffect(() => {
+		if (onReady) {
+			onReady();
+		}
+	}, [onReady]);
 
 	// helper to update a workbook setting (also persist to document)
 	const updateWorkbookSetting = (id, value) => {
