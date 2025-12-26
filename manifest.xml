@@ -7,7 +7,7 @@
   <DisplayName DefaultValue="Student Retention Add-in"/>
   <Description DefaultValue="An add-in for tracking student retention tasks."/>
   
-  <IconUrl DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-32.png"/>
+  <IconUrl DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-32.png"/>
   
   <SupportUrl DefaultValue="https://github.com/vsblanco/Student-Retention-Add-in"/>
   <AppDomains>
@@ -193,27 +193,27 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/icon-80.png"/>
-        <bt:Image id="ImportIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
-        <bt:Image id="ImportIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
-        <bt:Image id="ImportIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/import-icon.png"/>
-        <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
-        <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
-        <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/create-lda-icon.png"/>
-        <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
-        <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
-        <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/details-icon.png"/>
-        <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
-        <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
-        <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/about-icon.png"/>
-        <bt:Image id="SettingsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
-        <bt:Image id="SettingsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
-        <bt:Image id="SettingsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/settings-icon.png"/>
-        <bt:Image id="EmailIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
-        <bt:Image id="EmailIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
-        <bt:Image id="EmailIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/images/email-icon.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/icon-80.png"/>
+        <bt:Image id="ImportIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/import-icon.png"/>
+        <bt:Image id="ImportIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/import-icon.png"/>
+        <bt:Image id="ImportIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/import-icon.png"/>
+        <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/create-lda-icon.png"/>
+        <bt:Image id="DetailsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
+        <bt:Image id="DetailsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
+        <bt:Image id="DetailsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/details-icon.png"/>
+        <bt:Image id="AboutIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
+        <bt:Image id="AboutIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
+        <bt:Image id="AboutIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/about-icon.png"/>
+        <bt:Image id="SettingsIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
+        <bt:Image id="SettingsIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
+        <bt:Image id="SettingsIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/settings-icon.png"/>
+        <bt:Image id="EmailIcon.16x16" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
+        <bt:Image id="EmailIcon.32x32" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
+        <bt:Image id="EmailIcon.80x80" DefaultValue="https://vsblanco.github.io/Student-Retention-Add-in/assets/email-icon.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
