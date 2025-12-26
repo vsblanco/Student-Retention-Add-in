@@ -63,9 +63,16 @@ export function useOfficeSSO() {
       setIsLoading(false);
       return accessToken;
     } catch (err) {
+      const errorCode = err.code || 0;
       const errorMsg = err.code ? `Error ${err.code}: ${err.message}` : err.message;
       console.error("SSO Error:", errorMsg);
-      setError(errorMsg);
+
+      // Errors 13000-13012 are configuration errors - don't show to user if fallback is enabled
+      const isConfigError = errorCode >= 13000 && errorCode <= 13012;
+      if (!isConfigError || !SSOConfig.ENABLE_SSO_FALLBACK) {
+        setError(errorMsg);
+      }
+
       setToken(null);
       setIsLoading(false);
       return null;

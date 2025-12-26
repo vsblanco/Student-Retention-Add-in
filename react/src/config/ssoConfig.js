@@ -16,7 +16,7 @@ export const SSOConfig = {
 
   // If true, always uses fallback mode (hardcoded users) - useful for development
   // Set to false to enable Microsoft SSO attempts
-  FORCE_FALLBACK_MODE: false,
+  FORCE_FALLBACK_MODE: true,
 
   // Number of SSO retry attempts before falling back
   SSO_RETRY_ATTEMPTS: 1,
