@@ -6,6 +6,7 @@ import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
+import About from '../about/About'; // <-- ADDED: Import About component for Help tab
 
 const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken and onReady props
 	const [activeTab, setActiveTab] = useState('workbook');
@@ -456,6 +457,14 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 						>
 							User
 						</button>
+						<button
+							role="tab"
+							aria-selected={activeTab === 'help'}
+							onClick={() => setActiveTab('help')}
+							className={`studentview-tab ${activeTab === 'help' ? 'active' : ''}`}
+						>
+							Help
+						</button>
 					</div>
 
 					{/* Tab panels */}
@@ -494,7 +503,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								</button>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
 							</div>
-						) : (
+						) : activeTab === 'user' ? (
 							<div>
 								{/* User Information from SSO Token */}
 								<UserInfoDisplay accessToken={accessToken} />
@@ -507,6 +516,11 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 									<LicenseChecker accessToken={accessToken} />
 								</div>
 								*/}
+							</div>
+						) : (
+							<div>
+								{/* Help tab - displays About component */}
+								<About />
 							</div>
 						)}
 					</div>
