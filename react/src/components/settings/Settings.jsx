@@ -429,7 +429,8 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 				style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
 			>
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-					<h1 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '6px 8px', borderRadius: 6 }}>Settings</h1>
+					<h2 className="text-2xl text-slate-800 font-bold tracking-tight" style={{ margin: 0 }}>Settings</h2>
+					<p className="text-slate-400 text-sm mt-1">Manage your workbook and user preferences</p>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
 					<div className="studentview-tabs" role="tablist" aria-label="Settings tabs" style={{ marginBottom: 8 }}>
@@ -459,33 +460,32 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 					>
 						{activeTab === 'workbook' ? (
 							<div>
-								<div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px 0' }}>
-									<h2 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>Workbook Settings</h2>
-									<button
-										type="button"
-										onClick={() => setWorkbookModalOpen(true)}
-										title="Open workbook inspector"
-										aria-label="Open workbook inspector"
-										style={{
-											marginLeft: 4,
-											padding: '6px 8px',
-											borderRadius: 6,
-											background: '#f3f4f6',
-											border: '1px solid #e6e7eb',
-											cursor: 'pointer',
-											display: 'inline-flex',
-											alignItems: 'center',
-											gap: 6,
-											fontSize: 13
-										}}
-									>
-										{/* small file icon */}
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-											<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-											<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-									</button>
-								</div>
+								<button
+									type="button"
+									onClick={() => setWorkbookModalOpen(true)}
+									title="Open workbook inspector"
+									aria-label="Open workbook inspector"
+									style={{
+										margin: '0 0 8px 0',
+										padding: '4px 8px',
+										borderRadius: 6,
+										background: '#f3f4f6',
+										border: '1px solid #e6e7eb',
+										cursor: 'pointer',
+										display: 'inline-flex',
+										alignItems: 'center',
+										gap: 6,
+										fontSize: 15,
+										fontWeight: 700
+									}}
+								>
+									<span>Workbook Settings</span>
+									{/* small file icon */}
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+										<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+										<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+									</svg>
+								</button>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
 							</div>
 						) : (

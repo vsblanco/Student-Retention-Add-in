@@ -53,14 +53,6 @@ export default function UserInfoDisplay({ accessToken }) {
           </div>
         )}
       </div>
-
-      {/* Note about license information */}
-      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-        <p className="text-xs text-blue-800">
-          <strong>Note:</strong> License information requires Microsoft Graph API access.
-          Contact your administrator to enable this feature.
-        </p>
-      </div>
     </div>
   );
 }
