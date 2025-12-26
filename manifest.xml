@@ -22,6 +22,26 @@
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
+  <!--
+    WebApplicationInfo: Required for Microsoft SSO (Single Sign-On)
+
+    To enable SSO, you need to:
+    1. Register an app in Azure AD (https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps)
+    2. Add API permissions: User.Read (Microsoft Graph)
+    3. Set redirect URIs to match your add-in URLs
+    4. Replace the placeholders below with your actual values
+
+    For development/testing, the current configuration will fallback to the hardcoded user list.
+  -->
+  <WebApplicationInfo>
+    <Id>YOUR_AZURE_AD_APP_CLIENT_ID_HERE</Id>
+    <Resource>api://vsblanco.github.io/YOUR_AZURE_AD_APP_CLIENT_ID_HERE</Resource>
+    <Scopes>
+      <Scope>User.Read</Scope>
+      <Scope>profile</Scope>
+    </Scopes>
+  </WebApplicationInfo>
+
   <!-- Requirements for autoload functionality -->
   <Requirements>
     <Sets DefaultMinVersion="1.1">
