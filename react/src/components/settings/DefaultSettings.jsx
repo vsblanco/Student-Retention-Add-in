@@ -102,14 +102,8 @@ export const defaultUserSettings = [
 		defaultValue: 'light',
 		options: ['light', 'dark', 'system'],
 		description: 'User interface theme preference.'
-	},
-	{
-		id: 'profilePicture',
-		label: 'Profile Picture',
-		type: 'image',
-		defaultValue: defaultProfilePicture,
-		description: 'Default profile avatar (data URI).'
 	}
+	// Profile picture removed - now handled by UserAvatar component with SSO
 ];
 
 // export lucide-react icons keyed by section name

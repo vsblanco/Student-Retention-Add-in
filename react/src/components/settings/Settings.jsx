@@ -6,16 +6,9 @@ import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
+import UserAvatar from '../utility/UserAvatar'; // <-- User avatar with initials
 
 const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
-	// placeholder SVG avatar
-	const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-		<rect fill='%23e5e7eb' width='100' height='100' rx='16'/>
-		<circle fill='%239ca3af' cx='50' cy='36' r='18'/>
-		<path fill='%239ca3af' d='M20 84c0-14 12-26 30-26s30 12 30 26' />
-		</svg>`;
-	const avatarSrc = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-
 	const [activeTab, setActiveTab] = useState('workbook');
 
 	// initialize user settings state from defaults
@@ -403,12 +396,6 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 		);
 	};
 
-	// determine which image-type setting to use for the top avatar (if any)
-	const imageSetting = defaultUserSettings.find(s => s.type === 'image');
-	const avatarDisplaySrc = imageSetting
-		? (userSettingsState[imageSetting.id] || imageSetting.defaultValue || avatarSrc)
-		: avatarSrc;
-
 	// handle button actions per setting type
 	const handleSettingButton = (setting) => {
 		const cur = userSettingsState[setting.id];
@@ -531,23 +518,16 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 					</div>
 				</div>
 
-				<img
-					src={avatarDisplaySrc}
-					alt="Profile placeholder"
-					width="64"
-					height="64"
+				<div
 					style={{
 						position: 'absolute',
 						top: 12,
 						right: 12,
-						width: 64,
-						height: 64,
-						borderRadius: '50%',
-						objectFit: 'cover',       // ensure aspect ratio preserved and image is cropped to fill
-						objectPosition: 'center', // center the crop (zoom)
 						zIndex: 10,
 					}}
-				/>
+				>
+					<UserAvatar userName={user} size={64} />
+				</div>
 			</div>
 
 			{/* Render the modals via the new component */}
