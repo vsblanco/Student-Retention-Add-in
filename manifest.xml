@@ -261,8 +261,8 @@
       - Scopes: Required OAuth scopes (openid and profile are mandatory for SSO)
     -->
     <WebApplicationInfo>
-      <Id>4cde5161-e594-4c7b-9842-d90af94dd4e3</Id>
-      <Resource>api://vsblanco.github.io/4cde5161-e594-4c7b-9842-d90af94dd4e3</Resource>
+      <Id>71f37f39-a330-413a-be61-0baa5ce03ea3</Id>
+      <Resource>api://71f37f39-a330-413a-be61-0baa5ce03ea3</Resource>
       <Scopes>
         <Scope>openid</Scope>
         <Scope>profile</Scope>
