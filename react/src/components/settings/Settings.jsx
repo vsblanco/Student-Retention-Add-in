@@ -6,7 +6,6 @@ import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
-import UserAvatar from '../utility/UserAvatar'; // <-- User avatar with initials
 
 const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 	const [activeTab, setActiveTab] = useState('workbook');
@@ -490,13 +489,8 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 							</div>
 						) : (
 							<div>
-								<h2 style={{ margin: '0 0 8px 0', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>User Settings</h2>
-
 								{/* User Information from SSO Token */}
-								<div style={{ marginBottom: 16 }}>
-									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>User Information</h3>
-									<UserInfoDisplay accessToken={accessToken} />
-								</div>
+								<UserInfoDisplay accessToken={accessToken} />
 
 								{/* Power Automate License Section - Currently disabled due to Graph API requirements */}
 								{/* Uncomment this section once you implement backend OBO flow */}
@@ -509,17 +503,6 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 							</div>
 						)}
 					</div>
-				</div>
-
-				<div
-					style={{
-						position: 'absolute',
-						top: 12,
-						right: 12,
-						zIndex: 10,
-					}}
-				>
-					<UserAvatar userName={user} size={64} />
 				</div>
 			</div>
 
