@@ -4,17 +4,11 @@ import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
-import LicenseChecker from '../utility/LicenseChecker'; // <-- ADDED
+import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
+import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
+import UserAvatar from '../utility/UserAvatar'; // <-- User avatar with initials
 
 const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
-	// placeholder SVG avatar
-	const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-		<rect fill='%23e5e7eb' width='100' height='100' rx='16'/>
-		<circle fill='%239ca3af' cx='50' cy='36' r='18'/>
-		<path fill='%239ca3af' d='M20 84c0-14 12-26 30-26s30 12 30 26' />
-		</svg>`;
-	const avatarSrc = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-
 	const [activeTab, setActiveTab] = useState('workbook');
 
 	// initialize user settings state from defaults
@@ -402,12 +396,6 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 		);
 	};
 
-	// determine which image-type setting to use for the top avatar (if any)
-	const imageSetting = defaultUserSettings.find(s => s.type === 'image');
-	const avatarDisplaySrc = imageSetting
-		? (userSettingsState[imageSetting.id] || imageSetting.defaultValue || avatarSrc)
-		: avatarSrc;
-
 	// handle button actions per setting type
 	const handleSettingButton = (setting) => {
 		const cur = userSettingsState[setting.id];
@@ -507,19 +495,20 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 							<div>
 								<h2 style={{ margin: '0 0 8px 0', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>User Settings</h2>
 
-								{/* User Information Section */}
-								{user && (
-									<div style={{ marginBottom: 16, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-										<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Signed in as</h3>
-										<p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>{user}</p>
-									</div>
-								)}
+								{/* User Information from SSO Token */}
+								<div style={{ marginBottom: 16 }}>
+									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>User Information</h3>
+									<UserInfoDisplay accessToken={accessToken} />
+								</div>
 
-								{/* Power Automate License Section */}
+								{/* Power Automate License Section - Currently disabled due to Graph API requirements */}
+								{/* Uncomment this section once you implement backend OBO flow */}
+								{/*
 								<div style={{ marginBottom: 16 }}>
 									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Power Automate License</h3>
 									<LicenseChecker accessToken={accessToken} />
 								</div>
+								*/}
 
 								{/* Render each default user setting as a label + button */}
 								{renderSettingsControls(defaultUserSettings, userSettingsState, updateSetting)}
@@ -529,23 +518,16 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 					</div>
 				</div>
 
-				<img
-					src={avatarDisplaySrc}
-					alt="Profile placeholder"
-					width="64"
-					height="64"
+				<div
 					style={{
 						position: 'absolute',
 						top: 12,
 						right: 12,
-						width: 64,
-						height: 64,
-						borderRadius: '50%',
-						objectFit: 'cover',       // ensure aspect ratio preserved and image is cropped to fill
-						objectPosition: 'center', // center the crop (zoom)
 						zIndex: 10,
 					}}
-				/>
+				>
+					<UserAvatar userName={user} size={64} />
+				</div>
 			</div>
 
 			{/* Render the modals via the new component */}
