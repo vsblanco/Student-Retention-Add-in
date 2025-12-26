@@ -24,34 +24,34 @@ export default function UserInfoDisplay({ accessToken }) {
   const [userInfo, setUserInfo] = useState(null);
 
   useEffect(() => {
-    if (!accessToken) {
-      setUserInfo(null);
-      return;
+    // Try to load cached user info first
+    const cachedInfo = localStorage.getItem('SSO_USER_INFO');
+    if (cachedInfo) {
+      try {
+        setUserInfo(JSON.parse(cachedInfo));
+      } catch (e) {
+        console.error('Failed to parse cached user info:', e);
+      }
     }
 
-    // Decode the Office SSO token to get user claims
-    const claims = decodeAccessToken(accessToken);
-    if (claims) {
-      setUserInfo({
-        name: claims.name || claims.preferred_username || 'Unknown',
-        email: claims.preferred_username || claims.upn || claims.email,
-        tenantId: claims.tid,
-        objectId: claims.oid,
-        roles: claims.roles || [],
-        // Note: License info is NOT in the token - requires Graph API call
-      });
+    // If we have a fresh token, decode and update cache
+    if (accessToken) {
+      const claims = decodeAccessToken(accessToken);
+      if (claims) {
+        const info = {
+          name: claims.name || claims.preferred_username || 'Unknown',
+          email: claims.preferred_username || claims.upn || claims.email,
+          tenantId: claims.tid,
+          objectId: claims.oid,
+          roles: claims.roles || [],
+          // Note: License info is NOT in the token - requires Graph API call
+        };
+        setUserInfo(info);
+        // Cache the decoded info for persistence
+        localStorage.setItem('SSO_USER_INFO', JSON.stringify(info));
+      }
     }
   }, [accessToken]);
-
-  if (!accessToken) {
-    return (
-      <div className="p-4 bg-gray-50 rounded-md">
-        <p className="text-sm text-gray-600">
-          Sign in with Microsoft SSO to view your information
-        </p>
-      </div>
-    );
-  }
 
   if (!userInfo) {
     return (
