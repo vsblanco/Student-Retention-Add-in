@@ -19,7 +19,7 @@ export const SSOConfig = {
   FORCE_FALLBACK_MODE: false,
 
   // Number of SSO retry attempts before falling back
-  SSO_RETRY_ATTEMPTS: 1,
+  SSO_RETRY_ATTEMPTS: 2,
 
   // Show Microsoft SSO button even in fallback mode (allows manual retry)
   SHOW_SSO_OPTION: true,
