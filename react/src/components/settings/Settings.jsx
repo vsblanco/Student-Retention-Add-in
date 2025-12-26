@@ -4,7 +4,8 @@ import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
-import LicenseChecker from '../utility/LicenseChecker'; // <-- ADDED
+import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
+import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 
 const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 	// placeholder SVG avatar
@@ -507,19 +508,20 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 							<div>
 								<h2 style={{ margin: '0 0 8px 0', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>User Settings</h2>
 
-								{/* User Information Section */}
-								{user && (
-									<div style={{ marginBottom: 16, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-										<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Signed in as</h3>
-										<p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>{user}</p>
-									</div>
-								)}
+								{/* User Information from SSO Token */}
+								<div style={{ marginBottom: 16 }}>
+									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>User Information</h3>
+									<UserInfoDisplay accessToken={accessToken} />
+								</div>
 
-								{/* Power Automate License Section */}
+								{/* Power Automate License Section - Currently disabled due to Graph API requirements */}
+								{/* Uncomment this section once you implement backend OBO flow */}
+								{/*
 								<div style={{ marginBottom: 16 }}>
 									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Power Automate License</h3>
 									<LicenseChecker accessToken={accessToken} />
 								</div>
+								*/}
 
 								{/* Render each default user setting as a label + button */}
 								{renderSettingsControls(defaultUserSettings, userSettingsState, updateSetting)}
