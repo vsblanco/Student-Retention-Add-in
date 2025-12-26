@@ -145,20 +145,27 @@ To enable Microsoft SSO, you need to register an app in Azure AD:
 2. Click **"+ Add a client application"**
 3. Add these Office client IDs one by one:
 
-   **Office on Windows/Mac:**
+   **Office Desktop (Windows/Mac):**
    ```
    d3590ed6-52b3-4102-aeff-aad2292ab01c
    ```
 
-   **Office Online:**
+   **Office Online (Standard):**
    ```
    bc59ab01-8403-45c6-8796-ac3ef710b3e3
+   ```
+
+   **Office Online (SharePoint Context):**
+   ```
+   93d53678-613d-4013-afc1-62e9e444a0a5
    ```
 
    **Outlook:**
    ```
    57fb890c-0dab-4253-a5e0-7188c88b2bb4
    ```
+
+   **⚠️ Important:** If using Office through SharePoint, you MUST include `93d53678-613d-4013-afc1-62e9e444a0a5`
 
 4. For each, check the scope `access_as_user`
 5. Click **Add application**
