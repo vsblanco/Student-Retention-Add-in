@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Student Retention Add-in communicates with the Chrome Extension using the `window.postMessage()` API. The background script (`commands/commands.js`) automatically syncs the Master List data when the extension is detected.
+The Student Retention Add-in communicates with the Chrome Extension using the `window.postMessage()` API. The background script (`background-services/background-service.js`) automatically syncs the Master List data when the extension is detected.
 
 ## Message Flow
 

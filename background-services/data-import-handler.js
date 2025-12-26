@@ -38,7 +38,7 @@ function sendMessageToDialog(status, type = 'log', details = []) {
  */
 export function openImportDialog(event) {
     Office.context.ui.displayDialogAsync(
-        'https://vsblanco.github.io/Student-Retention-Add-in/commands/import-dialog.html',
+        'https://vsblanco.github.io/Student-Retention-Add-in/background-services/import-dialog.html',
         { height: 55, width: 45, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
