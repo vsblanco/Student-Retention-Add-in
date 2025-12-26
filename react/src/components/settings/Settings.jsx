@@ -429,7 +429,8 @@ const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 				style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
 			>
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-					<h1 style={{ margin: 0, backgroundColor: '#f3f4f6', padding: '6px 8px', borderRadius: 6 }}>Settings</h1>
+					<h2 className="text-2xl text-slate-800 font-bold tracking-tight" style={{ margin: 0 }}>Settings</h2>
+					<p className="text-slate-400 text-sm mt-1">Manage your workbook and user preferences</p>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
 					<div className="studentview-tabs" role="tablist" aria-label="Settings tabs" style={{ marginBottom: 8 }}>
