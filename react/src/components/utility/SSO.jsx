@@ -116,7 +116,7 @@ export default function SSO({ onNameSelect }) {
               cacheUser(userName, "sso");
               toast.success(`Welcome back, ${userName}!`, { position: "bottom-center" });
               if (onNameSelect) {
-                onNameSelect(userName);
+                onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
               }
               setMode("sso");
               return;
@@ -160,7 +160,7 @@ export default function SSO({ onNameSelect }) {
         cacheUser(userName, "sso");
         toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
         if (onNameSelect) {
-          onNameSelect(userName);
+          onNameSelect(userName, accessToken); // <-- ADDED: Pass token to parent
         }
         setMode("sso");
       } else {

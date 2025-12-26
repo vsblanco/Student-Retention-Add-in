@@ -4,8 +4,9 @@ import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
+import LicenseChecker from '../utility/LicenseChecker'; // <-- ADDED
 
-const Settings = () => {
+const Settings = ({ user, accessToken }) => { // <-- ADDED accessToken prop
 	// placeholder SVG avatar
 	const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
 		<rect fill='%23e5e7eb' width='100' height='100' rx='16'/>
@@ -505,6 +506,20 @@ const Settings = () => {
 						) : (
 							<div>
 								<h2 style={{ margin: '0 0 8px 0', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: 6 }}>User Settings</h2>
+
+								{/* User Information Section */}
+								{user && (
+									<div style={{ marginBottom: 16, padding: 12, background: '#f9fafb', borderRadius: 8, border: '1px solid #e5e7eb' }}>
+										<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Signed in as</h3>
+										<p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>{user}</p>
+									</div>
+								)}
+
+								{/* Power Automate License Section */}
+								<div style={{ marginBottom: 16 }}>
+									<h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#374151' }}>Power Automate License</h3>
+									<LicenseChecker accessToken={accessToken} />
+								</div>
 
 								{/* Render each default user setting as a label + button */}
 								{renderSettingsControls(defaultUserSettings, userSettingsState, updateSetting)}
