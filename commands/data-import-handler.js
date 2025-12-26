@@ -1,12 +1,17 @@
-// Timestamp: 2025-09-18 03:22 PM EDT
-// Version: 1.6.0
 /*
- * This file contains the logic for the "Import Data" ribbon button command.
- * Version 1.6.0 updates the initial JSON check to support encapsulated schemas
- * under a "CUSTOM_IMPORT" key.
+ * data-import-handler.js
+ * Version: 1.7.0
+ *
+ * Handles data import functionality for the "Import Data" ribbon button.
+ *
+ * Features:
+ * - Import dialog management
+ * - Master List creation and updates
+ * - Grade data import with conditional formatting
+ * - CSV and Excel file parsing
+ * - Student data matching and preservation
  */
-import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './utils.js';
-import { handleCustomImport } from './custom-import.js';
+import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './shared-utilities.js';
 
 let importDialog = null;
 
@@ -70,9 +75,6 @@ async function processImportMessage(arg) {
             break;
         case 'updateGrades':
             await handleUpdateGrades(message);
-            break;
-        case 'customImport':
-            await handleCustomImport(message, sendMessageToDialog);
             break;
         case 'closeDialog':
             if (importDialog) {
@@ -147,45 +149,6 @@ async function handleCreateMasterList(columns) {
 async function handleFileSelected(message) {
     const { fileName, data: dataUrl } = message;
     sendMessageToDialog(`File selected: ${fileName}. Starting analysis...`);
-    
-    // Handle JSON files for custom import
-    if (fileName.toLowerCase().endsWith('.json')) {
-        try {
-            // Decode and parse just enough to get the importName for the UI
-            const jsonString = atob(dataUrl.split(',')[1]);
-            const importFile = JSON.parse(jsonString);
-            
-            // --- UPDATED LOGIC ---
-            // Check for importName at the top level OR within a CUSTOM_IMPORT object
-            const importName = importFile.importName || (importFile.CUSTOM_IMPORT && importFile.CUSTOM_IMPORT.importName);
-
-            if (importName && typeof importName === 'string') {
-                 sendMessageToDialog(`Detected custom import: "${importName}".`);
-                 if (importDialog) {
-                    importDialog.messageChild(JSON.stringify({ 
-                        canUpdateMaster: false,
-                        canUpdateGrades: false,
-                        canCustomImport: true,
-                        importName: importName, // Pass the name to the dialog
-                        status: `Ready to run: ${importName}`
-                    }));
-                }
-            } else {
-                throw new Error("JSON file is missing a valid 'importName' property.");
-            }
-        } catch (error) {
-            sendMessageToDialog(`Error reading JSON file: ${error.message}`, 'error');
-            if (importDialog) {
-                importDialog.messageChild(JSON.stringify({ 
-                    canUpdateMaster: false,
-                    canUpdateGrades: false,
-                    canCustomImport: false,
-                    status: `Error: ${error.message}`
-                }));
-            }
-        }
-        return; // Exit early for JSON files
-    }
 
     let hasMasterListSheet = false;
     try {
@@ -269,10 +232,9 @@ async function handleFileSelected(message) {
         }
         
         if (importDialog) {
-            importDialog.messageChild(JSON.stringify({ 
+            importDialog.messageChild(JSON.stringify({
                 canUpdateMaster: canUpdateMaster,
                 canUpdateGrades: canUpdateGrades,
-                canCustomImport: false,
                 status: statusMessage
             }));
         }
@@ -280,10 +242,9 @@ async function handleFileSelected(message) {
         console.error("Error during file check:", error);
         sendMessageToDialog(`Error during file analysis: ${error.message}`, 'error');
         if (importDialog) {
-            importDialog.messageChild(JSON.stringify({ 
+            importDialog.messageChild(JSON.stringify({
                 canUpdateMaster: false,
                 canUpdateGrades: false,
-                canCustomImport: false,
                 status: `Error: ${error.message}`
             }));
         }

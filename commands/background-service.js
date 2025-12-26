@@ -1,16 +1,18 @@
 /*
- * This file is the main entry point for all ribbon button commands.
- * It imports functions from other modules and associates them with Office actions.
+ * background-service.js
  *
- * This file also serves as a background script that runs continuously,
- * even when taskpanes are closed, making it ideal for services that need
- * to always be listening (like the Chrome Extension Service).
+ * Main entry point and background service for ribbon button commands.
+ *
+ * This file:
+ * - Registers all ribbon button actions with Office.actions
+ * - Runs continuously as a background script (even when taskpanes are closed)
+ * - Manages Chrome Extension Service communication
+ * - Handles Master List data synchronization
  */
-import { openImportDialog } from './import.js';
-import { openCreateLdaDialog } from './lda.js';
-import { toggleHighlight, transferData } from './actions.js';
+import { openImportDialog } from './data-import-handler.js';
+import { toggleHighlight, transferData } from './ribbon-actions.js';
 import chromeExtensionService from '../react/src/services/chromeExtensionService.js';
-import { CONSTANTS, findColumnIndex } from './utils.js';
+import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
 
 // This function is required for the Analytics button, even if it does nothing,
 // because the manifest uses a ShowTaskpane action.
@@ -172,7 +174,6 @@ async function transferMasterList() {
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
-Office.actions.associate("openCreateLdaDialog", openCreateLdaDialog);
 Office.actions.associate("openAnalyticsPane", openAnalyticsPane);
 
 // Register autoload event handler
