@@ -410,26 +410,22 @@ async function transferMasterList() {
             usedRange.load("values, formulas");
             await context.sync();
 
-            // Parse headers
+            // Parse headers - keep original case for headers array
             const rawHeaders = usedRange.values[0];
-            const headers = rawHeaders.map(header => String(header || '').toLowerCase());
+            const headers = rawHeaders.map(header => String(header || ''));
+            const lowerCaseHeaders = headers.map(h => h.toLowerCase());
 
-            // Find column indices for all relevant columns
-            const colIndices = {
-                studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
-                syStudentId: findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS),
-                studentNumber: findColumnIndex(headers, CONSTANTS.STUDENT_NUMBER_COLS),
-                gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
-                daysOut: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut),
-                lastLda: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.lastLda),
-                grade: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade),
-                primaryPhone: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone),
-                otherPhone: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.otherPhone),
-                personalEmail: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.PersonalEmail),
-                studentEmail: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.StudentEmail),
-                assigned: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.assigned),
-                outreach: findColumnIndex(headers, CONSTANTS.OUTREACH_COLS)
-            };
+            // Find key column indices for reference
+            const studentNameColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+
+            // Create column mapping with actual header names
+            const columnMapping = {};
+            headers.forEach((header, idx) => {
+                if (header) {
+                    columnMapping[header] = idx;
+                }
+            });
 
             const students = [];
             const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
@@ -438,75 +434,51 @@ async function transferMasterList() {
             for (let i = 1; i < usedRange.values.length; i++) {
                 const rowValues = usedRange.values[i];
                 const rowFormulas = usedRange.formulas[i];
-                const student = {};
-                let hasData = false;
 
                 // Only include row if it has a student name
-                if (colIndices.studentName !== -1 && rowValues[colIndices.studentName]) {
-                    student.studentName = rowValues[colIndices.studentName];
-                    hasData = true;
+                if (studentNameColIdx !== -1 && rowValues[studentNameColIdx]) {
+                    const student = {};
 
-                    // Add all other fields if they exist
-                    if (colIndices.syStudentId !== -1 && rowValues[colIndices.syStudentId]) {
-                        student.syStudentId = rowValues[colIndices.syStudentId];
-                    }
-                    if (colIndices.studentNumber !== -1 && rowValues[colIndices.studentNumber]) {
-                        student.studentNumber = rowValues[colIndices.studentNumber];
-                    }
-                    if (colIndices.gradeBook !== -1) {
-                        const formula = rowFormulas[colIndices.gradeBook];
-                        const match = String(formula).match(hyperlinkRegex);
-                        if (match && match[1]) {
-                            student.gradeBook = match[1]; // Extract URL from HYPERLINK formula
-                        } else if (rowValues[colIndices.gradeBook]) {
-                            student.gradeBook = rowValues[colIndices.gradeBook];
+                    // Add all columns dynamically
+                    for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+                        const headerName = headers[colIdx];
+                        if (!headerName) continue;
+
+                        let value = rowValues[colIdx];
+
+                        // Special handling for Gradebook column - extract URL from HYPERLINK
+                        if (colIdx === gradeBookColIdx) {
+                            const formula = rowFormulas[colIdx];
+                            const match = String(formula).match(hyperlinkRegex);
+                            if (match && match[1]) {
+                                value = match[1]; // Extract URL from HYPERLINK formula
+                            }
+                        }
+
+                        // Include value if it's not null/undefined/empty string
+                        if (value !== null && value !== undefined && value !== "") {
+                            student[headerName] = value;
                         }
                     }
-                    if (colIndices.daysOut !== -1 && rowValues[colIndices.daysOut] !== null && rowValues[colIndices.daysOut] !== "") {
-                        student.daysOut = rowValues[colIndices.daysOut];
-                    }
-                    if (colIndices.lastLda !== -1 && rowValues[colIndices.lastLda]) {
-                        student.lastLda = rowValues[colIndices.lastLda];
-                    }
-                    if (colIndices.grade !== -1 && rowValues[colIndices.grade] !== null && rowValues[colIndices.grade] !== "") {
-                        student.grade = rowValues[colIndices.grade];
-                    }
-                    if (colIndices.primaryPhone !== -1 && rowValues[colIndices.primaryPhone]) {
-                        student.primaryPhone = rowValues[colIndices.primaryPhone];
-                    }
-                    if (colIndices.otherPhone !== -1 && rowValues[colIndices.otherPhone]) {
-                        student.otherPhone = rowValues[colIndices.otherPhone];
-                    }
-                    if (colIndices.personalEmail !== -1 && rowValues[colIndices.personalEmail]) {
-                        student.personalEmail = rowValues[colIndices.personalEmail];
-                    }
-                    if (colIndices.studentEmail !== -1 && rowValues[colIndices.studentEmail]) {
-                        student.studentEmail = rowValues[colIndices.studentEmail];
-                    }
-                    if (colIndices.assigned !== -1 && rowValues[colIndices.assigned]) {
-                        student.assigned = rowValues[colIndices.assigned];
-                    }
-                    if (colIndices.outreach !== -1 && rowValues[colIndices.outreach]) {
-                        student.outreach = rowValues[colIndices.outreach];
-                    }
-                }
 
-                if (hasData) {
                     students.push(student);
                 }
             }
 
+            console.log(`TransferMasterList: Sending ${headers.length} columns and ${students.length} students`);
+
             return {
                 sheetName: CONSTANTS.MASTER_LIST_SHEET,
-                columnMapping: colIndices,
-                students: students,
+                headers: headers,  // All column headers
+                columnMapping: columnMapping,  // Map of header name -> column index
+                students: students,  // Array of student objects with all columns
                 totalStudents: students.length,
                 timestamp: new Date().toISOString()
             };
         });
 
         if (masterListData) {
-            console.log(`TransferMasterList: Successfully read ${masterListData.totalStudents} students from Master List`);
+            console.log(`TransferMasterList: Successfully read ${masterListData.totalStudents} students from Master List with ${masterListData.headers.length} columns`);
 
             // Send the data to Chrome extension via postMessage
             chromeExtensionService.sendMessage({
