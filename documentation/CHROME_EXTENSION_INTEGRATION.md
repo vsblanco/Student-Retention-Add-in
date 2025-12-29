@@ -88,6 +88,7 @@ The Chrome extension can send master list data to import into the add-in's Maste
   - Automatically wrap Gradebook URLs in HYPERLINK formulas with "Grade Book" as the display text
   - Preserve existing Gradebook hyperlinks for students already in the list
   - Preserve "Assigned" column values and their colors
+  - Apply 3-color conditional formatting to Grade column (Red → Yellow → Green)
   - Highlight new students in light blue (#ADD8E6)
   - Clear and repopulate the sheet with the imported data
 
@@ -403,6 +404,8 @@ importMasterListToExcel(studentsToImport);
 - The add-in will only import if a "Master List" sheet already exists
 - Column headers are matched case-insensitively with whitespace normalization (e.g., "StudentName" matches "Student Name")
 - Gradebook URLs (starting with http:// or https://) are automatically wrapped in HYPERLINK formulas with "Grade Book" as the display text
+- Grade column receives automatic 3-color conditional formatting (Red for low, Yellow for medium ~70%, Green for high)
+- The formatting automatically detects 0-1 or 0-100 grade scales
 - Existing Gradebook links and Assigned values are preserved for existing students
 - New students will be highlighted in light blue
 - All data must be in array format matching the headers order

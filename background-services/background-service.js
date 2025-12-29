@@ -306,6 +306,9 @@ async function importMasterListFromExtension(payload) {
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
 
+            // Apply conditional formatting to Grade column
+            await applyGradeConditionalFormatting(context, sheet, masterHeaders);
+
             // Autofit columns
             console.log("ImportFromExtension: Autofitting columns...");
             sheet.getUsedRange().format.autofitColumns();
@@ -319,6 +322,66 @@ async function importMasterListFromExtension(payload) {
         if (error instanceof OfficeExtension.Error) {
             console.error("ImportFromExtension: Debug info:", JSON.stringify(error.debugInfo));
         }
+    }
+}
+
+/**
+ * Applies a 3-color scale conditional formatting to the grade column
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyGradeConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to Grade column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+
+        if (gradeColIdx === -1) {
+            console.log("ImportFromExtension: Grade column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("values, rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const gradeColumnRange = sheet.getRangeByIndexes(1, gradeColIdx, range.rowCount - 1, 1);
+
+        // Determine if grades are 0-1 or 0-100 scale by checking the first few values
+        let isPercentScale = false;
+        for (let i = 1; i < Math.min(range.rowCount, 10); i++) {
+            if (range.values[i] && typeof range.values[i][gradeColIdx] === 'number' && range.values[i][gradeColIdx] > 1) {
+                isPercentScale = true;
+                break;
+            }
+        }
+
+        console.log(`ImportFromExtension: Detected grade scale: ${isPercentScale ? '0-100' : '0-1'}`);
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        gradeColumnRange.conditionalFormats.clearAll();
+
+        // Apply 3-color scale: Red (low) -> Yellow (mid) -> Green (high)
+        const conditionalFormat = gradeColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+        const criteria = {
+            minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" }, // Red
+            midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: isPercentScale ? "70" : "0.7", color: "#FFEB84" }, // Yellow
+            maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" } // Green
+        };
+        conditionalFormat.colorScale.criteria = criteria;
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting applied to Grade column");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying conditional formatting:", error);
+        // Don't throw - formatting is not critical
     }
 }
 
