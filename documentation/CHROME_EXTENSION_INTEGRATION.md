@@ -62,9 +62,37 @@ If the extension responds with `wantsData: true`, the add-in sends the full Mast
 }
 ```
 
+### 4. Import Master List from Extension
+
+The Chrome extension can send master list data to import into the add-in's Master List sheet. The add-in will check if a Master List sheet exists before importing.
+
+**Extension → Add-in:**
+```javascript
+{
+  type: "SRK_IMPORT_MASTER_LIST",
+  data: {
+    headers: ["StudentName", "Student ID", "Grade", "Phone", ...],
+    data: [
+      ["Smith, John", "12345", 85.5, "555-1234", ...],
+      ["Doe, Jane", "67890", 72, "555-9876", ...],
+      // ... more rows
+    ]
+  }
+}
+```
+
+**Import Behavior:**
+- If the Master List sheet doesn't exist, the import will be aborted
+- If the sheet exists, the add-in will:
+  - Match incoming headers to Master List headers (case-insensitive)
+  - Preserve existing Gradebook hyperlinks for students already in the list
+  - Preserve "Assigned" column values and their colors
+  - Highlight new students in light blue (#ADD8E6)
+  - Clear and repopulate the sheet with the imported data
+
 ## Payload Structure
 
-### Master List Data Payload
+### Master List Data Payload (Add-in → Extension)
 
 ```typescript
 interface MasterListPayload {
@@ -75,6 +103,32 @@ interface MasterListPayload {
     students: Student[];            // Array of student records
     totalStudents: number;          // Total count
     timestamp: string;              // ISO 8601 timestamp
+  }
+}
+```
+
+### Import Master List Payload (Extension → Add-in)
+
+```typescript
+interface ImportMasterListPayload {
+  type: "SRK_IMPORT_MASTER_LIST";
+  data: {
+    headers: string[];    // Array of column headers
+    data: any[][];        // 2D array of row data (each row matches headers order)
+  }
+}
+```
+
+**Example:**
+```json
+{
+  "type": "SRK_IMPORT_MASTER_LIST",
+  "data": {
+    "headers": ["StudentName", "Student ID", "Grade", "Phone", "Email"],
+    "data": [
+      ["Smith, John", "12345", 85.5, "555-1234", "john@school.edu"],
+      ["Doe, Jane", "67890", 72, "555-9876", "jane@school.edu"]
+    ]
   }
 }
 
@@ -279,6 +333,78 @@ if (student && student.gradeBook) {
 }
 ```
 
+### 6. Importing Master List Data to Excel
+
+The Chrome extension can send master list data to import into the add-in's Excel sheet:
+
+```javascript
+function importMasterListToExcel(students) {
+  // Prepare headers (column names)
+  const headers = [
+    "StudentName",
+    "Student ID",
+    "Student Number",
+    "Grade",
+    "Phone",
+    "Email",
+    "Days Out"
+  ];
+
+  // Prepare data rows (must match header order)
+  const data = students.map(student => [
+    student.name,           // StudentName
+    student.id,             // Student ID
+    student.number,         // Student Number
+    student.grade,          // Grade
+    student.phone,          // Phone
+    student.email,          // Email
+    student.daysOut         // Days Out
+  ]);
+
+  // Send import message to add-in
+  window.postMessage({
+    type: "SRK_IMPORT_MASTER_LIST",
+    data: {
+      headers: headers,
+      data: data
+    }
+  }, "*");
+
+  console.log(`Sent ${data.length} students to Excel for import`);
+}
+
+// Example usage with sample data
+const studentsToImport = [
+  {
+    name: "Smith, John",
+    id: "12345",
+    number: "STU001",
+    grade: 85.5,
+    phone: "555-1234",
+    email: "john@school.edu",
+    daysOut: 3
+  },
+  {
+    name: "Doe, Jane",
+    id: "67890",
+    number: "STU002",
+    grade: 72,
+    phone: "555-9876",
+    email: "jane@school.edu",
+    daysOut: 7
+  }
+];
+
+importMasterListToExcel(studentsToImport);
+```
+
+**Important Notes for Import:**
+- The add-in will only import if a "Master List" sheet already exists
+- Column headers are matched case-insensitively
+- Existing Gradebook links and Assigned values are preserved for existing students
+- New students will be highlighted in light blue
+- All data must be in array format matching the headers order
+
 ## Important Notes
 
 1. **Column Mapping**: The `columnMapping` object tells you which column index each field came from. This is useful if you need to map data back to the spreadsheet.
@@ -308,6 +434,7 @@ if (student && student.gradeBook) {
 | `SRK_REQUEST_MASTER_LIST` | Add-in → Extension | Ask if extension wants data |
 | `SRK_MASTER_LIST_RESPONSE` | Extension → Add-in | Accept or decline data |
 | `SRK_MASTER_LIST_DATA` | Add-in → Extension | Send Master List payload |
+| `SRK_IMPORT_MASTER_LIST` | Extension → Add-in | Import master list data into Excel |
 
 ## Testing
 
