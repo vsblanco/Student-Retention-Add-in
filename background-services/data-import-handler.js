@@ -704,12 +704,30 @@ async function handleUpdateGrades(message) {
                             gradesUpdated++;
                         }
 
-                        // Update assignments
-                        if (masterMissingAssignmentsCol !== -1 && importedData.missingAssignments !== undefined) {
-                            valuesToWrite[i][masterMissingAssignmentsCol] = importedData.missingAssignments;
-                            details.push(`- Missing Assignments set to: ${importedData.missingAssignments}`);
-                            missingUpdated++;
+                        // Determine if student has or will have a gradebook link
+                        const hasGradebookLink = (importedData.courseId && importedData.studentId) ||
+                                                 (masterGradebookCol !== -1 && masterFormulas[i][masterGradebookCol] &&
+                                                  String(masterFormulas[i][masterGradebookCol]).toLowerCase().includes('hyperlink'));
+
+                        // Update assignments with conditional logic based on gradebook link
+                        if (masterMissingAssignmentsCol !== -1) {
+                            if (hasGradebookLink) {
+                                // If gradebook link exists, default to 0 if no count provided
+                                const missingCount = importedData.missingAssignments !== undefined &&
+                                                    importedData.missingAssignments !== null &&
+                                                    importedData.missingAssignments !== ''
+                                                    ? importedData.missingAssignments
+                                                    : 0;
+                                valuesToWrite[i][masterMissingAssignmentsCol] = missingCount;
+                                details.push(`- Missing Assignments set to: ${missingCount}`);
+                                missingUpdated++;
+                            } else {
+                                // If no gradebook link, set to blank
+                                valuesToWrite[i][masterMissingAssignmentsCol] = '';
+                                details.push(`- Missing Assignments set to blank (no gradebook link)`);
+                            }
                         }
+
                         if (masterZeroAssignmentsCol !== -1 && importedData.zeroAssignments !== undefined) {
                             valuesToWrite[i][masterZeroAssignmentsCol] = importedData.zeroAssignments;
                             details.push(`- Zero Assignments set to: ${importedData.zeroAssignments}`);
