@@ -100,11 +100,12 @@ The Chrome extension can send master list data to import into the add-in's Maste
 interface MasterListPayload {
   type: "SRK_MASTER_LIST_DATA";
   data: {
-    sheetName: string;              // Always "Master List"
-    columnMapping: ColumnMapping;   // Maps fields to column indices
-    students: Student[];            // Array of student records
-    totalStudents: number;          // Total count
-    timestamp: string;              // ISO 8601 timestamp
+    sheetName: string;                    // Always "Master List"
+    headers: string[];                    // Array of all column headers
+    columnMapping: Record<string, number>; // Map of header name -> column index
+    students: Student[];                  // Array of student records (all columns included)
+    totalStudents: number;                // Total count
+    timestamp: string;                    // ISO 8601 timestamp
   }
 }
 ```
@@ -134,36 +135,28 @@ interface ImportMasterListPayload {
   }
 }
 
-interface ColumnMapping {
-  studentName: number;      // Column index for Student Name
-  syStudentId: number;      // Column index for SyStudentId (School SIS ID)
-  studentNumber: number;    // Column index for Student Number (School ID)
-  gradeBook: number;        // Column index for Gradebook link
-  daysOut: number;          // Column index for Days Out
-  lastLda: number;          // Column index for Last LDA
-  grade: number;            // Column index for Grade/Score
-  primaryPhone: number;     // Column index for Primary Phone
-  otherPhone: number;       // Column index for Other Phone
-  personalEmail: number;    // Column index for Personal Email
-  studentEmail: number;     // Column index for Student Email
-  assigned: number;         // Column index for Assigned advisor
-  outreach: number;         // Column index for Outreach notes
-}
-
+// The Student interface is dynamic - it includes ALL columns from your Master List
 interface Student {
-  studentName: string;           // Required - student's name
-  syStudentId?: string;          // School's SIS (Student Information System) ID
-  studentNumber?: string;        // School's student identification number
-  gradeBook?: string;            // URL to gradebook (extracted from HYPERLINK formula)
-  daysOut?: number;              // Days since last attendance
-  lastLda?: any;                 // Last LDA date/value
-  grade?: number | string;       // Current grade/score
-  primaryPhone?: string;         // Primary contact phone
-  otherPhone?: string;           // Secondary phone
-  personalEmail?: string;        // Personal email address
-  studentEmail?: string;         // School email address
-  assigned?: string;             // Assigned advisor/counselor
-  outreach?: string;             // Outreach notes
+  [key: string]: any;  // Dynamic properties based on your Master List columns
+
+  // Common fields (but not limited to these):
+  // "Student Name"?: string;
+  // "Student ID"?: string;
+  // "Student Number"?: string;
+  // "Gradebook"?: string;         // URL extracted from HYPERLINK formula
+  // "Grade"?: number | string;
+  // "Days Out"?: number;
+  // "LDA"?: any;
+  // "Phone"?: string;
+  // "Other Phone"?: string;
+  // "StudentEmail"?: string;
+  // "PersonalEmail"?: string;
+  // "Assigned"?: string;
+  // "Outreach"?: string;
+  // "Gender"?: string;
+  // "Shift"?: string;
+  // "ProgramVersion"?: string;
+  // ... and any other custom columns in your sheet
 }
 ```
 
@@ -174,48 +167,78 @@ interface Student {
   "type": "SRK_MASTER_LIST_DATA",
   "data": {
     "sheetName": "Master List",
+    "headers": [
+      "Assigned",
+      "Student Name",
+      "Student Number",
+      "Gradebook",
+      "Grade",
+      "Missing Assignments",
+      "LDA",
+      "Days Out",
+      "Gender",
+      "Shift",
+      "Outreach",
+      "ProgramVersion",
+      "SyStudentId",
+      "Phone",
+      "Other Phone",
+      "StudentEmail",
+      "PersonalEmail"
+    ],
     "columnMapping": {
-      "studentName": 0,
-      "syStudentId": 1,
-      "studentNumber": 2,
-      "gradeBook": 5,
-      "daysOut": 8,
-      "lastLda": 9,
-      "grade": 4,
-      "primaryPhone": 10,
-      "otherPhone": 11,
-      "personalEmail": 12,
-      "studentEmail": 3,
-      "assigned": 6,
-      "outreach": 7
+      "Assigned": 0,
+      "Student Name": 1,
+      "Student Number": 2,
+      "Gradebook": 3,
+      "Grade": 4,
+      "Missing Assignments": 5,
+      "LDA": 6,
+      "Days Out": 7,
+      "Gender": 8,
+      "Shift": 9,
+      "Outreach": 10,
+      "ProgramVersion": 11,
+      "SyStudentId": 12,
+      "Phone": 13,
+      "Other Phone": 14,
+      "StudentEmail": 15,
+      "PersonalEmail": 16
     },
     "students": [
       {
-        "studentName": "Smith, John",
-        "syStudentId": "12345",
-        "studentNumber": "STU001",
-        "studentEmail": "john.smith@school.edu",
-        "grade": 85.5,
-        "gradeBook": "https://canvas.instructure.com/courses/123/gradebook/speed_grader?assignment_id=456&student_id=12345",
-        "assigned": "Dr. Johnson",
-        "outreach": "Called on 12/15",
-        "daysOut": 3,
-        "lastLda": "12/10/2025",
-        "primaryPhone": "555-1234",
-        "otherPhone": "555-5678",
-        "personalEmail": "john@email.com"
+        "Assigned": "Dr. Johnson",
+        "Student Name": "Smith, John",
+        "Student Number": "STU001",
+        "Gradebook": "https://nuc.instructure.com/courses/123/grades/12345",
+        "Grade": 85.5,
+        "Missing Assignments": 2,
+        "LDA": "12/10/2025",
+        "Days Out": 3,
+        "Gender": "M",
+        "Shift": "Day",
+        "Outreach": "Called on 12/15",
+        "ProgramVersion": "2.0",
+        "SyStudentId": "12345",
+        "Phone": "555-1234",
+        "Other Phone": "555-5678",
+        "StudentEmail": "john.smith@school.edu",
+        "PersonalEmail": "john@email.com"
       },
       {
-        "studentName": "Doe, Jane",
-        "syStudentId": "67890",
-        "studentNumber": "STU002",
-        "studentEmail": "jane.doe@school.edu",
-        "grade": 72,
-        "gradeBook": "https://canvas.instructure.com/courses/123/gradebook/speed_grader?assignment_id=456&student_id=67890",
-        "assigned": "Dr. Williams",
-        "daysOut": 7,
-        "lastLda": "12/05/2025",
-        "primaryPhone": "555-9876"
+        "Assigned": "Dr. Williams",
+        "Student Name": "Doe, Jane",
+        "Student Number": "STU002",
+        "Gradebook": "https://nuc.instructure.com/courses/123/grades/67890",
+        "Grade": 72,
+        "Missing Assignments": 5,
+        "LDA": "12/05/2025",
+        "Days Out": 7,
+        "Gender": "F",
+        "Shift": "Evening",
+        "SyStudentId": "67890",
+        "Phone": "555-9876",
+        "StudentEmail": "jane.doe@school.edu"
       }
     ],
     "totalStudents": 2,
@@ -288,24 +311,33 @@ function checkIfDataNeeded() {
 ```javascript
 function handleMasterListData(data) {
   console.log(`Received Master List with ${data.totalStudents} students`);
+  console.log(`Available columns: ${data.headers.join(', ')}`);
   console.log(`Data timestamp: ${data.timestamp}`);
 
   // Store the data
   localStorage.setItem('masterListData', JSON.stringify(data));
   localStorage.setItem('lastUpdated', data.timestamp);
 
-  // Process students
+  // Process students - access columns dynamically using header names
   data.students.forEach(student => {
-    console.log(`Student: ${student.studentName}`);
+    console.log(`Student: ${student["Student Name"]}`);
 
-    // Access gradebook URL if available
-    if (student.gradeBook) {
-      console.log(`  Gradebook: ${student.gradeBook}`);
+    // Access gradebook URL if available (URL extracted from HYPERLINK formula)
+    if (student.Gradebook) {
+      console.log(`  Gradebook: ${student.Gradebook}`);
     }
 
     // Check if student needs attention
-    if (student.daysOut && student.daysOut > 5) {
-      console.log(`  ⚠️ High absence: ${student.daysOut} days`);
+    if (student["Days Out"] && student["Days Out"] > 5) {
+      console.log(`  ⚠️ High absence: ${student["Days Out"]} days`);
+    }
+
+    // Access any custom columns
+    if (student.Gender) {
+      console.log(`  Gender: ${student.Gender}`);
+    }
+    if (student.ProgramVersion) {
+      console.log(`  Program: ${student.ProgramVersion}`);
     }
   });
 
@@ -322,16 +354,26 @@ function findStudent(name) {
   if (!data) return null;
 
   const normalizedSearch = name.toLowerCase();
-  return data.students.find(student =>
-    student.studentName.toLowerCase().includes(normalizedSearch)
-  );
+  return data.students.find(student => {
+    const studentName = student["Student Name"] || "";
+    return studentName.toLowerCase().includes(normalizedSearch);
+  });
 }
 
 // Usage
 const student = findStudent("John Smith");
-if (student && student.gradeBook) {
+if (student && student.Gradebook) {
   // Open gradebook in new tab
-  chrome.tabs.create({ url: student.gradeBook });
+  chrome.tabs.create({ url: student.Gradebook });
+}
+
+// Access any column dynamically
+if (student) {
+  console.log(`Student: ${student["Student Name"]}`);
+  console.log(`ID: ${student.SyStudentId}`);
+  console.log(`Grade: ${student.Grade}`);
+  console.log(`Gender: ${student.Gender}`);
+  console.log(`Shift: ${student.Shift}`);
 }
 ```
 
@@ -412,15 +454,19 @@ importMasterListToExcel(studentsToImport);
 
 ## Important Notes
 
-1. **Column Mapping**: The `columnMapping` object tells you which column index each field came from. This is useful if you need to map data back to the spreadsheet.
+1. **All Columns Included**: The add-in now sends ALL columns from the Master List sheet, not just predefined ones. This means any custom columns you add will automatically be included in the payload.
 
-2. **Optional Fields**: Most fields in the `Student` object are optional. Always check if a field exists before using it.
+2. **Column Mapping**: The `columnMapping` object maps each header name to its column index (0-based). Use this if you need to reference data back to specific columns. The `headers` array provides all column names in order.
 
-3. **Gradebook URLs**: The `gradeBook` field contains the full URL extracted from Excel HYPERLINK formulas, making it easy to open student gradebooks directly.
+3. **Dynamic Column Access**: Student objects use the actual header names as keys. Use bracket notation to access columns with spaces (e.g., `student["Student Name"]`) or dot notation for columns without spaces (e.g., `student.Grade`).
 
-4. **Timestamps**: Use the `timestamp` field to track when data was last synced and decide if you need to request fresh data.
+4. **Optional Fields**: All fields in student objects are optional (except the student name which is required). Always check if a field exists before using it.
 
-5. **Message Origin**: Always validate message origins in production for security:
+5. **Gradebook URLs**: The `Gradebook` field contains the full URL extracted from Excel HYPERLINK formulas, making it easy to open student gradebooks directly. The formula is automatically parsed to extract just the URL.
+
+6. **Timestamps**: Use the `timestamp` field to track when data was last synced and decide if you need to request fresh data.
+
+7. **Message Origin**: Always validate message origins in production for security:
    ```javascript
    window.addEventListener("message", (event) => {
      // Validate origin if needed
