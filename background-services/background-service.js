@@ -28,6 +28,130 @@ function onDocumentOpen(event) {
 }
 
 /**
+ * Imports missing assignments data to the Missing Assignments sheet
+ * @param {Array} studentsWithAssignments - Array of student objects that have missingAssignments
+ * @returns {Promise<void>}
+ */
+async function importMissingAssignments(studentsWithAssignments) {
+    try {
+        console.log("ImportMissingAssignments: Starting import of missing assignments...");
+
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            // Check if Missing Assignments sheet exists, create if not
+            let maSheet = sheets.items.find(s => s.name === "Missing Assignments");
+            if (!maSheet) {
+                console.log("ImportMissingAssignments: Creating Missing Assignments sheet...");
+                maSheet = sheets.add("Missing Assignments");
+                await context.sync();
+            } else {
+                maSheet = context.workbook.worksheets.getItem("Missing Assignments");
+            }
+
+            // Define the column structure
+            const headers = ["Student", "Grade", "Grade Book", "Assignment", "Due Date", "Score", "Submission"];
+
+            // Clear existing content
+            const usedRange = maSheet.getUsedRangeOrNullObject();
+            usedRange.load("address");
+            await context.sync();
+
+            if (!usedRange.isNullObject) {
+                usedRange.clear(Excel.ClearApplyTo.all);
+            }
+
+            // Write headers
+            const headerRange = maSheet.getRangeByIndexes(0, 0, 1, headers.length);
+            headerRange.values = [headers];
+            headerRange.format.font.bold = true;
+            await context.sync();
+
+            // Prepare data rows
+            const dataToWrite = [];
+            const formulasToWrite = [];
+
+            studentsWithAssignments.forEach(student => {
+                const studentName = student["Student Name"] || student.StudentName || "";
+                const grade = student.Grade || "";
+                const gradeBookUrl = typeof student["Grade Book"] === 'object' ? student["Grade Book"].url : student["Grade Book"];
+                const gradeBookText = typeof student["Grade Book"] === 'object' ? student["Grade Book"].text : "Grade Book";
+
+                if (student.missingAssignments && Array.isArray(student.missingAssignments)) {
+                    student.missingAssignments.forEach(assignment => {
+                        const row = new Array(headers.length).fill("");
+                        const formulaRow = new Array(headers.length).fill(null);
+
+                        // Student
+                        row[0] = studentName;
+
+                        // Grade
+                        row[1] = grade;
+
+                        // Grade Book (HYPERLINK)
+                        if (gradeBookUrl) {
+                            formulaRow[2] = `=HYPERLINK("${gradeBookUrl}", "${gradeBookText}")`;
+                            row[2] = gradeBookText;
+                        }
+
+                        // Assignment (HYPERLINK with assignment URL and title as friendly name)
+                        const assignmentUrl = typeof assignment.Assignment === 'object' ? assignment.Assignment.url : assignment.assignmentUrl || assignment.assignmentLink;
+                        const assignmentTitle = typeof assignment.Assignment === 'object' ? assignment.Assignment.text : assignment.assignmentTitle || assignment.assignmentName || "Assignment";
+                        if (assignmentUrl) {
+                            formulaRow[3] = `=HYPERLINK("${assignmentUrl}", "${assignmentTitle}")`;
+                            row[3] = assignmentTitle;
+                        } else {
+                            row[3] = assignmentTitle;
+                        }
+
+                        // Due Date
+                        row[4] = typeof assignment["Due Date"] === 'object' ? assignment["Due Date"].text : assignment.dueDate || assignment["Due Date"] || "";
+
+                        // Score
+                        row[5] = typeof assignment.Score === 'object' ? assignment.Score.text : assignment.score || assignment.Score || "";
+
+                        // Submission (HYPERLINK with submission URL and "Missing" as friendly name)
+                        const submissionUrl = typeof assignment.Submission === 'object' ? assignment.Submission.url : assignment.submissionUrl || assignment.submissionLink;
+                        if (submissionUrl) {
+                            formulaRow[6] = `=HYPERLINK("${submissionUrl}", "Missing")`;
+                            row[6] = "Missing";
+                        }
+
+                        dataToWrite.push(row);
+                        formulasToWrite.push(formulaRow);
+                    });
+                }
+            });
+
+            if (dataToWrite.length > 0) {
+                console.log(`ImportMissingAssignments: Writing ${dataToWrite.length} assignment rows...`);
+
+                // Write data and formulas
+                const dataRange = maSheet.getRangeByIndexes(1, 0, dataToWrite.length, headers.length);
+                dataRange.values = dataToWrite;
+                dataRange.formulas = formulasToWrite;
+
+                // Autofit columns
+                maSheet.getUsedRange().format.autofitColumns();
+
+                await context.sync();
+                console.log(`ImportMissingAssignments: Successfully imported ${dataToWrite.length} missing assignments`);
+            } else {
+                console.log("ImportMissingAssignments: No missing assignments to import");
+            }
+        });
+
+    } catch (error) {
+        console.error("ImportMissingAssignments: Error importing missing assignments:", error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("ImportMissingAssignments: Debug info:", JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
+/**
  * Imports master list data received from the Chrome extension
  * @param {object} payload - The data payload from the extension
  * @param {string[]} payload.headers - Array of column headers
@@ -317,6 +441,18 @@ async function importMasterListFromExtension(payload) {
             console.log("ImportFromExtension: Master List import completed successfully");
         });
 
+        // Check if the payload includes student objects with missing assignments
+        if (payload.students && Array.isArray(payload.students)) {
+            const studentsWithAssignments = payload.students.filter(
+                student => student.missingAssignments && Array.isArray(student.missingAssignments) && student.missingAssignments.length > 0
+            );
+
+            if (studentsWithAssignments.length > 0) {
+                console.log(`ImportFromExtension: Found ${studentsWithAssignments.length} students with missing assignments, importing...`);
+                await importMissingAssignments(studentsWithAssignments);
+            }
+        }
+
     } catch (error) {
         console.error("ImportFromExtension: Error importing Master List:", error);
         if (error instanceof OfficeExtension.Error) {
@@ -516,18 +652,18 @@ async function transferMasterList() {
                                     if (!headerName) continue;
 
                                     let value = rowValues[colIdx];
+                                    const formula = rowFormulas[colIdx];
 
-                                    // Special handling for Gradebook column - extract URL from HYPERLINK
-                                    if (colIdx === maGradebookColIdx) {
-                                        const formula = rowFormulas[colIdx];
-                                        const match = String(formula).match(hyperlinkRegex);
-                                        if (match && match[1]) {
-                                            value = match[1]; // Extract URL from HYPERLINK formula
-                                        }
-                                    }
-
-                                    // Include value if it's not null/undefined/empty string
-                                    if (value !== null && value !== undefined && value !== "") {
+                                    // Special handling for HYPERLINK formulas - extract both URL and friendly name
+                                    const hyperlinkMatch = String(formula).match(/=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)/i);
+                                    if (hyperlinkMatch) {
+                                        // Store as object with both url and text
+                                        assignmentData[headerName] = {
+                                            url: hyperlinkMatch[1],
+                                            text: hyperlinkMatch[2]
+                                        };
+                                    } else if (value !== null && value !== undefined && value !== "") {
+                                        // Regular value
                                         assignmentData[headerName] = value;
                                     }
                                 }

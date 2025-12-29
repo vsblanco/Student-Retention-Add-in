@@ -118,11 +118,12 @@ interface ImportMasterListPayload {
   data: {
     headers: string[];    // Array of column headers
     data: any[][];        // 2D array of row data (each row matches headers order)
+    students?: Student[]; // Optional: Array of student objects (for missing assignments import)
   }
 }
 ```
 
-**Example:**
+**Example (Basic Import):**
 ```json
 {
   "type": "SRK_IMPORT_MASTER_LIST",
@@ -134,6 +135,44 @@ interface ImportMasterListPayload {
     ]
   }
 }
+```
+
+**Example (With Missing Assignments):**
+```json
+{
+  "type": "SRK_IMPORT_MASTER_LIST",
+  "data": {
+    "headers": ["StudentName", "Student ID", "Grade", "Grade Book"],
+    "data": [
+      ["Smith, John", "12345", 85.5, "https://nuc.instructure.com/courses/123/grades/12345"],
+      ["Doe, Jane", "67890", 72, "https://nuc.instructure.com/courses/123/grades/67890"]
+    ],
+    "students": [
+      {
+        "Student Name": "Smith, John",
+        "Grade": 85.5,
+        "Grade Book": "https://nuc.instructure.com/courses/123/grades/12345",
+        "missingAssignments": [
+          {
+            "assignmentUrl": "https://nuc.instructure.com/courses/123/assignments/456",
+            "assignmentTitle": "Week 5 Homework",
+            "dueDate": "12/15/2025",
+            "score": "0/100",
+            "submissionUrl": "https://nuc.instructure.com/courses/123/assignments/456/submissions/12345"
+          },
+          {
+            "assignmentUrl": "https://nuc.instructure.com/courses/123/assignments/789",
+            "assignmentTitle": "Quiz 3",
+            "dueDate": "12/18/2025",
+            "score": "0/50",
+            "submissionUrl": "https://nuc.instructure.com/courses/123/assignments/789/submissions/12345"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
 // The Student interface is dynamic - it includes ALL columns from your Master List
 interface Student {
@@ -161,11 +200,21 @@ interface Student {
 }
 
 // Missing Assignment interface - includes all columns from the Missing Assignments sheet
+// When transferred from add-in to extension
 interface MissingAssignment {
   [key: string]: any;  // Dynamic properties based on your Missing Assignments sheet columns
 
   // The assignment data is matched by Gradebook URL
   // All columns from the Missing Assignments sheet are included for matching students
+  // HYPERLINK columns are sent as objects with both url and text:
+  // Example:
+  // {
+  //   "Assignment": { url: "https://...", text: "Week 5 Homework" },
+  //   "Submission": { url: "https://...", text: "Missing" },
+  //   "Grade Book": { url: "https://...", text: "Grade Book" },
+  //   "Due Date": "12/15/2025",
+  //   "Score": "0/100"
+  // }
 }
 ```
 
@@ -531,6 +580,31 @@ importMasterListToExcel(studentsToImport);
 - Existing Gradebook links and Assigned values are preserved for existing students
 - New students will be highlighted in light blue
 - All data must be in array format matching the headers order
+
+**Missing Assignments Import:**
+When the payload includes a `students` array with `missingAssignments` data:
+1. The add-in will automatically create or update a "Missing Assignments" sheet
+2. The sheet structure is fixed with these columns:
+   - **Student**: Student name
+   - **Grade**: Current grade
+   - **Grade Book**: HYPERLINK to student's gradebook
+   - **Assignment**: HYPERLINK to assignment with assignment title as friendly name
+   - **Due Date**: Assignment due date
+   - **Score**: Assignment score (e.g., "0/100")
+   - **Submission**: HYPERLINK to submission with "Missing" as friendly name
+3. All HYPERLINKs are automatically created from the provided URLs
+4. The import happens after the Master List import completes
+
+**Missing Assignment Object Structure:**
+```typescript
+interface MissingAssignmentImport {
+  assignmentUrl: string;        // URL to the assignment
+  assignmentTitle: string;      // Title/name of the assignment
+  dueDate?: string;             // Due date (any format)
+  score?: string;               // Score (e.g., "0/100")
+  submissionUrl?: string;       // URL to the submission
+}
+```
 
 ## Important Notes
 
