@@ -770,6 +770,7 @@ async function handleUpdateGrades(message) {
 
             // Apply conditional formatting after updates are synced
             await applyGradeConditionalFormatting(context);
+            await applyMissingAssignmentsConditionalFormatting(context);
 
             sendMessageToDialog("Grade update process completed successfully.", 'complete');
         });
@@ -833,4 +834,42 @@ async function applyGradeConditionalFormatting(context) {
 
     await context.sync();
     sendMessageToDialog("Conditional formatting applied.");
+}
+
+/**
+ * Applies conditional formatting to the missing assignments column to highlight 0s in light green.
+ * @param {Excel.RequestContext} context The request context.
+ */
+async function applyMissingAssignmentsConditionalFormatting(context) {
+    sendMessageToDialog("Applying conditional formatting to Missing Assignments column...");
+    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+    const range = sheet.getUsedRange(true);
+    range.load("values, rowCount");
+    await context.sync();
+
+    const headers = range.values[0].map(h => String(h || '').toLowerCase());
+    const missingAssignmentsColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+
+    if (missingAssignmentsColIdx === -1) {
+        sendMessageToDialog("'Missing Assignments' column not found, skipping conditional formatting.", 'log');
+        return;
+    }
+
+    if (range.rowCount <= 1) {
+        sendMessageToDialog("No data rows to format.", 'log');
+        return;
+    }
+
+    const missingAssignmentsColumnRange = sheet.getRangeByIndexes(1, missingAssignmentsColIdx, range.rowCount - 1, 1);
+
+    // Clear existing conditional formats on the column to avoid duplicates
+    missingAssignmentsColumnRange.conditionalFormats.clearAll();
+
+    // Apply conditional formatting: cells with value 0 get light green background
+    const conditionalFormat = missingAssignmentsColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+    conditionalFormat.cellValue.format.fill.color = "#90EE90"; // Light green
+    conditionalFormat.cellValue.rule = { formula1: "0", operator: "EqualTo" };
+
+    await context.sync();
+    sendMessageToDialog("Missing Assignments conditional formatting applied (0s highlighted in light green).");
 }
