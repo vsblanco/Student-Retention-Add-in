@@ -36,6 +36,7 @@ export const CONSTANTS = {
         programVersion: ["programversion", "program version"],
         courseMissingAssignments: ["course missing assignments"],
         courseZeroAssignments: ["course zero assignments"],
+        hold: ["hold", "Hold"],
         primaryPhone: ["primary phone", "phone", "phonenumber", "contact number", "Phone", "Phone Number", "Contact Number"],
         otherPhone: ["other phone", "otherphone", "Other Phone", "OtherPhone"],
         PersonalEmail: ["personal email", "otheremail", "Personal Email"],

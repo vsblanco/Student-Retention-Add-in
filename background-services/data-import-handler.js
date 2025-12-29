@@ -771,6 +771,7 @@ async function handleUpdateGrades(message) {
             // Apply conditional formatting after updates are synced
             await applyGradeConditionalFormatting(context);
             await applyMissingAssignmentsConditionalFormatting(context);
+            await applyHoldConditionalFormatting(context);
 
             sendMessageToDialog("Grade update process completed successfully.", 'complete');
         });
@@ -872,4 +873,42 @@ async function applyMissingAssignmentsConditionalFormatting(context) {
 
     await context.sync();
     sendMessageToDialog("Missing Assignments conditional formatting applied (0s highlighted in light green).");
+}
+
+/**
+ * Applies conditional formatting to the Hold column to highlight "Yes" values in light red.
+ * @param {Excel.RequestContext} context The request context.
+ */
+async function applyHoldConditionalFormatting(context) {
+    sendMessageToDialog("Applying conditional formatting to Hold column...");
+    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+    const range = sheet.getUsedRange(true);
+    range.load("values, rowCount");
+    await context.sync();
+
+    const headers = range.values[0].map(h => String(h || '').toLowerCase());
+    const holdColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.hold);
+
+    if (holdColIdx === -1) {
+        sendMessageToDialog("'Hold' column not found, skipping conditional formatting.", 'log');
+        return;
+    }
+
+    if (range.rowCount <= 1) {
+        sendMessageToDialog("No data rows to format.", 'log');
+        return;
+    }
+
+    const holdColumnRange = sheet.getRangeByIndexes(1, holdColIdx, range.rowCount - 1, 1);
+
+    // Clear existing conditional formats on the column to avoid duplicates
+    holdColumnRange.conditionalFormats.clearAll();
+
+    // Apply conditional formatting: cells with "Yes" get light red background
+    const conditionalFormat = holdColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+    conditionalFormat.textComparison.format.fill.color = "#FFB6C1"; // Light red (light pink)
+    conditionalFormat.textComparison.rule = { operator: Excel.ConditionalTextOperator.contains, text: "Yes" };
+
+    await context.sync();
+    sendMessageToDialog("Hold conditional formatting applied ('Yes' highlighted in light red).");
 }
