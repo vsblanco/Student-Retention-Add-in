@@ -12,7 +12,7 @@
 import { openImportDialog } from './data-import-handler.js';
 import { toggleHighlight, transferData } from './ribbon-actions.js';
 import chromeExtensionService from '../react/src/services/chromeExtensionService.js';
-import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
+import { CONSTANTS, findColumnIndex, normalizeName, formatToLastFirst } from './shared-utilities.js';
 
 // This function is required for the Analytics button, even if it does nothing,
 // because the manifest uses a ShowTaskpane action.
@@ -25,6 +25,272 @@ function openAnalyticsPane(event) {
 function onDocumentOpen(event) {
     console.log("Document opened - background services are active");
     event.completed();
+}
+
+/**
+ * Imports master list data received from the Chrome extension
+ * @param {object} payload - The data payload from the extension
+ * @param {string[]} payload.headers - Array of column headers
+ * @param {Array[]} payload.data - Array of data rows
+ * @returns {Promise<void>}
+ */
+async function importMasterListFromExtension(payload) {
+    try {
+        console.log("ImportFromExtension: Starting master list import from Chrome extension...");
+
+        // Validate payload
+        if (!payload || !payload.headers || !payload.data) {
+            console.error("ImportFromExtension: Invalid payload - missing headers or data");
+            return;
+        }
+
+        const { headers: incomingHeaders, data: incomingData } = payload;
+        console.log(`ImportFromExtension: Received ${incomingData.length} rows with headers: [${incomingHeaders.join(', ')}]`);
+
+        await Excel.run(async (context) => {
+            // Check if Master List sheet exists
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const masterListSheet = sheets.items.find(s => s.name === CONSTANTS.MASTER_LIST_SHEET);
+            if (!masterListSheet) {
+                console.error("ImportFromExtension: Master List sheet not found. Import aborted.");
+                return;
+            }
+
+            console.log("ImportFromExtension: Master List sheet found, proceeding with import...");
+
+            // Get the Master List sheet
+            const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("values, formulas");
+            await context.sync();
+
+            // Get Master List headers
+            const masterHeaders = usedRange.values[0].map(h => String(h || ''));
+            const lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
+            const lowerCaseIncomingHeaders = incomingHeaders.map(h => String(h || '').toLowerCase());
+
+            console.log(`ImportFromExtension: Master List headers: [${masterHeaders.join(', ')}]`);
+
+            // Create column mapping (incoming column index -> master column index)
+            const colMapping = lowerCaseIncomingHeaders.map(incomingHeader =>
+                lowerCaseMasterHeaders.indexOf(incomingHeader)
+            );
+
+            console.log(`ImportFromExtension: Column mapping: [${colMapping.join(', ')}]`);
+
+            // Find the student name column in both incoming data and master list
+            const incomingStudentNameCol = findColumnIndex(lowerCaseIncomingHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const masterAssignedCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+
+            if (incomingStudentNameCol === -1) {
+                console.error("ImportFromExtension: Incoming data is missing a 'Student Name' column");
+                return;
+            }
+
+            if (masterStudentNameCol === -1) {
+                console.error("ImportFromExtension: Master List is missing a 'StudentName' column");
+                return;
+            }
+
+            // Create a map of existing students to preserve certain data
+            const masterDataMap = new Map();
+            const valueToColorMap = new Map();
+
+            // First pass: Get existing data to preserve
+            for (let i = 1; i < usedRange.values.length; i++) {
+                const name = usedRange.values[i][masterStudentNameCol];
+                if (name) {
+                    const normalizedName = normalizeName(name);
+                    const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
+                    const assignedValue = (masterAssignedCol !== -1) ? usedRange.values[i][masterAssignedCol] : null;
+
+                    masterDataMap.set(normalizedName, {
+                        gradebookFormula: gradebookFormula,
+                        assigned: assignedValue
+                    });
+                }
+            }
+
+            console.log(`ImportFromExtension: Created map of ${masterDataMap.size} existing students`);
+
+            // Get colors for assigned column values
+            if (masterAssignedCol !== -1) {
+                const allAssignedValues = usedRange.values.map(row => row[masterAssignedCol]);
+                const uniqueValues = [...new Set(allAssignedValues.slice(1).filter(v => v && String(v).trim() !== ""))];
+
+                if (uniqueValues.length > 0) {
+                    console.log(`ImportFromExtension: Found ${uniqueValues.length} unique values in 'Assigned' column`);
+                    const cellsToLoad = [];
+                    uniqueValues.forEach(value => {
+                        const firstInstanceIndex = allAssignedValues.indexOf(value);
+                        if (firstInstanceIndex > 0) {
+                            const absoluteRowIndex = usedRange.rowIndex + firstInstanceIndex;
+                            const absoluteColIndex = usedRange.columnIndex + masterAssignedCol;
+                            const cell = sheet.getCell(absoluteRowIndex, absoluteColIndex);
+                            cell.load("format/fill/color");
+                            cellsToLoad.push({ value: value, cell: cell });
+                        }
+                    });
+
+                    await context.sync();
+
+                    cellsToLoad.forEach(item => {
+                        const color = item.cell.format.fill.color;
+                        if (color && color !== '#ffffff' && color !== '#000000') {
+                            valueToColorMap.set(item.value, color);
+                        }
+                    });
+                    console.log(`ImportFromExtension: Cached colors for ${valueToColorMap.size} unique values`);
+                }
+            }
+
+            // Categorize students as new or existing
+            const newStudents = [];
+            const existingStudents = [];
+
+            for (const row of incomingData) {
+                const studentName = row[incomingStudentNameCol];
+                const normalizedName = normalizeName(studentName);
+
+                if (masterDataMap.has(normalizedName)) {
+                    existingStudents.push(row);
+                } else {
+                    newStudents.push(row);
+                }
+            }
+
+            console.log(`ImportFromExtension: Found ${newStudents.length} new students and ${existingStudents.length} existing students`);
+
+            // Clear the sheet (keeping headers)
+            if (usedRange.rowCount > 1) {
+                const rangeToClear = sheet.getRangeByIndexes(1, 0, usedRange.rowCount - 1, masterHeaders.length);
+                rangeToClear.clear(Excel.ClearApplyTo.all);
+                rangeToClear.getEntireRow().delete(Excel.DeleteShiftDirection.up);
+                await context.sync();
+                console.log("ImportFromExtension: Sheet cleared");
+            }
+
+            // Combine students (new first, then existing)
+            const allStudentsToWrite = [...newStudents, ...existingStudents];
+
+            if (allStudentsToWrite.length === 0) {
+                console.log("ImportFromExtension: No students to import");
+                return;
+            }
+
+            console.log(`ImportFromExtension: Preparing to write ${allStudentsToWrite.length} students...`);
+            const dataToWrite = [];
+            const formulasToWrite = [];
+            const cellsToColor = [];
+            let gradebookLinksPreservedCount = 0;
+            let assignedUsersPreservedCount = 0;
+
+            allStudentsToWrite.forEach((incomingRow, index) => {
+                const newRow = new Array(masterHeaders.length).fill("");
+                const formulaRow = new Array(masterHeaders.length).fill(null);
+
+                // Map incoming data to master list columns
+                for (let incomingColIdx = 0; incomingColIdx < incomingRow.length; incomingColIdx++) {
+                    const masterColIdx = colMapping[incomingColIdx];
+                    if (masterColIdx !== -1) {
+                        let cellValue = incomingRow[incomingColIdx] || "";
+                        if (masterColIdx === masterStudentNameCol) {
+                            cellValue = formatToLastFirst(String(cellValue));
+                        }
+                        newRow[masterColIdx] = cellValue;
+                    }
+                }
+
+                // Preserve existing data for this student if they already exist
+                const studentName = incomingRow[incomingStudentNameCol];
+                const normalizedName = normalizeName(studentName);
+                if (masterDataMap.has(normalizedName)) {
+                    const existingData = masterDataMap.get(normalizedName);
+
+                    // Preserve Gradebook links
+                    if (existingData.gradebookFormula) {
+                        if (masterGradebookCol !== -1 && !newRow[masterGradebookCol]) {
+                            formulaRow[masterGradebookCol] = existingData.gradebookFormula;
+                            const match = existingData.gradebookFormula.match(/, *"([^"]+)"\)/i);
+                            newRow[masterGradebookCol] = match ? match[1] : "Gradebook";
+                            gradebookLinksPreservedCount++;
+                        }
+                    }
+
+                    // Preserve Assigned values
+                    if (existingData.assigned) {
+                        if (masterAssignedCol !== -1 && !newRow[masterAssignedCol]) {
+                            newRow[masterAssignedCol] = existingData.assigned;
+                            assignedUsersPreservedCount++;
+                        }
+                    }
+                }
+
+                // Check for preserved colors based on Assigned column value
+                if (masterAssignedCol !== -1) {
+                    const assignedValue = newRow[masterAssignedCol];
+                    if (assignedValue && valueToColorMap.has(assignedValue)) {
+                        cellsToColor.push({
+                            rowIndex: index + 1,
+                            colIndex: masterAssignedCol,
+                            color: valueToColorMap.get(assignedValue)
+                        });
+                    }
+                }
+
+                dataToWrite.push(newRow);
+                formulasToWrite.push(formulaRow);
+            });
+
+            if (gradebookLinksPreservedCount > 0) {
+                console.log(`ImportFromExtension: Preserved ${gradebookLinksPreservedCount} Gradebook links`);
+            }
+            if (assignedUsersPreservedCount > 0) {
+                console.log(`ImportFromExtension: Preserved ${assignedUsersPreservedCount} Assigned users`);
+            }
+
+            // Write all data and formulas
+            console.log("ImportFromExtension: Writing data to sheet...");
+            const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
+            writeRange.values = dataToWrite;
+            writeRange.formulas = formulasToWrite;
+            await context.sync();
+            console.log("ImportFromExtension: Data write completed");
+
+            // Apply preserved colors
+            if (cellsToColor.length > 0) {
+                console.log(`ImportFromExtension: Applying ${cellsToColor.length} preserved cell colors...`);
+                for (const cell of cellsToColor) {
+                    sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+                }
+            }
+
+            // Highlight new students
+            if (newStudents.length > 0) {
+                console.log(`ImportFromExtension: Highlighting ${newStudents.length} new students...`);
+                const highlightRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
+                highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
+            }
+
+            // Autofit columns
+            console.log("ImportFromExtension: Autofitting columns...");
+            sheet.getUsedRange().format.autofitColumns();
+
+            await context.sync();
+            console.log("ImportFromExtension: Master List import completed successfully");
+        });
+
+    } catch (error) {
+        console.error("ImportFromExtension: Error importing Master List:", error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("ImportFromExtension: Debug info:", JSON.stringify(error.debugInfo));
+        }
+    }
 }
 
 /**
@@ -215,6 +481,12 @@ Office.onReady(() => {
         } else {
           console.log("Background: Extension declined Master List data");
         }
+      }
+
+      // Handle Master List import from extension
+      if (event.data.type === 'SRK_IMPORT_MASTER_LIST') {
+        console.log("Background: Received Master List import request from extension");
+        importMasterListFromExtension(event.data.data);
       }
     }
   });

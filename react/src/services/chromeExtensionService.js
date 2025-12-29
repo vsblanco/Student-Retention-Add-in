@@ -49,6 +49,12 @@ class ChromeExtensionService {
         this.handleHighlightStudentRow(event.data.data);
         break;
 
+      case "SRK_IMPORT_MASTER_LIST":
+        console.log("ChromeExtensionService: Import master list request received:", event.data);
+        // Forward to listeners (background-service.js will handle the actual import)
+        this.notifyListeners({ type: "message", data: event.data });
+        break;
+
       // Add more message types here as needed
       default:
         // Forward unknown messages to listeners
