@@ -97,7 +97,7 @@ async function importMissingAssignments(studentsWithAssignments) {
                         }
 
                         // Assignment (HYPERLINK with assignment URL and title as friendly name)
-                        const assignmentUrl = typeof assignment.Assignment === 'object' ? assignment.Assignment.url : assignment.assignmentUrl || assignment.assignmentLink;
+                        const assignmentUrl = typeof assignment.Assignment === 'object' ? assignment.Assignment.url : assignment.assignmentLink || assignment.assignmentUrl;
                         const assignmentTitle = typeof assignment.Assignment === 'object' ? assignment.Assignment.text : assignment.assignmentTitle || assignment.assignmentName || "Assignment";
                         if (assignmentUrl) {
                             formulaRow[3] = `=HYPERLINK("${assignmentUrl}", "${assignmentTitle}")`;
@@ -113,7 +113,7 @@ async function importMissingAssignments(studentsWithAssignments) {
                         row[5] = typeof assignment.Score === 'object' ? assignment.Score.text : assignment.score || assignment.Score || "";
 
                         // Submission (HYPERLINK with submission URL and "Missing" as friendly name)
-                        const submissionUrl = typeof assignment.Submission === 'object' ? assignment.Submission.url : assignment.submissionUrl || assignment.submissionLink;
+                        const submissionUrl = typeof assignment.Submission === 'object' ? assignment.Submission.url : assignment.submissionLink || assignment.submissionUrl;
                         if (submissionUrl) {
                             formulaRow[6] = `=HYPERLINK("${submissionUrl}", "Missing")`;
                             row[6] = "Missing";
@@ -663,15 +663,15 @@ async function transferMasterList() {
 
                                         // Map to flattened properties based on column header
                                         if (headerName === "Assignment") {
-                                            assignmentData.assignmentUrl = url;
+                                            assignmentData.assignmentLink = url;
                                             assignmentData.assignmentTitle = text;
                                         } else if (headerName === "Submission") {
-                                            assignmentData.submissionUrl = url;
+                                            assignmentData.submissionLink = url;
                                         } else if (headerName === "Grade Book") {
                                             // Grade Book is already handled separately, skip
                                         } else {
                                             // For any other hyperlink columns, store both url and text as separate properties
-                                            assignmentData[`${headerName.toLowerCase().replace(/\s+/g, '')}Url`] = url;
+                                            assignmentData[`${headerName.toLowerCase().replace(/\s+/g, '')}Link`] = url;
                                             assignmentData[`${headerName.toLowerCase().replace(/\s+/g, '')}Text`] = text;
                                         }
                                     } else if (value !== null && value !== undefined && value !== "") {
