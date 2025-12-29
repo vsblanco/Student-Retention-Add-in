@@ -64,7 +64,7 @@ async function importMasterListFromExtension(payload) {
             // Get the Master List sheet
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, formulas");
+            usedRange.load("values, formulas, rowCount, rowIndex, columnIndex");
             await context.sync();
 
             // Get Master List headers
