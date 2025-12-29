@@ -84,7 +84,8 @@ The Chrome extension can send master list data to import into the add-in's Maste
 **Import Behavior:**
 - If the Master List sheet doesn't exist, the import will be aborted
 - If the sheet exists, the add-in will:
-  - Match incoming headers to Master List headers (case-insensitive)
+  - Match incoming headers to Master List headers (case-insensitive with whitespace normalization)
+  - Automatically wrap Gradebook URLs in HYPERLINK formulas with "Grade Book" as the display text
   - Preserve existing Gradebook hyperlinks for students already in the list
   - Preserve "Assigned" column values and their colors
   - Highlight new students in light blue (#ADD8E6)
@@ -400,7 +401,8 @@ importMasterListToExcel(studentsToImport);
 
 **Important Notes for Import:**
 - The add-in will only import if a "Master List" sheet already exists
-- Column headers are matched case-insensitively
+- Column headers are matched case-insensitively with whitespace normalization (e.g., "StudentName" matches "Student Name")
+- Gradebook URLs (starting with http:// or https://) are automatically wrapped in HYPERLINK formulas with "Grade Book" as the display text
 - Existing Gradebook links and Assigned values are preserved for existing students
 - New students will be highlighted in light blue
 - All data must be in array format matching the headers order

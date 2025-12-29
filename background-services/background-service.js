@@ -74,10 +74,26 @@ async function importMasterListFromExtension(payload) {
 
             console.log(`ImportFromExtension: Master List headers: [${masterHeaders.join(', ')}]`);
 
+            // Helper function to normalize headers (remove all whitespace)
+            const normalizeHeader = (header) => String(header).toLowerCase().replace(/\s+/g, '');
+
+            // Create normalized versions for matching
+            const normalizedMasterHeaders = masterHeaders.map(h => normalizeHeader(h));
+            const normalizedIncomingHeaders = incomingHeaders.map(h => normalizeHeader(h));
+
             // Create column mapping (incoming column index -> master column index)
-            const colMapping = lowerCaseIncomingHeaders.map(incomingHeader =>
-                lowerCaseMasterHeaders.indexOf(incomingHeader)
-            );
+            // First try exact case-insensitive match, then try normalized match
+            const colMapping = lowerCaseIncomingHeaders.map((incomingHeader, idx) => {
+                // Try exact match first
+                let masterIdx = lowerCaseMasterHeaders.indexOf(incomingHeader);
+
+                // If no exact match, try normalized match (removes whitespace differences)
+                if (masterIdx === -1) {
+                    masterIdx = normalizedMasterHeaders.indexOf(normalizedIncomingHeaders[idx]);
+                }
+
+                return masterIdx;
+            });
 
             console.log(`ImportFromExtension: Column mapping: [${colMapping.join(', ')}]`);
 
@@ -199,9 +215,22 @@ async function importMasterListFromExtension(payload) {
                     const masterColIdx = colMapping[incomingColIdx];
                     if (masterColIdx !== -1) {
                         let cellValue = incomingRow[incomingColIdx] || "";
+
+                        // Format student name to "Last, First"
                         if (masterColIdx === masterStudentNameCol) {
                             cellValue = formatToLastFirst(String(cellValue));
                         }
+
+                        // Wrap Gradebook URLs in HYPERLINK formula
+                        if (masterColIdx === masterGradebookCol && cellValue) {
+                            const urlString = String(cellValue).trim();
+                            // Check if it looks like a URL
+                            if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
+                                formulaRow[masterColIdx] = `=HYPERLINK("${urlString}", "Grade Book")`;
+                                cellValue = "Grade Book"; // Display value
+                            }
+                        }
+
                         newRow[masterColIdx] = cellValue;
                     }
                 }
