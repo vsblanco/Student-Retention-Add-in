@@ -467,6 +467,105 @@ async function transferMasterList() {
 
             console.log(`TransferMasterList: Sending ${headers.length} columns and ${students.length} students`);
 
+            // Check if Missing Assignments sheet exists and parse it
+            let missingAssignmentsData = null;
+            try {
+                const missingSheet = sheets.items.find(s => s.name === "Missing Assignments");
+                if (missingSheet) {
+                    console.log("TransferMasterList: Found Missing Assignments sheet, parsing data...");
+                    const maSheet = context.workbook.worksheets.getItem("Missing Assignments");
+                    const maRange = maSheet.getUsedRange();
+                    maRange.load("values, formulas");
+                    await context.sync();
+
+                    if (maRange.values.length > 0) {
+                        // Parse headers from Missing Assignments sheet
+                        const maHeaders = maRange.values[0].map(h => String(h || ''));
+                        const maLowerHeaders = maHeaders.map(h => h.toLowerCase());
+
+                        // Find the Gradebook column in Missing Assignments sheet
+                        const maGradebookColIdx = findColumnIndex(maLowerHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+
+                        console.log(`TransferMasterList: Missing Assignments headers: [${maHeaders.join(', ')}]`);
+                        console.log(`TransferMasterList: Gradebook column index in Missing Assignments: ${maGradebookColIdx}`);
+
+                        // Create a map of gradebook URL -> assignment data
+                        const gradebookToAssignmentsMap = new Map();
+
+                        for (let i = 1; i < maRange.values.length; i++) {
+                            const rowValues = maRange.values[i];
+                            const rowFormulas = maRange.formulas[i];
+
+                            // Get the gradebook URL (extract from HYPERLINK if needed)
+                            let gradebookUrl = null;
+                            if (maGradebookColIdx !== -1) {
+                                const formula = rowFormulas[maGradebookColIdx];
+                                const match = String(formula).match(hyperlinkRegex);
+                                if (match && match[1]) {
+                                    gradebookUrl = match[1]; // Extract URL from HYPERLINK formula
+                                } else {
+                                    gradebookUrl = rowValues[maGradebookColIdx];
+                                }
+                            }
+
+                            if (gradebookUrl) {
+                                // Create an object with all columns from this row
+                                const assignmentData = {};
+                                for (let colIdx = 0; colIdx < maHeaders.length; colIdx++) {
+                                    const headerName = maHeaders[colIdx];
+                                    if (!headerName) continue;
+
+                                    let value = rowValues[colIdx];
+
+                                    // Special handling for Gradebook column - extract URL from HYPERLINK
+                                    if (colIdx === maGradebookColIdx) {
+                                        const formula = rowFormulas[colIdx];
+                                        const match = String(formula).match(hyperlinkRegex);
+                                        if (match && match[1]) {
+                                            value = match[1]; // Extract URL from HYPERLINK formula
+                                        }
+                                    }
+
+                                    // Include value if it's not null/undefined/empty string
+                                    if (value !== null && value !== undefined && value !== "") {
+                                        assignmentData[headerName] = value;
+                                    }
+                                }
+
+                                // Store this assignment data keyed by gradebook URL
+                                if (!gradebookToAssignmentsMap.has(gradebookUrl)) {
+                                    gradebookToAssignmentsMap.set(gradebookUrl, []);
+                                }
+                                gradebookToAssignmentsMap.get(gradebookUrl).push(assignmentData);
+                            }
+                        }
+
+                        console.log(`TransferMasterList: Created map with ${gradebookToAssignmentsMap.size} unique gradebook URLs from Missing Assignments`);
+
+                        missingAssignmentsData = {
+                            headers: maHeaders,
+                            gradebookMap: gradebookToAssignmentsMap
+                        };
+                    }
+                } else {
+                    console.log("TransferMasterList: No Missing Assignments sheet found");
+                }
+            } catch (error) {
+                console.error("TransferMasterList: Error reading Missing Assignments sheet:", error);
+                // Continue without missing assignments data
+            }
+
+            // Add missing assignments to students if available
+            if (missingAssignmentsData && missingAssignmentsData.gradebookMap.size > 0) {
+                students.forEach(student => {
+                    const studentGradebook = student[headers[gradeBookColIdx]]; // Get gradebook URL from student
+                    if (studentGradebook && missingAssignmentsData.gradebookMap.has(studentGradebook)) {
+                        student.missingAssignments = missingAssignmentsData.gradebookMap.get(studentGradebook);
+                    }
+                });
+                console.log(`TransferMasterList: Added missing assignments data to students`);
+            }
+
             return {
                 sheetName: CONSTANTS.MASTER_LIST_SHEET,
                 headers: headers,  // All column headers

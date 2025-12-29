@@ -156,7 +156,16 @@ interface Student {
   // "Gender"?: string;
   // "Shift"?: string;
   // "ProgramVersion"?: string;
+  // "missingAssignments"?: MissingAssignment[];  // Array of missing assignments (only if Missing Assignments sheet exists)
   // ... and any other custom columns in your sheet
+}
+
+// Missing Assignment interface - includes all columns from the Missing Assignments sheet
+interface MissingAssignment {
+  [key: string]: any;  // Dynamic properties based on your Missing Assignments sheet columns
+
+  // The assignment data is matched by Gradebook URL
+  // All columns from the Missing Assignments sheet are included for matching students
 }
 ```
 
@@ -223,7 +232,21 @@ interface Student {
         "Phone": "555-1234",
         "Other Phone": "555-5678",
         "StudentEmail": "john.smith@school.edu",
-        "PersonalEmail": "john@email.com"
+        "PersonalEmail": "john@email.com",
+        "missingAssignments": [
+          {
+            "Gradebook": "https://nuc.instructure.com/courses/123/grades/12345",
+            "Assignment Name": "Week 5 Homework",
+            "Due Date": "12/15/2025",
+            "Points": 100
+          },
+          {
+            "Gradebook": "https://nuc.instructure.com/courses/123/grades/12345",
+            "Assignment Name": "Quiz 3",
+            "Due Date": "12/18/2025",
+            "Points": 50
+          }
+        ]
       },
       {
         "Assigned": "Dr. Williams",
@@ -377,7 +400,64 @@ if (student) {
 }
 ```
 
-### 6. Importing Master List Data to Excel
+### 6. Example: Working with Missing Assignments
+
+If a "Missing Assignments" sheet exists in the Excel workbook, the add-in will automatically include missing assignment data for each student, matched by their Gradebook URL:
+
+```javascript
+function displayStudentMissingAssignments(studentName) {
+  const data = JSON.parse(localStorage.getItem('masterListData'));
+  if (!data) return;
+
+  const student = data.students.find(s =>
+    s["Student Name"]?.toLowerCase().includes(studentName.toLowerCase())
+  );
+
+  if (!student) {
+    console.log("Student not found");
+    return;
+  }
+
+  console.log(`Student: ${student["Student Name"]}`);
+  console.log(`Grade: ${student.Grade}`);
+
+  // Check if student has missing assignments
+  if (student.missingAssignments && student.missingAssignments.length > 0) {
+    console.log(`Missing Assignments: ${student.missingAssignments.length}`);
+
+    student.missingAssignments.forEach((assignment, index) => {
+      console.log(`\n${index + 1}. ${assignment["Assignment Name"]}`);
+      console.log(`   Due Date: ${assignment["Due Date"]}`);
+      console.log(`   Points: ${assignment.Points}`);
+
+      // Access any custom columns from the Missing Assignments sheet
+      for (const [key, value] of Object.entries(assignment)) {
+        if (key !== "Assignment Name" && key !== "Due Date" &&
+            key !== "Points" && key !== "Gradebook") {
+          console.log(`   ${key}: ${value}`);
+        }
+      }
+    });
+  } else {
+    console.log("No missing assignments");
+  }
+}
+
+// Usage
+displayStudentMissingAssignments("John Smith");
+```
+
+**Important Notes about Missing Assignments:**
+- The `missingAssignments` array is only present if:
+  1. A "Missing Assignments" sheet exists in the workbook
+  2. The sheet has a Gradebook column that matches the student's Gradebook URL
+  3. There are missing assignments for that specific student
+- Always check if `student.missingAssignments` exists before accessing it
+- The array contains objects with ALL columns from the Missing Assignments sheet
+- Students are matched by their Gradebook URL (e.g., `https://nuc.instructure.com/courses/123/grades/12345`)
+- If the Gradebook URL is stored as a HYPERLINK formula, it will be automatically extracted
+
+### 7. Importing Master List Data to Excel
 
 The Chrome extension can send master list data to import into the add-in's Excel sheet:
 
@@ -456,17 +536,23 @@ importMasterListToExcel(studentsToImport);
 
 1. **All Columns Included**: The add-in now sends ALL columns from the Master List sheet, not just predefined ones. This means any custom columns you add will automatically be included in the payload.
 
-2. **Column Mapping**: The `columnMapping` object maps each header name to its column index (0-based). Use this if you need to reference data back to specific columns. The `headers` array provides all column names in order.
+2. **Missing Assignments Integration**: If a "Missing Assignments" sheet exists in the workbook:
+   - The add-in automatically parses it and matches assignments to students by Gradebook URL
+   - Each student object may include a `missingAssignments` array containing all assignment details
+   - The array includes ALL columns from the Missing Assignments sheet
+   - Always check if `student.missingAssignments` exists before accessing it
 
-3. **Dynamic Column Access**: Student objects use the actual header names as keys. Use bracket notation to access columns with spaces (e.g., `student["Student Name"]`) or dot notation for columns without spaces (e.g., `student.Grade`).
+3. **Column Mapping**: The `columnMapping` object maps each header name to its column index (0-based). Use this if you need to reference data back to specific columns. The `headers` array provides all column names in order.
 
-4. **Optional Fields**: All fields in student objects are optional (except the student name which is required). Always check if a field exists before using it.
+4. **Dynamic Column Access**: Student objects use the actual header names as keys. Use bracket notation to access columns with spaces (e.g., `student["Student Name"]`) or dot notation for columns without spaces (e.g., `student.Grade`).
 
-5. **Gradebook URLs**: The `Gradebook` field contains the full URL extracted from Excel HYPERLINK formulas, making it easy to open student gradebooks directly. The formula is automatically parsed to extract just the URL.
+5. **Optional Fields**: All fields in student objects are optional (except the student name which is required). Always check if a field exists before using it.
 
-6. **Timestamps**: Use the `timestamp` field to track when data was last synced and decide if you need to request fresh data.
+6. **Gradebook URLs**: The `Gradebook` field contains the full URL extracted from Excel HYPERLINK formulas, making it easy to open student gradebooks directly. The formula is automatically parsed to extract just the URL. This URL is also used to match students with their missing assignments.
 
-7. **Message Origin**: Always validate message origins in production for security:
+7. **Timestamps**: Use the `timestamp` field to track when data was last synced and decide if you need to request fresh data.
+
+8. **Message Origin**: Always validate message origins in production for security:
    ```javascript
    window.addEventListener("message", (event) => {
      // Validate origin if needed
