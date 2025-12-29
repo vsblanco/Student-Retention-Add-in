@@ -74,10 +74,26 @@ async function importMasterListFromExtension(payload) {
 
             console.log(`ImportFromExtension: Master List headers: [${masterHeaders.join(', ')}]`);
 
+            // Helper function to normalize headers (remove all whitespace)
+            const normalizeHeader = (header) => String(header).toLowerCase().replace(/\s+/g, '');
+
+            // Create normalized versions for matching
+            const normalizedMasterHeaders = masterHeaders.map(h => normalizeHeader(h));
+            const normalizedIncomingHeaders = incomingHeaders.map(h => normalizeHeader(h));
+
             // Create column mapping (incoming column index -> master column index)
-            const colMapping = lowerCaseIncomingHeaders.map(incomingHeader =>
-                lowerCaseMasterHeaders.indexOf(incomingHeader)
-            );
+            // First try exact case-insensitive match, then try normalized match
+            const colMapping = lowerCaseIncomingHeaders.map((incomingHeader, idx) => {
+                // Try exact match first
+                let masterIdx = lowerCaseMasterHeaders.indexOf(incomingHeader);
+
+                // If no exact match, try normalized match (removes whitespace differences)
+                if (masterIdx === -1) {
+                    masterIdx = normalizedMasterHeaders.indexOf(normalizedIncomingHeaders[idx]);
+                }
+
+                return masterIdx;
+            });
 
             console.log(`ImportFromExtension: Column mapping: [${colMapping.join(', ')}]`);
 
