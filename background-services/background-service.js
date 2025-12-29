@@ -215,9 +215,22 @@ async function importMasterListFromExtension(payload) {
                     const masterColIdx = colMapping[incomingColIdx];
                     if (masterColIdx !== -1) {
                         let cellValue = incomingRow[incomingColIdx] || "";
+
+                        // Format student name to "Last, First"
                         if (masterColIdx === masterStudentNameCol) {
                             cellValue = formatToLastFirst(String(cellValue));
                         }
+
+                        // Wrap Gradebook URLs in HYPERLINK formula
+                        if (masterColIdx === masterGradebookCol && cellValue) {
+                            const urlString = String(cellValue).trim();
+                            // Check if it looks like a URL
+                            if (urlString.startsWith('http://') || urlString.startsWith('https://')) {
+                                formulaRow[masterColIdx] = `=HYPERLINK("${urlString}", "Grade Book")`;
+                                cellValue = "Grade Book"; // Display value
+                            }
+                        }
+
                         newRow[masterColIdx] = cellValue;
                     }
                 }
