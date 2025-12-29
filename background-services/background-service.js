@@ -646,6 +646,7 @@ async function transferMasterList() {
 
                             if (gradebookUrl) {
                                 // Create an object with all columns from this row
+                                // Use flattened structure that matches the import payload format
                                 const assignmentData = {};
                                 for (let colIdx = 0; colIdx < maHeaders.length; colIdx++) {
                                     const headerName = maHeaders[colIdx];
@@ -654,17 +655,35 @@ async function transferMasterList() {
                                     let value = rowValues[colIdx];
                                     const formula = rowFormulas[colIdx];
 
-                                    // Special handling for HYPERLINK formulas - extract both URL and friendly name
+                                    // Special handling for HYPERLINK formulas - extract URL and text separately
                                     const hyperlinkMatch = String(formula).match(/=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)/i);
                                     if (hyperlinkMatch) {
-                                        // Store as object with both url and text
-                                        assignmentData[headerName] = {
-                                            url: hyperlinkMatch[1],
-                                            text: hyperlinkMatch[2]
-                                        };
+                                        const url = hyperlinkMatch[1];
+                                        const text = hyperlinkMatch[2];
+
+                                        // Map to flattened properties based on column header
+                                        if (headerName === "Assignment") {
+                                            assignmentData.assignmentUrl = url;
+                                            assignmentData.assignmentTitle = text;
+                                        } else if (headerName === "Submission") {
+                                            assignmentData.submissionUrl = url;
+                                        } else if (headerName === "Grade Book") {
+                                            // Grade Book is already handled separately, skip
+                                        } else {
+                                            // For any other hyperlink columns, store both url and text as separate properties
+                                            assignmentData[`${headerName.toLowerCase().replace(/\s+/g, '')}Url`] = url;
+                                            assignmentData[`${headerName.toLowerCase().replace(/\s+/g, '')}Text`] = text;
+                                        }
                                     } else if (value !== null && value !== undefined && value !== "") {
-                                        // Regular value
-                                        assignmentData[headerName] = value;
+                                        // Regular values - map to flattened property names
+                                        if (headerName === "Due Date") {
+                                            assignmentData.dueDate = value;
+                                        } else if (headerName === "Score") {
+                                            assignmentData.score = value;
+                                        } else {
+                                            // For any other columns, use the original header name
+                                            assignmentData[headerName] = value;
+                                        }
                                     }
                                 }
 
