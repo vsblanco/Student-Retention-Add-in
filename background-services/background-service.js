@@ -226,6 +226,8 @@ async function importMasterListFromExtension(payload) {
             const masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
             const masterAssignedCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+            const masterMissingAssignmentsCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+            const incomingMissingAssignmentsCol = findColumnIndex(lowerCaseIncomingHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
 
             if (incomingStudentNameCol === -1) {
                 console.error("ImportFromExtension: Incoming data is missing a 'Student Name' column");
@@ -359,6 +361,25 @@ async function importMasterListFromExtension(payload) {
                     }
                 }
 
+                // Handle missing assignments count based on gradebook link
+                if (masterMissingAssignmentsCol !== -1) {
+                    const incomingMissingCount = incomingMissingAssignmentsCol !== -1 ? incomingRow[incomingMissingAssignmentsCol] : null;
+                    const hasGradebookLink = masterGradebookCol !== -1 && newRow[masterGradebookCol];
+
+                    if (hasGradebookLink) {
+                        // If gradebook link exists, default to 0 if no count provided
+                        const missingCount = (incomingMissingCount !== null &&
+                                            incomingMissingCount !== undefined &&
+                                            incomingMissingCount !== '')
+                                            ? incomingMissingCount
+                                            : 0;
+                        newRow[masterMissingAssignmentsCol] = missingCount;
+                    } else {
+                        // If no gradebook link, set to blank
+                        newRow[masterMissingAssignmentsCol] = '';
+                    }
+                }
+
                 // Preserve existing data for this student if they already exist
                 const studentName = incomingRow[incomingStudentNameCol];
                 const normalizedName = normalizeName(studentName);
@@ -430,8 +451,10 @@ async function importMasterListFromExtension(payload) {
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
 
-            // Apply conditional formatting to Grade column
+            // Apply conditional formatting to columns
             await applyGradeConditionalFormatting(context, sheet, masterHeaders);
+            await applyMissingAssignmentsConditionalFormatting(context, sheet, masterHeaders);
+            await applyHoldConditionalFormatting(context, sheet, masterHeaders);
 
             // Autofit columns
             console.log("ImportFromExtension: Autofitting columns...");
@@ -517,6 +540,96 @@ async function applyGradeConditionalFormatting(context, sheet, headers) {
         console.log("ImportFromExtension: Conditional formatting applied to Grade column");
     } catch (error) {
         console.error("ImportFromExtension: Error applying conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies conditional formatting to the missing assignments column to highlight 0s in light green
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyMissingAssignmentsConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to Missing Assignments column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const missingAssignmentsColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+
+        if (missingAssignmentsColIdx === -1) {
+            console.log("ImportFromExtension: Missing Assignments column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("values, rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const missingAssignmentsColumnRange = sheet.getRangeByIndexes(1, missingAssignmentsColIdx, range.rowCount - 1, 1);
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        missingAssignmentsColumnRange.conditionalFormats.clearAll();
+
+        // Apply conditional formatting: cells with value 0 get light green background
+        const conditionalFormat = missingAssignmentsColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+        conditionalFormat.cellValue.format.fill.color = "#90EE90"; // Light green
+        conditionalFormat.cellValue.rule = { formula1: "0", operator: "EqualTo" };
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting applied to Missing Assignments column (0s highlighted in light green)");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying missing assignments conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies conditional formatting to the Hold column to highlight "Yes" values in light red
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyHoldConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to Hold column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const holdColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.hold);
+
+        if (holdColIdx === -1) {
+            console.log("ImportFromExtension: Hold column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("values, rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const holdColumnRange = sheet.getRangeByIndexes(1, holdColIdx, range.rowCount - 1, 1);
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        holdColumnRange.conditionalFormats.clearAll();
+
+        // Apply conditional formatting: cells with "Yes" get light red background
+        const conditionalFormat = holdColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+        conditionalFormat.textComparison.format.fill.color = "#FFB6C1"; // Light red (light pink)
+        conditionalFormat.textComparison.rule = { operator: Excel.ConditionalTextOperator.contains, text: "Yes" };
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting applied to Hold column ('Yes' highlighted in light red)");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying hold conditional formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
