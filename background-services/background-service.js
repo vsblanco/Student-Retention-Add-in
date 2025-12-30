@@ -455,6 +455,7 @@ async function importMasterListFromExtension(payload) {
             await applyGradeConditionalFormatting(context, sheet, masterHeaders);
             await applyMissingAssignmentsConditionalFormatting(context, sheet, masterHeaders);
             await applyHoldConditionalFormatting(context, sheet, masterHeaders);
+            await applyAdSAPStatusConditionalFormatting(context, sheet, masterHeaders);
 
             // Autofit columns
             console.log("ImportFromExtension: Autofitting columns...");
@@ -576,13 +577,13 @@ async function applyMissingAssignmentsConditionalFormatting(context, sheet, head
         // Clear existing conditional formats on the column to avoid duplicates
         missingAssignmentsColumnRange.conditionalFormats.clearAll();
 
-        // Apply conditional formatting: cells with value 0 get light green background
+        // Apply conditional formatting: cells with value 0 get Green, Accent 6, Lighter 80% background
         const conditionalFormat = missingAssignmentsColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
-        conditionalFormat.cellValue.format.fill.color = "#90EE90"; // Light green
+        conditionalFormat.cellValue.format.fill.color = "#E2EFDA"; // Green, Accent 6, Lighter 80%
         conditionalFormat.cellValue.rule = { formula1: "0", operator: "EqualTo" };
 
         await context.sync();
-        console.log("ImportFromExtension: Conditional formatting applied to Missing Assignments column (0s highlighted in light green)");
+        console.log("ImportFromExtension: Conditional formatting applied to Missing Assignments column (0s highlighted in Green, Accent 6, Lighter 80%)");
     } catch (error) {
         console.error("ImportFromExtension: Error applying missing assignments conditional formatting:", error);
         // Don't throw - formatting is not critical
@@ -630,6 +631,51 @@ async function applyHoldConditionalFormatting(context, sheet, headers) {
         console.log("ImportFromExtension: Conditional formatting applied to Hold column ('Yes' highlighted in light red)");
     } catch (error) {
         console.error("ImportFromExtension: Error applying hold conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies conditional formatting to the AdSAPStatus column to highlight cells containing "Financial" in light red
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyAdSAPStatusConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to AdSAPStatus column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const adsapStatusColIdx = lowerCaseHeaders.indexOf('adsapstatus');
+
+        if (adsapStatusColIdx === -1) {
+            console.log("ImportFromExtension: AdSAPStatus column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("values, rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const adsapStatusColumnRange = sheet.getRangeByIndexes(1, adsapStatusColIdx, range.rowCount - 1, 1);
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        adsapStatusColumnRange.conditionalFormats.clearAll();
+
+        // Apply conditional formatting: cells containing "Financial" get light red background
+        const conditionalFormat = adsapStatusColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+        conditionalFormat.textComparison.format.fill.color = "#FFB6C1"; // Light red (light pink)
+        conditionalFormat.textComparison.rule = { operator: Excel.ConditionalTextOperator.contains, text: "Financial" };
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting applied to AdSAPStatus column (cells containing 'Financial' highlighted in light red)");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying AdSAPStatus conditional formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
