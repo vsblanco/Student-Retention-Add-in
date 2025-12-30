@@ -867,6 +867,28 @@ async function transferMasterList() {
     }
 }
 
+/**
+ * Sets up listener to respond to ping checks from the Chrome extension
+ * Call this during add-in initialization to enable connectivity checks
+ */
+function setupPingResponseListener() {
+    window.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "SRK_TASKPANE_PING") {
+            console.log('🏓 Received ping from Chrome extension taskpane, sending pong...');
+
+            // Send pong response back to extension
+            window.postMessage({
+                type: "SRK_TASKPANE_PONG",
+                timestamp: new Date().toISOString()
+            }, "*");
+
+            console.log('✅ Pong sent to Chrome extension');
+        }
+    });
+
+    console.log('🔔 Ping response listener set up');
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
@@ -879,6 +901,9 @@ Office.actions.associate("onDocumentOpen", onDocumentOpen);
 // Initialize background services when Office is ready
 Office.onReady(() => {
   console.log("Background script initialized - starting Chrome Extension Service");
+
+  // Set up ping/pong listener for Chrome extension connectivity checks
+  setupPingResponseListener();
 
   // Start extension detection
   // This will continuously ping to detect the Chrome extension
