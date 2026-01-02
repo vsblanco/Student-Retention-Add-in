@@ -293,51 +293,20 @@ export default function PersonalizedEmail({ onReady }) {
 
                     for (const param of customParameters) {
                         let value = '';
-                        if (param.logicType === 'custom-script' && param.script) {
-                            try {
-                                const argNames = ['getWorksheet', 'sourceColumnValue'];
-                                const argValues = [getWorksheetData, ''];
-                                let userScript = param.script;
-                                const mainSourceColIndex = headers.indexOf(param.sourceColumn.toLowerCase());
-                                if (mainSourceColIndex !== -1) argValues[1] = row[mainSourceColIndex];
-
-                                if (param.scriptInputs) {
-                                    for (const varName in param.scriptInputs) {
-                                        const sourceColName = param.scriptInputs[varName];
-                                        const sourceColIndex = headers.indexOf(sourceColName.toLowerCase());
-                                        argNames.push(varName);
-                                        argValues.push((sourceColIndex !== -1) ? row[sourceColIndex] : undefined);
-                                        userScript = userScript.replace(new RegExp(`\\blet\\s+${varName}\\s*;`, 'g'), '');
+                        const colIndex = customParamIndices[param.name];
+                        if (colIndex !== undefined) {
+                            const cellValue = row[colIndex] ?? '';
+                            let mappingFound = false;
+                            if (param.mappings && cellValue !== '') {
+                                for (const mapping of param.mappings) {
+                                    if (evaluateMapping(cellValue, mapping)) {
+                                        value = mapping.then;
+                                        mappingFound = true;
+                                        break;
                                     }
                                 }
-
-                                const isAsync = /\bawait\b/.test(userScript);
-                                const hasReturn = /\breturn\b/.test(userScript);
-                                let finalScriptBody = isAsync
-                                    ? (hasReturn ? userScript : `return (async () => { ${userScript} })();`)
-                                    : (hasReturn ? userScript : `return (() => { "use strict"; ${userScript} })();`);
-                                const executor = new Function(...argNames, `return (async () => { "use strict"; ${finalScriptBody} })();`);
-                                value = await executor(...argValues);
-                            } catch (e) {
-                                console.error(`Error executing script for parameter "${param.name}":`, e);
-                                value = `[SCRIPT ERROR]`;
                             }
-                        } else {
-                            const colIndex = customParamIndices[param.name];
-                            if (colIndex !== undefined) {
-                                const cellValue = row[colIndex] ?? '';
-                                let mappingFound = false;
-                                if (param.mappings && cellValue !== '') {
-                                    for (const mapping of param.mappings) {
-                                        if (evaluateMapping(cellValue, mapping)) {
-                                            value = mapping.then;
-                                            mappingFound = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (!mappingFound) value = cellValue;
-                            }
+                            if (!mappingFound) value = cellValue;
                         }
                         student[param.name] = value;
                     }
@@ -484,7 +453,6 @@ export default function PersonalizedEmail({ onReady }) {
 
             if (hasNested) buttonClass = PARAMETER_BUTTON_STYLES.nested;
             else if (hasMappings) buttonClass = PARAMETER_BUTTON_STYLES.mapped;
-            else if (param.logicType === 'custom-script') buttonClass = PARAMETER_BUTTON_STYLES.script;
             else buttonClass = PARAMETER_BUTTON_STYLES.custom;
         }
 
