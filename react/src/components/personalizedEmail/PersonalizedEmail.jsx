@@ -384,6 +384,25 @@ export default function PersonalizedEmail({ onReady }) {
 
     const handleRecipientUpdate = (newSelection, count) => {
         setRecipientSelection({ ...newSelection, hasBeenSet: true });
+        // Clear cache to ensure fresh data is fetched when needed
+        setStudentDataCache([]);
+    };
+
+    const ensureStudentDataLoaded = async () => {
+        // Only fetch if we don't have data cached
+        if (studentDataCache.length === 0 && recipientSelection.hasBeenSet) {
+            await getStudentDataWithUI();
+        }
+    };
+
+    const handleOpenExampleModal = async () => {
+        await ensureStudentDataLoaded();
+        setShowExampleModal(true);
+    };
+
+    const handleOpenConfirmModal = async () => {
+        await ensureStudentDataLoaded();
+        setShowConfirmModal(true);
     };
 
     const insertParameter = (param) => {
@@ -685,14 +704,14 @@ export default function PersonalizedEmail({ onReady }) {
             {/* Action Buttons */}
             <div className="mt-6 flex space-x-2">
                 <button
-                    onClick={() => setShowExampleModal(true)}
+                    onClick={handleOpenExampleModal}
                     className="w-1/2 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200"
                 >
                     Example
                 </button>
                 <div className="relative w-1/2 group">
                     <button
-                        onClick={() => setShowConfirmModal(true)}
+                        onClick={handleOpenConfirmModal}
                         disabled={!isFormValid()}
                         className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                     >
@@ -743,7 +762,6 @@ export default function PersonalizedEmail({ onReady }) {
                 onConfirm={handleRecipientUpdate}
                 getStudentDataCore={getStudentDataCore}
                 recipientDataCache={recipientDataCache}
-                onDataFetch={getStudentDataWithUI}
             />
 
             <ConfirmSendModal
