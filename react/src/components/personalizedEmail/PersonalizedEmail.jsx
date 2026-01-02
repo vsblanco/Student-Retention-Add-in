@@ -55,10 +55,13 @@ export default function PersonalizedEmail({ onReady }) {
 
     // Check for existing connection on mount
     useEffect(() => {
-        checkConnection();
-        loadCustomParameters();
-        // Call onReady to signal that component is loaded
-        if (onReady) onReady();
+        const initializeComponent = async () => {
+            await checkConnection();
+            await loadCustomParameters();
+            // Call onReady after connection check is complete
+            if (onReady) onReady();
+        };
+        initializeComponent();
     }, [onReady]);
 
     // Pre-cache recipient data after connection is established
