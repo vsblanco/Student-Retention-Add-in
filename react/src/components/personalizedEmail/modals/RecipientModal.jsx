@@ -19,16 +19,16 @@ export default function RecipientModal({
     useEffect(() => {
         if (isOpen) {
             setSelection(currentSelection);
-            fetchStudentCount();
+            fetchStudentCount(currentSelection);
         }
     }, [isOpen, currentSelection]);
 
-    const fetchStudentCount = async () => {
+    const fetchStudentCount = async (sel = selection) => {
         setStatusMessage('Counting students...');
         setIsLoading(true);
         setExcludedStudents([]);
 
-        const { type, excludeDNC, excludeFillColor } = selection;
+        const { type, excludeDNC, excludeFillColor } = sel;
 
         // Check cache first
         if (type !== 'custom' && excludeDNC && excludeFillColor && recipientDataCache.has(type)) {
@@ -41,7 +41,7 @@ export default function RecipientModal({
         }
 
         try {
-            const result = await getStudentDataCore(selection);
+            const result = await getStudentDataCore(sel);
             setStudentCount(result.included.length);
             setExcludedStudents(result.excluded);
             setStatusMessage(`${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`);
