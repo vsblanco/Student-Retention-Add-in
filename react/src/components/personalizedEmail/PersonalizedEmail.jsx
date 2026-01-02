@@ -174,7 +174,7 @@ export default function PersonalizedEmail({ onReady }) {
         }
     };
 
-    const getStudentDataCore = async (selection) => {
+    const getStudentDataCore = async (selection, skipSpecialParams = false) => {
         const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
         let sheetName;
 
@@ -234,11 +234,17 @@ export default function PersonalizedEmail({ onReady }) {
                 const sheet = context.workbook.worksheets.getItem(sheetName);
                 const usedRange = sheet.getUsedRange();
                 const cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
-                usedRange.load("values, formulas");
+
+                // Only load formulas if we need to process special parameters
+                if (skipSpecialParams) {
+                    usedRange.load("values");
+                } else {
+                    usedRange.load("values, formulas");
+                }
                 await context.sync();
 
                 const values = usedRange.values;
-                const formulas = usedRange.formulas;
+                const formulas = skipSpecialParams ? null : usedRange.formulas;
                 const formats = cellProperties.value;
                 const headers = values[0].map(h => String(h ?? '').toLowerCase());
 
@@ -315,20 +321,22 @@ export default function PersonalizedEmail({ onReady }) {
                         student[param.name] = value;
                     }
 
-                    // Process special parameters
-                    for (const paramName of specialParameters) {
-                        if (paramName === 'MissingAssignmentsList') {
-                            const gradeBookIndex = colIndices.GradeBook;
-                            if (gradeBookIndex !== -1) {
-                                const gradeBookValue = row[gradeBookIndex];
-                                const gradeBookFormula = formulas[i][gradeBookIndex];
-                                student.MissingAssignmentsList = await generateMissingAssignmentsList(
-                                    gradeBookValue,
-                                    gradeBookFormula,
-                                    context
-                                );
-                            } else {
-                                student.MissingAssignmentsList = '';
+                    // Process special parameters (only when generating actual emails, not during counting)
+                    if (!skipSpecialParams) {
+                        for (const paramName of specialParameters) {
+                            if (paramName === 'MissingAssignmentsList') {
+                                const gradeBookIndex = colIndices.GradeBook;
+                                if (gradeBookIndex !== -1) {
+                                    const gradeBookValue = row[gradeBookIndex];
+                                    const gradeBookFormula = formulas[i][gradeBookIndex];
+                                    student.MissingAssignmentsList = await generateMissingAssignmentsList(
+                                        gradeBookValue,
+                                        gradeBookFormula,
+                                        context
+                                    );
+                                } else {
+                                    student.MissingAssignmentsList = '';
+                                }
                             }
                         }
                     }
@@ -363,11 +371,11 @@ export default function PersonalizedEmail({ onReady }) {
     const preCacheRecipientData = async () => {
         try {
             const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
-            const ldaResult = await getStudentDataCore(ldaSelection);
+            const ldaResult = await getStudentDataCore(ldaSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('lda', ldaResult));
 
             const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
-            const masterResult = await getStudentDataCore(masterSelection);
+            const masterResult = await getStudentDataCore(masterSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('master', masterResult));
         } catch (error) {
             console.warn("Pre-caching failed. This may happen if sheets are not yet created.", error);
