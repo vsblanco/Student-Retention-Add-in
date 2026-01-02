@@ -6,10 +6,7 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
     const [editingParam, setEditingParam] = useState(null);
     const [paramName, setParamName] = useState('');
     const [sourceColumn, setSourceColumn] = useState('');
-    const [logicType, setLogicType] = useState('');
     const [mappings, setMappings] = useState([]);
-    const [customScript, setCustomScript] = useState('');
-    const [scriptInputs, setScriptInputs] = useState({});
     const [saveStatus, setSaveStatus] = useState('');
 
     useEffect(() => {
@@ -22,10 +19,7 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
         setEditingParam(null);
         setParamName('');
         setSourceColumn('');
-        setLogicType('');
         setMappings([]);
-        setCustomScript('');
-        setScriptInputs({});
         setSaveStatus('');
     };
 
@@ -33,10 +27,7 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
         setEditingParam(param);
         setParamName(param.name);
         setSourceColumn(param.sourceColumn);
-        setLogicType(param.logicType || '');
         setMappings(param.mappings || []);
-        setCustomScript(param.script || '');
-        setScriptInputs(param.scriptInputs || {});
         setShowManageModal(false);
     };
 
@@ -54,41 +45,6 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
         setMappings(newMappings);
     };
 
-    const handleScanScript = () => {
-        const regex = /\b(?:let|const|var)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)(?!\s*=)/g;
-        const newInputs = new Set();
-        let match;
-
-        while ((match = regex.exec(customScript)) !== null) {
-            if (match[1] !== 'getWorksheet' && match[1] !== 'sourceColumnValue') {
-                newInputs.add(match[1]);
-            }
-        }
-
-        const updatedInputs = {};
-        newInputs.forEach(name => {
-            updatedInputs[name] = scriptInputs[name] || '';
-        });
-        setScriptInputs(updatedInputs);
-    };
-
-    const handleScriptInputChange = (varName, value) => {
-        setScriptInputs({ ...scriptInputs, [varName]: value });
-    };
-
-    const handleFileImport = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                setCustomScript(event.target.result);
-                handleScanScript();
-            };
-            reader.readAsText(file);
-        }
-        e.target.value = '';
-    };
-
     const handleSave = async () => {
         if (!/^[a-zA-Z0-9_]+$/.test(paramName)) {
             setSaveStatus('Parameter Name can only contain letters, numbers, and underscores.');
@@ -98,17 +54,8 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
         const newParam = {
             name: paramName,
             sourceColumn: sourceColumn,
-            logicType: logicType
+            mappings: mappings.filter(m => m.if)
         };
-
-        if (logicType === 'value-mapping') {
-            newParam.mappings = mappings.filter(m => m.if);
-        }
-
-        if (logicType === 'custom-script') {
-            newParam.script = customScript.trim();
-            newParam.scriptInputs = scriptInputs;
-        }
 
         let updatedParams = [...customParameters];
 
@@ -230,155 +177,73 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                         </p>
                     </div>
 
-                    <div className="space-y-4 border-t pt-4">
-                        <div>
-                            <label htmlFor="param-source-column" className="block text-sm font-medium text-gray-700">
-                                Source Column
-                            </label>
-                            <input
-                                type="text"
-                                id="param-source-column"
-                                value={sourceColumn}
-                                onChange={(e) => setSourceColumn(e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
-                                placeholder="e.g., Status"
-                            />
-                            <p className="mt-1 text-xs text-gray-500">
-                                The column in your sheet that this parameter will read from.
-                            </p>
-                        </div>
+                    <div>
+                        <label htmlFor="param-source-column" className="block text-sm font-medium text-gray-700">
+                            Source Column
+                        </label>
+                        <input
+                            type="text"
+                            id="param-source-column"
+                            value={sourceColumn}
+                            onChange={(e) => setSourceColumn(e.target.value)}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+                            placeholder="e.g., Status"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                            The column in your sheet that this parameter will read from.
+                        </p>
+                    </div>
 
-                        <div>
-                            <label htmlFor="logic-type-dropdown" className="block text-sm font-medium text-gray-700">
-                                Logic Type (Optional)
-                            </label>
-                            <select
-                                id="logic-type-dropdown"
-                                value={logicType}
-                                onChange={(e) => setLogicType(e.target.value)}
-                                className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="">Select a logic type...</option>
-                                <option value="value-mapping">Value Mapping</option>
-                                <option value="custom-script">Custom Script</option>
-                            </select>
-                            <p className="mt-1 text-xs text-gray-500">
-                                Optionally, transform the value from the source column before inserting it.
-                            </p>
-                        </div>
-
-                        {/* Value Mapping Logic */}
-                        {logicType === 'value-mapping' && (
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">Value Mappings</h4>
-                                <p className="mt-1 text-xs text-gray-500 mb-2">
-                                    If a cell's value matches a condition, the parameter will be replaced by the corresponding 'then' value.
-                                    If no conditions match, the original cell value will be used.
-                                </p>
-                                <div className="space-y-2">
-                                    {mappings.map((mapping, index) => (
-                                        <div key={index} className="flex items-center gap-2">
-                                            <span className="text-sm">If cell</span>
-                                            <select
-                                                value={mapping.operator}
-                                                onChange={(e) => handleMappingChange(index, 'operator', e.target.value)}
-                                                className="w-32 px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                            >
-                                                {MAPPING_OPERATORS.map(op => (
-                                                    <option key={op.value} value={op.value}>{op.text}</option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="text"
-                                                value={mapping.if}
-                                                onChange={(e) => handleMappingChange(index, 'if', e.target.value)}
-                                                className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                                placeholder="Value..."
-                                            />
-                                            <span className="text-sm">then</span>
-                                            <input
-                                                type="text"
-                                                value={mapping.then}
-                                                onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
-                                                className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                                placeholder="Result..."
-                                            />
-                                            <button
-                                                onClick={() => handleRemoveMapping(index)}
-                                                className="text-red-500 hover:text-red-700 text-xl"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={handleAddMapping}
-                                    className="mt-2 text-xs text-blue-600 hover:underline"
-                                >
-                                    + Add Mapping
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Custom Script Logic */}
-                        {logicType === 'custom-script' && (
-                            <div>
-                                <h4 className="text-sm font-medium text-gray-700 mb-2">Custom Script</h4>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs text-blue-600 hover:underline cursor-pointer">
-                                            + Import Script from File
-                                            <input
-                                                type="file"
-                                                accept=".js,.txt"
-                                                onChange={handleFileImport}
-                                                className="hidden"
-                                            />
-                                        </label>
-                                    </div>
-                                    <textarea
-                                        value={customScript}
-                                        onChange={(e) => setCustomScript(e.target.value)}
-                                        className="w-full h-32 p-2 border rounded-md font-mono text-xs bg-gray-50 focus:bg-white transition-colors"
-                                        placeholder="Paste your script here or import from a file..."
+                    <div className="border-t pt-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Value Mappings (Optional)</h4>
+                        <p className="text-xs text-gray-500 mb-3">
+                            Transform the value from the source column. If a cell's value matches a condition,
+                            the parameter will be replaced by the corresponding 'then' value.
+                            If no conditions match, the original cell value will be used.
+                        </p>
+                        <div className="space-y-2">
+                            {mappings.map((mapping, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                    <span className="text-sm">If cell</span>
+                                    <select
+                                        value={mapping.operator}
+                                        onChange={(e) => handleMappingChange(index, 'operator', e.target.value)}
+                                        className="w-32 px-2 py-1 border border-gray-300 rounded-md text-sm"
+                                    >
+                                        {MAPPING_OPERATORS.map(op => (
+                                            <option key={op.value} value={op.value}>{op.text}</option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        type="text"
+                                        value={mapping.if}
+                                        onChange={(e) => handleMappingChange(index, 'if', e.target.value)}
+                                        className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
+                                        placeholder="Value..."
                                     />
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={handleScanScript}
-                                            className="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300"
-                                        >
-                                            Scan for Inputs
-                                        </button>
-                                    </div>
-
-                                    {Object.keys(scriptInputs).length > 0 && (
-                                        <div className="space-y-2 border-t pt-3 mt-3">
-                                            <h5 className="text-xs font-medium text-gray-600">Script Inputs</h5>
-                                            <p className="text-xs text-gray-500">
-                                                Provide a source column name for each required script input.
-                                            </p>
-                                            <div className="space-y-2">
-                                                {Object.keys(scriptInputs).map(varName => (
-                                                    <div key={varName} className="flex items-center gap-2">
-                                                        <label className="w-1/3 text-sm font-mono text-gray-600">
-                                                            {varName}
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={scriptInputs[varName]}
-                                                            onChange={(e) => handleScriptInputChange(varName, e.target.value)}
-                                                            className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                                            placeholder="Source Column Name"
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                    <span className="text-sm">then</span>
+                                    <input
+                                        type="text"
+                                        value={mapping.then}
+                                        onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
+                                        className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
+                                        placeholder="Result..."
+                                    />
+                                    <button
+                                        onClick={() => handleRemoveMapping(index)}
+                                        className="text-red-500 hover:text-red-700 text-xl"
+                                    >
+                                        ×
+                                    </button>
                                 </div>
-                            </div>
-                        )}
+                            ))}
+                        </div>
+                        <button
+                            onClick={handleAddMapping}
+                            className="mt-2 text-xs text-blue-600 hover:underline"
+                        >
+                            + Add Mapping
+                        </button>
                     </div>
                 </div>
 
