@@ -6,8 +6,7 @@ export default function RecipientModal({
     currentSelection,
     onConfirm,
     getStudentDataCore,
-    recipientDataCache,
-    onDataFetch
+    recipientDataCache
 }) {
     const [selection, setSelection] = useState(currentSelection);
     const [studentCount, setStudentCount] = useState(0);
@@ -85,9 +84,6 @@ export default function RecipientModal({
     const handleConfirm = () => {
         onConfirm(selection, studentCount);
         onClose();
-        onDataFetch().catch(() => {
-            onConfirm(selection, -1);
-        });
     };
 
     if (!isOpen) return null;
