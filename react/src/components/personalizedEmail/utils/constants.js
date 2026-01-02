@@ -5,6 +5,9 @@ export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 // Standard, built-in parameters that are always available
 export const standardParameters = ['FirstName', 'LastName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
 
+// Special built-in parameters (more advanced, dynamically generated)
+export const specialParameters = ['MissingAssignmentsList'];
+
 // Configuration for the main rich text editor
 export const QUILL_EDITOR_CONFIG = {
     theme: 'snow',
@@ -28,7 +31,9 @@ export const COLUMN_MAPPINGS = {
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to', "Assigned", "Advisor"],
     Tags: ['history', 'tags', 'tag', "Tag", "Tags"],
     StudentIdentifier: ['student identifier','studentnumber', "Student Identifier", "Student Number"],
-    Outreach: ['outreach', "Outreach"]
+    Outreach: ['outreach', "Outreach"],
+    GradeBook: ['grade book', 'gradebook', 'Grade Book', 'GradeBook'],
+    Assignment: ['assignment', 'Assignment']
 };
 
 // Defines the operators available for creating custom parameter mapping rules
@@ -48,10 +53,10 @@ export const MAPPING_OPERATORS = [
 // Tailwind CSS class strings for different UI elements
 export const PARAMETER_BUTTON_STYLES = {
     standard: 'px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300',
+    special: 'px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded hover:bg-orange-200',
     custom: 'px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded hover:bg-blue-200',
     mapped: 'px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded hover:bg-purple-200',
-    nested: 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200',
-    script: 'px-2 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600'
+    nested: 'px-2 py-1 bg-rose-100 text-rose-800 text-xs rounded hover:bg-rose-200'
 };
 
 // The JSON schema for the payload that will be sent to the Power Automate flow
