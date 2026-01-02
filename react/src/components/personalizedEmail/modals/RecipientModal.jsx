@@ -41,7 +41,7 @@ export default function RecipientModal({
         }
 
         try {
-            const result = await getStudentDataCore(sel);
+            const result = await getStudentDataCore(sel, true); // Skip special params for faster counting
             setStudentCount(result.included.length);
             setExcludedStudents(result.excluded);
             setStatusMessage(`${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`);
@@ -69,7 +69,7 @@ export default function RecipientModal({
         setExcludedStudents([]);
 
         try {
-            const result = await getStudentDataCore(sel);
+            const result = await getStudentDataCore(sel, true); // Skip special params for faster counting
             setStudentCount(result.included.length);
             setExcludedStudents(result.excluded);
             setStatusMessage(`${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`);
