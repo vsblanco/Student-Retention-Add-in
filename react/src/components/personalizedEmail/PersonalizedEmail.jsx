@@ -36,6 +36,7 @@ export default function PersonalizedEmail({ onReady }) {
         excludeFillColor: true,
         hasBeenSet: false
     });
+    const [recipientCount, setRecipientCount] = useState(0);
     const [recipientDataCache, setRecipientDataCache] = useState(new Map());
     const [worksheetDataCache, setWorksheetDataCache] = useState({});
 
@@ -174,7 +175,7 @@ export default function PersonalizedEmail({ onReady }) {
         }
     };
 
-    const getStudentDataCore = async (selection, skipSpecialParams = false) => {
+    const getStudentDataCore = async (selection, skipSpecialParams = false, specialParamsToProcess = []) => {
         const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
         let sheetName;
 
@@ -322,8 +323,8 @@ export default function PersonalizedEmail({ onReady }) {
                     }
 
                     // Process special parameters (only when generating actual emails, not during counting)
-                    if (!skipSpecialParams) {
-                        for (const paramName of specialParameters) {
+                    if (!skipSpecialParams && specialParamsToProcess.length > 0) {
+                        for (const paramName of specialParamsToProcess) {
                             if (paramName === 'MissingAssignmentsList') {
                                 const gradeBookIndex = colIndices.GradeBook;
                                 if (gradeBookIndex !== -1) {
@@ -356,7 +357,12 @@ export default function PersonalizedEmail({ onReady }) {
     const getStudentDataWithUI = async () => {
         setStatus('Fetching students...');
         try {
-            const result = await getStudentDataCore(recipientSelection);
+            // Determine which special parameters are actually used in the email template
+            const specialParamsToProcess = specialParameters.filter(param =>
+                isParameterUsedInTemplate(param)
+            );
+
+            const result = await getStudentDataCore(recipientSelection, false, specialParamsToProcess);
             setStudentDataCache(result.included);
             setStatus(`Found ${result.included.length} students.`);
             setTimeout(() => setStatus(''), 3000);
@@ -384,8 +390,15 @@ export default function PersonalizedEmail({ onReady }) {
 
     const handleRecipientUpdate = (newSelection, count) => {
         setRecipientSelection({ ...newSelection, hasBeenSet: true });
+        setRecipientCount(count);
         // Clear cache to ensure fresh data is fetched when needed
         setStudentDataCache([]);
+    };
+
+    const isParameterUsedInTemplate = (paramName) => {
+        // Check if the parameter is used in any part of the email template
+        const template = `${fromPills[0] || ''} ${ccPills.join(' ')} ${subject} ${body}`;
+        return template.includes(`{${paramName}}`);
     };
 
     const ensureStudentDataLoaded = async () => {
@@ -479,14 +492,14 @@ export default function PersonalizedEmail({ onReady }) {
         const isFromValid = from && from.trim() !== '';
         const isSubjectValid = subject && subject.trim() !== '';
         const isBodyValid = body && body.trim() !== '';
-        const areRecipientsValid = recipientSelection.hasBeenSet && studentDataCache.length > 0;
+        const areRecipientsValid = recipientSelection.hasBeenSet && recipientCount > 0;
         return isFromValid && isSubjectValid && isBodyValid && areRecipientsValid;
     };
 
     const getValidationMessage = () => {
         const missing = [];
         if (!fromPills[0] || !fromPills[0].trim()) missing.push('From address');
-        if (!recipientSelection.hasBeenSet || studentDataCache.length === 0) missing.push('Recipients');
+        if (!recipientSelection.hasBeenSet || recipientCount === 0) missing.push('Recipients');
         if (!subject || !subject.trim()) missing.push('Subject');
         if (!body || !body.trim()) missing.push('Body');
         return missing.length > 0 ? `Required: ${missing.join(', ')}.` : '';
@@ -599,13 +612,13 @@ export default function PersonalizedEmail({ onReady }) {
                     <button
                         onClick={() => setShowRecipientModal(true)}
                         className={`mt-1 w-full text-left px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            recipientSelection.hasBeenSet && studentDataCache.length > 0
+                            recipientSelection.hasBeenSet && recipientCount > 0
                                 ? 'bg-green-100 text-green-800 font-semibold'
                                 : 'bg-white'
                         }`}
                     >
-                        {recipientSelection.hasBeenSet && studentDataCache.length > 0
-                            ? `${studentDataCache.length} Student${studentDataCache.length !== 1 ? 's' : ''} Selected`
+                        {recipientSelection.hasBeenSet && recipientCount > 0
+                            ? `${recipientCount} Student${recipientCount !== 1 ? 's' : ''} Selected`
                             : 'Select Students'}
                     </button>
                 </div>
