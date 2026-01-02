@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import PillInput from './components/PillInput';
-import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
-import { findColumnIndex, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate } from './utils/helpers';
+import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
+import { findColumnIndex, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
@@ -234,10 +234,11 @@ export default function PersonalizedEmail({ onReady }) {
                 const sheet = context.workbook.worksheets.getItem(sheetName);
                 const usedRange = sheet.getUsedRange();
                 const cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
-                usedRange.load("values");
+                usedRange.load("values, formulas");
                 await context.sync();
 
                 const values = usedRange.values;
+                const formulas = usedRange.formulas;
                 const formats = cellProperties.value;
                 const headers = values[0].map(h => String(h ?? '').toLowerCase());
 
@@ -313,6 +314,25 @@ export default function PersonalizedEmail({ onReady }) {
                         }
                         student[param.name] = value;
                     }
+
+                    // Process special parameters
+                    for (const paramName of specialParameters) {
+                        if (paramName === 'MissingAssignmentsList') {
+                            const gradeBookIndex = colIndices.GradeBook;
+                            if (gradeBookIndex !== -1) {
+                                const gradeBookValue = row[gradeBookIndex];
+                                const gradeBookFormula = formulas[i][gradeBookIndex];
+                                student.MissingAssignmentsList = await generateMissingAssignmentsList(
+                                    gradeBookValue,
+                                    gradeBookFormula,
+                                    context
+                                );
+                            } else {
+                                student.MissingAssignmentsList = '';
+                            }
+                        }
+                    }
+
                     includedStudents.push(student);
                 }
             });
@@ -450,7 +470,11 @@ export default function PersonalizedEmail({ onReady }) {
         const paramName = isCustom ? param.name : param;
 
         let buttonClass = PARAMETER_BUTTON_STYLES.standard;
-        if (isCustom) {
+
+        // Check if this is a special parameter
+        if (specialParameters.includes(paramName)) {
+            buttonClass = PARAMETER_BUTTON_STYLES.special;
+        } else if (isCustom) {
             const hasMappings = param.mappings && param.mappings.length > 0;
             const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
 
@@ -607,6 +631,15 @@ export default function PersonalizedEmail({ onReady }) {
                     <div className="mt-2 flex flex-wrap gap-2">
                         {standardParameters.map(param => renderParameterButton(param))}
                     </div>
+
+                    {specialParameters.length > 0 && (
+                        <div className="mt-3">
+                            <label className="block text-xs font-medium text-gray-600 mb-2">Special Parameters</label>
+                            <div className="flex flex-wrap gap-2">
+                                {specialParameters.map(param => renderParameterButton(param))}
+                            </div>
+                        </div>
+                    )}
 
                     {customParameters.length > 0 && (
                         <div className="mt-3">
