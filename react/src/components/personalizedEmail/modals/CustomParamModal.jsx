@@ -201,40 +201,49 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                             the parameter will be replaced by the corresponding 'then' value.
                             If no conditions match, the original cell value will be used.
                         </p>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {mappings.map((mapping, index) => (
-                                <div key={index} className="flex items-center gap-2">
-                                    <span className="text-sm">If cell</span>
-                                    <select
-                                        value={mapping.operator}
-                                        onChange={(e) => handleMappingChange(index, 'operator', e.target.value)}
-                                        className="w-32 px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                    >
-                                        {MAPPING_OPERATORS.map(op => (
-                                            <option key={op.value} value={op.value}>{op.text}</option>
-                                        ))}
-                                    </select>
-                                    <input
-                                        type="text"
-                                        value={mapping.if}
-                                        onChange={(e) => handleMappingChange(index, 'if', e.target.value)}
-                                        className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                        placeholder="Value..."
-                                    />
-                                    <span className="text-sm">then</span>
-                                    <input
-                                        type="text"
-                                        value={mapping.then}
-                                        onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
-                                        className="flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm"
-                                        placeholder="Result..."
-                                    />
-                                    <button
-                                        onClick={() => handleRemoveMapping(index)}
-                                        className="text-red-500 hover:text-red-700 text-xl"
-                                    >
-                                        ×
-                                    </button>
+                                <div key={index} className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <span className="text-xs font-medium text-gray-600">Mapping {index + 1}</span>
+                                        <button
+                                            onClick={() => handleRemoveMapping(index)}
+                                            className="text-red-500 hover:text-red-700 text-xl leading-none"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-sm text-gray-700">If cell</span>
+                                            <select
+                                                value={mapping.operator}
+                                                onChange={(e) => handleMappingChange(index, 'operator', e.target.value)}
+                                                className="flex-shrink-0 px-2 py-1 border border-gray-300 rounded-md text-sm bg-white"
+                                            >
+                                                {MAPPING_OPERATORS.map(op => (
+                                                    <option key={op.value} value={op.value}>{op.text}</option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="text"
+                                                value={mapping.if}
+                                                onChange={(e) => handleMappingChange(index, 'if', e.target.value)}
+                                                className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 rounded-md text-sm bg-white"
+                                                placeholder="Value..."
+                                            />
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-sm text-gray-700">Then use</span>
+                                            <input
+                                                type="text"
+                                                value={mapping.then}
+                                                onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
+                                                className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 rounded-md text-sm bg-white"
+                                                placeholder="Result..."
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
