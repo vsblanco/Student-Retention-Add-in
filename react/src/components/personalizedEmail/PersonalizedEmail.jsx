@@ -65,6 +65,73 @@ export default function PersonalizedEmail({ onReady }) {
         initializeComponent();
     }, [onReady]);
 
+    // Setup automatic parameter highlighting
+    useEffect(() => {
+        if (quillRef.current) {
+            const editor = quillRef.current.getEditor();
+
+            const handleTextChange = () => {
+                const text = editor.getText();
+                const paramRegex = /\{([a-zA-Z0-9_]+)\}/g;
+                let match;
+                const paramPositions = [];
+
+                // Find all parameter positions
+                while ((match = paramRegex.exec(text)) !== null) {
+                    paramPositions.push({
+                        start: match.index,
+                        length: match[0].length,
+                        name: match[1]
+                    });
+                }
+
+                // Apply formatting to each parameter
+                paramPositions.forEach(param => {
+                    const colors = getParameterColor(param.name);
+                    const currentFormat = editor.getFormat(param.start, param.length);
+
+                    // Only update if background or text color is different
+                    if (currentFormat.background !== colors.background || currentFormat.color !== colors.color) {
+                        editor.formatText(param.start, param.length, {
+                            background: colors.background,
+                            color: colors.color
+                        }, 'silent');
+                    }
+                });
+
+                // Remove formatting from incomplete parameters (e.g., just typed '{' or removed '}')
+                const allText = editor.getText();
+                const contents = editor.getContents();
+                let index = 0;
+
+                contents.ops.forEach(op => {
+                    if (op.insert && typeof op.insert === 'string') {
+                        const opText = op.insert;
+
+                        // Check if this text has a background but doesn't contain a complete parameter
+                        if (op.attributes && (op.attributes.background || op.attributes.color)) {
+                            const hasCompleteParam = /\{[a-zA-Z0-9_]+\}/.test(opText);
+                            if (!hasCompleteParam) {
+                                // Remove background and color from incomplete parameter text
+                                editor.formatText(index, opText.length, {
+                                    background: false,
+                                    color: false
+                                }, 'silent');
+                            }
+                        }
+                        index += opText.length;
+                    }
+                });
+            };
+
+            editor.on('text-change', handleTextChange);
+
+            return () => {
+                editor.off('text-change', handleTextChange);
+            };
+        }
+    }, [customParameters]); // Re-run when custom parameters change
+
     // Pre-cache recipient data after connection is established
     useEffect(() => {
         if (isConnected) {
@@ -421,7 +488,10 @@ export default function PersonalizedEmail({ onReady }) {
     const getParameterColor = (paramName) => {
         // Check if it's a special parameter
         if (specialParameters.includes(paramName)) {
-            return '#fed7aa'; // orange-200
+            return {
+                background: '#fed7aa', // orange-200
+                color: '#9a3412'       // orange-800
+            };
         }
 
         // Check if it's a custom parameter
@@ -430,13 +500,29 @@ export default function PersonalizedEmail({ onReady }) {
             const hasMappings = customParam.mappings && customParam.mappings.length > 0;
             const hasNested = hasMappings && customParam.mappings.some(m => /\{(\w+)\}/.test(m.then));
 
-            if (hasNested) return '#fecdd3'; // rose-200
-            if (hasMappings) return '#e9d5ff'; // purple-200
-            return '#bfdbfe'; // blue-200
+            if (hasNested) {
+                return {
+                    background: '#fecdd3', // rose-200
+                    color: '#881337'       // rose-800
+                };
+            }
+            if (hasMappings) {
+                return {
+                    background: '#e9d5ff', // purple-200
+                    color: '#581c87'       // purple-800
+                };
+            }
+            return {
+                background: '#bfdbfe', // blue-200
+                color: '#1e3a8a'       // blue-800
+            };
         }
 
         // Standard parameter
-        return '#e5e7eb'; // gray-200
+        return {
+            background: '#e5e7eb', // gray-200
+            color: '#374151'       // gray-700
+        };
     };
 
     const insertParameter = (param) => {
@@ -446,11 +532,12 @@ export default function PersonalizedEmail({ onReady }) {
 
             // Extract parameter name from {ParamName} format
             const paramName = param.replace(/[{}]/g, '');
-            const backgroundColor = getParameterColor(paramName);
+            const colors = getParameterColor(paramName);
 
-            // Insert with background color formatting
+            // Insert with background and text color formatting
             editor.insertText(range.index, param, {
-                background: backgroundColor
+                background: colors.background,
+                color: colors.color
             });
 
             // Move cursor after the inserted parameter
@@ -477,10 +564,11 @@ export default function PersonalizedEmail({ onReady }) {
             editor.focus();
 
             const paramName = param.replace(/[{}]/g, '');
-            const backgroundColor = getParameterColor(paramName);
+            const colors = getParameterColor(paramName);
 
             editor.insertText(editor.getLength(), param, {
-                background: backgroundColor
+                background: colors.background,
+                color: colors.color
             });
         }
     };
@@ -490,16 +578,20 @@ export default function PersonalizedEmail({ onReady }) {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
 
-        // Find all elements with background color
-        const styledElements = tempDiv.querySelectorAll('[style*="background"]');
+        // Find all elements with background or color styling
+        const styledElements = tempDiv.querySelectorAll('[style*="background"], [style*="color"]');
 
         styledElements.forEach(element => {
             const text = element.textContent || '';
-            // Only strip background if this element contains a parameter pattern
+            // Only strip background and color if this element contains a parameter pattern
             if (/\{[a-zA-Z0-9_]+\}/.test(text)) {
-                // Remove background-color from inline style
+                // Remove background-color and color from inline style
                 const style = element.getAttribute('style') || '';
-                const newStyle = style.replace(/background-color:\s*[^;]+;?/gi, '').replace(/background:\s*[^;]+;?/gi, '').trim();
+                const newStyle = style
+                    .replace(/background-color:\s*[^;]+;?/gi, '')
+                    .replace(/background:\s*[^;]+;?/gi, '')
+                    .replace(/color:\s*[^;]+;?/gi, '')
+                    .trim();
 
                 if (newStyle) {
                     element.setAttribute('style', newStyle);
