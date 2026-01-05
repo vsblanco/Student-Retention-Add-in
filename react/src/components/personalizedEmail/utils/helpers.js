@@ -130,16 +130,21 @@ export function parseHyperlinkFormula(formula) {
  */
 export async function generateMissingAssignmentsList(gradeBookValue, gradeBookFormula, context) {
     try {
-        // Extract the Grade Book identifier from the formula or value
-        let gradeBookId = gradeBookValue;
+        // Extract the Grade Book URL from the formula (this is the unique identifier)
+        let gradeBookUrl = null;
         if (gradeBookFormula) {
             const parsed = parseHyperlinkFormula(gradeBookFormula);
             if (parsed) {
-                gradeBookId = parsed.text; // Use the display text as identifier
+                gradeBookUrl = parsed.url; // Use the URL as the unique identifier
             }
         }
 
-        if (!gradeBookId) return '';
+        // Fallback to value if no formula found
+        if (!gradeBookUrl) {
+            gradeBookUrl = gradeBookValue;
+        }
+
+        if (!gradeBookUrl) return '';
 
         // Access the Missing Assignments sheet
         const missingSheet = context.workbook.worksheets.getItem("Missing Assignments");
@@ -169,17 +174,17 @@ export async function generateMissingAssignmentsList(gradeBookValue, gradeBookFo
             const rowGradeBookValue = values[i][gradeBookColIndex];
             const rowGradeBookFormula = formulas[i][gradeBookColIndex];
 
-            // Extract the display text if it's a HYPERLINK formula
-            let rowGradeBookId = rowGradeBookValue;
+            // Extract the URL if it's a HYPERLINK formula
+            let rowGradeBookUrl = rowGradeBookValue;
             if (rowGradeBookFormula) {
                 const parsed = parseHyperlinkFormula(rowGradeBookFormula);
                 if (parsed) {
-                    rowGradeBookId = parsed.text; // Use display text for comparison
+                    rowGradeBookUrl = parsed.url; // Use URL for comparison
                 }
             }
 
-            // Check if this row matches the student's grade book
-            if (String(rowGradeBookId).trim() === String(gradeBookId).trim()) {
+            // Check if this row matches the student's grade book URL
+            if (String(rowGradeBookUrl).trim() === String(gradeBookUrl).trim()) {
                 const assignmentFormula = formulas[i][assignmentColIndex];
                 const assignmentValue = values[i][assignmentColIndex];
 
