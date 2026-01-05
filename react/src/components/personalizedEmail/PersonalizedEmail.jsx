@@ -418,11 +418,43 @@ export default function PersonalizedEmail({ onReady }) {
         setShowConfirmModal(true);
     };
 
+    const getParameterColor = (paramName) => {
+        // Check if it's a special parameter
+        if (specialParameters.includes(paramName)) {
+            return '#fed7aa'; // orange-200
+        }
+
+        // Check if it's a custom parameter
+        const customParam = customParameters.find(p => p.name === paramName);
+        if (customParam) {
+            const hasMappings = customParam.mappings && customParam.mappings.length > 0;
+            const hasNested = hasMappings && customParam.mappings.some(m => /\{(\w+)\}/.test(m.then));
+
+            if (hasNested) return '#fecdd3'; // rose-200
+            if (hasMappings) return '#e9d5ff'; // purple-200
+            return '#bfdbfe'; // blue-200
+        }
+
+        // Standard parameter
+        return '#e5e7eb'; // gray-200
+    };
+
     const insertParameter = (param) => {
         if (lastFocusedInput === 'quill' && quillRef.current) {
             const editor = quillRef.current.getEditor();
             const range = editor.getSelection(true);
-            editor.insertText(range.index, param, 'user');
+
+            // Extract parameter name from {ParamName} format
+            const paramName = param.replace(/[{}]/g, '');
+            const backgroundColor = getParameterColor(paramName);
+
+            // Insert with background color formatting
+            editor.insertText(range.index, param, {
+                background: backgroundColor
+            });
+
+            // Move cursor after the inserted parameter
+            editor.setSelection(range.index + param.length);
         } else if (lastFocusedInput === 'from') {
             setFromPills([param]);
         } else if (lastFocusedInput === 'cc') {
@@ -443,7 +475,13 @@ export default function PersonalizedEmail({ onReady }) {
         } else if (quillRef.current) {
             const editor = quillRef.current.getEditor();
             editor.focus();
-            editor.insertText(editor.getLength(), param, 'user');
+
+            const paramName = param.replace(/[{}]/g, '');
+            const backgroundColor = getParameterColor(paramName);
+
+            editor.insertText(editor.getLength(), param, {
+                background: backgroundColor
+            });
         }
     };
 
