@@ -43,7 +43,9 @@ export default function PersonalizedEmail({ onReady }) {
     // UI state
     const [lastFocusedInput, setLastFocusedInput] = useState(null);
     const [showMoreParams, setShowMoreParams] = useState(false);
+    const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
     const quillRef = useRef(null);
+    const recipientButtonRef = useRef(null);
 
     // Modal states
     const [showExampleModal, setShowExampleModal] = useState(false);
@@ -422,12 +424,18 @@ export default function PersonalizedEmail({ onReady }) {
     };
 
     const getStudentDataWithUI = async () => {
-        setStatus('Fetching students...');
         try {
             // Determine which special parameters are actually used in the email template
             const specialParamsToProcess = specialParameters.filter(param =>
                 isParameterUsedInTemplate(param)
             );
+
+            // Set specific status message based on what's being fetched
+            if (specialParamsToProcess.includes('MissingAssignmentsList')) {
+                setStatus('Fetching students and missing assignments...');
+            } else {
+                setStatus('Fetching students...');
+            }
 
             const result = await getStudentDataCore(recipientSelection, false, specialParamsToProcess);
             setStudentDataCache(result.included);
@@ -478,6 +486,18 @@ export default function PersonalizedEmail({ onReady }) {
     const handleOpenExampleModal = async () => {
         await ensureStudentDataLoaded();
         setShowExampleModal(true);
+    };
+
+    const handleExampleButtonClick = async () => {
+        // If no recipients selected, scroll to recipient button and highlight it
+        if (recipientCount === 0) {
+            recipientButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setShowRecipientHighlight(true);
+            setTimeout(() => setShowRecipientHighlight(false), 2000);
+            return;
+        }
+        // Otherwise, open the example modal
+        await handleOpenExampleModal();
     };
 
     const handleOpenConfirmModal = async () => {
@@ -768,11 +788,14 @@ export default function PersonalizedEmail({ onReady }) {
                 <div>
                     <label className="block text-sm font-medium text-gray-700">Recipient</label>
                     <button
+                        ref={recipientButtonRef}
                         onClick={() => setShowRecipientModal(true)}
-                        className={`mt-1 w-full text-left px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        className={`mt-1 w-full text-left px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-500 ${
                             recipientSelection.hasBeenSet && recipientCount > 0
                                 ? 'bg-green-100 text-green-800 font-semibold'
                                 : 'bg-white'
+                        } ${
+                            showRecipientHighlight ? 'ring-2 ring-red-300 bg-red-50' : ''
                         }`}
                     >
                         {recipientSelection.hasBeenSet && recipientCount > 0
@@ -875,8 +898,13 @@ export default function PersonalizedEmail({ onReady }) {
             {/* Action Buttons */}
             <div className="mt-6 flex space-x-2">
                 <button
-                    onClick={handleOpenExampleModal}
-                    className="w-1/2 bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition-colors duration-200"
+                    onClick={handleExampleButtonClick}
+                    disabled={recipientCount === 0}
+                    className={`w-1/2 font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-200 ${
+                        recipientCount === 0
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400'
+                    }`}
                 >
                     Example
                 </button>
