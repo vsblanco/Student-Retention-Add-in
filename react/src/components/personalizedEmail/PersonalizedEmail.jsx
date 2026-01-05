@@ -12,7 +12,7 @@ import RecipientModal from './modals/RecipientModal';
 import ConfirmSendModal from './modals/ConfirmSendModal';
 import SuccessModal from './modals/SuccessModal';
 
-export default function PersonalizedEmail({ user, onReady }) {
+export default function PersonalizedEmail({ user, accessToken, onReady }) {
     // Connection state
     const [powerAutomateConnection, setPowerAutomateConnection] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -664,7 +664,94 @@ export default function PersonalizedEmail({ user, onReady }) {
         })).filter(email => email.to && email.from);
     };
 
-    const executeSend = async () => {
+    const sendEmailsViaGraphAPI = async () => {
+        setShowConfirmModal(false);
+        setStatus(`Sending ${studentDataCache.length} emails...`);
+
+        const payload = generatePayload();
+        setLastSentPayload(payload);
+
+        if (payload.length === 0) {
+            setStatus('No students with valid "To" and "From" email addresses found.');
+            return;
+        }
+
+        if (!accessToken) {
+            setStatus('Authentication token not available. Please log in again.');
+            return;
+        }
+
+        let successCount = 0;
+        let failureCount = 0;
+        const errors = [];
+
+        try {
+            for (const email of payload) {
+                try {
+                    // Parse CC recipients
+                    const ccRecipients = email.cc
+                        ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
+                            emailAddress: { address: addr }
+                        }))
+                        : [];
+
+                    // Construct Microsoft Graph API sendMail payload
+                    const graphPayload = {
+                        message: {
+                            subject: email.subject,
+                            body: {
+                                contentType: 'HTML',
+                                content: email.body
+                            },
+                            toRecipients: [
+                                {
+                                    emailAddress: {
+                                        address: email.to
+                                    }
+                                }
+                            ],
+                            ccRecipients: ccRecipients
+                        },
+                        saveToSentItems: true
+                    };
+
+                    const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(graphPayload)
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+
+                    successCount++;
+                    setStatus(`Sent ${successCount} of ${payload.length} emails...`);
+                } catch (error) {
+                    failureCount++;
+                    errors.push({ to: email.to, error: error.message });
+                    console.error(`Failed to send email to ${email.to}:`, error);
+                }
+            }
+
+            if (failureCount === 0) {
+                setStatus(`Successfully sent ${successCount} emails!`);
+                setShowSuccessModal(true);
+            } else {
+                setStatus(`Sent ${successCount} emails. Failed: ${failureCount}. Check console for details.`);
+                console.error('Email sending errors:', errors);
+            }
+        } catch (error) {
+            setStatus(`Failed to send emails: ${error.message}`);
+            console.error("Error sending emails:", error);
+        }
+    };
+
+    const sendEmailsViaPowerAutomate = async () => {
         setShowConfirmModal(false);
         setStatus(`Sending ${studentDataCache.length} emails...`);
 
@@ -688,6 +775,16 @@ export default function PersonalizedEmail({ user, onReady }) {
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
             console.error("Error sending emails:", error);
+        }
+    };
+
+    const executeSend = async () => {
+        if (mode === 'individual') {
+            await sendEmailsViaGraphAPI();
+        } else if (mode === 'powerautomate') {
+            await sendEmailsViaPowerAutomate();
+        } else {
+            setStatus('Invalid sending mode. Please refresh and try again.');
         }
     };
 
@@ -883,7 +980,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                 <button
                     onClick={handleExampleButtonClick}
                     disabled={recipientCount === 0}
-                    className={`${user === 'Guest' || mode === 'individual' ? 'w-full' : 'w-1/2'} font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-200 ${
+                    className={`${user === 'Guest' ? 'w-full' : 'w-1/2'} font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-200 ${
                         recipientCount === 0
                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             : 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400'
@@ -891,7 +988,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                 >
                     Example
                 </button>
-                {user !== 'Guest' && mode === 'powerautomate' && (
+                {user !== 'Guest' && (
                     <div className="relative w-1/2 group">
                         <button
                             onClick={handleOpenConfirmModal}
@@ -909,8 +1006,13 @@ export default function PersonalizedEmail({ user, onReady }) {
                 )}
             </div>
             {mode === 'individual' && user !== 'Guest' && (
-                <p className="text-xs text-blue-600 mt-2 text-center">
-                    To send emails, configure Power Automate in Settings → Workbook → Send Emails
+                <p className="text-xs text-gray-600 mt-2 text-center">
+                    Emails will be sent from your mailbox using Microsoft Graph API
+                </p>
+            )}
+            {mode === 'powerautomate' && user !== 'Guest' && (
+                <p className="text-xs text-gray-600 mt-2 text-center">
+                    Emails will be sent via Power Automate
                 </p>
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
