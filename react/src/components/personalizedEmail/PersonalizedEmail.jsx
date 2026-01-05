@@ -485,16 +485,44 @@ export default function PersonalizedEmail({ onReady }) {
         }
     };
 
+    const stripParameterBackgrounds = (html) => {
+        // Create a temporary div to parse HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+
+        // Find all elements with background color
+        const styledElements = tempDiv.querySelectorAll('[style*="background"]');
+
+        styledElements.forEach(element => {
+            const text = element.textContent || '';
+            // Only strip background if this element contains a parameter pattern
+            if (/\{[a-zA-Z0-9_]+\}/.test(text)) {
+                // Remove background-color from inline style
+                const style = element.getAttribute('style') || '';
+                const newStyle = style.replace(/background-color:\s*[^;]+;?/gi, '').replace(/background:\s*[^;]+;?/gi, '').trim();
+
+                if (newStyle) {
+                    element.setAttribute('style', newStyle);
+                } else {
+                    element.removeAttribute('style');
+                }
+            }
+        });
+
+        return tempDiv.innerHTML;
+    };
+
     const generatePayload = () => {
         const fromTemplate = fromPills[0] || '';
-        const bodyHtml = body;
+        // Strip parameter backgrounds from body before rendering
+        const cleanBodyHtml = stripParameterBackgrounds(body);
 
         return studentDataCache.map(student => ({
             from: renderTemplate(fromTemplate, student),
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccPills, student),
             subject: renderTemplate(subject, student),
-            body: renderTemplate(bodyHtml, student)
+            body: renderTemplate(cleanBodyHtml, student)
         })).filter(email => email.to && email.from);
     };
 
