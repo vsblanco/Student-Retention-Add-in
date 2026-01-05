@@ -166,10 +166,20 @@ export async function generateMissingAssignmentsList(gradeBookValue, gradeBookFo
         // Find all matching assignments
         const assignments = [];
         for (let i = 1; i < values.length; i++) {
-            const rowGradeBook = values[i][gradeBookColIndex];
+            const rowGradeBookValue = values[i][gradeBookColIndex];
+            const rowGradeBookFormula = formulas[i][gradeBookColIndex];
+
+            // Extract the display text if it's a HYPERLINK formula
+            let rowGradeBookId = rowGradeBookValue;
+            if (rowGradeBookFormula) {
+                const parsed = parseHyperlinkFormula(rowGradeBookFormula);
+                if (parsed) {
+                    rowGradeBookId = parsed.text; // Use display text for comparison
+                }
+            }
 
             // Check if this row matches the student's grade book
-            if (String(rowGradeBook) === String(gradeBookId)) {
+            if (String(rowGradeBookId).trim() === String(gradeBookId).trim()) {
                 const assignmentFormula = formulas[i][assignmentColIndex];
                 const assignmentValue = values[i][assignmentColIndex];
 
