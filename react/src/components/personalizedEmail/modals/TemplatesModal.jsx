@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { EMAIL_TEMPLATES_KEY } from '../utils/constants';
 
-export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
+export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, currentFrom, currentSubject, currentBody, currentCC }) {
     const [templates, setTemplates] = useState([]);
     const [expandedAuthors, setExpandedAuthors] = useState(new Set());
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templateName, setTemplateName] = useState('');
-    const [templateAuthor, setTemplateAuthor] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
+
+    const isGuest = user === 'Guest';
 
     useEffect(() => {
         if (isOpen) {
@@ -57,7 +58,6 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
     const handleEditTemplate = (template) => {
         setEditingTemplate(template);
         setTemplateName(template.name);
-        setTemplateAuthor(template.author);
         setShowSaveModal(true);
     };
 
@@ -68,18 +68,18 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
     };
 
     const handleSaveTemplate = async () => {
-        if (!templateName.trim() || !templateAuthor.trim()) {
-            setSaveStatus('Name and Author are required.');
+        if (!templateName.trim()) {
+            setSaveStatus('Template name is required.');
             return;
         }
 
         const templateData = {
             name: templateName.trim(),
-            author: templateAuthor.trim(),
-            from: '', // Would need to pass current values from parent
-            subject: '',
-            body: '',
-            cc: []
+            author: user || 'Unknown',
+            from: currentFrom,
+            subject: currentSubject,
+            body: currentBody,
+            cc: currentCC || []
         };
 
         let updatedTemplates = [...templates];
@@ -162,12 +162,14 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
                                                         >
                                                             Load
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleEditTemplate(template)}
-                                                            className="px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300"
-                                                        >
-                                                            Edit
-                                                        </button>
+                                                        {!isGuest && (
+                                                            <button
+                                                                onClick={() => handleEditTemplate(template)}
+                                                                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -178,18 +180,19 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
                         )}
                     </div>
 
-                    <div className="flex justify-between mt-4">
-                        <button
-                            onClick={() => {
-                                setEditingTemplate(null);
-                                setTemplateName('');
-                                setTemplateAuthor('');
-                                setShowSaveModal(true);
-                            }}
-                            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                        >
-                            Save Current as Template
-                        </button>
+                    <div className={`flex ${isGuest ? 'justify-end' : 'justify-between'} mt-4`}>
+                        {!isGuest && (
+                            <button
+                                onClick={() => {
+                                    setEditingTemplate(null);
+                                    setTemplateName('');
+                                    setShowSaveModal(true);
+                                }}
+                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                            >
+                                Save Current as Template
+                            </button>
+                        )}
                         <button
                             onClick={onClose}
                             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
@@ -222,17 +225,12 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate }) {
                                 />
                             </div>
                             <div>
-                                <label htmlFor="template-author" className="block text-sm font-medium text-gray-700">
+                                <label className="block text-sm font-medium text-gray-700">
                                     Author
                                 </label>
-                                <input
-                                    type="text"
-                                    id="template-author"
-                                    value={templateAuthor}
-                                    onChange={(e) => setTemplateAuthor(e.target.value)}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
-                                    placeholder="Your Name"
-                                />
+                                <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700">
+                                    {user || 'Unknown'}
+                                </div>
                             </div>
                         </div>
                         <p className="text-xs mt-2 h-4 text-center text-red-600">{saveStatus}</p>

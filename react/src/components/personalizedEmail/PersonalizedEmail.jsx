@@ -12,7 +12,7 @@ import RecipientModal from './modals/RecipientModal';
 import ConfirmSendModal from './modals/ConfirmSendModal';
 import SuccessModal from './modals/SuccessModal';
 
-export default function PersonalizedEmail({ onReady }) {
+export default function PersonalizedEmail({ user, onReady }) {
     // Connection state
     const [powerAutomateConnection, setPowerAutomateConnection] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -900,7 +900,7 @@ export default function PersonalizedEmail({ onReady }) {
                 <button
                     onClick={handleExampleButtonClick}
                     disabled={recipientCount === 0}
-                    className={`w-1/2 font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-200 ${
+                    className={`${user === 'Guest' ? 'w-full' : 'w-1/2'} font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 transition-colors duration-200 ${
                         recipientCount === 0
                             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                             : 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-400'
@@ -908,20 +908,22 @@ export default function PersonalizedEmail({ onReady }) {
                 >
                     Example
                 </button>
-                <div className="relative w-1/2 group">
-                    <button
-                        onClick={handleOpenConfirmModal}
-                        disabled={!isFormValid()}
-                        className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                        Send Email
-                    </button>
-                    {!isFormValid() && (
-                        <span className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-md p-2 text-center">
-                            {getValidationMessage()}
-                        </span>
-                    )}
-                </div>
+                {user !== 'Guest' && (
+                    <div className="relative w-1/2 group">
+                        <button
+                            onClick={handleOpenConfirmModal}
+                            disabled={!isFormValid()}
+                            className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                            Send Email
+                        </button>
+                        {!isFormValid() && (
+                            <span className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-md p-2 text-center">
+                                {getValidationMessage()}
+                            </span>
+                        )}
+                    </div>
+                )}
             </div>
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
 
@@ -939,6 +941,11 @@ export default function PersonalizedEmail({ onReady }) {
             <TemplatesModal
                 isOpen={showTemplatesModal}
                 onClose={() => setShowTemplatesModal(false)}
+                user={user}
+                currentFrom={fromPills[0] || ''}
+                currentSubject={subject}
+                currentBody={body}
+                currentCC={ccPills}
                 onLoadTemplate={(template) => {
                     setFromPills([template.from]);
                     setSubject(template.subject);

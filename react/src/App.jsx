@@ -157,7 +157,7 @@ function App() {
       case 'create-lda':
         return <LDAManager user={currentUser} onReady={handleFeatureReady} />;
       case 'personalized-email':
-        return <PersonalizedEmail onReady={handleFeatureReady} />;
+        return <PersonalizedEmail user={currentUser} onReady={handleFeatureReady} />;
       case 'student-view':
       default:
         // Pass user and ready-handler to StudentView
