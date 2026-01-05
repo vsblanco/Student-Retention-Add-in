@@ -5,7 +5,8 @@ export default function PillInput({
     onPillsChange,
     placeholder,
     singleValue = false,
-    onFocus
+    onFocus,
+    readOnly = false
 }) {
     const inputRef = useRef(null);
     const containerRef = useRef(null);
@@ -47,8 +48,10 @@ export default function PillInput({
     return (
         <div
             ref={containerRef}
-            onClick={handleContainerClick}
-            className="flex flex-wrap items-center gap-1.5 p-1.5 border border-gray-300 rounded-md bg-white cursor-text"
+            onClick={readOnly ? undefined : handleContainerClick}
+            className={`flex flex-wrap items-center gap-1.5 p-1.5 border border-gray-300 rounded-md ${
+                readOnly ? 'bg-gray-100 cursor-default' : 'bg-white cursor-text'
+            }`}
         >
             {pills.map((pill, index) => {
                 const isParam = pill.startsWith('{') && pill.endsWith('}');
@@ -62,27 +65,31 @@ export default function PillInput({
                         }`}
                     >
                         {pill}
-                        <span
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                removePill(index);
-                            }}
-                            className="ml-1.5 cursor-pointer font-bold hover:text-red-600"
-                        >
-                            ×
-                        </span>
+                        {!readOnly && (
+                            <span
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    removePill(index);
+                                }}
+                                className="ml-1.5 cursor-pointer font-bold hover:text-red-600"
+                            >
+                                ×
+                            </span>
+                        )}
                     </span>
                 );
             })}
-            <input
-                ref={inputRef}
-                type="text"
-                className="flex-grow border-none outline-none p-1 bg-transparent min-w-[120px]"
-                placeholder={pills.length === 0 ? placeholder : ''}
-                onKeyDown={handleKeyDown}
-                onBlur={handleBlur}
-                onFocus={onFocus}
-            />
+            {!readOnly && (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    className="flex-grow border-none outline-none p-1 bg-transparent min-w-[120px]"
+                    placeholder={pills.length === 0 ? placeholder : ''}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleBlur}
+                    onFocus={onFocus}
+                />
+            )}
         </div>
     );
 }
