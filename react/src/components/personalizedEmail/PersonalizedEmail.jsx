@@ -65,6 +65,71 @@ export default function PersonalizedEmail({ onReady }) {
         initializeComponent();
     }, [onReady]);
 
+    // Setup automatic parameter highlighting
+    useEffect(() => {
+        if (quillRef.current) {
+            const editor = quillRef.current.getEditor();
+
+            const handleTextChange = () => {
+                const text = editor.getText();
+                const paramRegex = /\{([a-zA-Z0-9_]+)\}/g;
+                let match;
+                const paramPositions = [];
+
+                // Find all parameter positions
+                while ((match = paramRegex.exec(text)) !== null) {
+                    paramPositions.push({
+                        start: match.index,
+                        length: match[0].length,
+                        name: match[1]
+                    });
+                }
+
+                // Apply formatting to each parameter
+                paramPositions.forEach(param => {
+                    const backgroundColor = getParameterColor(param.name);
+                    const currentFormat = editor.getFormat(param.start, param.length);
+
+                    // Only update if background color is different
+                    if (currentFormat.background !== backgroundColor) {
+                        editor.formatText(param.start, param.length, {
+                            background: backgroundColor
+                        }, 'silent');
+                    }
+                });
+
+                // Remove background from incomplete parameters (e.g., just typed '{' or removed '}')
+                const allText = editor.getText();
+                const contents = editor.getContents();
+                let index = 0;
+
+                contents.ops.forEach(op => {
+                    if (op.insert && typeof op.insert === 'string') {
+                        const opText = op.insert;
+
+                        // Check if this text has a background but doesn't contain a complete parameter
+                        if (op.attributes && op.attributes.background) {
+                            const hasCompleteParam = /\{[a-zA-Z0-9_]+\}/.test(opText);
+                            if (!hasCompleteParam) {
+                                // Remove background from incomplete parameter text
+                                editor.formatText(index, opText.length, {
+                                    background: false
+                                }, 'silent');
+                            }
+                        }
+                        index += opText.length;
+                    }
+                });
+            };
+
+            editor.on('text-change', handleTextChange);
+
+            return () => {
+                editor.off('text-change', handleTextChange);
+            };
+        }
+    }, [customParameters]); // Re-run when custom parameters change
+
     // Pre-cache recipient data after connection is established
     useEffect(() => {
         if (isConnected) {
