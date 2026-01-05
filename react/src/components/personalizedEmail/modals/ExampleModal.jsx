@@ -75,7 +75,7 @@ export default function ExampleModal({ isOpen, onClose, studentData, fromTemplat
                                 <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                             </svg>
                         </button>
-                        <span className="text-sm text-gray-600 font-medium w-24 text-center">
+                        <span className="text-sm text-gray-600 font-medium w-36 text-center">
                             Student: {currentIndex + 1} / {studentData.length}
                         </span>
                         <button
@@ -151,10 +151,10 @@ export default function ExampleModal({ isOpen, onClose, studentData, fromTemplat
                         <label className="font-semibold text-gray-600 w-20">Subject:</label>
                         <p className="text-gray-800 font-medium">{subject}</p>
                     </div>
-                    <div className="flex items-start">
-                        <label className="font-semibold text-gray-600 w-20 mt-1">Body:</label>
+                    <div>
+                        <label className="font-semibold text-gray-600">Body:</label>
                         <div
-                            className="text-gray-800 border rounded-md p-2 bg-gray-50 max-h-64 overflow-y-auto w-full"
+                            className="text-gray-800 border rounded-md p-2 bg-gray-50 max-h-64 overflow-y-auto w-full mt-1"
                             dangerouslySetInnerHTML={{ __html: body }}
                         />
                     </div>
