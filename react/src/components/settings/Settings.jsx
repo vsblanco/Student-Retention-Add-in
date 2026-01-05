@@ -4,6 +4,7 @@ import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
+import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED: Power Automate config modal
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
@@ -35,6 +36,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 	// new: workbook inspector modal state
 	const [workbookModalOpen, setWorkbookModalOpen] = useState(false);
+
+	// Power Automate config modal state
+	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
 
 	const openArrayModal = (setting, currentValue, updater) => {
 		setModalSetting(setting);
@@ -309,6 +313,18 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								);
 							}
 
+							if (setting.type === 'powerautomate') {
+								return (
+									<button
+										onClick={() => setPowerAutomateModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure Power Automate`}
+									>
+										Configure
+									</button>
+								);
+							}
+
 							if (setting.type === 'image') {
 								const fileId = `file-${inputId}`;
 								return (
@@ -541,6 +557,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			/>
 			{/* pass the document key constant so the modal can read the workbook-specific mapping */}
 			<WorkbookSettingsModal isOpen={workbookModalOpen} onClose={() => setWorkbookModalOpen(false)} docKey={DOC_KEY} />
+
+			{/* Power Automate configuration modal */}
+			<PowerAutomateConfigModal isOpen={powerAutomateModalOpen} onClose={() => setPowerAutomateModalOpen(false)} />
 		</div>
 	);
 };
