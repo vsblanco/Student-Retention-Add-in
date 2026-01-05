@@ -424,12 +424,18 @@ export default function PersonalizedEmail({ onReady }) {
     };
 
     const getStudentDataWithUI = async () => {
-        setStatus('Fetching students...');
         try {
             // Determine which special parameters are actually used in the email template
             const specialParamsToProcess = specialParameters.filter(param =>
                 isParameterUsedInTemplate(param)
             );
+
+            // Set specific status message based on what's being fetched
+            if (specialParamsToProcess.includes('MissingAssignmentsList')) {
+                setStatus('Fetching students and missing assignments...');
+            } else {
+                setStatus('Fetching students...');
+            }
 
             const result = await getStudentDataCore(recipientSelection, false, specialParamsToProcess);
             setStudentDataCache(result.included);
