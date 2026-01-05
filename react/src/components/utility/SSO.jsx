@@ -65,6 +65,70 @@ function cacheUserInfoFromToken(token) {
   }
 }
 
+// Helper function to save user info to Excel workbook settings
+async function saveUserToWorkbookSettings(userInfo) {
+  if (!userInfo || !userInfo.email) {
+    console.warn('SSO: Cannot save user - invalid user info');
+    return;
+  }
+
+  try {
+    await Excel.run(async (context) => {
+      const settings = context.workbook.settings;
+      const usersSetting = settings.getItemOrNullObject("sso_users");
+      usersSetting.load("value");
+      await context.sync();
+
+      let users = [];
+      if (usersSetting.value) {
+        try {
+          users = JSON.parse(usersSetting.value);
+          if (!Array.isArray(users)) {
+            users = [];
+          }
+        } catch (e) {
+          console.error('SSO: Failed to parse existing users', e);
+          users = [];
+        }
+      }
+
+      // Check if user already exists (by email or objectId)
+      const existingUserIndex = users.findIndex(u =>
+        u.email === userInfo.email ||
+        (userInfo.objectId && u.objectId === userInfo.objectId)
+      );
+
+      const userRecord = {
+        name: userInfo.name,
+        email: userInfo.email,
+        tenantId: userInfo.tenantId,
+        objectId: userInfo.objectId,
+        roles: userInfo.roles || [],
+        lastLogin: new Date().toISOString()
+      };
+
+      if (existingUserIndex !== -1) {
+        // Update existing user record
+        users[existingUserIndex] = userRecord;
+        console.log('SSO: Updated existing user in workbook settings');
+      } else {
+        // Add new user record
+        users.push(userRecord);
+        console.log('SSO: Added new user to workbook settings');
+      }
+
+      // Save back to settings
+      settings.add("sso_users", JSON.stringify(users));
+      await context.sync();
+
+      console.log('SSO: User info saved to workbook settings');
+    });
+  } catch (error) {
+    console.error('SSO: Failed to save user to workbook settings', error);
+    // Don't throw - this shouldn't block login
+  }
+}
+
 export function useOfficeSSO() {
   const [token, setToken] = useState(null);
   const [error, setError] = useState(null);
@@ -150,7 +214,13 @@ export default function SSO({ onNameSelect }) {
           if (userName) {
             console.log("SSO: Silent SSO succeeded");
             cacheUser(userName, "sso");
-            cacheUserInfoFromToken(accessToken); // Cache full user info
+            const userInfo = cacheUserInfoFromToken(accessToken); // Cache full user info
+
+            // Save user info to workbook settings
+            if (userInfo) {
+              await saveUserToWorkbookSettings(userInfo);
+            }
+
             toast.success(`Welcome back, ${userName}!`, { position: "bottom-center" });
             if (onNameSelect) {
               onNameSelect(userName, accessToken); // Pass token to parent
@@ -191,7 +261,13 @@ export default function SSO({ onNameSelect }) {
       const userName = decodeJwt(accessToken);
       if (userName) {
         cacheUser(userName, "sso");
-        cacheUserInfoFromToken(accessToken); // Cache full user info
+        const userInfo = cacheUserInfoFromToken(accessToken); // Cache full user info
+
+        // Save user info to workbook settings
+        if (userInfo) {
+          await saveUserToWorkbookSettings(userInfo);
+        }
+
         toast.success(`Success! Logged in as: ${userName}`, { position: "bottom-center" });
         if (onNameSelect) {
           onNameSelect(userName, accessToken); // Pass token to parent
