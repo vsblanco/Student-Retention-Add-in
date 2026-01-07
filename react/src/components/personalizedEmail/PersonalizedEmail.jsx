@@ -1148,7 +1148,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 </div>
 
                 {/* Parameters */}
-                <div>
+                <div className="mt-8">
                     <label className="block text-sm font-medium text-gray-700">Insert Parameter</label>
                     <div className="mt-2 flex flex-wrap gap-2">
                         {standardParameters.map(param => renderParameterButton(param))}
