@@ -68,7 +68,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 const userInfoStr = localStorage.getItem('SSO_USER_INFO');
                 if (userInfoStr) {
                     const userInfo = JSON.parse(userInfoStr);
-                    setUserEmail(userInfo.email || '');
+                    setUserEmail((userInfo.email || '').toLowerCase());
                 }
             } catch (error) {
                 console.error('Error loading user email:', error);
@@ -1143,7 +1143,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         onFocus={() => setLastFocusedInput('quill')}
                         modules={QUILL_EDITOR_CONFIG.modules}
                         className="mt-1 bg-white"
-                        style={{ height: '192px', marginBottom: '50px' }}
+                        style={{ height: '192px', marginBottom: '80px' }}
                     />
                 </div>
 
