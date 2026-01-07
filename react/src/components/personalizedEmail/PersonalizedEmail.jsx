@@ -1143,7 +1143,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         onFocus={() => setLastFocusedInput('quill')}
                         modules={QUILL_EDITOR_CONFIG.modules}
                         className="mt-1 bg-white"
-                        style={{ height: '192px', marginBottom: '50px' }}
+                        style={{ height: '192px', marginBottom: '80px' }}
                     />
                 </div>
 
