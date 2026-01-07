@@ -664,6 +664,47 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         })).filter(email => email.to && email.from);
     };
 
+    const showConsentDialog = () => {
+        return new Promise((resolve, reject) => {
+            const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/consent-dialog.html';
+
+            Office.context.ui.displayDialogAsync(
+                dialogUrl,
+                { height: 60, width: 30, promptBeforeOpen: false },
+                (result) => {
+                    if (result.status === Office.AsyncResultStatus.Failed) {
+                        reject(new Error('Failed to open consent dialog'));
+                        return;
+                    }
+
+                    const dialog = result.value;
+
+                    dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
+                        dialog.close();
+
+                        try {
+                            const response = JSON.parse(arg.message);
+
+                            if (response.status === 'success') {
+                                // User consented successfully
+                                resolve({ success: true });
+                            } else {
+                                reject(new Error(response.description || response.error || 'Consent failed'));
+                            }
+                        } catch (e) {
+                            reject(new Error('Invalid response from consent dialog'));
+                        }
+                    });
+
+                    dialog.addEventHandler(Office.EventType.DialogEventReceived, (arg) => {
+                        dialog.close();
+                        reject(new Error('Dialog was closed'));
+                    });
+                }
+            );
+        });
+    };
+
     const sendEmailsViaGraphAPI = async () => {
         setShowConfirmModal(false);
         setStatus(`Authenticating...`);
@@ -699,18 +740,21 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             if (!tokenExchangeResponse.ok) {
                 // Check if this is a consent error
                 if (responseData.details && responseData.details.includes('AADSTS65001')) {
-                    setStatus('Consent required. Please click "Send Email" again and accept the consent prompt.');
+                    setStatus('Opening Microsoft consent dialog. Please grant permissions...');
 
-                    // Show consent prompt by getting a new token with forceConsent
                     try {
+                        // Show Microsoft consent dialog (this will be a popup)
+                        await showConsentDialog();
+
+                        // After consent, get a fresh SSO token
+                        setStatus('Consent granted. Getting fresh authentication token...');
                         const newToken = await Office.auth.getAccessToken({
-                            allowSignInPrompt: true,
-                            forceConsent: true,
+                            allowSignInPrompt: false,
                             forMSGraphAccess: true
                         });
 
-                        // If we got a new token, retry the exchange
-                        setStatus('Consent granted. Retrying email send...');
+                        // Retry token exchange with fresh token
+                        setStatus('Retrying email send...');
                         const retryResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -719,7 +763,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                         if (!retryResponse.ok) {
                             const retryData = await retryResponse.json();
-                            throw new Error(`Token exchange failed after consent: ${retryData.error || retryData.details || 'Unknown error'}`);
+                            throw new Error(`Token exchange still failed after consent: ${retryData.error || retryData.details || 'Unknown error'}`);
                         }
 
                         const { accessToken: graphToken } = await retryResponse.json();
@@ -729,7 +773,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         return;
 
                     } catch (consentError) {
-                        throw new Error(`Consent failed: ${consentError.message}. Please configure Power Automate in Settings for email sending, or contact your IT administrator for assistance.`);
+                        throw new Error(`Consent required but failed: ${consentError.message}. You may need to configure Power Automate in Settings, or contact your IT administrator.`);
                     }
                 }
 
