@@ -1080,6 +1080,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         singleValue={true}
                         onFocus={() => setLastFocusedInput('from')}
                         readOnly={mode === 'individual'}
+                        noWrap={true}
                     />
                 </div>
 
@@ -1111,6 +1112,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         onPillsChange={setCcPills}
                         placeholder="Add an additional email"
                         onFocus={() => setLastFocusedInput('cc')}
+                        noWrap={true}
                     />
                 </div>
 
