@@ -40,16 +40,22 @@
             const urlParams = new URLSearchParams(window.location.search);
             const clientId = '71f37f39-a330-413a-be61-0baa5ce03ea3';
             const redirectUri = encodeURIComponent('https://vsblanco.github.io/Student-Retention-Add-in/consent-callback.html');
-            const scope = encodeURIComponent('api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user');
+
+            // Request BOTH scopes: access_as_user AND Graph API Mail.Send
+            const scopes = [
+                'openid',
+                'api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user',
+                'https://graph.microsoft.com/Mail.Send'
+            ].join(' ');
 
             // Build Microsoft OAuth URL - using id_token (implicit flow) just to trigger consent
-            // We don't actually use the token - we just need the user to consent
+            // We don't actually use the token - we just need the user to consent to ALL scopes
             const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
                 `client_id=${clientId}` +
                 `&response_type=id_token` +
                 `&redirect_uri=${redirectUri}` +
                 `&response_mode=fragment` +
-                `&scope=openid ${scope}` +
+                `&scope=${encodeURIComponent(scopes)}` +
                 `&prompt=consent` +
                 `&nonce=${Math.random().toString(36)}`;
 
