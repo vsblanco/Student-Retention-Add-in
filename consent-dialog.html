@@ -39,17 +39,19 @@
         Office.onReady(() => {
             const urlParams = new URLSearchParams(window.location.search);
             const clientId = '71f37f39-a330-413a-be61-0baa5ce03ea3';
-            const redirectUri = encodeURIComponent(window.location.origin + '/Student-Retention-Add-in/consent-callback.html');
-            const scope = encodeURIComponent('api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user offline_access');
+            const redirectUri = encodeURIComponent('https://vsblanco.github.io/Student-Retention-Add-in/consent-callback.html');
+            const scope = encodeURIComponent('api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user');
 
-            // Build Microsoft OAuth URL
+            // Build Microsoft OAuth URL - using id_token (implicit flow) just to trigger consent
+            // We don't actually use the token - we just need the user to consent
             const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
                 `client_id=${clientId}` +
-                `&response_type=code` +
+                `&response_type=id_token` +
                 `&redirect_uri=${redirectUri}` +
-                `&response_mode=query` +
-                `&scope=${scope}` +
-                `&prompt=consent`;
+                `&response_mode=fragment` +
+                `&scope=openid ${scope}` +
+                `&prompt=consent` +
+                `&nonce=${Math.random().toString(36)}`;
 
             // Redirect to Microsoft consent page
             window.location.href = authUrl;

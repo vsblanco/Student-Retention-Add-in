@@ -27,10 +27,16 @@
 
     <script>
         Office.onReady(() => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('code');
-            const error = urlParams.get('error');
-            const errorDescription = urlParams.get('error_description');
+            // Implicit flow returns data in URL fragment (after #)
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+
+            // Also check query params for errors
+            const queryParams = new URLSearchParams(window.location.search);
+
+            const idToken = params.get('id_token');
+            const error = params.get('error') || queryParams.get('error');
+            const errorDescription = params.get('error_description') || queryParams.get('error_description');
 
             if (error) {
                 document.getElementById('message').innerHTML =
@@ -42,14 +48,14 @@
                     error: error,
                     description: errorDescription
                 }));
-            } else if (code) {
+            } else if (idToken) {
                 document.getElementById('message').innerHTML =
                     `<div class="success">✓ Consent granted! Closing window...</div>`;
 
-                // Send success back to parent
+                // Send success back to parent (we don't need the token, just confirmation)
                 Office.context.ui.messageParent(JSON.stringify({
                     status: 'success',
-                    code: code
+                    consented: true
                 }));
             } else {
                 document.getElementById('message').innerHTML =
