@@ -20,6 +20,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [setupStatus, setSetupStatus] = useState('');
     const [mode, setMode] = useState('individual'); // 'individual' or 'powerautomate'
     const [userEmail, setUserEmail] = useState('');
+    const [localAccessToken, setLocalAccessToken] = useState(accessToken);
 
     // Email composer state
     const [fromPills, setFromPills] = useState([]);
@@ -79,6 +80,32 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         };
         initializeComponent();
     }, [onReady]);
+
+    // Fetch fresh authentication token on component mount
+    useEffect(() => {
+        const fetchFreshToken = async () => {
+            try {
+                if (typeof Office !== 'undefined' && Office.auth) {
+                    console.log('Fetching fresh authentication token...');
+                    const token = await Office.auth.getAccessToken({
+                        allowSignInPrompt: false,
+                        forMSGraphAccess: true
+                    });
+                    setLocalAccessToken(token);
+                    console.log('Fresh authentication token obtained');
+                } else {
+                    console.log('Office.auth not available, using prop token');
+                    setLocalAccessToken(accessToken);
+                }
+            } catch (error) {
+                console.error('Failed to get fresh token:', error);
+                // Fall back to prop token
+                setLocalAccessToken(accessToken);
+            }
+        };
+
+        fetchFreshToken();
+    }, []);
 
     // Setup automatic parameter highlighting
     useEffect(() => {
@@ -716,7 +743,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             return;
         }
 
-        if (!accessToken) {
+        if (!localAccessToken) {
             setStatus('Authentication token not available. Please log in again.');
             return;
         }
