@@ -21,6 +21,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [mode, setMode] = useState('individual'); // 'individual' or 'powerautomate'
     const [userEmail, setUserEmail] = useState('');
     const [localAccessToken, setLocalAccessToken] = useState(accessToken);
+    const [consentStatus, setConsentStatus] = useState(null); // null, 'checking', 'granted', 'required'
 
     // Email composer state
     const [fromPills, setFromPills] = useState([]);
@@ -106,6 +107,65 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
         fetchFreshToken();
     }, []);
+
+    // Check consent status in individual mode
+    useEffect(() => {
+        const checkConsentStatus = async () => {
+            // Only check in individual mode
+            if (mode !== 'individual') {
+                setConsentStatus('granted');
+                return;
+            }
+
+            // Wait for localAccessToken to be available
+            if (!localAccessToken) {
+                return;
+            }
+
+            setConsentStatus('checking');
+
+            try {
+                // Try to exchange token to check if consent is granted
+                const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: localAccessToken })
+                });
+
+                const responseData = await tokenExchangeResponse.json();
+
+                // Check if the error is consent-related
+                if (!tokenExchangeResponse.ok) {
+                    const errorDetails = responseData.error || responseData.details || '';
+
+                    // Check for consent-required errors (AADSTS65001, AADSTS70011, etc.)
+                    if (errorDetails.includes('AADSTS65001') ||
+                        errorDetails.includes('AADSTS70011') ||
+                        errorDetails.includes('consent')) {
+                        console.log('Consent required for Graph API access');
+                        setConsentStatus('required');
+                    } else {
+                        // Other errors - assume consent might still be needed
+                        console.warn('Token exchange check failed:', errorDetails);
+                        setConsentStatus('required');
+                    }
+                } else {
+                    // Token exchange succeeded - consent is granted
+                    console.log('Consent already granted');
+                    setConsentStatus('granted');
+                }
+            } catch (error) {
+                console.error('Failed to check consent status:', error);
+                // On network error, assume we need consent
+                setConsentStatus('required');
+            }
+        };
+
+        // Run check when mode changes or when localAccessToken becomes available
+        if (localAccessToken) {
+            checkConsentStatus();
+        }
+    }, [mode, localAccessToken]);
 
     // Setup automatic parameter highlighting
     useEffect(() => {
@@ -753,24 +813,14 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const errors = [];
 
         try {
-            // Step 1: ALWAYS show consent dialog first
-            setStatus('Opening Microsoft consent dialog. Please grant permissions...');
-
-            try {
-                // Show Microsoft consent dialog (this will be a popup)
-                await showConsentDialog();
-            } catch (consentError) {
-                throw new Error(`Consent failed: ${consentError.message}. You may need to configure Power Automate in Settings, or contact your IT administrator.`);
-            }
-
-            // Step 2: After consent, get a fresh SSO token
-            setStatus('Consent granted. Getting authentication token...');
+            // Step 1: Get a fresh SSO token
+            setStatus('Getting authentication token...');
             const newToken = await Office.auth.getAccessToken({
                 allowSignInPrompt: false,
                 forMSGraphAccess: true
             });
 
-            // Step 3: Exchange Office SSO token for Graph API token
+            // Step 2: Exchange Office SSO token for Graph API token
             setStatus('Exchanging authentication token...');
             const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
                 method: 'POST',
@@ -786,7 +836,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
             const { accessToken: graphToken } = responseData;
 
-            // Step 4: Send emails using Graph API token
+            // Step 3: Send emails using Graph API token
             await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
 
         } catch (error) {
@@ -942,6 +992,67 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             </button>
         );
     };
+
+    // Show loading screen while checking consent
+    if (consentStatus === 'checking') {
+        return (
+            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Checking permissions...</p>
+                </div>
+            </div>
+        );
+    }
+
+    // Show consent required screen if admin consent is needed
+    if (consentStatus === 'required') {
+        const adminConsentUrl = 'https://login.microsoftonline.com/common/adminconsent?client_id=71f37f39-a330-413a-be61-0baa5ce03ea3';
+
+        return (
+            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg">
+                    <div className="text-center mb-6">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
+                            <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Approval Required</h2>
+                        <p className="text-gray-600 mb-6">
+                            This feature requires an IT Administrator to enable it before you can send personalized emails using Microsoft Graph API.
+                        </p>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+                        <p className="text-sm text-blue-800 mb-2">
+                            <strong>For IT Administrators:</strong>
+                        </p>
+                        <p className="text-sm text-blue-700 mb-3">
+                            Click the button below to grant consent for this application. This is a one-time setup that will enable all users in your organization to use this feature.
+                        </p>
+                        <a
+                            href={adminConsentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block w-full text-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                            Grant Admin Consent
+                        </a>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-4">
+                        <p className="text-xs text-gray-500 text-center mb-3">
+                            After consent is granted, refresh this page to start sending emails.
+                        </p>
+                        <p className="text-xs text-gray-500 text-center">
+                            <strong>Alternative:</strong> You can configure Power Automate in Settings to send emails without requiring admin approval.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     // Email Composer View
     return (
