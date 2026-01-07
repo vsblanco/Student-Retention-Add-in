@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="TaskPaneApp">
   <Id>a8b1e479-1b3d-4e9e-9a1c-2f8e1c8b4a0e</Id>
-  <Version>2.1.0.1</Version>
+  <Version>2.1.0.2</Version>
   <ProviderName>Victor Blanco</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Student Retention Add-in"/>
@@ -213,8 +213,7 @@
       <Scopes>
         <Scope>openid</Scope>
         <Scope>profile</Scope>
-        <Scope>User.Read</Scope>
-        <Scope>User.ReadBasic.All</Scope>
+        <Scope>api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user</Scope>
       </Scopes>
     </WebApplicationInfo>
   </VersionOverrides>
