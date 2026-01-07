@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Consent Completed</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .success {
+            color: #16a34a;
+            font-size: 18px;
+            margin-top: 20px;
+        }
+        .error {
+            color: #dc2626;
+            font-size: 18px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="message">Processing consent...</div>
+
+    <script>
+        Office.onReady(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const error = urlParams.get('error');
+            const errorDescription = urlParams.get('error_description');
+
+            if (error) {
+                document.getElementById('message').innerHTML =
+                    `<div class="error">Consent failed: ${errorDescription || error}</div>`;
+
+                // Send error back to parent
+                Office.context.ui.messageParent(JSON.stringify({
+                    status: 'error',
+                    error: error,
+                    description: errorDescription
+                }));
+            } else if (code) {
+                document.getElementById('message').innerHTML =
+                    `<div class="success">✓ Consent granted! Closing window...</div>`;
+
+                // Send success back to parent
+                Office.context.ui.messageParent(JSON.stringify({
+                    status: 'success',
+                    code: code
+                }));
+            } else {
+                document.getElementById('message').innerHTML =
+                    `<div class="error">Unknown response from Microsoft</div>`;
+
+                Office.context.ui.messageParent(JSON.stringify({
+                    status: 'error',
+                    error: 'unknown_response'
+                }));
+            }
+        });
+    </script>
+</body>
+</html>
