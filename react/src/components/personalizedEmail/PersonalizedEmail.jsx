@@ -666,7 +666,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
     const sendEmailsViaGraphAPI = async () => {
         setShowConfirmModal(false);
-        setStatus(`Sending ${studentDataCache.length} emails...`);
+        setStatus(`Authenticating...`);
 
         const payload = generatePayload();
         setLastSentPayload(payload);
@@ -686,6 +686,24 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const errors = [];
 
         try {
+            // Step 1: Exchange Office SSO token for Graph API token
+            setStatus('Exchanging authentication token...');
+            const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: accessToken })
+            });
+
+            if (!tokenExchangeResponse.ok) {
+                const errorData = await tokenExchangeResponse.json();
+                throw new Error(`Token exchange failed: ${errorData.error || errorData.details || 'Unknown error'}`);
+            }
+
+            const { accessToken: graphToken } = await tokenExchangeResponse.json();
+
+            // Step 2: Send emails using Graph API token
+            setStatus(`Sending ${payload.length} emails...`);
+
             for (const email of payload) {
                 try {
                     // Parse CC recipients
@@ -718,7 +736,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
                         method: 'POST',
                         headers: {
-                            'Authorization': `Bearer ${accessToken}`,
+                            'Authorization': `Bearer ${graphToken}`,
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(graphPayload)
