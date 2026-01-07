@@ -6,7 +6,8 @@ export default function PillInput({
     placeholder,
     singleValue = false,
     onFocus,
-    readOnly = false
+    readOnly = false,
+    noWrap = false
 }) {
     const inputRef = useRef(null);
     const containerRef = useRef(null);
@@ -49,9 +50,9 @@ export default function PillInput({
         <div
             ref={containerRef}
             onClick={readOnly ? undefined : handleContainerClick}
-            className={`flex flex-wrap items-center gap-1.5 p-1.5 border border-gray-300 rounded-md ${
-                readOnly ? 'bg-gray-100 cursor-default' : 'bg-white cursor-text'
-            }`}
+            className={`flex items-center gap-1.5 p-1.5 border border-gray-300 rounded-md ${
+                noWrap ? 'overflow-x-auto' : 'flex-wrap'
+            } ${readOnly ? 'bg-gray-100 cursor-default' : 'bg-white cursor-text'}`}
         >
             {pills.map((pill, index) => {
                 const isParam = pill.startsWith('{') && pill.endsWith('}');
@@ -83,7 +84,9 @@ export default function PillInput({
                 <input
                     ref={inputRef}
                     type="text"
-                    className="flex-grow border-none outline-none p-1 bg-transparent min-w-[120px]"
+                    className={`flex-grow border-none outline-none p-1 bg-transparent ${
+                        noWrap ? 'min-w-[80px]' : 'min-w-[120px]'
+                    }`}
                     placeholder={pills.length === 0 ? placeholder : ''}
                     onKeyDown={handleKeyDown}
                     onBlur={handleBlur}
