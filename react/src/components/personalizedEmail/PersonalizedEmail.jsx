@@ -68,7 +68,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 const userInfoStr = localStorage.getItem('SSO_USER_INFO');
                 if (userInfoStr) {
                     const userInfo = JSON.parse(userInfoStr);
-                    setUserEmail(userInfo.email || '');
+                    setUserEmail((userInfo.email || '').toLowerCase());
                 }
             } catch (error) {
                 console.error('Error loading user email:', error);
