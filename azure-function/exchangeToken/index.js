@@ -36,6 +36,23 @@ module.exports = async function (context, req) {
             return;
         }
 
+        // DEBUG: Decode and log token details
+        try {
+            const tokenParts = officeSsoToken.split('.');
+            if (tokenParts.length === 3) {
+                const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+                context.log('Token payload:', {
+                    aud: payload.aud,
+                    scp: payload.scp,
+                    roles: payload.roles,
+                    appid: payload.appid,
+                    ver: payload.ver
+                });
+            }
+        } catch (decodeError) {
+            context.log.error('Failed to decode token for debugging:', decodeError);
+        }
+
         // Get Azure AD configuration from environment variables
         const tenantId = process.env.AZURE_TENANT_ID;
         const clientId = process.env.AZURE_CLIENT_ID;
