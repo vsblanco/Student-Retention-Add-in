@@ -694,78 +694,120 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 body: JSON.stringify({ token: accessToken })
             });
 
+            const responseData = await tokenExchangeResponse.json();
+
             if (!tokenExchangeResponse.ok) {
-                const errorData = await tokenExchangeResponse.json();
-                throw new Error(`Token exchange failed: ${errorData.error || errorData.details || 'Unknown error'}`);
+                // Check if this is a consent error
+                if (responseData.details && responseData.details.includes('AADSTS65001')) {
+                    setStatus('Consent required. Please click "Send Email" again and accept the consent prompt.');
+
+                    // Show consent prompt by getting a new token with forceConsent
+                    try {
+                        const newToken = await Office.auth.getAccessToken({
+                            allowSignInPrompt: true,
+                            forceConsent: true,
+                            forMSGraphAccess: true
+                        });
+
+                        // If we got a new token, retry the exchange
+                        setStatus('Consent granted. Retrying email send...');
+                        const retryResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: newToken })
+                        });
+
+                        if (!retryResponse.ok) {
+                            const retryData = await retryResponse.json();
+                            throw new Error(`Token exchange failed after consent: ${retryData.error || retryData.details || 'Unknown error'}`);
+                        }
+
+                        const { accessToken: graphToken } = await retryResponse.json();
+
+                        // Continue with email sending
+                        await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
+                        return;
+
+                    } catch (consentError) {
+                        throw new Error(`Consent failed: ${consentError.message}. Please configure Power Automate in Settings for email sending, or contact your IT administrator for assistance.`);
+                    }
+                }
+
+                throw new Error(`Token exchange failed: ${responseData.error || responseData.details || 'Unknown error'}`);
             }
 
-            const { accessToken: graphToken } = await tokenExchangeResponse.json();
+            const { accessToken: graphToken } = responseData;
 
             // Step 2: Send emails using Graph API token
-            setStatus(`Sending ${payload.length} emails...`);
+            await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
 
-            for (const email of payload) {
-                try {
-                    // Parse CC recipients
-                    const ccRecipients = email.cc
-                        ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
-                            emailAddress: { address: addr }
-                        }))
-                        : [];
-
-                    // Construct Microsoft Graph API sendMail payload
-                    const graphPayload = {
-                        message: {
-                            subject: email.subject,
-                            body: {
-                                contentType: 'HTML',
-                                content: email.body
-                            },
-                            toRecipients: [
-                                {
-                                    emailAddress: {
-                                        address: email.to
-                                    }
-                                }
-                            ],
-                            ccRecipients: ccRecipients
-                        },
-                        saveToSentItems: true
-                    };
-
-                    const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${graphToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(graphPayload)
-                    });
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP ${response.status}: ${errorText}`);
-                    }
-
-                    successCount++;
-                    setStatus(`Sent ${successCount} of ${payload.length} emails...`);
-                } catch (error) {
-                    failureCount++;
-                    errors.push({ to: email.to, error: error.message });
-                    console.error(`Failed to send email to ${email.to}:`, error);
-                }
-            }
-
-            if (failureCount === 0) {
-                setStatus(`Successfully sent ${successCount} emails!`);
-                setShowSuccessModal(true);
-            } else {
-                setStatus(`Sent ${successCount} emails. Failed: ${failureCount}. Check console for details.`);
-                console.error('Email sending errors:', errors);
-            }
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
             console.error("Error sending emails:", error);
+        }
+    };
+
+    const sendEmailsWithGraphToken = async (graphToken, payload, setStatus, successCount, failureCount, errors) => {
+        setStatus(`Sending ${payload.length} emails...`);
+
+        for (const email of payload) {
+            try {
+                // Parse CC recipients
+                const ccRecipients = email.cc
+                    ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
+                        emailAddress: { address: addr }
+                    }))
+                    : [];
+
+                // Construct Microsoft Graph API sendMail payload
+                const graphPayload = {
+                    message: {
+                        subject: email.subject,
+                        body: {
+                            contentType: 'HTML',
+                            content: email.body
+                        },
+                        toRecipients: [
+                            {
+                                emailAddress: {
+                                    address: email.to
+                                }
+                            }
+                        ],
+                        ccRecipients: ccRecipients
+                    },
+                    saveToSentItems: true
+                };
+
+                const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${graphToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(graphPayload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                successCount++;
+                setStatus(`Sent ${successCount} of ${payload.length} emails...`);
+            } catch (error) {
+                failureCount++;
+                errors.push({ to: email.to, error: error.message });
+                console.error(`Failed to send email to ${email.to}:`, error);
+            }
+        }
+
+        if (failureCount === 0) {
+            setStatus(`Successfully sent ${successCount} emails!`);
+            setShowSuccessModal(true);
+        } else {
+            setStatus(`Sent ${successCount} emails. Failed: ${failureCount}. Check console for details.`);
+            console.error('Email sending errors:', errors);
         }
     };
 
