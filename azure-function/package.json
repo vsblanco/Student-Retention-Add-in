@@ -1,0 +1,12 @@
+{
+  "name": "student-retention-token-exchange",
+  "version": "1.0.0",
+  "description": "Azure Function to exchange Office SSO tokens for Microsoft Graph API tokens",
+  "main": "index.js",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests specified\""
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
