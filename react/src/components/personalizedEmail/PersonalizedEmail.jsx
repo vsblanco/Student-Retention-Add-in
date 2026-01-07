@@ -707,7 +707,6 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
     const sendEmailsViaGraphAPI = async () => {
         setShowConfirmModal(false);
-        setStatus(`Authenticating...`);
 
         const payload = generatePayload();
         setLastSentPayload(payload);
@@ -727,62 +726,40 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const errors = [];
 
         try {
-            // Step 1: Exchange Office SSO token for Graph API token
+            // Step 1: ALWAYS show consent dialog first
+            setStatus('Opening Microsoft consent dialog. Please grant permissions...');
+
+            try {
+                // Show Microsoft consent dialog (this will be a popup)
+                await showConsentDialog();
+            } catch (consentError) {
+                throw new Error(`Consent failed: ${consentError.message}. You may need to configure Power Automate in Settings, or contact your IT administrator.`);
+            }
+
+            // Step 2: After consent, get a fresh SSO token
+            setStatus('Consent granted. Getting authentication token...');
+            const newToken = await Office.auth.getAccessToken({
+                allowSignInPrompt: false,
+                forMSGraphAccess: true
+            });
+
+            // Step 3: Exchange Office SSO token for Graph API token
             setStatus('Exchanging authentication token...');
             const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: accessToken })
+                body: JSON.stringify({ token: newToken })
             });
 
             const responseData = await tokenExchangeResponse.json();
 
             if (!tokenExchangeResponse.ok) {
-                // Check if this is a consent error
-                if (responseData.details && responseData.details.includes('AADSTS65001')) {
-                    setStatus('Opening Microsoft consent dialog. Please grant permissions...');
-
-                    try {
-                        // Show Microsoft consent dialog (this will be a popup)
-                        await showConsentDialog();
-
-                        // After consent, get a fresh SSO token
-                        setStatus('Consent granted. Getting fresh authentication token...');
-                        const newToken = await Office.auth.getAccessToken({
-                            allowSignInPrompt: false,
-                            forMSGraphAccess: true
-                        });
-
-                        // Retry token exchange with fresh token
-                        setStatus('Retrying email send...');
-                        const retryResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token: newToken })
-                        });
-
-                        if (!retryResponse.ok) {
-                            const retryData = await retryResponse.json();
-                            throw new Error(`Token exchange still failed after consent: ${retryData.error || retryData.details || 'Unknown error'}`);
-                        }
-
-                        const { accessToken: graphToken } = await retryResponse.json();
-
-                        // Continue with email sending
-                        await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
-                        return;
-
-                    } catch (consentError) {
-                        throw new Error(`Consent required but failed: ${consentError.message}. You may need to configure Power Automate in Settings, or contact your IT administrator.`);
-                    }
-                }
-
                 throw new Error(`Token exchange failed: ${responseData.error || responseData.details || 'Unknown error'}`);
             }
 
             const { accessToken: graphToken } = responseData;
 
-            // Step 2: Send emails using Graph API token
+            // Step 4: Send emails using Graph API token
             await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
 
         } catch (error) {
