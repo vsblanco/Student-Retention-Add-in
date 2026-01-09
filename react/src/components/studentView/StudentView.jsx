@@ -47,6 +47,37 @@ const isHeaderRowAddress = (address) => {
   return /^[A-Z]+1(:[A-Z]+1)?$/.test(cleanAddress);
 };
 
+// Helper function to get value from object with case-insensitive key matching
+const getCaseInsensitive = (obj, possibleKeys) => {
+  if (!obj || typeof obj !== 'object') return null;
+
+  // First try exact matches (fastest)
+  for (const key of possibleKeys) {
+    if (obj[key] !== undefined && obj[key] !== null) {
+      return obj[key];
+    }
+  }
+
+  // If no exact match, try case-insensitive lookup
+  const objKeysLower = Object.keys(obj).reduce((acc, k) => {
+    acc[k.toLowerCase()] = k;
+    return acc;
+  }, {});
+
+  for (const key of possibleKeys) {
+    const lowerKey = key.toLowerCase();
+    if (objKeysLower[lowerKey]) {
+      const actualKey = objKeysLower[lowerKey];
+      const value = obj[actualKey];
+      if (value !== undefined && value !== null) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+};
+
 // Now accepts 'user' prop from App.jsx
 function StudentView({ onReady, user }) {
     const [activeTab, setActiveTab] = useState('details');
@@ -141,9 +172,18 @@ function StudentView({ onReady, user }) {
 
                     // Filter to match either SyStudentId (preferred) or StudentNumber (fallback)
                     const filtered = res.data.filter(entry => {
-                        // Normalize keys to handle case variations
-                        const entryId = entry.ID || entry['Student ID'] || entry['SyStudentID'] || entry['Student Identifier'] || entry['Student identifier'] || entry.StudentID;
-                        const entryNumber = entry['Student Number'] || entry.StudentNumber;
+                        // Use case-insensitive lookup for both ID fields
+                        const entryId = getCaseInsensitive(entry, [
+                            'ID',
+                            'Student ID',
+                            'SyStudentID',
+                            'Student Identifier',
+                            'StudentID'
+                        ]);
+                        const entryNumber = getCaseInsensitive(entry, [
+                            'Student Number',
+                            'StudentNumber'
+                        ]);
 
                         // Match by SyStudentId first, then StudentNumber
                         // Use loose equality (==) to handle string/number mismatches
