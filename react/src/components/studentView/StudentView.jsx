@@ -133,15 +133,22 @@ function StudentView({ onReady, user }) {
         loadSheet('Student History')
             .then((res) => {
                 if (res && res.data && Array.isArray(res.data)) {
+                    console.log('Raw history data count:', res.data.length);
+                    console.log('Sample entry keys:', res.data[0] ? Object.keys(res.data[0]) : 'no entries');
+                    console.log('Looking for studentId:', studentId, 'or studentNumber:', studentNumber);
+
                     // Filter to match either SyStudentId (preferred) or StudentNumber (fallback)
                     const filtered = res.data.filter(entry => {
                         // Normalize keys to handle case variations
-                        const entryId = entry['Student ID'] || entry['SyStudentID'] || entry['Student identifier'] || entry.StudentID;
+                        const entryId = entry.ID || entry['Student ID'] || entry['SyStudentID'] || entry['Student identifier'] || entry.StudentID;
                         const entryNumber = entry['Student Number'] || entry.StudentNumber;
 
                         // Match by SyStudentId first, then StudentNumber
-                        return (studentId && entryId == studentId) || (studentNumber && entryNumber == studentNumber);
+                        const matches = (studentId && entryId == studentId) || (studentNumber && entryNumber == studentNumber);
+                        return matches;
                     });
+
+                    console.log('Filtered history count:', filtered.length);
                     setHistory(filtered);
                 }
             })
