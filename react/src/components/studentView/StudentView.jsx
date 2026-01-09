@@ -110,18 +110,41 @@ function StudentView({ onReady, user }) {
     }, [availableTabs, activeTab]);
 
     const loadHistory = () => {
-        if (!activeStudentState || !activeStudentState.StudentNumber) return;
+        if (!activeStudentState) return;
         if (!availableTabs.history) return;
+
+        // Prefer SyStudentId (ID), fallback to StudentNumber for backwards compatibility
+        const studentId = activeStudentState.ID;
+        const studentNumber = activeStudentState.StudentNumber;
+
+        if (!studentId && !studentNumber) return;
 
         console.log('Loading history for', activeStudentState.StudentName);
         setHistoryLoading(true);
-        
-        loadSheetCache(activeStudentState.StudentNumber)
-            .then((cached) => { if (cached) setHistory(cached); })
-            .catch(() => {});
-            
-        loadSheet('Student History', 'StudentNumber', activeStudentState.StudentNumber)
-            .then((res) => { if (res && res.data) setHistory(res.data); })
+
+        // Try cache with StudentNumber first for backwards compatibility
+        if (studentNumber) {
+            loadSheetCache(studentNumber)
+                .then((cached) => { if (cached) setHistory(cached); })
+                .catch(() => {});
+        }
+
+        // Load all history and filter by either SyStudentId or StudentNumber
+        loadSheet('Student History')
+            .then((res) => {
+                if (res && res.data && Array.isArray(res.data)) {
+                    // Filter to match either SyStudentId (preferred) or StudentNumber (fallback)
+                    const filtered = res.data.filter(entry => {
+                        // Normalize keys to handle case variations
+                        const entryId = entry['Student ID'] || entry['SyStudentID'] || entry['Student identifier'] || entry.StudentID;
+                        const entryNumber = entry['Student Number'] || entry.StudentNumber;
+
+                        // Match by SyStudentId first, then StudentNumber
+                        return (studentId && entryId == studentId) || (studentNumber && entryNumber == studentNumber);
+                    });
+                    setHistory(filtered);
+                }
+            })
             .catch((err) => console.error('Failed to load Student History sheet:', err));
     };
 
@@ -135,11 +158,11 @@ function StudentView({ onReady, user }) {
 
     // 3. AUTO-LOADER
     useEffect(() => {
-        if (!activeStudentState?.StudentNumber) return;
+        if (!activeStudentState?.ID && !activeStudentState?.StudentNumber) return;
         if (availableTabs.history) loadHistory();
         if (availableTabs.assignments) loadAssignments();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeStudentState?.StudentNumber]);
+    }, [activeStudentState?.ID, activeStudentState?.StudentNumber]);
 
     const renderActiveTab = () => {
         if (!activeStudentState || !activeStudentState.ID) {

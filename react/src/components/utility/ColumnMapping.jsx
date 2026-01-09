@@ -5,7 +5,7 @@ export const Sheets = {
 
 export const COLUMN_ALIASES = {
   StudentName: ['Student Name', 'Student'],
-  ID: ['Student ID', 'Student Number','Student identifier'],
+  ID: ['Student ID', 'SyStudentID', 'Student Number','Student identifier'],
   Gender: ['Gender'],
   Phone: ['Phone Number', 'Contact'],
   CreatedBy: ['Created By', 'Author', 'Advisor'],
@@ -38,7 +38,7 @@ export const COLUMN_ALIASES_HISTORY = {
   comment: ['Comment', 'Notes', 'History', 'Entry'],
   createdBy: ['Created By', 'Author', 'Advisor'],
   tag: ['Tag', 'Category', 'Type','Tags'],
-  StudentID: ['Student ID', 'Student Number','Student identifier'],
+  StudentID: ['Student ID', 'SyStudentID', 'Student Number','Student identifier'],
   commentID: ['Comment ID', 'History ID', 'Entry ID','commentID']
   // Add more aliases as needed for history columns
 };
