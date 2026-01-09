@@ -89,6 +89,10 @@ function getCurrentMonth() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function getCurrentYear() {
+  return new Date().getFullYear();
+}
+
 function getMonthYearLabel(monthStr) {
   // monthStr: "YYYY-MM"
   const [year, month] = monthStr.split('-');
@@ -130,8 +134,9 @@ function StudentHistory({ history, student, reload }) {
   const [processed, setProcessed] = useState({
     pinnedComments: [],
     currentMonthComments: [],
-    monthGroups: {},
-    sortedMonths: []
+    currentYearMonths: [],       // months from current year (not in year folders)
+    yearGroups: {},               // { year: { monthGroups: {}, sortedMonths: [] } }
+    sortedYears: []               // sorted list of previous years
   });
   // isLoading true while parent hasn't provided history OR external loading was triggered
   const isLoading = externalLoading || history == null || !ready;
@@ -157,6 +162,11 @@ function StudentHistory({ history, student, reload }) {
   const [collapsedFolders, setCollapsedFolders] = useState({});
   const collapsedRef = useRef(collapsedFolders);
   useEffect(() => { collapsedRef.current = collapsedFolders; }, [collapsedFolders]);
+
+  // Collapsed state for year folders
+  const [collapsedYears, setCollapsedYears] = useState({});
+  const collapsedYearsRef = useRef(collapsedYears);
+  useEffect(() => { collapsedYearsRef.current = collapsedYears; }, [collapsedYears]);
 
   // Sync localHistory with history prop if it changes
   useEffect(() => {
@@ -189,10 +199,12 @@ useEffect(() => {
        setProcessed({
          pinnedComments: [],
          currentMonthComments: [],
-         monthGroups: {},
-         sortedMonths: []
+         currentYearMonths: [],
+         yearGroups: {},
+         sortedYears: []
        });
        setCollapsedFolders({});
+       setCollapsedYears({});
        // mark ready so isLoading becomes false and skeleton overlay fades away
        setReady(true);
        // clear external/global loading flag as a courtesy so other modules know loading finished
@@ -243,48 +255,112 @@ useEffect(() => {
            .slice()
            .sort((a, b) => parseTimestampMs(b.timestamp) - parseTimestampMs(a.timestamp));
 
-         const monthGroups = {};
          const currentMonth = getCurrentMonth();
+         const currentYear = getCurrentYear();
          const currentMonthComments = [];
+         const currentYearMonthGroups = {};
+         const yearGroups = {};
+
+         // Group unpinned comments by year and month
          unpinnedComments.forEach(entry => {
            const month = getMonthFromTimestamp(entry.timestamp);
+           if (!month) return;
+
+           const [year] = month.split('-');
+           const yearNum = parseInt(year, 10);
+
            if (month === currentMonth) {
+             // Current month - no folder
              currentMonthComments.push(entry);
-           } else if (month) {
-             if (!monthGroups[month]) monthGroups[month] = [];
-             monthGroups[month].push(entry);
+           } else if (yearNum === currentYear) {
+             // Other months in current year - month folder at top level
+             if (!currentYearMonthGroups[month]) currentYearMonthGroups[month] = [];
+             currentYearMonthGroups[month].push(entry);
+           } else {
+             // Previous years - organize into year folders containing month folders
+             if (!yearGroups[yearNum]) {
+               yearGroups[yearNum] = {};
+             }
+             if (!yearGroups[yearNum][month]) yearGroups[yearNum][month] = [];
+             yearGroups[yearNum][month].push(entry);
            }
          });
 
-         const sortedMonths = Object.keys(monthGroups).sort((a, b) => b.localeCompare(a));
+         // Sort current year months (most recent first)
+         const sortedCurrentYearMonths = Object.keys(currentYearMonthGroups).sort((a, b) => b.localeCompare(a));
 
-         // Merge collapsed state with new months BEFORE flipping ready so UI doesn't render an intermediate state.
-         const prev = collapsedRef.current || {};
-         const merged = { ...prev };
-         sortedMonths.forEach(month => {
-           if (!(month in merged)) merged[month] = true;
+         // Sort years (most recent first)
+         const sortedYears = Object.keys(yearGroups)
+           .map(y => parseInt(y, 10))
+           .sort((a, b) => b - a);
+
+         // For each year, sort its months
+         const processedYearGroups = {};
+         sortedYears.forEach(year => {
+           const months = Object.keys(yearGroups[year]).sort((a, b) => b.localeCompare(a));
+           processedYearGroups[year] = {
+             monthGroups: yearGroups[year],
+             sortedMonths: months
+           };
+         });
+
+         // Merge collapsed state for current year months
+         const prevMonths = collapsedRef.current || {};
+         const mergedMonths = { ...prevMonths };
+         sortedCurrentYearMonths.forEach(month => {
+           if (!(month in mergedMonths)) mergedMonths[month] = true;
+         });
+         // Also handle months within year folders
+         sortedYears.forEach(year => {
+           Object.keys(yearGroups[year]).forEach(month => {
+             const key = `${year}-${month}`;
+             if (!(key in mergedMonths)) mergedMonths[key] = true;
+           });
          });
          // Remove months that no longer exist
-         Object.keys(merged).forEach(m => {
-           if (!sortedMonths.includes(m)) delete merged[m];
+         Object.keys(mergedMonths).forEach(m => {
+           const isCurrentYearMonth = sortedCurrentYearMonths.includes(m);
+           const isYearMonth = sortedYears.some(year => {
+             return yearGroups[year] && Object.keys(yearGroups[year]).includes(m);
+           });
+           if (!isCurrentYearMonth && !isYearMonth) delete mergedMonths[m];
          });
-         // Update collapsedFolders and processed together, then mark ready
-         setCollapsedFolders(merged);
+
+         // Merge collapsed state for years
+         const prevYears = collapsedYearsRef.current || {};
+         const mergedYears = { ...prevYears };
+         sortedYears.forEach(year => {
+           if (!(year in mergedYears)) mergedYears[year] = true;
+         });
+         // Remove years that no longer exist
+         Object.keys(mergedYears).forEach(y => {
+           if (!sortedYears.includes(parseInt(y, 10))) delete mergedYears[y];
+         });
+
+         // Update state
+         setCollapsedFolders(mergedMonths);
+         setCollapsedYears(mergedYears);
          setProcessed({
            pinnedComments,
            currentMonthComments,
-           monthGroups,
-           sortedMonths
+           currentYearMonths: sortedCurrentYearMonths.map(month => ({
+             month,
+             comments: currentYearMonthGroups[month]
+           })),
+           yearGroups: processedYearGroups,
+           sortedYears
          });
          setReady(true);
        } catch (err) {
          // If processing fails for some reason, mark ready so UI can attempt rendering (and show error via toast if needed)
          setCollapsedFolders({});
+         setCollapsedYears({});
          setProcessed({
            pinnedComments: [],
            currentMonthComments: [],
-           monthGroups: {},
-           sortedMonths: []
+           currentYearMonths: [],
+           yearGroups: {},
+           sortedYears: []
          });
          setReady(true);
        }
@@ -309,6 +385,13 @@ useEffect(() => {
      setCollapsedFolders(prev => ({
        ...prev,
        [month]: !prev[month]
+     }));
+   }
+
+   function toggleYear(year) {
+     setCollapsedYears(prev => ({
+       ...prev,
+       [year]: !prev[year]
      }));
    }
 
@@ -495,8 +578,8 @@ useEffect(() => {
                    save={saveCommentFromHistory}
                  />
                ))}
-               {/* Previous months in collapsible folders (only unpinned) */}
-               {(processed.sortedMonths || []).map(month => (
+               {/* Other months from current year in collapsible folders (only unpinned) */}
+               {(processed.currentYearMonths || []).map(({ month, comments }) => (
                  <li key={month} className="bg-gray-50 rounded-lg shadow-sm p-2">
                    <div
                      className="flex items-center font-semibold text-gray-700 mb-2 cursor-pointer select-none"
@@ -519,7 +602,7 @@ useEffect(() => {
                    </div>
                    {!collapsedFolders[month] && (
                      <ul className="space-y-2">
-                       {[...(processed.monthGroups[month] || [])].map((entry, idx) => (
+                       {[...(comments || [])].map((entry, idx) => (
                          <Comment
                            key={`month-${month}-${idx}`}
                            entry={entry}
@@ -528,6 +611,71 @@ useEffect(() => {
                            delete={deleteCommentFromHistory}
                            save={saveCommentFromHistory}
                          />
+                       ))}
+                     </ul>
+                   )}
+                 </li>
+               ))}
+               {/* Previous years in collapsible year folders */}
+               {(processed.sortedYears || []).map(year => (
+                 <li key={year} className="bg-gray-100 rounded-lg shadow-md p-2 mb-2">
+                   <div
+                     className="flex items-center font-bold text-gray-800 mb-2 cursor-pointer select-none"
+                     onClick={() => toggleYear(year)}
+                     style={{ userSelect: 'none' }}
+                     aria-label={collapsedYears[year] ? "Expand" : "Collapse"}
+                     tabIndex={0}
+                     role="button"
+                     onKeyDown={e => {
+                       if (e.key === 'Enter' || e.key === ' ') toggleYear(year);
+                     }}
+                   >
+                     <span className="mr-2 text-gray-600" style={{ fontSize: '1.2em', lineHeight: '1' }}>
+                       {collapsedYears[year]
+                         ? <Folder size={22} strokeWidth={2.5} />
+                         : <FolderOpen size={22} strokeWidth={2.5} />
+                       }
+                     </span>
+                     {year}
+                   </div>
+                   {!collapsedYears[year] && processed.yearGroups[year] && (
+                     <ul className="space-y-2 ml-2">
+                       {processed.yearGroups[year].sortedMonths.map(month => (
+                         <li key={month} className="bg-gray-50 rounded-lg shadow-sm p-2">
+                           <div
+                             className="flex items-center font-semibold text-gray-700 mb-2 cursor-pointer select-none"
+                             onClick={() => toggleFolder(`${year}-${month}`)}
+                             style={{ userSelect: 'none' }}
+                             aria-label={collapsedFolders[`${year}-${month}`] ? "Expand" : "Collapse"}
+                             tabIndex={0}
+                             role="button"
+                             onKeyDown={e => {
+                               if (e.key === 'Enter' || e.key === ' ') toggleFolder(`${year}-${month}`);
+                             }}
+                           >
+                             <span className="mr-2 text-gray-500" style={{ fontSize: '1.2em', lineHeight: '1' }}>
+                               {collapsedFolders[`${year}-${month}`]
+                                 ? <Folder size={20} strokeWidth={2} />
+                                 : <FolderOpen size={20} strokeWidth={2} />
+                               }
+                             </span>
+                             {getMonthYearLabel(month)}
+                           </div>
+                           {!collapsedFolders[`${year}-${month}`] && (
+                             <ul className="space-y-2">
+                               {[...(processed.yearGroups[year].monthGroups[month] || [])].map((entry, idx) => (
+                                 <Comment
+                                   key={`year-${year}-month-${month}-${idx}`}
+                                   entry={entry}
+                                   searchTerm={searchTerm}
+                                   index={idx}
+                                   delete={deleteCommentFromHistory}
+                                   save={saveCommentFromHistory}
+                                 />
+                               ))}
+                             </ul>
+                           )}
+                         </li>
                        ))}
                      </ul>
                    )}
