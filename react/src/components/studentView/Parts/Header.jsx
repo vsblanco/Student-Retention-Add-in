@@ -198,6 +198,7 @@ function StudentHeader({ student, selectedRowCount = 1 }) {
   const [showNoLink, setShowNoLink] = React.useState(false);
   const [showDaysModal, setShowDaysModal] = React.useState(false);
   const [bounce, setBounce] = React.useState(false);
+  const [showEnlargedPhoto, setShowEnlargedPhoto] = React.useState(false);
 
   // --- Dynamic Text Resizing Logic ---
   const nameRef = React.useRef(null);
@@ -246,10 +247,14 @@ function StudentHeader({ student, selectedRowCount = 1 }) {
             className={`relative w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold shrink-0 focus:outline-none${bounce ? " bounce" : ""}`}
             style={avatarBg}
             onClick={() => {
-              setBounce(true);
-              setTimeout(() => setBounce(false), 500);
+              if (profilePicUrl && !imageError) {
+                setShowEnlargedPhoto(true);
+              } else {
+                setBounce(true);
+                setTimeout(() => setBounce(false), 500);
+              }
             }}
-            aria-label="Bounce avatar"
+            aria-label={profilePicUrl && !imageError ? "View profile photo" : "Bounce avatar"}
             // Only show a generic title on the avatar if there is no expected start date.
             title={isNew && !expectedStartDisplay ? "New student" : undefined}
           >
@@ -397,6 +402,47 @@ function StudentHeader({ student, selectedRowCount = 1 }) {
           </button>
         </div>
       </div>
+
+      {/* Enlarged Profile Photo Modal */}
+      {showEnlargedPhoto && profilePicUrl && !imageError && (
+        <div
+          onClick={() => setShowEnlargedPhoto(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            cursor: 'pointer'
+          }}
+          aria-label="Close enlarged photo"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') {
+              setShowEnlargedPhoto(false);
+            }
+          }}
+        >
+          <img
+            src={profilePicUrl}
+            alt={studentName ? `${studentName} profile photo enlarged` : 'Student profile photo enlarged'}
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              borderRadius: '8px',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.5)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Days Out Modal */}
       <DaysOutModal
