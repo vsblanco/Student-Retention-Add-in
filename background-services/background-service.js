@@ -930,6 +930,19 @@ function setupPingResponseListener() {
 
             console.log('✅ Pong sent to Chrome extension');
         }
+
+        if (event.data && event.data.type === "SRK_PING") {
+            console.log('🏓 Received SRK_PING from Chrome extension, sending pong...');
+
+            // Send pong response back to extension
+            window.postMessage({
+                type: "SRK_PONG",
+                timestamp: new Date().toISOString(),
+                source: "excel-addin-background"
+            }, "*");
+
+            console.log('✅ SRK_PONG sent to Chrome extension');
+        }
     });
 
     console.log('🔔 Ping response listener set up');
