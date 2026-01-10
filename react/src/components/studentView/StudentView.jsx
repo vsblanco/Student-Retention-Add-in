@@ -144,9 +144,17 @@ function StudentView({ onReady, user }) {
         if (!activeStudentState) return;
         if (!availableTabs.history) return;
 
+        // Debug: log the entire activeStudentState to see what columns we have
+        console.log('=== ACTIVE STUDENT STATE ===');
+        console.log('Full activeStudentState:', activeStudentState);
+        console.log('Available keys:', Object.keys(activeStudentState));
+
         // Prefer SyStudentId (ID), fallback to StudentNumber for backwards compatibility
         const studentId = activeStudentState.ID;
         const studentNumber = activeStudentState.StudentNumber;
+
+        console.log('Extracted studentId (ID):', studentId);
+        console.log('Extracted studentNumber:', studentNumber);
 
         if (!studentId && !studentNumber) return;
 
