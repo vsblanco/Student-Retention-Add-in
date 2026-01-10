@@ -49,7 +49,7 @@ const calculateWhiskerStats = (values) => {
   return { min, q1, median, q3, max, mean, count: n };
 };
 
-function MultiStudentView({ students }) {
+function MultiStudentView({ students, hiddenRowCount = 0 }) {
   const [distributionType, setDistributionType] = useState('grade');
 
   // Calculate stats for all distribution types
@@ -389,6 +389,13 @@ function MultiStudentView({ students }) {
           </div>
         )}
       </div>
+
+      {/* Hidden row count info */}
+      {hiddenRowCount > 0 && (
+        <div className="text-xs text-gray-500 text-center pt-2 border-t border-gray-200">
+          {hiddenRowCount} row{hiddenRowCount !== 1 ? 's' : ''} hidden by filters
+        </div>
+      )}
     </div>
   );
 }

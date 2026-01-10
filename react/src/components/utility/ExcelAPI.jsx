@@ -291,7 +291,8 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                             data: payload.data || {},
                             values: payload.values || [],
                             rowCount: payload.rowCount || 1,
-                            allRows: payload.allRows || []
+                            allRows: payload.allRows || [],
+                            hiddenRowCount: payload.hiddenRowCount || 0
                         });
                     });
                 } catch (err) {
@@ -461,6 +462,8 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         address: selRange.address,
         rowIndex: selectedRowIndex,
         rowCount: allRows.length,  // Return count of visible rows only
+        originalRowCount: selectedRowCount,  // Original selection count (including hidden)
+        hiddenRowCount: selectedRowCount - allRows.length,  // Number of hidden rows
         startCol: usedColIndex,
         columnCount: usedColCount,
         headers: headerIndexMap,
@@ -682,7 +685,8 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
                         data: payload.data || {},
                         values: payload.values || [],
                         rowCount: payload.rowCount || 1,
-                        allRows: payload.allRows || []
+                        allRows: payload.allRows || [],
+                        hiddenRowCount: payload.hiddenRowCount || 0
                     });
                 } catch (err) {
                     console.error("getSelectedRange callback error:", err);
