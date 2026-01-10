@@ -606,6 +606,76 @@ interface MissingAssignmentImport {
 }
 ```
 
+### 8. Ping-Pong Connectivity Checks
+
+The add-in includes a reverse ping-pong mechanism that allows the Chrome extension to verify if the add-in is loaded and ready. This is useful for the extension to confirm connectivity before sending data or commands.
+
+**Extension → Add-in (Ping):**
+```javascript
+// Send ping to check if add-in is ready
+window.postMessage({
+  type: "SRK_PING"
+}, "*");
+```
+
+**Add-in → Extension (Pong Response):**
+```javascript
+// The add-in automatically responds with:
+{
+  type: "SRK_PONG",
+  timestamp: "2025-01-10T10:30:00.000Z",
+  source: "excel-addin-background"
+}
+```
+
+**Example: Implementing Ping in Extension**
+```javascript
+// In your Chrome extension, set up a ping check
+function checkAddInConnectivity() {
+  return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    // Set up listener for pong response
+    const pongListener = (event) => {
+      if (event.data && event.data.type === "SRK_PONG") {
+        clearTimeout(timeoutId);
+        window.removeEventListener("message", pongListener);
+        console.log("✅ Add-in is ready!", event.data);
+        resolve(true);
+      }
+    };
+
+    window.addEventListener("message", pongListener);
+
+    // Send ping
+    window.postMessage({ type: "SRK_PING" }, "*");
+
+    // Timeout after 5 seconds
+    timeoutId = setTimeout(() => {
+      window.removeEventListener("message", pongListener);
+      console.log("❌ Add-in did not respond");
+      resolve(false);
+    }, 5000);
+  });
+}
+
+// Usage
+const isConnected = await checkAddInConnectivity();
+if (isConnected) {
+  console.log("Add-in is loaded and ready to receive messages");
+  // Proceed with sending data or commands
+} else {
+  console.log("Add-in is not available");
+  // Show user notification or retry
+}
+```
+
+**Background Service Behavior:**
+- The ping response listener is automatically set up when the add-in loads
+- It runs in the background and responds immediately to `SRK_PING` messages
+- No configuration needed - it's always active when the add-in is loaded on a sheet
+- Both general (`SRK_PING`/`SRK_PONG`) and taskpane-specific (`SRK_TASKPANE_PING`/`SRK_TASKPANE_PONG`) ping-pong are supported
+
 ## Important Notes
 
 1. **All Columns Included**: The add-in now sends ALL columns from the Master List sheet, not just predefined ones. This means any custom columns you add will automatically be included in the payload.
@@ -642,6 +712,10 @@ interface MissingAssignmentImport {
 |-------------|-----------|---------|
 | `SRK_CHECK_EXTENSION` | Add-in → Extension | Ping to detect extension |
 | `SRK_EXTENSION_INSTALLED` | Extension → Add-in | Confirm extension is present |
+| `SRK_PING` | Extension → Add-in | Check if add-in is loaded and ready |
+| `SRK_PONG` | Add-in → Extension | Confirm add-in is loaded and ready |
+| `SRK_TASKPANE_PING` | Extension → Add-in | Check taskpane connectivity |
+| `SRK_TASKPANE_PONG` | Add-in → Extension | Confirm taskpane is ready |
 | `SRK_REQUEST_MASTER_LIST` | Add-in → Extension | Ask if extension wants data |
 | `SRK_MASTER_LIST_RESPONSE` | Extension → Add-in | Accept or decline data |
 | `SRK_MASTER_LIST_DATA` | Add-in → Extension | Send Master List payload |

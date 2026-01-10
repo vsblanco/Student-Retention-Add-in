@@ -919,6 +919,7 @@ async function transferMasterList() {
  */
 function setupPingResponseListener() {
     window.addEventListener("message", (event) => {
+        // Handle taskpane-specific ping
         if (event.data && event.data.type === "SRK_TASKPANE_PING") {
             console.log('🏓 Received ping from Chrome extension taskpane, sending pong...');
 
@@ -926,6 +927,20 @@ function setupPingResponseListener() {
             window.postMessage({
                 type: "SRK_TASKPANE_PONG",
                 timestamp: new Date().toISOString()
+            }, "*");
+
+            console.log('✅ Pong sent to Chrome extension');
+        }
+
+        // Handle general ping to check if add-in is loaded
+        if (event.data && event.data.type === "SRK_PING") {
+            console.log('🏓 Received ping from Chrome extension, sending pong...');
+
+            // Send pong response back to extension
+            window.postMessage({
+                type: "SRK_PONG",
+                timestamp: new Date().toISOString(),
+                source: "excel-addin-background"
             }, "*");
 
             console.log('✅ Pong sent to Chrome extension');
