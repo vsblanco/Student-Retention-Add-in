@@ -919,18 +919,6 @@ async function transferMasterList() {
  */
 function setupPingResponseListener() {
     window.addEventListener("message", (event) => {
-        if (event.data && event.data.type === "SRK_TASKPANE_PING") {
-            console.log('🏓 Received ping from Chrome extension taskpane, sending pong...');
-
-            // Send pong response back to extension
-            window.postMessage({
-                type: "SRK_TASKPANE_PONG",
-                timestamp: new Date().toISOString()
-            }, "*");
-
-            console.log('✅ Pong sent to Chrome extension');
-        }
-
         if (event.data && event.data.type === "SRK_PING") {
             console.log('🏓 Received SRK_PING from Chrome extension, sending pong...');
 
