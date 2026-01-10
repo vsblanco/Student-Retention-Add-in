@@ -180,27 +180,27 @@ function StudentView({ onReady, user }) {
 
                     // Filter to match either SyStudentId (preferred) or StudentNumber (fallback)
                     const filtered = res.data.filter(entry => {
-                        // Use case-insensitive lookup for both ID fields
-                        const entryId = getCaseInsensitive(entry, [
+                        // Get the identifier value from the history entry
+                        // This could be in any of these columns: SyStudentId, Student Identifier, Student Number, etc.
+                        const entryIdValue = getCaseInsensitive(entry, [
                             'ID',
                             'Student ID',
                             'SyStudentID',
                             'Student Identifier',
-                            'StudentID'
-                        ]);
-                        const entryNumber = getCaseInsensitive(entry, [
-                            'Student Number',
+                            'StudentID',
+                            'Student Number',  // Also check Student Number column for backwards compatibility
                             'StudentNumber'
                         ]);
 
-                        // Match by SyStudentId first, then StudentNumber
-                        // Use loose equality (==) to handle string/number mismatches
-                        const matchById = studentId && entryId && (entryId == studentId);
-                        const matchByNumber = studentNumber && entryNumber && (entryNumber == studentNumber);
-                        const matches = matchById || matchByNumber;
+                        if (!entryIdValue) return false;
+
+                        // Match if the entry's identifier matches EITHER the student's SyStudentId OR StudentNumber
+                        // This ensures we find entries regardless of which column name is used in the History sheet
+                        const matches = (studentId && entryIdValue == studentId) ||
+                                       (studentNumber && entryIdValue == studentNumber);
 
                         if (matches) {
-                            console.log('MATCH FOUND:', { entryId, entryNumber, studentId, studentNumber });
+                            console.log('MATCH FOUND:', { entryIdValue, studentId, studentNumber });
                         }
 
                         return matches;
