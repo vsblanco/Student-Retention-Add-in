@@ -935,6 +935,98 @@ function setupPingResponseListener() {
     console.log('🔔 Ping response listener set up');
 }
 
+/**
+ * Creates a new sheet with the given name and headers
+ * @param {string} sheetName - The name of the sheet to create
+ * @param {string[]} headers - Array of column headers
+ * @returns {Promise<void>}
+ */
+async function createSheetFromExtension(sheetName, headers) {
+    try {
+        console.log(`CreateSheet: Received request to create sheet "${sheetName}" with headers:`, headers);
+
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            // Check if sheet already exists
+            let targetSheet = sheets.items.find(s => s.name === sheetName);
+
+            if (!targetSheet) {
+                console.log(`CreateSheet: Creating new sheet "${sheetName}"...`);
+                targetSheet = sheets.add(sheetName);
+                await context.sync();
+            } else {
+                console.log(`CreateSheet: Sheet "${sheetName}" already exists, getting reference...`);
+                targetSheet = context.workbook.worksheets.getItem(sheetName);
+            }
+
+            // Write headers to the first row
+            if (headers && Array.isArray(headers) && headers.length > 0) {
+                const headerRange = targetSheet.getRangeByIndexes(0, 0, 1, headers.length);
+                headerRange.values = [headers];
+                headerRange.format.font.bold = true;
+                await context.sync();
+                console.log(`CreateSheet: Headers written to sheet "${sheetName}"`);
+            }
+
+            // Activate the new sheet
+            targetSheet.activate();
+            await context.sync();
+
+            console.log(`CreateSheet: Sheet "${sheetName}" created and activated successfully`);
+        });
+    } catch (error) {
+        console.error(`CreateSheet: Error creating sheet "${sheetName}":`, error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("CreateSheet: Debug info:", JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
+/**
+ * Retrieves all sheet names from the workbook and sends them to the Chrome extension
+ * @returns {Promise<void>}
+ */
+async function sendSheetListToExtension() {
+    try {
+        console.log("SheetList: Retrieving all sheet names...");
+
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            // Extract sheet names
+            const sheetNames = sheets.items.map(sheet => sheet.name);
+            console.log(`SheetList: Found ${sheetNames.length} sheets:`, sheetNames);
+
+            // Send response to Chrome extension
+            chromeExtensionService.sendMessage({
+                type: 'SRK_SHEET_LIST_RESPONSE',
+                sheets: sheetNames,
+                timestamp: new Date().toISOString()
+            });
+
+            console.log("SheetList: Sheet list sent to Chrome extension");
+        });
+    } catch (error) {
+        console.error("SheetList: Error retrieving sheet names:", error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("SheetList: Debug info:", JSON.stringify(error.debugInfo));
+        }
+
+        // Send error response to extension
+        chromeExtensionService.sendMessage({
+            type: 'SRK_SHEET_LIST_RESPONSE',
+            sheets: [],
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("openImportDialog", openImportDialog);
@@ -989,6 +1081,23 @@ Office.onReady(() => {
       if (event.data.type === 'SRK_IMPORT_MASTER_LIST') {
         console.log("Background: Received Master List import request from extension");
         importMasterListFromExtension(event.data.data);
+      }
+
+      // Handle sheet creation request from extension
+      if (event.data.type === 'SRK_CREATE_SHEET') {
+        console.log("Background: Received sheet creation request from extension");
+        const { sheetName, headers } = event.data;
+        if (sheetName && headers) {
+          createSheetFromExtension(sheetName, headers);
+        } else {
+          console.error("Background: Invalid SRK_CREATE_SHEET request - missing sheetName or headers");
+        }
+      }
+
+      // Handle sheet list request from extension
+      if (event.data.type === 'SRK_REQUEST_SHEET_LIST') {
+        console.log("Background: Received sheet list request from extension");
+        sendSheetListToExtension();
       }
     }
   });
