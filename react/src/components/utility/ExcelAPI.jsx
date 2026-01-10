@@ -291,7 +291,8 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                             data: payload.data || {},
                             values: payload.values || [],
                             rowCount: payload.rowCount || 1,
-                            allRows: payload.allRows || []
+                            allRows: payload.allRows || [],
+                            hiddenRowCount: payload.hiddenRowCount || 0
                         });
                     });
                 } catch (err) {
@@ -356,6 +357,15 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
     rowRange.load("values");
     await context.sync();
 
+    // Check which rows are hidden to filter them out
+    const rowVisibility = [];
+    for (let r = 0; r < selectedRowCount; r++) {
+        const row = worksheet.getRangeByIndexes(selectedRowIndex + r, usedColIndex, 1, 1);
+        row.load("rowHidden");
+        rowVisibility.push(row);
+    }
+    await context.sync();
+
     const usedRangeStartRow = (typeof usedRange.rowIndex === "number") ? usedRange.rowIndex : 0;
 
     // Helper function to build row object from values
@@ -413,9 +423,14 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         return rowObj;
     };
 
-    // Build all row objects
+    // Build all row objects, filtering out hidden rows
     const allRows = [];
     for (let r = 0; r < selectedRowCount; r++) {
+        // Skip hidden rows
+        if (rowVisibility[r] && rowVisibility[r].rowHidden) {
+            continue;
+        }
+
         const absoluteRowIndex = selectedRowIndex + r;
         const relativeRowIdx = absoluteRowIndex - usedRangeStartRow;
         const rowValues = (rowRange.values && rowRange.values[r]) ? rowRange.values[r] : [];
@@ -427,24 +442,35 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
     const headerIndexMap = {};
     rawHeaders.forEach((h, i) => { headerIndexMap[h] = i; });
 
-    // For backward compatibility, keep first row as 'data' and first row values as 'values'
-    const firstRowValues = (rowRange.values && rowRange.values[0]) ? rowRange.values[0] : [];
+    // For backward compatibility, keep first visible row as 'data' and first visible row values as 'values'
+    // Find the first visible row index
+    let firstVisibleRowIdx = 0;
+    for (let r = 0; r < selectedRowCount; r++) {
+        if (!rowVisibility[r] || !rowVisibility[r].rowHidden) {
+            firstVisibleRowIdx = r;
+            break;
+        }
+    }
+
+    const firstRowValues = (rowRange.values && rowRange.values[firstVisibleRowIdx]) ? rowRange.values[firstVisibleRowIdx] : [];
     const firstRowData = allRows.length > 0 ? allRows[0] : {};
-    const firstRelativeRowIdx = selectedRowIndex - usedRangeStartRow;
+    const firstRelativeRowIdx = (selectedRowIndex + firstVisibleRowIdx) - usedRangeStartRow;
     const formulasRow = (usedRange.formulas && usedRange.formulas[firstRelativeRowIdx]) ? usedRange.formulas[firstRelativeRowIdx] : [];
 
     return {
         success: true,
         address: selRange.address,
         rowIndex: selectedRowIndex,
-        rowCount: selectedRowCount,
+        rowCount: allRows.length,  // Return count of visible rows only
+        originalRowCount: selectedRowCount,  // Original selection count (including hidden)
+        hiddenRowCount: selectedRowCount - allRows.length,  // Number of hidden rows
         startCol: usedColIndex,
         columnCount: usedColCount,
         headers: headerIndexMap,
         values: firstRowValues,
         formulas: formulasRow,
         data: firstRowData,
-        allRows: allRows  // NEW: all selected rows
+        allRows: allRows  // All visible (non-hidden) rows only
     };
 }
 
@@ -659,7 +685,8 @@ export async function getSelectedRange(arg1, arg2 = null, options = {}) {
                         data: payload.data || {},
                         values: payload.values || [],
                         rowCount: payload.rowCount || 1,
-                        allRows: payload.allRows || []
+                        allRows: payload.allRows || [],
+                        hiddenRowCount: payload.hiddenRowCount || 0
                     });
                 } catch (err) {
                     console.error("getSelectedRange callback error:", err);

@@ -86,6 +86,7 @@ function StudentView({ onReady, user }) {
     const [activeStudentState, setActiveStudentState] = useState(activeStudent);
     const [selectedRowCount, setSelectedRowCount] = useState(1);
     const [selectedStudents, setSelectedStudents] = useState([]);
+    const [hiddenRowCount, setHiddenRowCount] = useState(0);
 
     // Track sheet version to force re-binding of listeners on sheet switch
     const [sheetVersion, setSheetVersion] = useState(0);
@@ -260,15 +261,17 @@ function StudentView({ onReady, user }) {
     let handlerRef = null;
     (async () => {
       try {
-        handlerRef = await onSelectionChanged(({ address, values, data, rowCount, allRows }) => {
+        handlerRef = await onSelectionChanged(({ address, values, data, rowCount, allRows, hiddenRowCount }) => {
           if (isHeaderRowAddress(address)) {
             setActiveStudentState({});
             setSelectedRowCount(1);
             setSelectedStudents([]);
+            setHiddenRowCount(0);
             return;
           }
           setSelectedRowCount(rowCount || 1);
           setSelectedStudents(allRows || []);
+          setHiddenRowCount(hiddenRowCount || 0);
           setActiveStudentState(prev => ({ ...prev, ...data }));
         }, COLUMN_ALIASES);
 
@@ -277,6 +280,7 @@ function StudentView({ onReady, user }) {
           if (sel && sel.success) {
             setSelectedRowCount(sel.rowCount || 1);
             setSelectedStudents(sel.allRows || []);
+            setHiddenRowCount(sel.hiddenRowCount || 0);
             const initialRow = sel.singleRow || (Array.isArray(sel.rows) && sel.rows[0]) || null;
             if (initialRow) {
                 if (initialRow.ID === 'Student ID' || initialRow.StudentName === 'Student Name') {
@@ -388,7 +392,7 @@ function StudentView({ onReady, user }) {
                     </div>
                 </>
             ) : (
-                <MultiStudentView students={selectedStudents} />
+                <MultiStudentView students={selectedStudents} hiddenRowCount={hiddenRowCount} />
             )}
         </div>
     );
