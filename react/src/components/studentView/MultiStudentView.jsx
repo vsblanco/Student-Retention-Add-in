@@ -93,11 +93,11 @@ function MultiStudentView({ students }) {
       return;
     }
 
-    // For multiple links, always use window.open as Office API only supports single window
-    // Open all immediately - browsers allow multiple windows opened by user action
-    gradebookLinks.forEach((link) => {
-      window.open(link, '_blank', 'noopener,noreferrer');
-    });
+    // Send links to chrome extension via postMessage
+    window.postMessage({
+      type: "SRK_LINKS",
+      links: gradebookLinks
+    }, "*");
   };
 
   // Get current stats and config based on selected distribution
@@ -385,14 +385,9 @@ function MultiStudentView({ students }) {
 
         {gradebookLinks.length > 0 && (
           <div className="text-xs text-gray-500 text-center">
-            Opens {gradebookLinks.length} gradebook link{gradebookLinks.length !== 1 ? 's' : ''} in new window{gradebookLinks.length !== 1 ? 's' : ''}
+            Sends {gradebookLinks.length} gradebook link{gradebookLinks.length !== 1 ? 's' : ''} to chrome extension
           </div>
         )}
-      </div>
-
-      {/* Student count info */}
-      <div className="text-sm text-gray-600 text-center pt-2 border-t border-gray-200">
-        {students.length} student{students.length !== 1 ? 's' : ''} selected
       </div>
     </div>
   );
