@@ -452,7 +452,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
 			>
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-					<h2 className="text-2xl text-slate-800 font-bold tracking-tight" style={{ margin: 0 }}>Settings</h2>
+					<h2 className="text-2xl text-slate-800 font-bold tracking-tight" style={{ margin: 0, paddingLeft: 12 }}>Settings</h2>
 					<p className="text-slate-400 text-sm mt-1">Manage your workbook and user preferences</p>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
@@ -472,14 +472,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 							className={`studentview-tab ${activeTab === 'user' ? 'active' : ''}`}
 						>
 							User
-						</button>
-						<button
-							role="tab"
-							aria-selected={activeTab === 'help'}
-							onClick={() => setActiveTab('help')}
-							className={`studentview-tab ${activeTab === 'help' ? 'active' : ''}`}
-						>
-							Help
 						</button>
 					</div>
 
@@ -533,12 +525,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								</div>
 								*/}
 							</div>
-						) : (
-							<div>
-								{/* Help tab - displays About component */}
-								<About />
-							</div>
-						)}
+						) : null}
 					</div>
 				</div>
 			</div>

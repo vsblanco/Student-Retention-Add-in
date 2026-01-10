@@ -96,17 +96,12 @@ function getCurrentYear() {
 function getMonthYearLabel(monthStr) {
   // monthStr: "YYYY-MM"
   const [year, month] = monthStr.split('-');
-  const now = new Date();
-  const currentYear = now.getFullYear();
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ];
   const monthIdx = parseInt(month, 10) - 1;
-  if (parseInt(year, 10) === currentYear) {
-    return monthNames[monthIdx];
-  }
-  return `${monthNames[monthIdx]} ${year}`;
+  return monthNames[monthIdx];
 }
 
 // add helper to parse timestamp to milliseconds
