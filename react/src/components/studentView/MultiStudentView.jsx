@@ -382,12 +382,6 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
             ? `Open All Gradebooks (${gradebookLinks.length})`
             : 'No Gradebook Links'}
         </button>
-
-        {gradebookLinks.length > 0 && (
-          <div className="text-xs text-gray-500 text-center">
-            Sends {gradebookLinks.length} gradebook link{gradebookLinks.length !== 1 ? 's' : ''} to chrome extension
-          </div>
-        )}
       </div>
 
       {/* Hidden row count info */}
