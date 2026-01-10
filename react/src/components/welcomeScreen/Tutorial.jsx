@@ -38,31 +38,19 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
         },
         {
             title: "Master List",
-           content: <p>This sheet holds the entire student population of your campus. It's the place where your imports will target and where your LDA will derive off of</p>,
+           content: <p>This sheet contains the complete student population of your campus. It serves as the target for your imports and the source for your LDA.</p>,
         },
          {
             title: "Student History",
-           content: <p>This sheet holds a history of student interactions and communications. A new entry is made via the Student View pannel.</p>,
+           content: <p>This sheet maintains a record of student interactions and communications. New entries can be added through the Student View panel. There are two methods for making a comment: you can either manually create a comment from the Student View panel or type in the Outreach Column, which will automatically generate one.</p>,
         },
          {
             title: "Missing Assignments",
-           content: <p>This sheet holds a list of missing assignments for students. The report is made via the Student Retention Kit - Chrome Extension. You then import the CSV back into the sheet via Import Data.</p>,
+           content: <p>This sheet contains a list of students' missing assignments. The report is generated using the Student Retention Kit—Chrome Extension.</p>,
         },
-       
         {
-            title: "Importing external reports",
-            component: (
-                <>
-                    <div style={{ padding: 10 }}>
-                        <p>You can import external reports by clicking on the Import Data button on the ribbon.</p>
-                    </div>
-                    <Media src={importdatataskpane} alt="Import Data taskpane" width="820px" fit="contain" clickable={false} />
-                 <div style={{ padding: 10 }}>
-                        <p>Imports will appear on the Master List sheet.</p>
-                    </div>
-                </>
-                
-            ),
+            title: "Importing Data",
+           content: <p>Importing Data is handled through the Student Retention Kit—Chrome Extension. All it needs is a student population report with either a SyStudentId or Student SIS column in it. It will automatically organize the data and create a canvas for their grade book information. The system will automatically import the data into the Master List sheet for your viewing pleasure.</p>,
         },
            {
             title: "Creating the LDA sheet.",
@@ -78,6 +66,14 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
                 </>
                 
             ),
+        },
+        {
+            title: "Sending Personalized Emails",
+           content: <p>You can automatically send personalized emails to each student by granting consent to send emails on your behalf. You will see what parameters you can choose from to help personalize your emails. You can also create your own parameters for further customization. Alternatively, if you have a power automate premium license, you can configure an HTTP request to create more advanced automations.</p>,
+        },
+        {
+            title: "That's it!",
+           content: <p>The mission of this application is to make your job more efficient. So you have more time to focus on what's most important. The students.</p>,
         },
     ];
 
