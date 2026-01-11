@@ -135,13 +135,79 @@ class ChromeExtensionService {
 
     try {
       await Excel.run(async (context) => {
-        // Get the target worksheet
-        const worksheet = context.workbook.worksheets.getItemOrNullObject(targetSheet);
+        // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026")
+        const normalizeDateFormat = (dateStr) => {
+          // Check if the string looks like a date format (contains /)
+          if (!dateStr || typeof dateStr !== 'string' || !dateStr.includes('/')) {
+            return [dateStr]; // Not a date format, return as-is
+          }
+
+          const parts = dateStr.split('/');
+          if (parts.length !== 3) {
+            return [dateStr]; // Not a standard date format
+          }
+
+          const [month, day, year] = parts;
+
+          // Generate variations with and without leading zeros
+          const variations = new Set();
+
+          // Add original
+          variations.add(dateStr);
+
+          // Add version with leading zeros
+          const withZeros = `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
+          variations.add(withZeros);
+
+          // Add version without leading zeros
+          const withoutZeros = `${parseInt(month, 10)}/${parseInt(day, 10)}/${year}`;
+          variations.add(withoutZeros);
+
+          // Also try variations with only month or only day having leading zeros
+          variations.add(`${month.padStart(2, '0')}/${parseInt(day, 10)}/${year}`);
+          variations.add(`${parseInt(month, 10)}/${day.padStart(2, '0')}/${year}`);
+
+          return Array.from(variations);
+        };
+
+        // Try to get the target worksheet with resilient matching
+        let worksheet = context.workbook.worksheets.getItemOrNullObject(targetSheet);
+        worksheet.load("isNullObject");
+        await context.sync();
+
+        // If exact match fails, try normalized date variations
+        if (worksheet.isNullObject) {
+          const variations = normalizeDateFormat(targetSheet);
+
+          // If we have variations, load all sheets and try to find a match
+          if (variations.length > 1) {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            // Try each variation against all sheet names
+            let foundSheetName = null;
+            for (const variation of variations) {
+              const matchingSheet = sheets.items.find(sheet => sheet.name === variation);
+              if (matchingSheet) {
+                foundSheetName = matchingSheet.name;
+                break;
+              }
+            }
+
+            if (foundSheetName) {
+              console.log(`ChromeExtensionService: Found sheet "${foundSheetName}" using date format normalization (requested: "${targetSheet}")`);
+              worksheet = context.workbook.worksheets.getItem(foundSheetName);
+            }
+          }
+        }
+
+        // Final check if sheet was found
         worksheet.load("isNullObject");
         await context.sync();
 
         if (worksheet.isNullObject) {
-          console.error(`ChromeExtensionService: Sheet "${targetSheet}" not found`);
+          console.error(`ChromeExtensionService: Sheet "${targetSheet}" not found (tried date format variations)`);
           return;
         }
 
