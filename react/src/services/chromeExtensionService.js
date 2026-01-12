@@ -135,37 +135,60 @@ class ChromeExtensionService {
 
     try {
       await Excel.run(async (context) => {
-        // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026")
+        // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026" <-> "LDA 01-11-2026")
         const normalizeDateFormat = (dateStr) => {
-          // Check if the string looks like a date format (contains /)
-          if (!dateStr || typeof dateStr !== 'string' || !dateStr.includes('/')) {
+          // Check if the string looks like a date format (contains / or -)
+          if (!dateStr || typeof dateStr !== 'string') {
+            return [dateStr]; // Not a string, return as-is
+          }
+
+          // Extract any prefix (e.g., "LDA " from "LDA 01-11-2026")
+          const datePattern = /^(.*?)(\d{1,2}[/-]\d{1,2}[/-]\d{4})$/;
+          const match = dateStr.match(datePattern);
+
+          if (!match) {
+            return [dateStr]; // Not a recognizable date format, return as-is
+          }
+
+          const prefix = match[1]; // e.g., "LDA " or ""
+          const datePart = match[2]; // e.g., "01-11-2026"
+
+          // Detect separator (slash or dash)
+          let separator = null;
+          if (datePart.includes('/')) {
+            separator = '/';
+          } else if (datePart.includes('-')) {
+            separator = '-';
+          } else {
             return [dateStr]; // Not a date format, return as-is
           }
 
-          const parts = dateStr.split('/');
+          const parts = datePart.split(separator);
           if (parts.length !== 3) {
             return [dateStr]; // Not a standard date format
           }
 
           const [month, day, year] = parts;
 
-          // Generate variations with and without leading zeros
+          // Generate variations with and without leading zeros, with both separators
           const variations = new Set();
 
           // Add original
           variations.add(dateStr);
 
-          // Add version with leading zeros
-          const withZeros = `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
-          variations.add(withZeros);
+          // For both separators (/ and -)
+          const separators = ['/', '-'];
+          separators.forEach(sep => {
+            // Version with leading zeros
+            variations.add(`${prefix}${month.padStart(2, '0')}${sep}${day.padStart(2, '0')}${sep}${year}`);
 
-          // Add version without leading zeros
-          const withoutZeros = `${parseInt(month, 10)}/${parseInt(day, 10)}/${year}`;
-          variations.add(withoutZeros);
+            // Version without leading zeros
+            variations.add(`${prefix}${parseInt(month, 10)}${sep}${parseInt(day, 10)}${sep}${year}`);
 
-          // Also try variations with only month or only day having leading zeros
-          variations.add(`${month.padStart(2, '0')}/${parseInt(day, 10)}/${year}`);
-          variations.add(`${parseInt(month, 10)}/${day.padStart(2, '0')}/${year}`);
+            // Variations with only month or only day having leading zeros
+            variations.add(`${prefix}${month.padStart(2, '0')}${sep}${parseInt(day, 10)}${sep}${year}`);
+            variations.add(`${prefix}${parseInt(month, 10)}${sep}${day.padStart(2, '0')}${sep}${year}`);
+          });
 
           return Array.from(variations);
         };
