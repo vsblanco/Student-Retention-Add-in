@@ -1,5 +1,6 @@
 // Multi-Student Selection View Component
 import React, { useMemo, useState } from 'react';
+import chromeExtensionService from '../../services/chromeExtensionService';
 
 // Helper to parse grade strings into numbers
 const parseGrade = (grade) => {
@@ -93,11 +94,14 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
       return;
     }
 
-    // Send links to chrome extension via postMessage
-    window.postMessage({
+    // Send ping to ensure Chrome extension is active and listening
+    chromeExtensionService.sendPing();
+
+    // Send links to chrome extension via chromeExtensionService
+    chromeExtensionService.sendMessage({
       type: "SRK_LINKS",
       links: gradebookLinks
-    }, "*");
+    });
   };
 
   // Get current stats and config based on selected distribution
