@@ -52,7 +52,7 @@ async function importMissingAssignments(studentsWithAssignments) {
             }
 
             // Define the column structure
-            const headers = ["Student", "Grade", "Grade Book", "Assignment", "Due Date", "Score", "Submission", "Submitted"];
+            const headers = ["Student", "Grade", "Grade Book", "Assignment", "Due Date", "Score", "Submission"];
 
             // Clear existing content
             const usedRange = maSheet.getUsedRangeOrNullObject();
@@ -118,9 +118,6 @@ async function importMissingAssignments(studentsWithAssignments) {
                             formulaRow[6] = `=HYPERLINK("${submissionUrl}", "Missing")`;
                             row[6] = "Missing";
                         }
-
-                        // Submitted status - FALSE for all missing assignments
-                        row[7] = false;
 
                         dataToWrite.push(row);
                         formulasToWrite.push(formulaRow);

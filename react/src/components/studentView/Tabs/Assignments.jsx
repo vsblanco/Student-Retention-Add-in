@@ -349,11 +349,13 @@ function StudentAssignments({ assignments, reload }) {
       >
         {sortedAssignments && sortedAssignments.length > 0 ? (
           sortedAssignments.map((a, idx) => {
-            // treat missing submission status as false (i.e. missing)
+            // treat missing submission status as false or "Missing" string (i.e. missing)
             const submission = Object.prototype.hasOwnProperty.call(a, map.submission)
               ? a[map.submission]
               : false;
-            const borderColor = submission === false ? 'border-red-500' : 'border-blue-300';
+            const isMissing = submission === false ||
+                             (typeof submission === 'string' && submission.toLowerCase() === 'missing');
+            const borderColor = isMissing ? 'border-red-500' : 'border-blue-300';
              return (
                <div key={idx} className={`${cardStyle} group border-l-4 ${borderColor} pl-4`}>
                  <div className={`${mainRowStyle} w-full`}>
@@ -380,7 +382,7 @@ function StudentAssignments({ assignments, reload }) {
                          {/* UPDATED: Uses renderDueDate helper to format Excel numbers */}
                          Due: {renderDueDate(a[map.dueDate])}
                        </div>
-                       {submission === false && (
+                       {isMissing && (
                          <div className="mt-1">
                            {a[map.submissionLink] ? (
                              <a
