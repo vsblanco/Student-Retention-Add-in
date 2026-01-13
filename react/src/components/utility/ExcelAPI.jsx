@@ -578,7 +578,7 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
             }
 
             const usedRange = worksheet.getUsedRangeOrNullObject();
-            usedRange.load(["values", "rowCount", "columnCount", "address", "isNullObject"]);
+            usedRange.load(["values", "formulas", "rowCount", "columnCount", "address", "isNullObject"]);
             await context.sync();
 
             if (usedRange.isNullObject) {
@@ -596,17 +596,31 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
                     ? headerNames.findIndex(h => normalize(h) === normalize(identifierColumn))
                     : -1;
 
+                const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
+                const formulas = usedRange.formulas || [];
+
                 let data;
                 if (idColIdx !== -1) {
-                    data = {}; 
+                    data = {};
                     for (let r = 1; r < values.length; r++) {
                         const row = values[r] || [];
+                        const rowFormulas = formulas[r] || [];
                         const rowObj = {};
                         for (let c = 0; c < columnCount; c++) {
                             const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
                             rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
                         }
-                        const rawKey = row[idColIdx];
+                        let rawKey = row[idColIdx];
+                        // Check if identifier column has a HYPERLINK formula - extract URL
+                        if (idColIdx < rowFormulas.length) {
+                            const formula = rowFormulas[idColIdx];
+                            if (formula && typeof formula === 'string') {
+                                const match = formula.match(hyperlinkRegex);
+                                if (match && match[1]) {
+                                    rawKey = match[1]; // Use URL from HYPERLINK formula
+                                }
+                            }
+                        }
                         const key = (rawKey === undefined || rawKey === null) ? `Row${r}` : String(rawKey);
                         if (!data[key]) data[key] = [];
                         data[key].push(rowObj);
