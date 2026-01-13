@@ -17,7 +17,7 @@ export const COLUMN_ALIASES = {
   Grade: ['Current Grade', 'Grade %', 'Grade'],
   LDA: ['Last Date of Attendance', 'LDA'],
   DaysOut: ['Days Out'],
-  Gradebook: ['Gradebook','gradeBookLink'],
+  Gradebook: ['Gradebook', 'gradeBookLink', 'Grade Book'],
   MissingAssignments: ['Missing Assignments', 'Missing'],
   Outreach: ['Outreach', 'Comments', 'Notes', 'Comment']
   // You can add more aliases for other columns here
@@ -30,7 +30,7 @@ export const COLUMN_ALIASES_ASSIGNMENTS = {
   score: ['Score', 'Points'],
   submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
   assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link'],
-  Gradebook: ['Gradebook','gradeBookLink'],
+  Gradebook: ['Gradebook', 'gradeBookLink', 'Grade Book'],
 };
 
 export const COLUMN_ALIASES_HISTORY = {

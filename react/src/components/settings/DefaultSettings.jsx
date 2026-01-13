@@ -7,7 +7,7 @@ export const defaultColumns =[
 	{ name: 'Student Number', alias: ['Student Numbers','Issued ID'], hidden: true },
 	{ name: 'SyStudentId', alias: ['student sis'], hidden: true, identifier: true },
 	{ name: 'Student Name', alias: ['Student']},
-	{ name: 'Gradebook', alias: ['Gradelink','gradeBookLink'], static: true, identifier: true, format: ['=HYPERLINK']},
+	{ name: 'Gradebook', alias: ['Gradelink', 'gradeBookLink', 'Grade Book'], static: true, identifier: true, format: ['=HYPERLINK']},
 	{ name: 'ProgramVersion', alias: ['Program','ProgVersDescrip'] },
 	{ name: 'Shift', alias: ['ShiftDescrip'] },
 	{ name: 'LDA', alias: ['Last Date of Attendance','Date of Attendance', 'CurrentLDA'], format: ['MM/DD/YYYY']},

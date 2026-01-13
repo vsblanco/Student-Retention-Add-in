@@ -218,7 +218,7 @@ function StudentView({ onReady, user }) {
     const loadAssignments = () => {
         if (!activeStudentState || !activeStudentState.Gradebook) return;
         if (!availableTabs.assignments) return;
-        loadSheet('Missing Assignments', 'gradeBookLink', activeStudentState.Gradebook)
+        loadSheet('Missing Assignments', 'Gradebook', activeStudentState.Gradebook)
             .then((res) => { setAssignments(res.data); })
             .catch((err) => console.error(err));
     };
