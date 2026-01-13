@@ -609,6 +609,18 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
                         for (let c = 0; c < columnCount; c++) {
                             const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
                             rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
+
+                            // Extract URL from HYPERLINK formula if present
+                            if (c < rowFormulas.length) {
+                                const formula = rowFormulas[c];
+                                if (formula && typeof formula === 'string') {
+                                    const match = formula.match(hyperlinkRegex);
+                                    if (match && match[1]) {
+                                        // Store URL as "{ColumnName} Link"
+                                        rowObj[`${headerKey} Link`] = match[1];
+                                    }
+                                }
+                            }
                         }
                         let rawKey = row[idColIdx];
                         // Check if identifier column has a HYPERLINK formula - extract URL
@@ -629,10 +641,23 @@ export async function loadSheet(sheet, identifierColumn = null, identifierRow = 
                     data = [];
                     for (let r = 1; r < values.length; r++) {
                         const row = values[r] || [];
+                        const rowFormulas = formulas[r] || [];
                         const rowObj = {};
                         for (let c = 0; c < columnCount; c++) {
                             const headerKey = headerNames[c] !== "" ? headerNames[c] : `Column${c}`;
                             rowObj[headerKey] = (row[c] !== undefined) ? row[c] : null;
+
+                            // Extract URL from HYPERLINK formula if present
+                            if (c < rowFormulas.length) {
+                                const formula = rowFormulas[c];
+                                if (formula && typeof formula === 'string') {
+                                    const match = formula.match(hyperlinkRegex);
+                                    if (match && match[1]) {
+                                        // Store URL as "{ColumnName} Link"
+                                        rowObj[`${headerKey} Link`] = match[1];
+                                    }
+                                }
+                            }
                         }
                         data.push(rowObj);
                     }
