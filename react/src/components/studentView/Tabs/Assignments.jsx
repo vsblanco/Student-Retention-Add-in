@@ -22,7 +22,7 @@ export const COLUMN_ALIASES_ASSIGNMENTS = {
   score: ['Score', 'Points'],
   submissionLink: ['Submission Link', 'Submission', 'Submit Link'],
   assignmentLink: ['Assignment Link', 'Assignment URL', 'Assignment Page', 'Link'],
-  gradebook: ['Gradebook','gradeBookLink'],
+  gradebook: ['Gradebook', 'gradeBookLink', 'Grade Book'],
   submission: ['submission', 'Submitted', 'Submission Status', 'Is Submitted']
 };
 
