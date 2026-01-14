@@ -88,6 +88,34 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
       .filter(link => link && typeof link === 'string' && /^https?:\/\/\S+$/i.test(link));
   }, [students]);
 
+  // Auto-switch distribution type when current selection has no data
+  React.useEffect(() => {
+    let currentStats = null;
+
+    // Get stats for current distribution type
+    if (distributionType === 'grade') {
+      currentStats = gradeStats;
+    } else if (distributionType === 'daysOut') {
+      currentStats = daysOutStats;
+    } else if (distributionType === 'missingAssignments') {
+      currentStats = missingAssignmentsStats;
+    }
+
+    // If current distribution has no data, switch to next available
+    if (!currentStats) {
+      if (daysOutStats) {
+        console.log('📊 MultiStudentView: No data for', distributionType, '- switching to daysOut');
+        setDistributionType('daysOut');
+      } else if (missingAssignmentsStats) {
+        console.log('📊 MultiStudentView: No data for', distributionType, '- switching to missingAssignments');
+        setDistributionType('missingAssignments');
+      } else if (gradeStats && distributionType !== 'grade') {
+        console.log('📊 MultiStudentView: No data for', distributionType, '- switching to grade');
+        setDistributionType('grade');
+      }
+    }
+  }, [distributionType, gradeStats, daysOutStats, missingAssignmentsStats]);
+
   const openAllGradebooks = () => {
     console.log('🔵 MultiStudentView: openAllGradebooks called');
     console.log('🔵 MultiStudentView: Gradebook links count:', gradebookLinks.length);
@@ -120,39 +148,11 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
   };
 
   // Get current stats and config based on selected distribution
-  // Auto-fallback to next available distribution if current has no data
   const getCurrentDistribution = () => {
-    let currentType = distributionType;
-    let currentStats = null;
-
-    // Try to get stats for current distribution type
-    if (currentType === 'grade') {
-      currentStats = gradeStats;
-    } else if (currentType === 'daysOut') {
-      currentStats = daysOutStats;
-    } else if (currentType === 'missingAssignments') {
-      currentStats = missingAssignmentsStats;
-    }
-
-    // Fallback logic: if current distribution has no data, try the next available one
-    if (!currentStats) {
-      if (daysOutStats) {
-        currentType = 'daysOut';
-        currentStats = daysOutStats;
-      } else if (missingAssignmentsStats) {
-        currentType = 'missingAssignments';
-        currentStats = missingAssignmentsStats;
-      } else if (gradeStats) {
-        currentType = 'grade';
-        currentStats = gradeStats;
-      }
-    }
-
-    // Return the configuration for the determined distribution type
-    switch (currentType) {
+    switch (distributionType) {
       case 'grade':
         return {
-          stats: currentStats,
+          stats: gradeStats,
           title: 'Grade Distribution',
           unit: '%',
           scaleLabels: ['0%', '50%', '100%'],
@@ -161,33 +161,33 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
         };
       case 'daysOut':
         return {
-          stats: currentStats,
+          stats: daysOutStats,
           title: 'Days Out Distribution',
           unit: ' days',
-          scaleLabels: currentStats ? [
+          scaleLabels: daysOutStats ? [
             '0',
-            Math.round(currentStats.max / 2).toString(),
-            Math.round(currentStats.max).toString()
+            Math.round(daysOutStats.max / 2).toString(),
+            Math.round(daysOutStats.max).toString()
           ] : ['0', '0', '0'],
           isPercentage: false,
           reverseColors: true  // Lower is better
         };
       case 'missingAssignments':
         return {
-          stats: currentStats,
+          stats: missingAssignmentsStats,
           title: 'Missing Assignments Distribution',
           unit: '',
-          scaleLabels: currentStats ? [
+          scaleLabels: missingAssignmentsStats ? [
             '0',
-            Math.round(currentStats.max / 2).toString(),
-            Math.round(currentStats.max).toString()
+            Math.round(missingAssignmentsStats.max / 2).toString(),
+            Math.round(missingAssignmentsStats.max).toString()
           ] : ['0', '0', '0'],
           isPercentage: false,
           reverseColors: true  // Lower is better
         };
       default:
         return {
-          stats: null,
+          stats: gradeStats,
           title: 'Grade Distribution',
           unit: '%',
           scaleLabels: ['0%', '50%', '100%'],
