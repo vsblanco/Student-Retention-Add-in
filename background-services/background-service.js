@@ -919,8 +919,13 @@ async function transferMasterList() {
  */
 function setupPingResponseListener() {
     window.addEventListener("message", (event) => {
+        // Log all incoming messages for debugging
+        if (event.data && event.data.type && event.data.type.startsWith('SRK_')) {
+            console.log(`📨 Background Service: Received ${event.data.type} message:`, event.data);
+        }
+
         if (event.data && event.data.type === "SRK_PING") {
-            console.log('🏓 Received SRK_PING from Chrome extension, sending pong...');
+            console.log('🏓 Background Service: Received SRK_PING, sending pong...');
 
             // Send pong response back to extension
             window.postMessage({
@@ -929,11 +934,16 @@ function setupPingResponseListener() {
                 source: "excel-addin-background"
             }, "*");
 
-            console.log('✅ SRK_PONG sent to Chrome extension');
+            console.log('✅ Background Service: SRK_PONG sent to Chrome extension');
+        }
+
+        if (event.data && event.data.type === "SRK_LINKS") {
+            console.log('🔗 Background Service: Received SRK_LINKS message with links:', event.data.links);
+            console.log('ℹ️ Background Service: SRK_LINKS is forwarded to Chrome extension (not handled here)');
         }
     });
 
-    console.log('🔔 Ping response listener set up');
+    console.log('🔔 Background Service: Ping response listener set up');
 }
 
 /**

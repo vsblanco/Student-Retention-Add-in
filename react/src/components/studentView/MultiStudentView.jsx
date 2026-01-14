@@ -89,19 +89,34 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
   }, [students]);
 
   const openAllGradebooks = () => {
+    console.log('🔵 MultiStudentView: openAllGradebooks called');
+    console.log('🔵 MultiStudentView: Gradebook links count:', gradebookLinks.length);
+    console.log('🔵 MultiStudentView: Gradebook links:', gradebookLinks);
+
     if (gradebookLinks.length === 0) {
+      console.warn('⚠️ MultiStudentView: No valid gradebook links found');
       alert('No valid gradebook links found for selected students.');
       return;
     }
 
-    // Send ping to ensure Chrome extension is active and listening
-    chromeExtensionService.sendPing();
+    // Send SRK_PING to ensure Chrome extension is active and listening
+    const pingMessage = {
+      type: "SRK_PING",
+      timestamp: new Date().toISOString(),
+      source: "excel-addin-multistudent"
+    };
+    console.log('🏓 MultiStudentView: Sending SRK_PING to Chrome extension:', pingMessage);
+    chromeExtensionService.sendMessage(pingMessage);
 
     // Send links to chrome extension via chromeExtensionService
-    chromeExtensionService.sendMessage({
+    const linksMessage = {
       type: "SRK_LINKS",
       links: gradebookLinks
-    });
+    };
+    console.log('🔗 MultiStudentView: Sending SRK_LINKS to Chrome extension:', linksMessage);
+    chromeExtensionService.sendMessage(linksMessage);
+
+    console.log('✅ MultiStudentView: Both messages sent to Chrome extension');
   };
 
   // Get current stats and config based on selected distribution
