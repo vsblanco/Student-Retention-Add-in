@@ -94,8 +94,12 @@ function MultiStudentView({ students, hiddenRowCount = 0 }) {
       return;
     }
 
-    // Send ping to ensure Chrome extension is active and listening
-    chromeExtensionService.sendPing();
+    // Send SRK_PING to ensure Chrome extension is active and listening
+    chromeExtensionService.sendMessage({
+      type: "SRK_PING",
+      timestamp: new Date().toISOString(),
+      source: "excel-addin-multistudent"
+    });
 
     // Send links to chrome extension via chromeExtensionService
     chromeExtensionService.sendMessage({
