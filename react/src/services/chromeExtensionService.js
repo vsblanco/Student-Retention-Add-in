@@ -511,10 +511,14 @@ class ChromeExtensionService {
    * @param {Object} message - Message object to send
    */
   sendMessage(message) {
+    console.log(`📤 ChromeExtensionService: Sending message (${message.type}) to window:`, message);
     window.postMessage(message, "*");
 
     if (window.parent && window.parent !== window) {
+      console.log(`📤 ChromeExtensionService: Sending message (${message.type}) to parent window:`, message);
       window.parent.postMessage(message, "*");
+    } else {
+      console.log('ℹ️ ChromeExtensionService: No parent window, message sent only to self');
     }
   }
 
