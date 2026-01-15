@@ -3,23 +3,6 @@
 This Excel Add-in is a powerful tool designed to help improve student retention. It seamlessly integrates with Microsoft Excel to provide a comprehensive solution for tracking, analyzing, and engaging with students. The add-in is designed to save educators and administrators countless hours by automating repetitive tasks and providing actionable insights.
 ## **✨ Features**
 
-* **📊 Automatic Report Import**: Easily import student data from various report formats directly into Excel. The add-in is highly customizable, allowing you to tailor the import process and the display of your reports to your specific needs.  
-* **🧑‍🎓 Student View**: A dedicated view that presents student data in a clear, concise, and easy-to-read format. This allows for a quick and holistic understanding of each student's status.  
+  * **🧑‍🎓 Student View**: A dedicated view that presents student data in a clear, concise, and easy-to-read format. This allows for a quick and holistic understanding of each student's status.  
 * **📝 Collaborative Notes**: A built-in notes section allows you and your team to add, view, and edit notes for each student. All notes are securely saved within your Excel workbook, ensuring that everyone on the team has access to the latest information.  
 * **📧 Personalized Emails**: A feature that allows you to send personalized emails to students based on the data in your workbook. This can be automated using Power Automate to send customized emails at scale, for example, to students with missing assignments or low grades.
-
-## **🔐 Authentication**
-
-The add-in supports **Microsoft Single Sign-On (SSO)** with intelligent fallback:
-
-* **Microsoft SSO**: Seamlessly authenticate using your Microsoft 365 account
-* **Smart Fallback**: Automatically falls back to demo accounts if SSO is not configured
-* **Flexible Configuration**: Easy toggle between SSO and demo modes
-
-### Quick Setup
-
-For detailed SSO setup instructions, see [Microsoft SSO Setup Guide](./documentation/MICROSOFT_SSO_SETUP.md).
-
-**Development Mode**: The add-in currently uses demo accounts by default. To enable Microsoft SSO, follow the setup guide to configure Azure AD.
-
-**Configuration**: SSO behavior can be controlled in `/react/src/config/ssoConfig.js`
