@@ -1,9 +1,11 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
+ * Version: 2.22.0
+ * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Fix 500 Internal Server Error during formatting by using smaller batch size (100 rows)
- *         for cell-level formatting operations. Data reads/writes use 500 rows, but formatting
- *         (colors, fonts, formulas) uses 100 rows to avoid overwhelming the Excel API.
+ * Update: Optimize formatting performance by using range-based operations instead of cell-by-cell.
+ *         Consecutive cells with the same color are merged into single range operations, reducing
+ *         API calls from thousands to hundreds per batch. This dramatically speeds up formatting.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -674,8 +676,8 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         await context.sync();
     }
 
-    // --- STEP 5: Apply Custom Row Colors & Cell Highlights (in batches) ---
-    // Use smaller batch size for formatting - cell operations are more expensive
+    // --- STEP 5: Apply Custom Row Colors & Cell Highlights (optimized) ---
+    // Use range-based operations instead of cell-by-cell for much better performance
     const bodyRange = table.getDataBodyRange();
     const totalFormatBatches = Math.ceil(rowCount / FORMAT_BATCH_SIZE);
     let formatBatch = 0;
@@ -683,31 +685,78 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
     for (let batchStart = 0; batchStart < rowCount; batchStart += FORMAT_BATCH_SIZE) {
         const batchEnd = Math.min(batchStart + FORMAT_BATCH_SIZE, rowCount);
 
+        // Collect all formatting operations for this batch first
+        // Then apply them efficiently using range operations
+
+        // 1. Collect row-level colors (apply to full rows)
+        const rowColorOps = []; // {rowIdx, color}
+
+        // 2. Collect cell highlights - group consecutive cells with same color per row
+        const cellColorOps = []; // {rowIdx, startCol, endCol, color, strikethrough}
+
+        // 3. Collect formulas
+        const formulaOps = []; // {rowIdx, colIdx, formula}
+
         for (let idx = batchStart; idx < batchEnd; idx++) {
             const r = processedRows[idx];
 
+            // Collect row colors
             if (r.rowColor) {
-                bodyRange.getRow(idx).format.fill.color = r.rowColor;
+                rowColorOps.push({ rowIdx: idx, color: r.rowColor });
             }
 
-            r.cellHighlights.forEach(h => {
-                const cell = bodyRange.getCell(idx, h.colIndex);
-                cell.format.fill.color = h.color;
+            // Collect and merge consecutive cell highlights with same color
+            if (r.cellHighlights.length > 0) {
+                // Sort highlights by column index
+                const sorted = [...r.cellHighlights].sort((a, b) => a.colIndex - b.colIndex);
 
-                if (h.strikethrough) {
-                    cell.format.font.strikethrough = true;
-                    cell.format.font.color = "#9C0006"; // Dark Red Text
+                let current = null;
+                for (const h of sorted) {
+                    if (current && current.color === h.color && current.endCol === h.colIndex - 1 && !h.strikethrough && !current.strikethrough) {
+                        // Extend current range
+                        current.endCol = h.colIndex;
+                    } else {
+                        // Start new range
+                        if (current) cellColorOps.push(current);
+                        current = {
+                            rowIdx: idx,
+                            startCol: h.colIndex,
+                            endCol: h.colIndex,
+                            color: h.color,
+                            strikethrough: h.strikethrough || false
+                        };
+                    }
                 }
-            });
+                if (current) cellColorOps.push(current);
+            }
 
+            // Collect formulas
             r.formulas.forEach((f, cIdx) => {
-                if (f) {
-                    bodyRange.getCell(idx, cIdx).formulas = [[f]];
-                }
+                if (f) formulaOps.push({ rowIdx: idx, colIdx: cIdx, formula: f });
             });
         }
 
-        // Sync after each batch of formatting operations
+        // Apply row colors (these are rare, so individual calls are OK)
+        for (const op of rowColorOps) {
+            bodyRange.getRow(op.rowIdx).format.fill.color = op.color;
+        }
+
+        // Apply cell color ranges (merged ranges = fewer API calls)
+        for (const op of cellColorOps) {
+            const range = bodyRange.getRangeByIndexes(op.rowIdx, op.startCol, 1, op.endCol - op.startCol + 1);
+            range.format.fill.color = op.color;
+            if (op.strikethrough) {
+                range.format.font.strikethrough = true;
+                range.format.font.color = "#9C0006";
+            }
+        }
+
+        // Apply formulas (typically few per batch)
+        for (const op of formulaOps) {
+            bodyRange.getCell(op.rowIdx, op.colIdx).formulas = [[op.formula]];
+        }
+
+        // Sync after each batch
         await context.sync();
 
         formatBatch++;
