@@ -1,9 +1,9 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
  * Description: Core logic for creating LDA reports.
- * Update: Fix response payload size limit for large datasets (6000+ students) by implementing
- *         chunked batch operations for BOTH reading and writing. Master List values/formulas
- *         are now read in batches, and cell colors are sampled from first 500 rows only.
+ * Update: Fix 500 Internal Server Error during formatting by using smaller batch size (100 rows)
+ *         for cell-level formatting operations. Data reads/writes use 500 rows, but formatting
+ *         (colors, fonts, formulas) uses 100 rows to avoid overwhelming the Excel API.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -13,8 +13,12 @@ const SHEET_NAMES = {
 };
 
 // Batch size for chunked operations to avoid payload size limits
-// Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size
+// Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size for data
 const BATCH_SIZE = 500;
+
+// Smaller batch size for formatting operations (colors, fonts, formulas per cell)
+// These are more expensive as each cell operation adds to the request queue
+const FORMAT_BATCH_SIZE = 100;
 
 /**
  * Helper to convert Excel serial date to MM-DD-YY string
@@ -671,12 +675,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
     }
 
     // --- STEP 5: Apply Custom Row Colors & Cell Highlights (in batches) ---
+    // Use smaller batch size for formatting - cell operations are more expensive
     const bodyRange = table.getDataBodyRange();
-    const totalFormatBatches = Math.ceil(rowCount / BATCH_SIZE);
+    const totalFormatBatches = Math.ceil(rowCount / FORMAT_BATCH_SIZE);
     let formatBatch = 0;
 
-    for (let batchStart = 0; batchStart < rowCount; batchStart += BATCH_SIZE) {
-        const batchEnd = Math.min(batchStart + BATCH_SIZE, rowCount);
+    for (let batchStart = 0; batchStart < rowCount; batchStart += FORMAT_BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + FORMAT_BATCH_SIZE, rowCount);
 
         for (let idx = batchStart; idx < batchEnd; idx++) {
             const r = processedRows[idx];
