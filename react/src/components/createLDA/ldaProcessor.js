@@ -74,8 +74,9 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
  * Main function to create the LDA report.
  * @param {Object} userOverrides - The settings from the UI (daysOut, includeFailingList, etc.)
  * @param {Function} onProgress - Callback to update UI steps: (stepId, status) => void
+ * @param {Function} onBatchProgress - Optional callback for batch progress: (current, total, phase, tableName) => void
  */
-export async function createLDA(userOverrides, onProgress) {
+export async function createLDA(userOverrides, onProgress, onBatchProgress = null) {
     try {
         // --- STEP 1: Validate Settings & Environment ---
         if (onProgress) onProgress('validate', 'active');
@@ -486,16 +487,22 @@ export async function createLDA(userOverrides, onProgress) {
 
             // 7b. Write Main LDA Table
             if (dataRows.length > 0) {
+                // Create a batch progress wrapper that includes table name
+                const ldaBatchProgress = onBatchProgress
+                    ? (current, total, phase) => onBatchProgress(current, total, phase, 'LDA_Table')
+                    : null;
+
                 await writeTable(
-                    context, 
-                    newSheet, 
-                    0, 
-                    "LDA_Table", 
-                    outputColumns, 
+                    context,
+                    newSheet,
+                    0,
+                    "LDA_Table",
+                    outputColumns,
                     dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
                     masterSheet,
                     getColIndex,
-                    dateColumnIndices
+                    dateColumnIndices,
+                    ldaBatchProgress
                 );
             } else {
                 const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
@@ -508,17 +515,23 @@ export async function createLDA(userOverrides, onProgress) {
                 const title = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
                 title.values = [["Failing Students (Active)"]];
                 title.format.font.bold = true;
-                
+
+                // Create a batch progress wrapper that includes table name
+                const failingBatchProgress = onBatchProgress
+                    ? (current, total, phase) => onBatchProgress(current, total, phase, 'Failing_Table')
+                    : null;
+
                 await writeTable(
-                    context, 
-                    newSheet, 
-                    nextRow, 
-                    "Failing_Table", 
-                    outputColumns, 
+                    context,
+                    newSheet,
+                    nextRow,
+                    "Failing_Table",
+                    outputColumns,
                     failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
                     masterSheet,
                     getColIndex,
-                    dateColumnIndices
+                    dateColumnIndices,
+                    failingBatchProgress
                 );
             }
 

@@ -1,8 +1,10 @@
 /*
- * Timestamp: 2025-11-25 18:05:00
- * Version: 2.1.0
+ * Timestamp: 2026-01-26 00:00:00
+ * Version: 2.2.0
  * Author: Gemini (for Victor)
  * Description: Fully functional LDA Manager. Integrates with ldaProcessor.js to run the real Excel generation logic.
+ * Update: Added batch progress display for large datasets (6000+ students). Shows progress bar under
+ *         "Formatting LDA Table" step when multiple batches are being processed.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -36,6 +38,10 @@ export default function CreateLDAManager({ onReady } = {}) {
 
   // State for Progress Tracking: { [stepId]: 'pending' | 'active' | 'completed' }
   const [stepStatus, setStepStatus] = useState({});
+
+  // State for Batch Progress (for large datasets)
+  // { current, total, phase, tableName } where phase is 'writing' | 'formatting'
+  const [batchProgress, setBatchProgress] = useState(null);
 
   // Load workbook settings on mount
   useEffect(() => {
@@ -87,11 +93,12 @@ export default function CreateLDAManager({ onReady } = {}) {
   // --- REAL LOGIC: Trigger the Processor ---
   const handleCreateLDA = async () => {
     console.log('Starting LDA Creation Process with:', ldaSettings);
-    
+
     // 1. Switch View
     setView('processing');
     setErrorMessage('');
-    
+    setBatchProgress(null);
+
     // 2. Reset Steps
     const initialStatus = {};
     PROCESS_STEPS.forEach(s => initialStatus[s.id] = 'pending');
@@ -99,20 +106,33 @@ export default function CreateLDAManager({ onReady } = {}) {
 
     try {
         // 3. Call the imported processor function
-        await createLDA(ldaSettings, (stepId, status) => {
-            // Update state safely
-            setStepStatus(prev => ({
-                ...prev,
-                [stepId]: status
-            }));
-        });
+        await createLDA(
+            ldaSettings,
+            // Step progress callback
+            (stepId, status) => {
+                setStepStatus(prev => ({
+                    ...prev,
+                    [stepId]: status
+                }));
+                // Clear batch progress when moving to a new step
+                if (status === 'active') {
+                    setBatchProgress(null);
+                }
+            },
+            // Batch progress callback (for large datasets)
+            (current, total, phase, tableName) => {
+                setBatchProgress({ current, total, phase, tableName });
+            }
+        );
 
         // 4. Success
+        setBatchProgress(null);
         setView('done');
 
     } catch (error) {
         console.error("LDA Failed:", error);
         setErrorMessage(error.message || "An unexpected error occurred.");
+        setBatchProgress(null);
         setView('error');
     }
   };
@@ -121,6 +141,7 @@ export default function CreateLDAManager({ onReady } = {}) {
     setView('settings');
     setStepStatus({});
     setErrorMessage('');
+    setBatchProgress(null);
   };
 
   return (
@@ -178,23 +199,47 @@ export default function CreateLDAManager({ onReady } = {}) {
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
                   {PROCESS_STEPS.map((step, index) => {
                       const status = stepStatus[step.id] || 'pending';
-                      
+                      const showBatchProgress = step.id === 'format' && status === 'active' && batchProgress && batchProgress.total > 1;
+
                       return (
-                          <div key={step.id} className="flex items-center gap-3">
-                              {/* Icon Column */}
-                              <div className="w-6 flex justify-center shrink-0">
-                                  {status === 'pending' && <Circle className="w-4 h-4 text-slate-300" />}
-                                  {status === 'active' && <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />}
-                                  {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500 animate-in zoom-in duration-300" />}
+                          <div key={step.id}>
+                              <div className="flex items-center gap-3">
+                                  {/* Icon Column */}
+                                  <div className="w-6 flex justify-center shrink-0">
+                                      {status === 'pending' && <Circle className="w-4 h-4 text-slate-300" />}
+                                      {status === 'active' && <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />}
+                                      {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500 animate-in zoom-in duration-300" />}
+                                  </div>
+
+                                  {/* Text Column */}
+                                  <div className={`flex-1 text-sm font-medium transition-colors duration-300 ${
+                                      status === 'pending' ? 'text-slate-400' :
+                                      status === 'active' ? 'text-slate-800' : 'text-emerald-700'
+                                  }`}>
+                                      {step.label}
+                                  </div>
                               </div>
-                              
-                              {/* Text Column */}
-                              <div className={`flex-1 text-sm font-medium transition-colors duration-300 ${
-                                  status === 'pending' ? 'text-slate-400' : 
-                                  status === 'active' ? 'text-slate-800' : 'text-emerald-700'
-                              }`}>
-                                  {step.label}
-                              </div>
+
+                              {/* Batch Progress (shown under format step for large datasets) */}
+                              {showBatchProgress && (
+                                  <div className="ml-9 mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                                          <span>
+                                              {batchProgress.phase === 'writing' ? 'Writing' : 'Formatting'}{' '}
+                                              {batchProgress.tableName === 'LDA_Table' ? 'LDA' : 'Failing'} data
+                                          </span>
+                                          <span className="font-medium">
+                                              {batchProgress.current} / {batchProgress.total}
+                                          </span>
+                                      </div>
+                                      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                          <div
+                                              className="h-full bg-[#145F82] rounded-full transition-all duration-300 ease-out"
+                                              style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                                          />
+                                      </div>
+                                  </div>
+                              )}
                           </div>
                       );
                   })}
