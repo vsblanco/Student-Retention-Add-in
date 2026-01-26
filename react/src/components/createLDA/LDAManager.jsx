@@ -1,7 +1,5 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
- * Version: 2.3.0
- * Author: Gemini (for Victor)
  * Description: Fully functional LDA Manager. Integrates with ldaProcessor.js to run the real Excel generation logic.
  * Update: Added batch progress display for large datasets (6000+ students). Shows progress bar under
  *         "Reading Master List" and "Formatting LDA Table" steps when multiple batches are being processed.

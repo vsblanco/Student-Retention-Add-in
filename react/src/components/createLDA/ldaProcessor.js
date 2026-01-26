@@ -1,7 +1,5 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
- * Version: 2.20.0
- * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
  * Update: Fix response payload size limit for large datasets (6000+ students) by implementing
  *         chunked batch operations for BOTH reading and writing. Master List values/formulas
