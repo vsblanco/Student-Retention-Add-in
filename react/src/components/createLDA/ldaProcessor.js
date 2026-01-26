@@ -1,11 +1,11 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
- * Version: 2.19.0
+ * Version: 2.20.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Fix payload size limit error for large datasets (6000+ students) by implementing
- *         chunked batch operations in writeTable(). Data is now written in batches of 500 rows
- *         with sync() calls between batches to avoid exceeding Excel Add-in payload limits.
+ * Update: Fix response payload size limit for large datasets (6000+ students) by implementing
+ *         chunked batch operations for BOTH reading and writing. Master List values/formulas
+ *         are now read in batches, and cell colors are sampled from first 500 rows only.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -117,10 +117,42 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
             const masterRange = masterSheet.getUsedRange();
-            
-            masterRange.load("values, formulas, rowIndex, columnIndex, rowCount, columnCount");
-            
-            const masterCellProps = masterRange.getCellProperties({
+
+            // First, get dimensions only
+            masterRange.load("rowCount, columnCount");
+            await context.sync();
+
+            const totalRows = masterRange.rowCount;
+            const totalCols = masterRange.columnCount;
+
+            // Read values and formulas in batches to avoid response payload limits
+            let masterValues = [];
+            let masterFormulas = [];
+
+            for (let startRow = 0; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = masterSheet.getRangeByIndexes(startRow, 0, rowsToRead, totalCols);
+                batchRange.load("values, formulas");
+                await context.sync();
+
+                masterValues = masterValues.concat(batchRange.values);
+                masterFormulas = masterFormulas.concat(batchRange.formulas);
+
+                // Report progress for large datasets
+                if (onBatchProgress && totalRows > BATCH_SIZE) {
+                    const currentBatch = Math.floor(startRow / BATCH_SIZE) + 1;
+                    const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
+                    onBatchProgress(currentBatch, totalBatches, 'reading', 'Master_List');
+                }
+            }
+
+            const headers = masterValues[0];
+
+            // Read cell colors from a sample (first 500 rows) to build color map
+            // We don't need all rows - just enough to capture the value->color mappings
+            const colorSampleRows = Math.min(500, totalRows);
+            const colorSampleRange = masterSheet.getRangeByIndexes(0, 0, colorSampleRows, totalCols);
+            const colorSampleProps = colorSampleRange.getCellProperties({
                 format: { fill: { color: true } }
             });
 
@@ -130,15 +162,12 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 const histSheet = sheets.getItem(SHEET_NAMES.HISTORY);
                 const histRange = histSheet.getUsedRange();
                 histRange.load("values");
-                historyData = histRange; 
+                historyData = histRange;
             }
 
             await context.sync();
-            
-            const masterValues = masterRange.values;
-            const masterFormulas = masterRange.formulas;
-            const masterColors = masterCellProps.value; 
-            const headers = masterValues[0];
+
+            const masterColors = colorSampleProps.value;
             
             // --- UPDATED: Space-Insensitive Matching ---
             const getColIndex = (settingName) => {
@@ -229,7 +258,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 '#add8e6'  // LightBlue (Standard Excel/HTML name)
             ]);
 
-            for (let r = 1; r < masterValues.length; r++) {
+            // Only iterate over the sampled color rows (masterColors has limited rows)
+            const colorRowLimit = Math.min(masterColors.length, masterValues.length);
+            for (let r = 1; r < colorRowLimit; r++) {
                 outputColIndices.forEach(cIdx => {
                     const val = masterValues[r][cIdx];
                     const rawColor = masterColors[r]?.[cIdx]?.format?.fill?.color;

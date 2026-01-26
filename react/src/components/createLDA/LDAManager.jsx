@@ -1,10 +1,10 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
- * Version: 2.2.0
+ * Version: 2.3.0
  * Author: Gemini (for Victor)
  * Description: Fully functional LDA Manager. Integrates with ldaProcessor.js to run the real Excel generation logic.
  * Update: Added batch progress display for large datasets (6000+ students). Shows progress bar under
- *         "Formatting LDA Table" step when multiple batches are being processed.
+ *         "Reading Master List" and "Formatting LDA Table" steps when multiple batches are being processed.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -199,7 +199,9 @@ export default function CreateLDAManager({ onReady } = {}) {
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
                   {PROCESS_STEPS.map((step, index) => {
                       const status = stepStatus[step.id] || 'pending';
-                      const showBatchProgress = step.id === 'format' && status === 'active' && batchProgress && batchProgress.total > 1;
+                      // Show batch progress for 'read' or 'format' steps when processing large datasets
+                      const showBatchProgress = (step.id === 'format' || step.id === 'read') &&
+                          status === 'active' && batchProgress && batchProgress.total > 1;
 
                       return (
                           <div key={step.id}>
@@ -225,8 +227,10 @@ export default function CreateLDAManager({ onReady } = {}) {
                                   <div className="ml-9 mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
                                       <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
                                           <span>
-                                              {batchProgress.phase === 'writing' ? 'Writing' : 'Formatting'}{' '}
-                                              {batchProgress.tableName === 'LDA_Table' ? 'LDA' : 'Failing'} data
+                                              {batchProgress.phase === 'reading' ? 'Reading' :
+                                               batchProgress.phase === 'writing' ? 'Writing' : 'Formatting'}{' '}
+                                              {batchProgress.tableName === 'Master_List' ? 'Master List' :
+                                               batchProgress.tableName === 'LDA_Table' ? 'LDA' : 'Failing'} data
                                           </span>
                                           <span className="font-medium">
                                               {batchProgress.current} / {batchProgress.total}
