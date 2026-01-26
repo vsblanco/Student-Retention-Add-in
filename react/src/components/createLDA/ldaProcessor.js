@@ -1,9 +1,11 @@
 /*
- * Timestamp: 2025-12-08 11:25:00
- * Version: 2.18.0
+ * Timestamp: 2026-01-26 00:00:00
+ * Version: 2.19.0
  * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
- * Update: Robust LDA Date Parsing using Regex to handle complex tags like "Contacted, LDA 12/08/25, Outreach".
+ * Update: Fix payload size limit error for large datasets (6000+ students) by implementing
+ *         chunked batch operations in writeTable(). Data is now written in batches of 500 rows
+ *         with sync() calls between batches to avoid exceeding Excel Add-in payload limits.
  */
 
 // Hardcoded sheet names (unless these are also settings, usually they are static)
@@ -11,6 +13,10 @@ const SHEET_NAMES = {
     MASTER_LIST: "Master List",
     HISTORY: "Student History"
 };
+
+// Batch size for chunked operations to avoid payload size limits
+// Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size
+const BATCH_SIZE = 500;
 
 /**
  * Helper to convert Excel serial date to MM-DD-YY string
@@ -543,85 +549,123 @@ export async function createLDA(userOverrides, onProgress) {
 
 /**
  * Helper to write a table, COPY Conditional Formatting, and apply custom styles.
+ * Uses chunked batch operations to avoid payload size limits with large datasets.
+ * @param {Function} onBatchProgress - Optional callback (currentBatch, totalBatches, phase) for progress updates
  */
-async function writeTable(context, sheet, startRow, tableName, outputColumns, processedRows, masterSheet, getColIndex, dateColumnNames) {
+async function writeTable(context, sheet, startRow, tableName, outputColumns, processedRows, masterSheet, getColIndex, dateColumnNames, onBatchProgress = null) {
     if (processedRows.length === 0) return;
 
     const rowCount = processedRows.length;
     const colCount = outputColumns.length;
     const headers = outputColumns.map(c => c.name);
 
-    // Prepare data blocks
-    const values = [headers];
-    const formulas = [headers.map(() => null)];
+    // --- STEP 1: Write headers first ---
+    const headerRange = sheet.getRangeByIndexes(startRow, 0, 1, colCount);
+    headerRange.values = [headers];
+    await context.sync();
 
-    processedRows.forEach(r => {
-        values.push(r.cells);
-        formulas.push(r.formulas);
-    });
+    // --- STEP 2: Write data rows in batches to avoid payload size limits ---
+    const totalDataBatches = Math.ceil(rowCount / BATCH_SIZE);
+    let currentBatch = 0;
 
-    const range = sheet.getRangeByIndexes(startRow, 0, rowCount + 1, colCount);
-    range.values = values;
-    
-    // Create Table
-    const table = sheet.tables.add(range, true);
+    for (let batchStart = 0; batchStart < rowCount; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, rowCount);
+        const batchRows = processedRows.slice(batchStart, batchEnd);
+        const batchValues = batchRows.map(r => r.cells);
+
+        // Calculate the actual row position in the sheet (startRow + 1 for header + batchStart)
+        const batchRange = sheet.getRangeByIndexes(
+            startRow + 1 + batchStart,
+            0,
+            batchValues.length,
+            colCount
+        );
+        batchRange.values = batchValues;
+
+        // Sync after each batch to flush the request and avoid payload limits
+        await context.sync();
+
+        currentBatch++;
+        if (onBatchProgress) {
+            onBatchProgress(currentBatch, totalDataBatches, 'writing');
+        }
+    }
+
+    // --- STEP 3: Create table after all data is written ---
+    const fullRange = sheet.getRangeByIndexes(startRow, 0, rowCount + 1, colCount);
+    const table = sheet.tables.add(fullRange, true);
     table.name = tableName + "_" + Math.floor(Math.random() * 1000);
     table.style = "TableStyleLight9";
+    await context.sync();
 
-    // --- FORCE Copy Conditional Formatting from Master List ---
+    // --- STEP 4: Copy Conditional Formatting from Master List (in batches) ---
     const cfChecks = [];
-    
+
     outputColumns.forEach((colConfig, idx) => {
         const masterIdx = getColIndex(colConfig.name);
         if (masterIdx !== -1) {
-            // Get the first data cell (Row 2, Index 1) of the master column
             const sourceCell = masterSheet.getCell(1, masterIdx);
-            cfChecks.push({ 
-                sourceCell, 
+            cfChecks.push({
+                sourceCell,
                 targetIndex: idx,
                 colName: colConfig.name
             });
         }
     });
 
-    cfChecks.forEach(check => {
-        const targetColRange = table.columns.getItemAt(check.targetIndex).getDataBodyRange();
-        
-        // 1. Copy everything (Backgrounds + CF) from master list source cell
-        targetColRange.copyFrom(check.sourceCell, Excel.RangeCopyType.formats);
-        
-        // 2. FIX: Explicitly clear the static background color.
-        targetColRange.format.fill.clear();
+    // Process CF in batches to avoid payload limits
+    for (let i = 0; i < cfChecks.length; i += BATCH_SIZE) {
+        const batch = cfChecks.slice(i, i + BATCH_SIZE);
+        batch.forEach(check => {
+            const targetColRange = table.columns.getItemAt(check.targetIndex).getDataBodyRange();
+            targetColRange.copyFrom(check.sourceCell, Excel.RangeCopyType.formats);
+            targetColRange.format.fill.clear();
 
-        // --- Apply Smart Date Formatting ---
-        if (dateColumnNames.has(check.colName)) {
-            targetColRange.numberFormat = [["mm-dd-yy;@"]];
-        }
-    });
-
-    // Explicit sync to ensure formats are applied before we overlay our custom highlights
-    await context.sync(); 
-
-    // --- Apply Custom Row Colors & Cell Highlights ---
-    const bodyRange = table.getDataBodyRange();
-    
-    processedRows.forEach((r, idx) => {
-        if (r.rowColor) {
-             bodyRange.getRow(idx).format.fill.color = r.rowColor;
-        }
-        r.cellHighlights.forEach(h => {
-             const cell = bodyRange.getCell(idx, h.colIndex);
-             cell.format.fill.color = h.color;
-             
-             if (h.strikethrough) {
-                 cell.format.font.strikethrough = true;
-                 cell.format.font.color = "#9C0006"; // Dark Red Text
-             }
-        });
-        r.formulas.forEach((f, cIdx) => {
-            if (f) {
-                bodyRange.getCell(idx, cIdx).formulas = [[f]];
+            if (dateColumnNames.has(check.colName)) {
+                targetColRange.numberFormat = [["mm-dd-yy;@"]];
             }
         });
-    });
+        await context.sync();
+    }
+
+    // --- STEP 5: Apply Custom Row Colors & Cell Highlights (in batches) ---
+    const bodyRange = table.getDataBodyRange();
+    const totalFormatBatches = Math.ceil(rowCount / BATCH_SIZE);
+    let formatBatch = 0;
+
+    for (let batchStart = 0; batchStart < rowCount; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, rowCount);
+
+        for (let idx = batchStart; idx < batchEnd; idx++) {
+            const r = processedRows[idx];
+
+            if (r.rowColor) {
+                bodyRange.getRow(idx).format.fill.color = r.rowColor;
+            }
+
+            r.cellHighlights.forEach(h => {
+                const cell = bodyRange.getCell(idx, h.colIndex);
+                cell.format.fill.color = h.color;
+
+                if (h.strikethrough) {
+                    cell.format.font.strikethrough = true;
+                    cell.format.font.color = "#9C0006"; // Dark Red Text
+                }
+            });
+
+            r.formulas.forEach((f, cIdx) => {
+                if (f) {
+                    bodyRange.getCell(idx, cIdx).formulas = [[f]];
+                }
+            });
+        }
+
+        // Sync after each batch of formatting operations
+        await context.sync();
+
+        formatBatch++;
+        if (onBatchProgress) {
+            onBatchProgress(formatBatch, totalFormatBatches, 'formatting');
+        }
+    }
 }
