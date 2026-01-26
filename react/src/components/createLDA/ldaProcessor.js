@@ -1,7 +1,5 @@
 /*
  * Timestamp: 2026-01-26 00:00:00
- * Version: 2.21.0
- * Author: Gemini (for Victor)
  * Description: Core logic for creating LDA reports.
  * Update: Fix 500 Internal Server Error during formatting by using smaller batch size (100 rows)
  *         for cell-level formatting operations. Data reads/writes use 500 rows, but formatting
