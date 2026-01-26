@@ -742,8 +742,11 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         }
 
         // Apply cell color ranges (merged ranges = fewer API calls)
+        // Use sheet.getRangeByIndexes with absolute positions (bodyRange doesn't have this method)
+        // Body starts at startRow + 1 (after header)
         for (const op of cellColorOps) {
-            const range = bodyRange.getRangeByIndexes(op.rowIdx, op.startCol, 1, op.endCol - op.startCol + 1);
+            const absoluteRow = startRow + 1 + op.rowIdx;
+            const range = sheet.getRangeByIndexes(absoluteRow, op.startCol, 1, op.endCol - op.startCol + 1);
             range.format.fill.color = op.color;
             if (op.strikethrough) {
                 range.format.font.strikethrough = true;
