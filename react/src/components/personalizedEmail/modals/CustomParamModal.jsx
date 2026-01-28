@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { MAPPING_OPERATORS } from '../utils/constants';
+import React, { useState, useEffect, useRef } from 'react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+import { MAPPING_OPERATORS, MINI_QUILL_EDITOR_CONFIG, standardParameters } from '../utils/constants';
 
 export default function CustomParamModal({ isOpen, onClose, customParameters, onSave }) {
     const [showManageModal, setShowManageModal] = useState(false);
@@ -8,6 +10,8 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
     const [sourceColumn, setSourceColumn] = useState('');
     const [mappings, setMappings] = useState([]);
     const [saveStatus, setSaveStatus] = useState('');
+    const [focusedMappingIndex, setFocusedMappingIndex] = useState(null);
+    const quillRefs = useRef([]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -21,6 +25,18 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
         setSourceColumn('');
         setMappings([]);
         setSaveStatus('');
+        setFocusedMappingIndex(null);
+        quillRefs.current = [];
+    };
+
+    // Insert a parameter into the currently focused mapping Quill editor
+    const insertParameterToMapping = (param) => {
+        if (focusedMappingIndex === null || !quillRefs.current[focusedMappingIndex]) return;
+
+        const editor = quillRefs.current[focusedMappingIndex].getEditor();
+        const range = editor.getSelection(true);
+        editor.insertText(range ? range.index : editor.getLength(), param, 'user');
+        editor.setSelection((range ? range.index : editor.getLength()) + param.length);
     };
 
     const handleEditParam = (param) => {
@@ -233,15 +249,21 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                                                 placeholder="Value..."
                                             />
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-sm text-gray-700">Then use</span>
-                                            <input
-                                                type="text"
-                                                value={mapping.then}
-                                                onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
-                                                className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 rounded-md text-sm bg-white"
-                                                placeholder="Result..."
-                                            />
+                                        <div className="mt-2">
+                                            <span className="text-sm text-gray-700 block mb-1">Then use</span>
+                                            <div className="mapping-quill-editor">
+                                                <ReactQuill
+                                                    ref={(el) => { quillRefs.current[index] = el; }}
+                                                    theme="snow"
+                                                    value={mapping.then}
+                                                    onChange={(value) => handleMappingChange(index, 'then', value)}
+                                                    onFocus={() => setFocusedMappingIndex(index)}
+                                                    modules={MINI_QUILL_EDITOR_CONFIG.modules}
+                                                    placeholder="Result (with formatting)..."
+                                                    className="bg-white rounded-md"
+                                                />
+                                            </div>
+                                            <p className="text-xs text-gray-400 mt-1">Tip: Use parameter buttons below to insert nested parameters</p>
                                         </div>
                                     </div>
                                 </div>
@@ -253,6 +275,45 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                         >
                             + Add Mapping
                         </button>
+
+                        {/* Parameter buttons for inserting into mapping result boxes */}
+                        {mappings.length > 0 && (
+                            <div className="mt-4 p-3 bg-gray-100 rounded-md">
+                                <p className="text-xs font-medium text-gray-600 mb-2">
+                                    Insert Parameter {focusedMappingIndex !== null ? `(into Mapping ${focusedMappingIndex + 1})` : '(click in a result box first)'}:
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                    {standardParameters.map(param => (
+                                        <button
+                                            key={param}
+                                            onClick={() => insertParameterToMapping(`{${param}}`)}
+                                            disabled={focusedMappingIndex === null}
+                                            className={`px-2 py-1 text-xs rounded ${
+                                                focusedMappingIndex === null
+                                                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            {`{${param}}`}
+                                        </button>
+                                    ))}
+                                    {customParameters.filter(p => p.name !== paramName).map(param => (
+                                        <button
+                                            key={param.name}
+                                            onClick={() => insertParameterToMapping(`{${param.name}}`)}
+                                            disabled={focusedMappingIndex === null}
+                                            className={`px-2 py-1 text-xs rounded ${
+                                                focusedMappingIndex === null
+                                                    ? 'bg-blue-50 text-blue-300 cursor-not-allowed'
+                                                    : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                                            }`}
+                                        >
+                                            {`{${param.name}}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

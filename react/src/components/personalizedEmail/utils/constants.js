@@ -21,6 +21,16 @@ export const QUILL_EDITOR_CONFIG = {
     }
 };
 
+// Configuration for smaller rich text editors (value mapping result boxes)
+export const MINI_QUILL_EDITOR_CONFIG = {
+    theme: 'snow',
+    modules: {
+        toolbar: [
+            ['bold', 'italic', 'underline', 'link']
+        ]
+    }
+};
+
 // Maps internal data keys to possible column header names in the Excel sheet
 export const COLUMN_MAPPINGS = {
     StudentName: ["studentname", "student name", "Student Name", "StudentName"],

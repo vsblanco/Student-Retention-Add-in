@@ -238,6 +238,7 @@ Office.onReady((info) => {
         
         const appContext = {
             quill,
+            setLastFocusedInput: (input) => { lastFocusedInput = input; },
             getStudentDataWithUI,
             getStudentDataCore: _getStudentDataCore,
             updateRecipientSelection: (newSelection, count) => {
