@@ -683,6 +683,7 @@ export default class ModalManager {
             <div class="mt-2">
                 <span class="text-sm text-gray-700 block mb-1">Then use</span>
                 <div class="then-editor-container bg-white rounded-md"></div>
+                <p class="text-xs text-gray-400 mt-1">Tip: Click in the editor above, then use parameter buttons to insert nested parameters like {Grade}</p>
             </div>
         `;
 
@@ -696,6 +697,13 @@ export default class ModalManager {
         // Initialize Quill editor for the result box
         const editorContainer = row.querySelector('.then-editor-container');
         const quillInstance = new Quill(editorContainer, MINI_QUILL_EDITOR_CONFIG);
+
+        // Track focus to allow parameter insertion via parameter buttons
+        quillInstance.on('selection-change', (range) => {
+            if (range) {
+                this.appContext.setLastFocusedInput(quillInstance);
+            }
+        });
 
         // Set initial value (handle both plain text and HTML)
         if (mapping.then) {
