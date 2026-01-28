@@ -217,7 +217,7 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                             the parameter will be replaced by the corresponding 'then' value.
                             If no conditions match, the parameter will be left blank.
                         </p>
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                             {mappings.map((mapping, index) => (
                                 <div key={index} className="border border-gray-200 rounded-md p-3 bg-gray-50">
                                     <div className="flex items-center justify-between mb-2">
