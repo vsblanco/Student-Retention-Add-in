@@ -499,7 +499,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                                     }
                                 }
                             }
-                            if (!mappingFound) value = cellValue;
+                            // If no mapping matches, leave value blank (empty string)
                         }
                         student[param.name] = value;
                     }

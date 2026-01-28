@@ -215,7 +215,7 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                         <p className="text-xs text-gray-500 mb-3">
                             Transform the value from the source column. If a cell's value matches a condition,
                             the parameter will be replaced by the corresponding 'then' value.
-                            If no conditions match, the original cell value will be used.
+                            If no conditions match, the parameter will be left blank.
                         </p>
                         <div className="space-y-3">
                             {mappings.map((mapping, index) => (
