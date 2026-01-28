@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MAPPING_OPERATORS } from '../utils/constants';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+import { MAPPING_OPERATORS, MINI_QUILL_EDITOR_CONFIG } from '../utils/constants';
 
 export default function CustomParamModal({ isOpen, onClose, customParameters, onSave }) {
     const [showManageModal, setShowManageModal] = useState(false);
@@ -233,15 +235,18 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                                                 placeholder="Value..."
                                             />
                                         </div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-sm text-gray-700">Then use</span>
-                                            <input
-                                                type="text"
-                                                value={mapping.then}
-                                                onChange={(e) => handleMappingChange(index, 'then', e.target.value)}
-                                                className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 rounded-md text-sm bg-white"
-                                                placeholder="Result..."
-                                            />
+                                        <div className="mt-2">
+                                            <span className="text-sm text-gray-700 block mb-1">Then use</span>
+                                            <div className="mapping-quill-editor">
+                                                <ReactQuill
+                                                    theme="snow"
+                                                    value={mapping.then}
+                                                    onChange={(value) => handleMappingChange(index, 'then', value)}
+                                                    modules={MINI_QUILL_EDITOR_CONFIG.modules}
+                                                    placeholder="Result (with formatting)..."
+                                                    className="bg-white rounded-md"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

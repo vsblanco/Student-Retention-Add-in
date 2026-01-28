@@ -1,4 +1,6 @@
-// V-5.2 - 2025-10-01 - 7:08 PM EDT
+// V-5.3 - 2026-01-28 - Added Quill editors for value mapping result boxes
+import { MINI_QUILL_EDITOR_CONFIG } from './constants.js';
+
 export default class ModalManager {
     constructor(appContext) {
         this.appContext = appContext;
@@ -12,6 +14,7 @@ export default class ModalManager {
         this.tempExcludedStudents = [];
         this.currentPayloadForReceipt = [];
         this.currentBodyForReceipt = '';
+        this.mappingQuillEditors = []; // Track Quill instances for mapping result boxes
 
 
         this._setupEventListeners();
@@ -542,6 +545,8 @@ export default class ModalManager {
     _resetCustomParamModal() {
         this.editingParamName = null;
         this.currentScriptInputs = {};
+        // Clean up any existing Quill editors for mappings
+        this.mappingQuillEditors = [];
         document.getElementById('custom-param-modal-title').textContent = 'Create Custom Parameter';
         document.getElementById('param-name').value = '';
         document.getElementById('param-source-column').value = '';
@@ -650,37 +655,73 @@ export default class ModalManager {
     
     _addMappingRow(mapping = { if: '', operator: 'eq', then: '' }) {
         const container = document.getElementById('param-mapping-container');
+        const rowIndex = this.mappingQuillEditors.length;
         const row = document.createElement('div');
-        row.className = 'flex items-center gap-2 mapping-row';
+        row.className = 'mapping-row border border-gray-200 rounded-md p-3 bg-gray-50 mb-3';
+        row.dataset.rowIndex = rowIndex;
         row.innerHTML = `
-            <span class="text-sm">If cell</span>
-            <select class="operator-select w-32 px-2 py-1 border border-gray-300 rounded-md text-sm">
-                <option value="eq" ${mapping.operator === 'eq' ? 'selected' : ''}>is equal to</option>
-                <option value="neq" ${mapping.operator === 'neq' ? 'selected' : ''}>is not equal to</option>
-                <option value="contains" ${mapping.operator === 'contains' ? 'selected' : ''}>contains</option>
-                <option value="does_not_contain" ${mapping.operator === 'does_not_contain' ? 'selected' : ''}>does not contain</option>
-                <option value="starts_with" ${mapping.operator === 'starts_with' ? 'selected' : ''}>starts with</option>
-                <option value="ends_with" ${mapping.operator === 'ends_with' ? 'selected' : ''}>ends with</option>
-                <option value="gt" ${mapping.operator === 'gt' ? 'selected' : ''}>&gt; (number)</option>
-                <option value="lt" ${mapping.operator === 'lt' ? 'selected' : ''}>&lt; (number)</option>
-                <option value="gte" ${mapping.operator === 'gte' ? 'selected' : ''}>&gt;= (number)</option>
-                <option value="lte" ${mapping.operator === 'lte' ? 'selected' : ''}>&lt;= (number)</option>
-            </select>
-            <input type="text" class="if-input flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Value..." value="${mapping.if}">
-            <span class="text-sm">then</span>
-            <input type="text" class="then-input flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm" placeholder="Result..." value="${mapping.then}">
-            <button class="remove-mapping-btn text-red-500 hover:text-red-700">&times;</button>
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-gray-600">Mapping ${rowIndex + 1}</span>
+                <button class="remove-mapping-btn text-red-500 hover:text-red-700 text-xl leading-none">&times;</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+                <span class="text-sm">If cell</span>
+                <select class="operator-select w-32 px-2 py-1 border border-gray-300 rounded-md text-sm bg-white">
+                    <option value="eq" ${mapping.operator === 'eq' ? 'selected' : ''}>is equal to</option>
+                    <option value="neq" ${mapping.operator === 'neq' ? 'selected' : ''}>is not equal to</option>
+                    <option value="contains" ${mapping.operator === 'contains' ? 'selected' : ''}>contains</option>
+                    <option value="does_not_contain" ${mapping.operator === 'does_not_contain' ? 'selected' : ''}>does not contain</option>
+                    <option value="starts_with" ${mapping.operator === 'starts_with' ? 'selected' : ''}>starts with</option>
+                    <option value="ends_with" ${mapping.operator === 'ends_with' ? 'selected' : ''}>ends with</option>
+                    <option value="gt" ${mapping.operator === 'gt' ? 'selected' : ''}>&gt; (number)</option>
+                    <option value="lt" ${mapping.operator === 'lt' ? 'selected' : ''}>&lt; (number)</option>
+                    <option value="gte" ${mapping.operator === 'gte' ? 'selected' : ''}>&gt;= (number)</option>
+                    <option value="lte" ${mapping.operator === 'lte' ? 'selected' : ''}>&lt;= (number)</option>
+                </select>
+                <input type="text" class="if-input flex-grow px-2 py-1 border border-gray-300 rounded-md text-sm bg-white" placeholder="Value..." value="${mapping.if}">
+            </div>
+            <div class="mt-2">
+                <span class="text-sm text-gray-700 block mb-1">Then use</span>
+                <div class="then-editor-container bg-white rounded-md"></div>
+            </div>
         `;
-        row.querySelector('.remove-mapping-btn').onclick = () => row.remove();
+
+        row.querySelector('.remove-mapping-btn').onclick = () => {
+            const idx = parseInt(row.dataset.rowIndex);
+            this.mappingQuillEditors[idx] = null; // Mark as removed
+            row.remove();
+        };
         container.appendChild(row);
+
+        // Initialize Quill editor for the result box
+        const editorContainer = row.querySelector('.then-editor-container');
+        const quillInstance = new Quill(editorContainer, MINI_QUILL_EDITOR_CONFIG);
+
+        // Set initial value (handle both plain text and HTML)
+        if (mapping.then) {
+            // Check if it looks like HTML content
+            if (mapping.then.startsWith('<')) {
+                quillInstance.root.innerHTML = mapping.then;
+            } else {
+                quillInstance.setText(mapping.then);
+            }
+        }
+
+        this.mappingQuillEditors.push(quillInstance);
     }
     
     _getMappingsFromDOM() {
-        return Array.from(document.querySelectorAll('.mapping-row')).map(row => ({
-            if: row.querySelector('.if-input').value,
-            operator: row.querySelector('.operator-select').value,
-            then: row.querySelector('.then-input').value,
-        })).filter(m => m.if);
+        return Array.from(document.querySelectorAll('.mapping-row')).map(row => {
+            const rowIndex = parseInt(row.dataset.rowIndex);
+            const quillEditor = this.mappingQuillEditors[rowIndex];
+            // Get HTML content from Quill editor, or empty string if editor was removed
+            const thenValue = quillEditor ? quillEditor.root.innerHTML : '';
+            return {
+                if: row.querySelector('.if-input').value,
+                operator: row.querySelector('.operator-select').value,
+                then: thenValue,
+            };
+        }).filter(m => m.if);
     }
 
     _scanScriptForInputs() {
