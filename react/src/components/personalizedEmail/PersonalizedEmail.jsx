@@ -525,6 +525,20 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                                 const daysOut = parseInt(student.DaysOut, 10) || 0;
                                 const daysLeft = Math.max(0, 14 - daysOut);
                                 student.DaysLeft = daysLeft.toString();
+                            } else if (paramName === 'Salutation') {
+                                // Get time-based greeting
+                                const hour = new Date().getHours();
+                                let timeGreeting;
+                                if (hour < 12) {
+                                    timeGreeting = 'Good Morning';
+                                } else if (hour < 17) {
+                                    timeGreeting = 'Good Afternoon';
+                                } else {
+                                    timeGreeting = 'Good Evening';
+                                }
+                                // Randomly pick from greetings including time-based one
+                                const greetings = ['Dear', 'Hello', 'Greetings', timeGreeting];
+                                student.Salutation = greetings[Math.floor(Math.random() * greetings.length)];
                             }
                         }
                     }
@@ -678,8 +692,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 color: colors.color
             });
 
-            // Move cursor after the inserted parameter
-            editor.setSelection(range.index + param.length);
+            // Move cursor after the inserted parameter and reset formatting
+            const newPosition = range.index + param.length;
+            editor.setSelection(newPosition);
+            editor.format('background', false);
+            editor.format('color', false);
         } else if (lastFocusedInput === 'from') {
             setFromPills([param]);
         } else if (lastFocusedInput === 'cc') {
@@ -704,10 +721,17 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             const paramName = param.replace(/[{}]/g, '');
             const colors = getParameterColor(paramName);
 
-            editor.insertText(editor.getLength(), param, {
+            const insertPosition = editor.getLength() - 1;
+            editor.insertText(insertPosition, param, {
                 background: colors.background,
                 color: colors.color
             });
+
+            // Move cursor after the inserted parameter and reset formatting
+            const newPosition = insertPosition + param.length;
+            editor.setSelection(newPosition);
+            editor.format('background', false);
+            editor.format('color', false);
         }
     };
 
