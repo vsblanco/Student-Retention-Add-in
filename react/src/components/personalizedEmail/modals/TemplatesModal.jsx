@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { EMAIL_TEMPLATES_KEY } from '../utils/constants';
 
-export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, currentFrom, currentSubject, currentBody, currentCC }) {
-    const [templates, setTemplates] = useState([]);
+export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, currentFrom, currentSubject, currentBody, currentCC, templates, onTemplatesChange }) {
     const [expandedAuthors, setExpandedAuthors] = useState(new Set());
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
@@ -11,33 +10,12 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
 
     const isGuest = user === 'Guest';
 
-    useEffect(() => {
-        if (isOpen) {
-            loadTemplates();
-        }
-    }, [isOpen]);
-
-    const loadTemplates = async () => {
-        const loaded = await getTemplates();
-        setTemplates(loaded);
-    };
-
-    const getTemplates = async () => {
-        return Excel.run(async (context) => {
-            const settings = context.workbook.settings;
-            const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
-            templatesSetting.load("value");
-            await context.sync();
-            return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
-        });
-    };
-
     const saveTemplates = async (templatesArray) => {
         await Excel.run(async (context) => {
             context.workbook.settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templatesArray));
             await context.sync();
         });
-        setTemplates(templatesArray);
+        onTemplatesChange(templatesArray);
     };
 
     const toggleAuthor = (author) => {

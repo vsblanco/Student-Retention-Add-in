@@ -60,6 +60,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
 
+    // Pre-loaded templates state
+    const [templates, setTemplates] = useState(null); // null = loading, [] = loaded (empty or with data)
+
     // Check for existing connection on mount
     useEffect(() => {
         const initializeComponent = async () => {
@@ -74,9 +77,13 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 console.error('Error loading user email:', error);
             }
 
-            await checkConnection();
-            await loadCustomParameters();
-            // Call onReady after connection check is complete
+            // Load connection, custom parameters, and templates in parallel
+            await Promise.all([
+                checkConnection(),
+                loadCustomParameters(),
+                loadTemplates()
+            ]);
+            // Call onReady after all initialization is complete
             if (onReady) onReady();
         };
         initializeComponent();
@@ -315,6 +322,22 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const loadCustomParameters = async () => {
         const params = await getCustomParameters();
         setCustomParameters(params);
+    };
+
+    const loadTemplates = async () => {
+        try {
+            const loadedTemplates = await Excel.run(async (context) => {
+                const settings = context.workbook.settings;
+                const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
+                templatesSetting.load("value");
+                await context.sync();
+                return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
+            });
+            setTemplates(loadedTemplates);
+        } catch (error) {
+            console.error('Error loading templates:', error);
+            setTemplates([]); // Set to empty array on error so we don't block loading
+        }
     };
 
     const getCustomParameters = async () => {
@@ -1036,8 +1059,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         );
     };
 
-    // Show loading screen while checking connection/mode
-    if (mode === null) {
+    // Show loading screen while checking connection/mode or loading templates
+    if (mode === null || templates === null) {
         return (
             <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
                 <div className="text-center">
@@ -1312,6 +1335,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 currentSubject={subject}
                 currentBody={body}
                 currentCC={ccPills}
+                templates={templates}
+                onTemplatesChange={setTemplates}
                 onLoadTemplate={(template) => {
                     setFromPills([template.from]);
                     setSubject(template.subject);
