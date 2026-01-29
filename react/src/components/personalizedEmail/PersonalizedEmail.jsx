@@ -828,7 +828,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             cc: renderCCTemplate(ccPills, student),
             subject: renderTemplate(subject, student),
             body: renderTemplate(cleanBodyHtml, student),
-            by: userEmail || ''
+            byName: user || '',
+            byEmail: userEmail || ''
         })).filter(email => email.to && email.from);
     };
 
@@ -1070,7 +1071,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             cc: renderCCTemplate(ccPills, testStudent),
             subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
             body: renderTemplate(cleanBodyHtml, testStudent),
-            by: userEmail || ''
+            byName: user || '',
+            byEmail: userEmail || ''
         }];
 
         setLastSentPayload(testPayload);
