@@ -4,31 +4,28 @@ import { getTodaysLdaSheetName } from './helpers';
 
 /**
  * Renders an HTML string with basic formatting into a jsPDF document,
- * respecting a maximum height for the content area.
+ * with automatic page breaks (no truncation).
+ * @returns {number} The final Y position after rendering
  */
 function renderHtmlInPdf(doc, html, options) {
-    let { startX, startY, maxWidth, maxHeight } = options;
+    let { startX, startY, maxWidth, margin, pageHeight } = options;
     let currentY = startY;
-    let isTruncated = false;
+    const lineHeight = 12;
+    const paragraphSpacing = 18;
 
     const tempDiv = document.createElement('div');
     tempDiv.style.display = 'none';
     tempDiv.innerHTML = html;
     document.body.appendChild(tempDiv);
 
-    const processNode = (node, currentX, styles) => {
-        if (isTruncated) return currentX;
-
-        if (currentY > startY + maxHeight - 12) {
-            if (!isTruncated) {
-                doc.setFont(undefined, 'italic');
-                doc.setTextColor(150);
-                doc.text("[... content truncated ...]", startX, currentY);
-                isTruncated = true;
-            }
-            return currentX;
+    const checkPageBreak = (neededHeight = lineHeight) => {
+        if (currentY + neededHeight > pageHeight - margin) {
+            doc.addPage();
+            currentY = margin;
         }
+    };
 
+    const processNode = (node, currentX, styles) => {
         const isBold = styles.isBold || node.tagName === 'STRONG' || node.tagName === 'B';
         const isItalic = styles.isItalic || node.tagName === 'EM' || node.tagName === 'I';
         let fontStyle = 'normal';
@@ -47,24 +44,15 @@ function renderHtmlInPdf(doc, html, options) {
                 const wordWidth = doc.getTextWidth(wordWithSpace);
 
                 if (currentX + wordWidth > startX + maxWidth) {
-                    currentY += 12;
+                    currentY += lineHeight;
                     currentX = startX;
-                    if (currentY > startY + maxHeight - 12) {
-                        if (!isTruncated) {
-                            doc.setFont(undefined, 'italic');
-                            doc.setTextColor(150);
-                            doc.text("[... content truncated ...]", startX, currentY);
-                            isTruncated = true;
-                        }
-                        break;
-                    }
+                    checkPageBreak();
                 }
                 doc.text(wordWithSpace, currentX, currentY);
                 currentX += wordWidth;
             }
         } else {
             for (const child of Array.from(node.childNodes)) {
-                if (isTruncated) break;
                 currentX = processNode(child, currentX, { isBold, isItalic });
             }
         }
@@ -72,39 +60,75 @@ function renderHtmlInPdf(doc, html, options) {
     };
 
     Array.from(tempDiv.children).forEach(element => {
-        if (isTruncated) return;
+        checkPageBreak(paragraphSpacing);
 
         switch (element.tagName) {
             case 'P':
                 processNode(element, startX, {});
-                currentY += 18;
+                currentY += paragraphSpacing;
                 break;
             case 'UL':
             case 'OL':
                 Array.from(element.children).forEach((li, index) => {
-                    if (isTruncated || currentY > startY + maxHeight - 12) {
-                        if (!isTruncated) {
-                            doc.setFont(undefined, 'italic');
-                            doc.setTextColor(150);
-                            doc.text("[... content truncated ...]", startX, currentY);
-                            isTruncated = true;
-                        }
-                        return;
-                    }
+                    checkPageBreak(paragraphSpacing);
                     const bullet = (element.tagName === 'OL') ? `${index + 1}. ` : '• ';
                     doc.text(bullet, startX, currentY);
                     processNode(li, startX + 15, {});
-                    currentY += 18;
+                    currentY += paragraphSpacing;
                 });
                 break;
             default:
                 processNode(element, startX, {});
-                currentY += 18;
+                currentY += paragraphSpacing;
         }
     });
 
     document.body.removeChild(tempDiv);
     return currentY;
+}
+
+/**
+ * Estimates the height needed to render HTML content
+ */
+function estimateHtmlHeight(doc, html, maxWidth) {
+    const lineHeight = 12;
+    const paragraphSpacing = 18;
+    let estimatedHeight = 0;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.display = 'none';
+    tempDiv.innerHTML = html;
+    document.body.appendChild(tempDiv);
+
+    const estimateNodeHeight = (node, currentX) => {
+        if (node.nodeType === 3) {
+            let textContent = (node.textContent || '').replace(/\s+/g, ' ');
+            const words = textContent.split(' ');
+            for (const word of words) {
+                if (!word) continue;
+                const wordWithSpace = word + ' ';
+                const wordWidth = doc.getTextWidth(wordWithSpace);
+                if (currentX + wordWidth > maxWidth) {
+                    estimatedHeight += lineHeight;
+                    currentX = 0;
+                }
+                currentX += wordWidth;
+            }
+        } else {
+            for (const child of Array.from(node.childNodes)) {
+                currentX = estimateNodeHeight(child, currentX);
+            }
+        }
+        return currentX;
+    };
+
+    Array.from(tempDiv.children).forEach(element => {
+        estimateNodeHeight(element, 0);
+        estimatedHeight += paragraphSpacing;
+    });
+
+    document.body.removeChild(tempDiv);
+    return estimatedHeight + 20; // Add some padding
 }
 
 /**
@@ -125,12 +149,12 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
         const doc = new jsPDF({ orientation: "portrait", unit: "px", format: "letter" });
 
         const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
         const margin = 30;
         const contentWidth = pageWidth - (margin * 2);
-        const maxBodyContainerHeight = 120;
-        const textPadding = 5;
         let currentY = 0;
 
+        // Header
         doc.setFontSize(18);
         doc.text("Email Sending Receipt", pageWidth / 2, currentY + 40, { align: "center" });
         doc.setFontSize(10);
@@ -144,6 +168,7 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
             currentY = 75;
         }
 
+        // Summary section
         doc.setFontSize(12);
         doc.text("Summary", margin, currentY);
         doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
@@ -178,6 +203,7 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
         }
         currentY += 20;
 
+        // Message Body section
         doc.setFontSize(12);
         doc.text("Message Body", margin, currentY);
         doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
@@ -189,38 +215,58 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
         doc.setFont(undefined, 'bold');
         const beforeTitle = containsParameters ? "Template Format:" : "Email Body:";
         doc.text(beforeTitle, margin, currentY);
+        doc.setFont(undefined, 'normal');
         currentY += 15;
 
-        const container1StartY = currentY;
-        doc.setDrawColor(220, 220, 220);
-        doc.roundedRect(margin, container1StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
-        renderHtmlInPdf(doc, bodyTemplate, {
-            startX: margin + textPadding,
-            startY: container1StartY + textPadding + 2,
-            maxWidth: contentWidth - (textPadding * 2),
-            maxHeight: maxBodyContainerHeight - (textPadding * 2)
+        // Render template body (full content, no truncation)
+        currentY = renderHtmlInPdf(doc, bodyTemplate, {
+            startX: margin,
+            startY: currentY,
+            maxWidth: contentWidth,
+            margin: margin,
+            pageHeight: pageHeight
         });
-        currentY = container1StartY + maxBodyContainerHeight + 15;
 
+        currentY += 10;
+
+        // Example section (if template has parameters)
         if (containsParameters) {
+            const randomStudentPayload = emails[Math.floor(Math.random() * emails.length)];
+
+            // Estimate height needed for example section
+            const estimatedExampleHeight = estimateHtmlHeight(doc, randomStudentPayload.body, contentWidth);
+            const spaceRemaining = pageHeight - margin - currentY;
+
+            // If example won't fit on current page, start new page
+            if (estimatedExampleHeight > spaceRemaining) {
+                doc.addPage();
+                currentY = margin;
+            }
+
             doc.setFont(undefined, 'bold');
             doc.text("Example:", margin, currentY);
+            doc.setFont(undefined, 'normal');
             currentY += 15;
 
-            const container2StartY = currentY;
-            const randomStudentPayload = emails[Math.floor(Math.random() * emails.length)];
-            doc.setDrawColor(220, 220, 220);
-            doc.roundedRect(margin, container2StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
-            renderHtmlInPdf(doc, randomStudentPayload.body, {
-                startX: margin + textPadding,
-                startY: container2StartY + textPadding + 2,
-                maxWidth: contentWidth - (textPadding * 2),
-                maxHeight: maxBodyContainerHeight - (textPadding * 2)
+            // Render example body (full content, no truncation)
+            currentY = renderHtmlInPdf(doc, randomStudentPayload.body, {
+                startX: margin,
+                startY: currentY,
+                maxWidth: contentWidth,
+                margin: margin,
+                pageHeight: pageHeight
             });
-            currentY = container2StartY + maxBodyContainerHeight + 20;
-        } else {
-            currentY += 5;
+
+            currentY += 10;
         }
+
+        // Recipient list on a new page
+        doc.addPage();
+
+        // Add header for recipients page
+        doc.setFontSize(12);
+        doc.text("Recipient List", margin, margin);
+        doc.line(margin, margin + 2, pageWidth - margin, margin + 2);
 
         const tableColumn = ["#", "Recipient Email", "Subject"];
         const tableRows = emails.map((email, index) => [
@@ -232,7 +278,7 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
         autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
-            startY: currentY,
+            startY: margin + 15,
             theme: 'grid',
             headStyles: { fillColor: [41, 128, 185] },
             styles: { fontSize: 8, cellPadding: 2 },
