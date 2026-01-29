@@ -18,7 +18,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [isConnected, setIsConnected] = useState(false);
     const [setupUrl, setSetupUrl] = useState('');
     const [setupStatus, setSetupStatus] = useState('');
-    const [mode, setMode] = useState('individual'); // 'individual' or 'powerautomate'
+    const [mode, setMode] = useState(null); // null (loading), 'individual', or 'powerautomate'
     const [userEmail, setUserEmail] = useState('');
     const [localAccessToken, setLocalAccessToken] = useState(accessToken);
     const [consentStatus, setConsentStatus] = useState(null); // null, 'checking', 'granted', 'required'
@@ -111,7 +111,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     // Check consent status in individual mode
     useEffect(() => {
         const checkConsentStatus = async () => {
-            // Only check in individual mode
+            // Skip if mode hasn't been determined yet
+            if (mode === null) {
+                return;
+            }
+
+            // Only check consent in individual mode
             if (mode !== 'individual') {
                 setConsentStatus('granted');
                 return;
@@ -1030,6 +1035,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             </button>
         );
     };
+
+    // Show loading screen while checking connection/mode
+    if (mode === null) {
+        return (
+            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     // Show loading screen while checking consent
     if (consentStatus === 'checking') {
