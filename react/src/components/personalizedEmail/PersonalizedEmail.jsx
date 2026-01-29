@@ -692,8 +692,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 color: colors.color
             });
 
-            // Move cursor after the inserted parameter
-            editor.setSelection(range.index + param.length);
+            // Move cursor after the inserted parameter and reset formatting
+            const newPosition = range.index + param.length;
+            editor.setSelection(newPosition);
+            editor.format('background', false);
+            editor.format('color', false);
         } else if (lastFocusedInput === 'from') {
             setFromPills([param]);
         } else if (lastFocusedInput === 'cc') {
@@ -718,10 +721,17 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             const paramName = param.replace(/[{}]/g, '');
             const colors = getParameterColor(paramName);
 
-            editor.insertText(editor.getLength(), param, {
+            const insertPosition = editor.getLength() - 1;
+            editor.insertText(insertPosition, param, {
                 background: colors.background,
                 color: colors.color
             });
+
+            // Move cursor after the inserted parameter and reset formatting
+            const newPosition = insertPosition + param.length;
+            editor.setSelection(newPosition);
+            editor.format('background', false);
+            editor.format('color', false);
         }
     };
 
