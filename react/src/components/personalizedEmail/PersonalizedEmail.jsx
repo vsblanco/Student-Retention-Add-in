@@ -832,9 +832,23 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             body: renderTemplate(cleanBodyHtml, student)
         })).filter(email => email.to && email.from);
 
+        // Calculate sender breakdown
+        const senderCounts = emails.reduce((acc, email) => {
+            const from = email.from || 'Unknown';
+            acc[from] = (acc[from] || 0) + 1;
+            return acc;
+        }, {});
+
+        const senders = Object.entries(senderCounts).map(([email, count]) => ({
+            email,
+            count
+        }));
+
         return {
             byName: user || '',
             byEmail: userEmail || '',
+            totalCount: emails.length,
+            senders: senders,
             emails: emails
         };
     };
@@ -1086,12 +1100,15 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         // Generate single test email payload with user's email as recipient
         const fromTemplate = fromPills[0] || '';
         const cleanBodyHtml = stripParameterBackgrounds(body);
+        const testFromEmail = renderTemplate(fromTemplate, testStudent);
 
         const testPayload = {
             byName: user || '',
             byEmail: userEmail || '',
+            totalCount: 1,
+            senders: [{ email: testFromEmail, count: 1 }],
             emails: [{
-                from: renderTemplate(fromTemplate, testStudent),
+                from: testFromEmail,
                 to: userEmail, // Always send to the logged-in user
                 cc: renderCCTemplate(ccPills, testStudent),
                 subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
