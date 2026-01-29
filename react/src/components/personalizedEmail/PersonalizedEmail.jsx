@@ -1482,6 +1482,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 isOpen={showTemplatesModal}
                 onClose={() => setShowTemplatesModal(false)}
                 user={user}
+                userEmail={userEmail}
                 currentFrom={fromPills[0] || ''}
                 currentSubject={subject}
                 currentBody={body}
