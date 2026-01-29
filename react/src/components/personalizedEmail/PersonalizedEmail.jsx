@@ -824,15 +824,33 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         // Strip parameter backgrounds from body before rendering
         const cleanBodyHtml = stripParameterBackgrounds(body);
 
-        return studentDataCache.map(student => ({
+        const emails = studentDataCache.map(student => ({
             from: renderTemplate(fromTemplate, student),
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccPills, student),
             subject: renderTemplate(subject, student),
-            body: renderTemplate(cleanBodyHtml, student),
-            byName: user || '',
-            byEmail: userEmail || ''
+            body: renderTemplate(cleanBodyHtml, student)
         })).filter(email => email.to && email.from);
+
+        // Calculate sender breakdown
+        const senderCounts = emails.reduce((acc, email) => {
+            const from = email.from || 'Unknown';
+            acc[from] = (acc[from] || 0) + 1;
+            return acc;
+        }, {});
+
+        const senders = Object.entries(senderCounts).map(([email, count]) => ({
+            email,
+            count
+        }));
+
+        return {
+            byName: user || '',
+            byEmail: userEmail || '',
+            totalCount: emails.length,
+            senders: senders,
+            emails: emails
+        };
     };
 
     const showConsentDialog = () => {
@@ -882,7 +900,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const payload = generatePayload();
         setLastSentPayload(payload);
 
-        if (payload.length === 0) {
+        if (payload.emails.length === 0) {
             setStatus('No students with valid "To" and "From" email addresses found.');
             return;
         }
@@ -921,7 +939,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             const { accessToken: graphToken } = responseData;
 
             // Step 3: Send emails using Graph API token
-            await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
+            await sendEmailsWithGraphToken(graphToken, payload.emails, setStatus, successCount, failureCount, errors);
 
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
@@ -929,10 +947,10 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
     };
 
-    const sendEmailsWithGraphToken = async (graphToken, payload, setStatus, successCount, failureCount, errors) => {
-        setStatus(`Sending ${payload.length} emails...`);
+    const sendEmailsWithGraphToken = async (graphToken, emails, setStatus, successCount, failureCount, errors) => {
+        setStatus(`Sending ${emails.length} emails...`);
 
-        for (const email of payload) {
+        for (const email of emails) {
             try {
                 // Parse CC recipients
                 const ccRecipients = email.cc
@@ -976,7 +994,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 }
 
                 successCount++;
-                setStatus(`Sent ${successCount} of ${payload.length} emails...`);
+                setStatus(`Sent ${successCount} of ${emails.length} emails...`);
             } catch (error) {
                 failureCount++;
                 errors.push({ to: email.to, error: error.message });
@@ -998,21 +1016,37 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         setStatus(`Sending ${studentDataCache.length} emails...`);
 
         const payload = generatePayload();
-        setLastSentPayload(payload);
 
-        if (payload.length === 0) {
+        if (payload.emails.length === 0) {
             setStatus('No students with valid "To" and "From" email addresses found.');
             return;
         }
+
+        // Generate base64 PDF receipt to include in payload
+        const initiator = { name: user, email: userEmail };
+        const receiptBase64 = generatePdfReceipt(
+            payload.emails,
+            body,
+            initiator,
+            true // returnBase64
+        );
+
+        // Add receipt to payload
+        const payloadWithReceipt = {
+            ...payload,
+            receipt: receiptBase64 || ''
+        };
+
+        setLastSentPayload(payloadWithReceipt);
 
         try {
             const response = await fetch(powerAutomateConnection.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payloadWithReceipt)
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            setStatus(`Successfully sent ${payload.length} emails!`);
+            setStatus(`Successfully sent ${payload.emails.length} emails!`);
             setShowSuccessModal(true);
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
@@ -1066,16 +1100,21 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         // Generate single test email payload with user's email as recipient
         const fromTemplate = fromPills[0] || '';
         const cleanBodyHtml = stripParameterBackgrounds(body);
+        const testFromEmail = renderTemplate(fromTemplate, testStudent);
 
-        const testPayload = [{
-            from: renderTemplate(fromTemplate, testStudent),
-            to: userEmail, // Always send to the logged-in user
-            cc: renderCCTemplate(ccPills, testStudent),
-            subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
-            body: renderTemplate(cleanBodyHtml, testStudent),
+        const testPayload = {
             byName: user || '',
-            byEmail: userEmail || ''
-        }];
+            byEmail: userEmail || '',
+            totalCount: 1,
+            senders: [{ email: testFromEmail, count: 1 }],
+            emails: [{
+                from: testFromEmail,
+                to: userEmail, // Always send to the logged-in user
+                cc: renderCCTemplate(ccPills, testStudent),
+                subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
+                body: renderTemplate(cleanBodyHtml, testStudent)
+            }]
+        };
 
         setLastSentPayload(testPayload);
         setStatus('Sending test email to yourself...');
@@ -1102,7 +1141,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 const { accessToken: graphToken } = responseData;
 
                 // Send single test email
-                const email = testPayload[0];
+                const email = testPayload.emails[0];
                 const ccRecipients = email.cc
                     ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
                         emailAddress: { address: addr }
@@ -1135,11 +1174,26 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                 setStatus(`Test email sent to ${userEmail}!`);
             } else if (mode === 'powerautomate') {
+                // Generate base64 PDF receipt for test email
+                const initiator = { name: user, email: userEmail };
+                const receiptBase64 = generatePdfReceipt(
+                    testPayload.emails,
+                    body,
+                    initiator,
+                    true // returnBase64
+                );
+
+                // Add receipt to payload
+                const testPayloadWithReceipt = {
+                    ...testPayload,
+                    receipt: receiptBase64 || ''
+                };
+
                 // Send via Power Automate
                 const response = await fetch(powerAutomateConnection.url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(testPayload)
+                    body: JSON.stringify(testPayloadWithReceipt)
                 });
 
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -1529,9 +1583,10 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             <SuccessModal
                 isOpen={showSuccessModal}
                 onClose={() => setShowSuccessModal(false)}
-                count={lastSentPayload.length}
+                count={lastSentPayload?.emails?.length || 0}
                 payload={lastSentPayload}
                 bodyTemplate={body}
+                initiator={{ name: user, email: userEmail }}
             />
         </div>
     );

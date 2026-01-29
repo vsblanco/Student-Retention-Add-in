@@ -107,10 +107,15 @@ function renderHtmlInPdf(doc, html, options) {
 
 /**
  * Generates a PDF receipt from the email payload using jsPDF and jsPDF-AutoTable.
+ * @param {Array} emails - Array of email objects
+ * @param {string} bodyTemplate - The email body template
+ * @param {Object} initiator - Object with name and email of who initiated the send
+ * @param {boolean} returnBase64 - If true, returns base64 string instead of saving
+ * @returns {string|undefined} - Base64 string if returnBase64 is true, undefined otherwise
  */
-export function generatePdfReceipt(payload, bodyTemplate) {
-    if (!payload || payload.length === 0) {
-        console.error("Payload is empty. Cannot generate PDF receipt.");
+export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnBase64 = false) {
+    if (!emails || emails.length === 0) {
+        console.error("Emails array is empty. Cannot generate PDF receipt.");
         return;
     }
 
@@ -129,7 +134,14 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         doc.text("Email Sending Receipt", pageWidth / 2, currentY + 40, { align: "center" });
         doc.setFontSize(10);
         doc.text(`Sent on: ${new Date().toLocaleString()}`, pageWidth / 2, currentY + 55, { align: "center" });
-        currentY = 75;
+
+        // Add initiator info
+        if (initiator.name || initiator.email) {
+            doc.text(`Initiated by: ${initiator.name || 'Unknown'}${initiator.email ? ` (${initiator.email})` : ''}`, pageWidth / 2, currentY + 68, { align: "center" });
+            currentY = 88;
+        } else {
+            currentY = 75;
+        }
 
         doc.setFontSize(12);
         doc.text("Summary", margin, currentY);
@@ -137,10 +149,10 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         currentY += 15;
 
         doc.setFontSize(10);
-        doc.text(`Total Emails Sent: ${payload.length}`, margin, currentY);
+        doc.text(`Total Emails Sent: ${emails.length}`, margin, currentY);
         currentY += 12;
 
-        const senderCounts = payload.reduce((acc, email) => {
+        const senderCounts = emails.reduce((acc, email) => {
             const from = email.from || "N/A";
             acc[from] = (acc[from] || 0) + 1;
             return acc;
@@ -195,7 +207,7 @@ export function generatePdfReceipt(payload, bodyTemplate) {
             currentY += 15;
 
             const container2StartY = currentY;
-            const randomStudentPayload = payload[Math.floor(Math.random() * payload.length)];
+            const randomStudentPayload = emails[Math.floor(Math.random() * emails.length)];
             doc.setDrawColor(220, 220, 220);
             doc.roundedRect(margin, container2StartY, contentWidth, maxBodyContainerHeight, 3, 3, 'S');
             renderHtmlInPdf(doc, randomStudentPayload.body, {
@@ -210,7 +222,7 @@ export function generatePdfReceipt(payload, bodyTemplate) {
         }
 
         const tableColumn = ["#", "Recipient Email", "Subject"];
-        const tableRows = payload.map((email, index) => [
+        const tableRows = emails.map((email, index) => [
             index + 1,
             email.to,
             email.subject.substring(0, 45) + (email.subject.length > 45 ? '...' : '')
@@ -230,10 +242,16 @@ export function generatePdfReceipt(payload, bodyTemplate) {
             }
         });
 
-        const fileName = `Email_Receipt_${getTodaysLdaSheetName().replace("LDA ", "")}.pdf`;
-        doc.save(fileName);
+        if (returnBase64) {
+            // Return as base64 string (without the data:application/pdf;base64, prefix)
+            return doc.output('datauristring').split(',')[1];
+        } else {
+            const fileName = `Email_Receipt_${getTodaysLdaSheetName().replace("LDA ", "")}.pdf`;
+            doc.save(fileName);
+        }
 
     } catch (error) {
         console.error("Failed to generate PDF receipt:", error);
+        return undefined;
     }
 }
