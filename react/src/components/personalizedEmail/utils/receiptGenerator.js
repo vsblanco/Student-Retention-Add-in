@@ -32,24 +32,68 @@ function renderHtmlInPdf(doc, html, options) {
         if (isBold && isItalic) fontStyle = 'bolditalic';
         else if (isBold) fontStyle = 'bold';
         else if (isItalic) fontStyle = 'italic';
-        doc.setFont(undefined, fontStyle);
-        doc.setTextColor(0);
 
         if (node.nodeType === 3) {
             let textContent = (node.textContent || '').replace(/\s+/g, ' ');
-            const words = textContent.split(' ');
-            for (const word of words) {
-                if (!word) continue;
-                const wordWithSpace = word + ' ';
-                const wordWidth = doc.getTextWidth(wordWithSpace);
 
-                if (currentX + wordWidth > startX + maxWidth) {
-                    currentY += lineHeight;
-                    currentX = startX;
-                    checkPageBreak();
+            // Split text by parameter patterns {ParameterName}, keeping delimiters
+            const paramRegex = /(\{[^}]+\})/g;
+            const parts = textContent.split(paramRegex);
+
+            for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+                const part = parts[partIndex];
+                if (!part) continue;
+
+                const isParameter = /^\{[^}]+\}$/.test(part);
+
+                doc.setFont(undefined, fontStyle);
+                if (isParameter) {
+                    doc.setTextColor(234, 88, 12); // Orange color for parameters
+
+                    // Render parameter as a single unit (no trailing space)
+                    const partWidth = doc.getTextWidth(part);
+                    if (currentX + partWidth > startX + maxWidth) {
+                        currentY += lineHeight;
+                        currentX = startX;
+                        checkPageBreak();
+                    }
+                    doc.text(part, currentX, currentY);
+                    currentX += partWidth;
+                } else {
+                    doc.setTextColor(0); // Black for regular text
+
+                    // Process regular text word by word
+                    const words = part.split(' ');
+                    for (let i = 0; i < words.length; i++) {
+                        const word = words[i];
+                        if (!word) {
+                            // Empty string means there was a space - add space width
+                            if (i > 0 || partIndex > 0) {
+                                const spaceWidth = doc.getTextWidth(' ');
+                                currentX += spaceWidth;
+                            }
+                            continue;
+                        }
+
+                        // Add space before word if not at start and previous was non-empty
+                        const needsLeadingSpace = i > 0 && words[i - 1] !== '';
+                        const textToRender = needsLeadingSpace ? ' ' + word : word;
+                        const wordWidth = doc.getTextWidth(textToRender);
+
+                        if (currentX + wordWidth > startX + maxWidth) {
+                            currentY += lineHeight;
+                            currentX = startX;
+                            checkPageBreak();
+                            // Don't add leading space at start of new line
+                            const trimmedText = textToRender.trimStart();
+                            doc.text(trimmedText, currentX, currentY);
+                            currentX += doc.getTextWidth(trimmedText);
+                        } else {
+                            doc.text(textToRender, currentX, currentY);
+                            currentX += wordWidth;
+                        }
+                    }
                 }
-                doc.text(wordWithSpace, currentX, currentY);
-                currentX += wordWidth;
             }
         } else {
             for (const child of Array.from(node.childNodes)) {
