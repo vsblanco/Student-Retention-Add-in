@@ -18,7 +18,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [isConnected, setIsConnected] = useState(false);
     const [setupUrl, setSetupUrl] = useState('');
     const [setupStatus, setSetupStatus] = useState('');
-    const [mode, setMode] = useState('individual'); // 'individual' or 'powerautomate'
+    const [mode, setMode] = useState(null); // null (loading), 'individual', or 'powerautomate'
     const [userEmail, setUserEmail] = useState('');
     const [localAccessToken, setLocalAccessToken] = useState(accessToken);
     const [consentStatus, setConsentStatus] = useState(null); // null, 'checking', 'granted', 'required'
@@ -48,8 +48,10 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [lastFocusedInput, setLastFocusedInput] = useState(null);
     const [showMoreParams, setShowMoreParams] = useState(false);
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
+    const [showSendContextMenu, setShowSendContextMenu] = useState(false);
     const quillRef = useRef(null);
     const recipientButtonRef = useRef(null);
+    const sendButtonRef = useRef(null);
 
     // Modal states
     const [showExampleModal, setShowExampleModal] = useState(false);
@@ -59,6 +61,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
+
+    // Pre-loaded templates state
+    const [templates, setTemplates] = useState(null); // null = loading, [] = loaded (empty or with data)
 
     // Check for existing connection on mount
     useEffect(() => {
@@ -74,9 +79,13 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 console.error('Error loading user email:', error);
             }
 
-            await checkConnection();
-            await loadCustomParameters();
-            // Call onReady after connection check is complete
+            // Load connection, custom parameters, and templates in parallel
+            await Promise.all([
+                checkConnection(),
+                loadCustomParameters(),
+                loadTemplates()
+            ]);
+            // Call onReady after all initialization is complete
             if (onReady) onReady();
         };
         initializeComponent();
@@ -111,7 +120,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     // Check consent status in individual mode
     useEffect(() => {
         const checkConsentStatus = async () => {
-            // Only check in individual mode
+            // Skip if mode hasn't been determined yet
+            if (mode === null) {
+                return;
+            }
+
+            // Only check consent in individual mode
             if (mode !== 'individual') {
                 setConsentStatus('granted');
                 return;
@@ -166,6 +180,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             checkConsentStatus();
         }
     }, [mode, localAccessToken]);
+
+    // Close send context menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showSendContextMenu && sendButtonRef.current && !sendButtonRef.current.parentElement.contains(event.target)) {
+                setShowSendContextMenu(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showSendContextMenu]);
 
     // Setup automatic parameter highlighting
     useEffect(() => {
@@ -310,6 +336,22 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const loadCustomParameters = async () => {
         const params = await getCustomParameters();
         setCustomParameters(params);
+    };
+
+    const loadTemplates = async () => {
+        try {
+            const loadedTemplates = await Excel.run(async (context) => {
+                const settings = context.workbook.settings;
+                const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
+                templatesSetting.load("value");
+                await context.sync();
+                return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
+            });
+            setTemplates(loadedTemplates);
+        } catch (error) {
+            console.error('Error loading templates:', error);
+            setTemplates([]); // Set to empty array on error so we don't block loading
+        }
     };
 
     const getCustomParameters = async () => {
@@ -984,6 +1026,127 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
     };
 
+    const handleSendTestEmail = async () => {
+        setShowSendContextMenu(false);
+
+        // Validate we have minimum required fields (From, Subject, Body)
+        const from = fromPills[0] || '';
+        if (!from.trim() || !subject.trim() || !body.trim()) {
+            setStatus('Please fill in From, Subject, and Body to send a test email.');
+            return;
+        }
+
+        if (!userEmail) {
+            setStatus('Unable to determine your email address. Please sign in again.');
+            return;
+        }
+
+        // Ensure student data is loaded
+        await ensureStudentDataLoaded();
+
+        // Pick a random student for parameter replacement, or use a placeholder if no students
+        let testStudent;
+        if (studentDataCache.length > 0) {
+            const randomIndex = Math.floor(Math.random() * studentDataCache.length);
+            testStudent = studentDataCache[randomIndex];
+        } else {
+            // Create placeholder student data if no students selected
+            testStudent = {
+                StudentEmail: userEmail,
+                FirstName: 'Test',
+                LastName: 'Student',
+                StudentName: 'Test Student'
+            };
+        }
+
+        // Generate single test email payload with user's email as recipient
+        const fromTemplate = fromPills[0] || '';
+        const cleanBodyHtml = stripParameterBackgrounds(body);
+
+        const testPayload = [{
+            from: renderTemplate(fromTemplate, testStudent),
+            to: userEmail, // Always send to the logged-in user
+            cc: renderCCTemplate(ccPills, testStudent),
+            subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
+            body: renderTemplate(cleanBodyHtml, testStudent)
+        }];
+
+        setLastSentPayload(testPayload);
+        setStatus('Sending test email to yourself...');
+
+        try {
+            if (mode === 'individual') {
+                // Get fresh token and send via Graph API
+                const newToken = await Office.auth.getAccessToken({
+                    allowSignInPrompt: false,
+                    forMSGraphAccess: true
+                });
+
+                const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: newToken })
+                });
+
+                const responseData = await tokenExchangeResponse.json();
+                if (!tokenExchangeResponse.ok) {
+                    throw new Error(`Token exchange failed: ${responseData.error || responseData.details || 'Unknown error'}`);
+                }
+
+                const { accessToken: graphToken } = responseData;
+
+                // Send single test email
+                const email = testPayload[0];
+                const ccRecipients = email.cc
+                    ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
+                        emailAddress: { address: addr }
+                    }))
+                    : [];
+
+                const graphPayload = {
+                    message: {
+                        subject: email.subject,
+                        body: { contentType: 'HTML', content: email.body },
+                        toRecipients: [{ emailAddress: { address: email.to } }],
+                        ccRecipients: ccRecipients
+                    },
+                    saveToSentItems: true
+                };
+
+                const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${graphToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(graphPayload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                setStatus(`Test email sent to ${userEmail}!`);
+            } else if (mode === 'powerautomate') {
+                // Send via Power Automate
+                const response = await fetch(powerAutomateConnection.url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testPayload)
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                setStatus(`Test email sent to ${userEmail}!`);
+            } else {
+                setStatus('Invalid sending mode. Please refresh and try again.');
+            }
+        } catch (error) {
+            setStatus(`Failed to send test email: ${error.message}`);
+            console.error("Error sending test email:", error);
+        }
+    };
+
     const isFormValid = () => {
         const from = fromPills[0] || '';
         const isFromValid = from && from.trim() !== '';
@@ -1030,6 +1193,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             </button>
         );
     };
+
+    // Show loading screen while checking connection/mode or loading templates
+    if (mode === null || templates === null) {
+        return (
+            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     // Show loading screen while checking consent
     if (consentStatus === 'checking') {
@@ -1250,7 +1425,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 {user !== 'Guest' && (
                     <div className="relative w-1/2 group">
                         <button
+                            ref={sendButtonRef}
                             onClick={handleOpenConfirmModal}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                setShowSendContextMenu(true);
+                            }}
                             disabled={!isFormValid()}
                             className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
@@ -1260,6 +1440,17 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                             <span className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-md p-2 text-center">
                                 {getValidationMessage()}
                             </span>
+                        )}
+                        {/* Context Menu for Send Button */}
+                        {showSendContextMenu && (
+                            <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                                <button
+                                    onClick={handleSendTestEmail}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 rounded-lg"
+                                >
+                                    Send Test Email to myself
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
@@ -1291,10 +1482,13 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 isOpen={showTemplatesModal}
                 onClose={() => setShowTemplatesModal(false)}
                 user={user}
+                userEmail={userEmail}
                 currentFrom={fromPills[0] || ''}
                 currentSubject={subject}
                 currentBody={body}
                 currentCC={ccPills}
+                templates={templates}
+                onTemplatesChange={setTemplates}
                 onLoadTemplate={(template) => {
                     setFromPills([template.from]);
                     setSubject(template.subject);

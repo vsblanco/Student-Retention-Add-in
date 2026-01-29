@@ -1,43 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { EMAIL_TEMPLATES_KEY } from '../utils/constants';
 
-export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, currentFrom, currentSubject, currentBody, currentCC }) {
-    const [templates, setTemplates] = useState([]);
+export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, userEmail, currentFrom, currentSubject, currentBody, currentCC, templates, onTemplatesChange }) {
     const [expandedAuthors, setExpandedAuthors] = useState(new Set());
     const [showSaveModal, setShowSaveModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templateName, setTemplateName] = useState('');
+    const [customAuthor, setCustomAuthor] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
 
     const isGuest = user === 'Guest';
-
-    useEffect(() => {
-        if (isOpen) {
-            loadTemplates();
-        }
-    }, [isOpen]);
-
-    const loadTemplates = async () => {
-        const loaded = await getTemplates();
-        setTemplates(loaded);
-    };
-
-    const getTemplates = async () => {
-        return Excel.run(async (context) => {
-            const settings = context.workbook.settings;
-            const templatesSetting = settings.getItemOrNullObject(EMAIL_TEMPLATES_KEY);
-            templatesSetting.load("value");
-            await context.sync();
-            return templatesSetting.value ? JSON.parse(templatesSetting.value) : [];
-        });
-    };
+    const canEditAuthor = userEmail?.toLowerCase() === 'vblanco1@ftccollege.edu';
 
     const saveTemplates = async (templatesArray) => {
         await Excel.run(async (context) => {
             context.workbook.settings.add(EMAIL_TEMPLATES_KEY, JSON.stringify(templatesArray));
             await context.sync();
         });
-        setTemplates(templatesArray);
+        onTemplatesChange(templatesArray);
     };
 
     const toggleAuthor = (author) => {
@@ -58,6 +38,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
     const handleEditTemplate = (template) => {
         setEditingTemplate(template);
         setTemplateName(template.name);
+        setCustomAuthor(template.author || user || 'Unknown');
         setShowSaveModal(true);
     };
 
@@ -73,9 +54,11 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
             return;
         }
 
+        const authorToUse = canEditAuthor ? (customAuthor.trim() || user || 'Unknown') : (user || 'Unknown');
+
         const templateData = {
             name: templateName.trim(),
-            author: user || 'Unknown',
+            author: authorToUse,
             from: currentFrom,
             subject: currentSubject,
             body: currentBody,
@@ -186,6 +169,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                                 onClick={() => {
                                     setEditingTemplate(null);
                                     setTemplateName('');
+                                    setCustomAuthor(user || 'Unknown');
                                     setShowSaveModal(true);
                                 }}
                                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
@@ -228,9 +212,19 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                                 <label className="block text-sm font-medium text-gray-700">
                                     Author
                                 </label>
-                                <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700">
-                                    {user || 'Unknown'}
-                                </div>
+                                {canEditAuthor ? (
+                                    <input
+                                        type="text"
+                                        value={customAuthor}
+                                        onChange={(e) => setCustomAuthor(e.target.value)}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+                                        placeholder="Enter author name"
+                                    />
+                                ) : (
+                                    <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700">
+                                        {user || 'Unknown'}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         <p className="text-xs mt-2 h-4 text-center text-red-600">{saveStatus}</p>
