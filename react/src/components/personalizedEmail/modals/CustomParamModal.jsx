@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { MAPPING_OPERATORS, MINI_QUILL_EDITOR_CONFIG, standardParameters } from '../utils/constants';
+import { MAPPING_OPERATORS, MINI_QUILL_EDITOR_CONFIG, standardParameters, specialParameters } from '../utils/constants';
 
 export default function CustomParamModal({ isOpen, onClose, customParameters, onSave }) {
     const [showManageModal, setShowManageModal] = useState(false);
@@ -292,6 +292,20 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                                                 focusedMappingIndex === null
                                                     ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                            }`}
+                                        >
+                                            {`{${param}}`}
+                                        </button>
+                                    ))}
+                                    {specialParameters.map(param => (
+                                        <button
+                                            key={param}
+                                            onClick={() => insertParameterToMapping(`{${param}}`)}
+                                            disabled={focusedMappingIndex === null}
+                                            className={`px-2 py-1 text-xs rounded ${
+                                                focusedMappingIndex === null
+                                                    ? 'bg-orange-50 text-orange-300 cursor-not-allowed'
+                                                    : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
                                             }`}
                                         >
                                             {`{${param}}`}
