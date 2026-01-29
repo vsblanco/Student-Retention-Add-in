@@ -272,7 +272,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         if (mode === 'individual' && userEmail && fromPills.length === 0) {
             setFromPills([userEmail]);
         }
-    }, [mode, userEmail]);
+    }, [mode, userEmail, fromPills.length]);
 
     const checkConnection = async () => {
         await Excel.run(async (context) => {
