@@ -161,8 +161,8 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
 
     // Create/Edit Parameter View
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 overflow-y-auto p-4">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-8">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-start justify-center z-50 overflow-y-auto p-4">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-8 max-h-[calc(100vh-4rem)] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold text-gray-800">
                         {editingParam ? 'Edit Custom Parameter' : 'Create Custom Parameter'}
