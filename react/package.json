@@ -13,7 +13,7 @@
     "exceljs": "^4.4.0",
     "github-markdown-css": "^5.8.1",
     "jspdf": "^3.0.4",
-    "jspdf-autotable": "^5.0.2",
+    "jspdf-autotable": "^5.0.7",
     "liquid-glass-react": "^1.1.1",
     "lucide-react": "^0.545.0",
     "marked": "^16.3.0",

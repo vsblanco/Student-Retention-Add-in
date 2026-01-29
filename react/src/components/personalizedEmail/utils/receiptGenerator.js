@@ -1,3 +1,5 @@
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { getTodaysLdaSheetName } from './helpers';
 
 /**
@@ -120,7 +122,6 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
     }
 
     try {
-        const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: "portrait", unit: "px", format: "letter" });
 
         const pageWidth = doc.internal.pageSize.getWidth();
