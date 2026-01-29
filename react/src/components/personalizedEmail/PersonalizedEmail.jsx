@@ -1110,7 +1110,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             emails: [{
                 from: testFromEmail,
                 to: userEmail, // Always send to the logged-in user
-                cc: renderCCTemplate(ccPills, testStudent),
+                cc: '', // Don't CC anyone on test emails
                 subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
                 body: renderTemplate(cleanBodyHtml, testStudent)
             }]
