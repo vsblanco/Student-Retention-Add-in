@@ -525,6 +525,20 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                                 const daysOut = parseInt(student.DaysOut, 10) || 0;
                                 const daysLeft = Math.max(0, 14 - daysOut);
                                 student.DaysLeft = daysLeft.toString();
+                            } else if (paramName === 'Salutation') {
+                                // Get time-based greeting
+                                const hour = new Date().getHours();
+                                let timeGreeting;
+                                if (hour < 12) {
+                                    timeGreeting = 'Good Morning';
+                                } else if (hour < 17) {
+                                    timeGreeting = 'Good Afternoon';
+                                } else {
+                                    timeGreeting = 'Good Evening';
+                                }
+                                // Randomly pick from greetings including time-based one
+                                const greetings = ['Dear', 'Hello', 'Greetings', timeGreeting];
+                                student.Salutation = greetings[Math.floor(Math.random() * greetings.length)];
                             }
                         }
                     }
