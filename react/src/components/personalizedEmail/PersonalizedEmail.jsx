@@ -827,7 +827,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccPills, student),
             subject: renderTemplate(subject, student),
-            body: renderTemplate(cleanBodyHtml, student)
+            body: renderTemplate(cleanBodyHtml, student),
+            by: userEmail || ''
         })).filter(email => email.to && email.from);
     };
 
@@ -1068,7 +1069,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             to: userEmail, // Always send to the logged-in user
             cc: renderCCTemplate(ccPills, testStudent),
             subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
-            body: renderTemplate(cleanBodyHtml, testStudent)
+            body: renderTemplate(cleanBodyHtml, testStudent),
+            by: userEmail || ''
         }];
 
         setLastSentPayload(testPayload);
