@@ -531,17 +531,19 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         const colIndex = customParamIndices[param.name];
                         if (colIndex !== undefined) {
                             const cellValue = row[colIndex] ?? '';
-                            let mappingFound = false;
-                            if (param.mappings && cellValue !== '') {
+                            // If no mappings configured, use the raw cell value
+                            if (!param.mappings || param.mappings.length === 0) {
+                                value = cellValue;
+                            } else if (cellValue !== '') {
+                                // If mappings exist, try to find a match
                                 for (const mapping of param.mappings) {
                                     if (evaluateMapping(cellValue, mapping)) {
                                         value = mapping.then;
-                                        mappingFound = true;
                                         break;
                                     }
                                 }
+                                // If no mapping matches, leave value blank (empty string)
                             }
-                            // If no mapping matches, leave value blank (empty string)
                         }
                         student[param.name] = value;
                     }
