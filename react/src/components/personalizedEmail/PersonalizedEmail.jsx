@@ -520,6 +520,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                                 } else {
                                     student.MissingAssignmentsList = '';
                                 }
+                            } else if (paramName === 'DaysLeft') {
+                                // Calculate DaysLeft as 14 - DaysOut, defaulting to 0 if negative
+                                const daysOut = parseInt(student.DaysOut, 10) || 0;
+                                const daysLeft = Math.max(0, 14 - daysOut);
+                                student.DaysLeft = daysLeft.toString();
                             }
                         }
                     }

@@ -6,7 +6,7 @@ export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 export const standardParameters = ['FirstName', 'LastName', 'StudentEmail', 'PersonalEmail', 'Grade', 'DaysOut', 'Assigned'];
 
 // Special built-in parameters (more advanced, dynamically generated)
-export const specialParameters = ['MissingAssignmentsList'];
+export const specialParameters = ['MissingAssignmentsList', 'DaysLeft'];
 
 // Configuration for the main rich text editor
 export const QUILL_EDITOR_CONFIG = {
