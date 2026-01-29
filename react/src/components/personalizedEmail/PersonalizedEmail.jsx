@@ -692,11 +692,16 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 color: colors.color
             });
 
-            // Move cursor after the inserted parameter and reset formatting
-            const newPosition = range.index + param.length;
-            editor.setSelection(newPosition);
-            editor.format('background', false);
-            editor.format('color', false);
+            // Insert a zero-width space after the parameter without formatting
+            // This creates a buffer that prevents the cursor from picking up the highlight
+            const bufferPosition = range.index + param.length;
+            editor.insertText(bufferPosition, '\u200B', {
+                background: false,
+                color: false
+            });
+
+            // Move cursor after the buffer
+            editor.setSelection(bufferPosition + 1);
         } else if (lastFocusedInput === 'from') {
             setFromPills([param]);
         } else if (lastFocusedInput === 'cc') {
@@ -727,11 +732,15 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 color: colors.color
             });
 
-            // Move cursor after the inserted parameter and reset formatting
-            const newPosition = insertPosition + param.length;
-            editor.setSelection(newPosition);
-            editor.format('background', false);
-            editor.format('color', false);
+            // Insert a zero-width space after the parameter without formatting
+            const bufferPosition = insertPosition + param.length;
+            editor.insertText(bufferPosition, '\u200B', {
+                background: false,
+                color: false
+            });
+
+            // Move cursor after the buffer
+            editor.setSelection(bufferPosition + 1);
         }
     };
 
