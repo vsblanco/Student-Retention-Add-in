@@ -824,15 +824,19 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         // Strip parameter backgrounds from body before rendering
         const cleanBodyHtml = stripParameterBackgrounds(body);
 
-        return studentDataCache.map(student => ({
+        const emails = studentDataCache.map(student => ({
             from: renderTemplate(fromTemplate, student),
             to: student.StudentEmail || '',
             cc: renderCCTemplate(ccPills, student),
             subject: renderTemplate(subject, student),
-            body: renderTemplate(cleanBodyHtml, student),
-            byName: user || '',
-            byEmail: userEmail || ''
+            body: renderTemplate(cleanBodyHtml, student)
         })).filter(email => email.to && email.from);
+
+        return {
+            byName: user || '',
+            byEmail: userEmail || '',
+            emails: emails
+        };
     };
 
     const showConsentDialog = () => {
@@ -882,7 +886,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const payload = generatePayload();
         setLastSentPayload(payload);
 
-        if (payload.length === 0) {
+        if (payload.emails.length === 0) {
             setStatus('No students with valid "To" and "From" email addresses found.');
             return;
         }
@@ -921,7 +925,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             const { accessToken: graphToken } = responseData;
 
             // Step 3: Send emails using Graph API token
-            await sendEmailsWithGraphToken(graphToken, payload, setStatus, successCount, failureCount, errors);
+            await sendEmailsWithGraphToken(graphToken, payload.emails, setStatus, successCount, failureCount, errors);
 
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
@@ -929,10 +933,10 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
     };
 
-    const sendEmailsWithGraphToken = async (graphToken, payload, setStatus, successCount, failureCount, errors) => {
-        setStatus(`Sending ${payload.length} emails...`);
+    const sendEmailsWithGraphToken = async (graphToken, emails, setStatus, successCount, failureCount, errors) => {
+        setStatus(`Sending ${emails.length} emails...`);
 
-        for (const email of payload) {
+        for (const email of emails) {
             try {
                 // Parse CC recipients
                 const ccRecipients = email.cc
@@ -976,7 +980,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 }
 
                 successCount++;
-                setStatus(`Sent ${successCount} of ${payload.length} emails...`);
+                setStatus(`Sent ${successCount} of ${emails.length} emails...`);
             } catch (error) {
                 failureCount++;
                 errors.push({ to: email.to, error: error.message });
@@ -1000,7 +1004,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const payload = generatePayload();
         setLastSentPayload(payload);
 
-        if (payload.length === 0) {
+        if (payload.emails.length === 0) {
             setStatus('No students with valid "To" and "From" email addresses found.');
             return;
         }
@@ -1012,7 +1016,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 body: JSON.stringify(payload)
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            setStatus(`Successfully sent ${payload.length} emails!`);
+            setStatus(`Successfully sent ${payload.emails.length} emails!`);
             setShowSuccessModal(true);
         } catch (error) {
             setStatus(`Failed to send emails: ${error.message}`);
@@ -1067,15 +1071,17 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const fromTemplate = fromPills[0] || '';
         const cleanBodyHtml = stripParameterBackgrounds(body);
 
-        const testPayload = [{
-            from: renderTemplate(fromTemplate, testStudent),
-            to: userEmail, // Always send to the logged-in user
-            cc: renderCCTemplate(ccPills, testStudent),
-            subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
-            body: renderTemplate(cleanBodyHtml, testStudent),
+        const testPayload = {
             byName: user || '',
-            byEmail: userEmail || ''
-        }];
+            byEmail: userEmail || '',
+            emails: [{
+                from: renderTemplate(fromTemplate, testStudent),
+                to: userEmail, // Always send to the logged-in user
+                cc: renderCCTemplate(ccPills, testStudent),
+                subject: `[TEST] ${renderTemplate(subject, testStudent)}`,
+                body: renderTemplate(cleanBodyHtml, testStudent)
+            }]
+        };
 
         setLastSentPayload(testPayload);
         setStatus('Sending test email to yourself...');
@@ -1102,7 +1108,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 const { accessToken: graphToken } = responseData;
 
                 // Send single test email
-                const email = testPayload[0];
+                const email = testPayload.emails[0];
                 const ccRecipients = email.cc
                     ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
                         emailAddress: { address: addr }
