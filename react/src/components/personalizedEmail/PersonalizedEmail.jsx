@@ -1002,18 +1002,34 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         setStatus(`Sending ${studentDataCache.length} emails...`);
 
         const payload = generatePayload();
-        setLastSentPayload(payload);
 
         if (payload.emails.length === 0) {
             setStatus('No students with valid "To" and "From" email addresses found.');
             return;
         }
 
+        // Generate base64 PDF receipt to include in payload
+        const initiator = { name: user, email: userEmail };
+        const receiptBase64 = generatePdfReceipt(
+            payload.emails,
+            body,
+            initiator,
+            true // returnBase64
+        );
+
+        // Add receipt to payload
+        const payloadWithReceipt = {
+            ...payload,
+            receipt: receiptBase64 || ''
+        };
+
+        setLastSentPayload(payloadWithReceipt);
+
         try {
             const response = await fetch(powerAutomateConnection.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payloadWithReceipt)
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             setStatus(`Successfully sent ${payload.emails.length} emails!`);
@@ -1141,11 +1157,26 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                 setStatus(`Test email sent to ${userEmail}!`);
             } else if (mode === 'powerautomate') {
+                // Generate base64 PDF receipt for test email
+                const initiator = { name: user, email: userEmail };
+                const receiptBase64 = generatePdfReceipt(
+                    testPayload.emails,
+                    body,
+                    initiator,
+                    true // returnBase64
+                );
+
+                // Add receipt to payload
+                const testPayloadWithReceipt = {
+                    ...testPayload,
+                    receipt: receiptBase64 || ''
+                };
+
                 // Send via Power Automate
                 const response = await fetch(powerAutomateConnection.url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(testPayload)
+                    body: JSON.stringify(testPayloadWithReceipt)
                 });
 
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -1535,9 +1566,10 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             <SuccessModal
                 isOpen={showSuccessModal}
                 onClose={() => setShowSuccessModal(false)}
-                count={lastSentPayload.length}
+                count={lastSentPayload?.emails?.length || 0}
                 payload={lastSentPayload}
                 bodyTemplate={body}
+                initiator={{ name: user, email: userEmail }}
             />
         </div>
     );
