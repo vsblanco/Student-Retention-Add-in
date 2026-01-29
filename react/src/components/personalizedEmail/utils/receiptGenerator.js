@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { getTodaysLdaSheetName } from './helpers';
 
 /**
@@ -229,7 +229,7 @@ export function generatePdfReceipt(emails, bodyTemplate, initiator = {}, returnB
             email.subject.substring(0, 45) + (email.subject.length > 45 ? '...' : '')
         ]);
 
-        doc.autoTable({
+        autoTable(doc, {
             head: [tableColumn],
             body: tableRows,
             startY: currentY,
