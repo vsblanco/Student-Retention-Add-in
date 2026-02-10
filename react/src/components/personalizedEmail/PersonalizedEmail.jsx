@@ -457,8 +457,21 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 }
 
                 const sheet = context.workbook.worksheets.getItem(sheetName);
-                const usedRange = sheet.getUsedRange();
-                const cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
+                const usedRange = sheet.getUsedRangeOrNullObject();
+                usedRange.load("isNullObject");
+                await context.sync();
+
+                if (usedRange.isNullObject) {
+                    const err = new Error(`Sheet "${sheetName}" is empty — no data found.`);
+                    err.userFacing = true;
+                    throw err;
+                }
+
+                // Only load cell properties (fill colors) when the exclusion toggle is on
+                let cellProperties = null;
+                if (excludeFillColor) {
+                    cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
+                }
 
                 // Only load formulas if we need to process special parameters
                 if (skipSpecialParams) {
@@ -470,7 +483,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                 const values = usedRange.values;
                 const formulas = skipSpecialParams ? null : usedRange.formulas;
-                const formats = cellProperties.value;
+                const formats = cellProperties ? cellProperties.value : null;
                 const headers = values[0].map(h => String(h ?? '').toLowerCase());
 
                 const colIndices = {};
@@ -504,7 +517,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         }
                     }
 
-                    if (excludeFillColor && colIndices.Outreach !== -1) {
+                    if (excludeFillColor && formats && colIndices.Outreach !== -1) {
                         const cellFormat = formats[i]?.[colIndices.Outreach];
                         const cellColor = cellFormat?.format.fill.color;
                         if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
@@ -594,7 +607,14 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         } catch (error) {
             if (error.code === 'ItemNotFound') {
                 error.userFacingMessage = `Error: Sheet "${sheetName}" not found.`;
+            } else if (error.userFacing) {
+                error.userFacingMessage = error.message;
+            } else if (error.code === 'InvalidArgument' || error.code === 'GeneralException') {
+                error.userFacingMessage = `Error reading "${sheetName}": ${error.message || 'The sheet may be too large or empty.'}`;
+            } else {
+                error.userFacingMessage = `Error: ${error.message || 'An unknown error occurred while reading the sheet.'}`;
             }
+            console.error(`[PersonalizedEmail] getStudentDataCore error on sheet "${sheetName}":`, error);
             throw error;
         }
     };
