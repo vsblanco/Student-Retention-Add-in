@@ -40,7 +40,40 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// Power Automate config modal state
 	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
 
-	const openArrayModal = (setting, currentValue, updater) => {
+	// master list headers read from the active workbook (populated when columns modal opens)
+	const [masterListHeaders, setMasterListHeaders] = useState(null);
+
+	// read headers from the "Master List" worksheet via Excel API
+	const readMasterListHeaders = async () => {
+		try {
+			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
+				const headers = await Excel.run(async (context) => {
+					const sheet = context.workbook.worksheets.getItemOrNullObject('Master List');
+					await context.sync();
+					if (sheet.isNullObject) return null;
+					const used = sheet.getUsedRangeOrNullObject();
+					used.load('values');
+					await context.sync();
+					if (used.isNullObject || !used.values || used.values.length === 0) return null;
+					return used.values[0].map(v => (v == null ? '' : String(v).trim())).filter(Boolean);
+				});
+				return headers;
+			}
+		} catch (err) {
+			console.warn('Failed to read Master List headers', err);
+		}
+		return null;
+	};
+
+	const openArrayModal = async (setting, currentValue, updater) => {
+		// if this is the columns setting, read master list headers first
+		if (setting.id === 'columns') {
+			const headers = await readMasterListHeaders();
+			setMasterListHeaders(headers); // null means no master list found (show all)
+		} else {
+			setMasterListHeaders(null);
+		}
+
 		setModalSetting(setting);
 		// normalize items to objects: { name: string, alias: string[], edit: 'name'|'alias', static: boolean }
 		const normalized = Array.isArray(currentValue)
@@ -541,6 +574,8 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				saveModal={saveModal}
 				// provide current workbook columns so modal uses document columns instead of defaults
 				workbookColumns={workbookSettingsState.columns}
+				// master list headers to filter which columns are shown (null = show all)
+				masterListHeaders={masterListHeaders}
 			/>
 			{/* pass the document key constant so the modal can read the workbook-specific mapping */}
 			<WorkbookSettingsModal isOpen={workbookModalOpen} onClose={() => setWorkbookModalOpen(false)} docKey={DOC_KEY} />
