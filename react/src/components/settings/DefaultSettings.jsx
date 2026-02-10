@@ -1,5 +1,4 @@
 import React from 'react';
-import importIcon from '../../assets/icons/import-icon.png';
 import createLdaIcon from '../../assets/icons/create-lda-icon.png';
 
 export const defaultColumns =[
@@ -38,7 +37,7 @@ export const defaultWorkbookSettings = [
 		choices: defaultColumns,
 		options: Options,
 		defaultValue: [],
-		section: 'Import Data',
+		section: 'Create LDA',
 		description: 'List of columns to format in the master list.'
 	},
 	{
@@ -98,7 +97,6 @@ export const defaultUserSettings = [
 
 // export lucide-react icons keyed by section name
 export const sectionIcons = {
-	'Import Data': <img src={importIcon} alt="Import" style={{ width: 16, height: 16 }} aria-hidden="true" />,
 	'Create LDA': <img src={createLdaIcon} alt="Create LDA" style={{ width: 16, height: 16 }} aria-hidden="true" />,
 	'Send Emails': (
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
