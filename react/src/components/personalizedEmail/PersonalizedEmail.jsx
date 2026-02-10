@@ -399,7 +399,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
     };
 
-    const getStudentDataCore = async (selection, skipSpecialParams = false, specialParamsToProcess = []) => {
+    const getStudentDataCore = async (selection, skipSpecialParams = false, specialParamsToProcess = [], onProgress = null) => {
         const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
         let sheetName;
 
@@ -420,6 +420,16 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
         try {
             await Excel.run(async (context) => {
+                // Progress tracking for counting stages
+                let totalStages = 2; // load sheet data + process students
+                if (excludeDNC) totalStages++;
+                if (excludeFillColor) totalStages++;
+                let completedStages = 0;
+                const reportProgress = () => {
+                    completedStages++;
+                    if (onProgress) onProgress(Math.round((completedStages / totalStages) * 100));
+                };
+
                 const dncStudentIdentifiers = new Set();
 
                 if (excludeDNC) {
@@ -454,6 +464,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     } catch (error) {
                         console.error("Could not process 'Student History' sheet for DNC exclusion.", error);
                     }
+                    reportProgress();
                 }
 
                 const sheet = context.workbook.worksheets.getItem(sheetName);
@@ -466,6 +477,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     usedRange.load("values, formulas, rowCount, columnCount, isNullObject");
                 }
                 await context.sync();
+                reportProgress();
 
                 if (usedRange.isNullObject) {
                     const err = new Error(`Sheet "${sheetName}" is empty — no data found.`);
@@ -488,6 +500,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         await context.sync();
                         outreachColors = colProps.value; // array of [{format:{fill:{color}}}] per row
                     }
+                    reportProgress();
                 }
 
                 const colIndices = {};
@@ -613,6 +626,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                     includedStudents.push(student);
                 }
+                reportProgress();
             });
             return { included: includedStudents, excluded: excludedStudents };
         } catch (error) {
