@@ -458,7 +458,13 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                 const sheet = context.workbook.worksheets.getItem(sheetName);
                 const usedRange = sheet.getUsedRangeOrNullObject();
-                usedRange.load("isNullObject");
+
+                // Only load formulas if we need to process special parameters
+                if (skipSpecialParams) {
+                    usedRange.load("values, rowCount, columnCount, isNullObject");
+                } else {
+                    usedRange.load("values, formulas, rowCount, columnCount, isNullObject");
+                }
                 await context.sync();
 
                 if (usedRange.isNullObject) {
@@ -467,24 +473,22 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     throw err;
                 }
 
-                // Only load cell properties (fill colors) when the exclusion toggle is on
-                let cellProperties = null;
-                if (excludeFillColor) {
-                    cellProperties = usedRange.getCellProperties({ format: { fill: { color: true } } });
-                }
-
-                // Only load formulas if we need to process special parameters
-                if (skipSpecialParams) {
-                    usedRange.load("values");
-                } else {
-                    usedRange.load("values, formulas");
-                }
-                await context.sync();
-
                 const values = usedRange.values;
                 const formulas = skipSpecialParams ? null : usedRange.formulas;
-                const formats = cellProperties ? cellProperties.value : null;
                 const headers = values[0].map(h => String(h ?? '').toLowerCase());
+
+                // Load fill colors for ONLY the Outreach column (not entire sheet)
+                // to avoid exceeding the response payload size limit
+                let outreachColors = null;
+                if (excludeFillColor) {
+                    const outreachIdx = findColumnIndex(headers, COLUMN_MAPPINGS.Outreach);
+                    if (outreachIdx !== -1) {
+                        const outreachCol = sheet.getRangeByIndexes(0, outreachIdx, usedRange.rowCount, 1);
+                        const colProps = outreachCol.getCellProperties({ format: { fill: { color: true } } });
+                        await context.sync();
+                        outreachColors = colProps.value; // array of [{format:{fill:{color}}}] per row
+                    }
+                }
 
                 const colIndices = {};
                 for (const key in COLUMN_MAPPINGS) {
@@ -517,9 +521,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         }
                     }
 
-                    if (excludeFillColor && formats && colIndices.Outreach !== -1) {
-                        const cellFormat = formats[i]?.[colIndices.Outreach];
-                        const cellColor = cellFormat?.format.fill.color;
+                    if (excludeFillColor && outreachColors) {
+                        const cellColor = outreachColors[i]?.[0]?.format?.fill?.color;
                         if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
                             excludedStudents.push({ name: studentNameForRow, reason: 'Fill Color' });
                             continue;
