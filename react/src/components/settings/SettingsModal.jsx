@@ -60,7 +60,7 @@ export default SettingsModal;
 // Replace the existing EditableArrayInner component with this updated version
 const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null }) => {
 	const [selectedIdx, setSelectedIdx] = React.useState(0);
-	const [viewMode, setViewMode] = React.useState('choices');
+	const [viewMode, setViewMode] = React.useState('choices'); // 'choices' | 'options' | 'add'
 	const [editableMap, setEditableMap] = React.useState({});
 	const [hoverIdx, setHoverIdx] = React.useState(null);
 	const [orderMap, setOrderMap] = React.useState({});
@@ -73,27 +73,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	const [isDirty, setIsDirty] = React.useState(false);
 	// state to control delete confirmation modal
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-
-	// build a lowercase set of master list headers for fast matching
-	const masterHeaderSet = React.useMemo(() => {
-		if (!Array.isArray(masterListHeaders)) return null; // null = no filtering
-		const s = new Set();
-		masterListHeaders.forEach(h => { if (h) s.add(h.toLowerCase()); });
-		return s;
-	}, [masterListHeaders]);
-
-	// check if a column (by name + aliases) is present on the master list
-	const isOnMasterList = React.useCallback((key) => {
-		if (!masterHeaderSet) return true; // no master list = show all
-		const lk = key.toLowerCase();
-		if (masterHeaderSet.has(lk)) return true;
-		// check aliases from workbook column entry
-		const wbEntry = workbookColumns.find(e => String(e?.name ?? e?.label ?? e).trim().toLowerCase() === lk);
-		if (wbEntry && Array.isArray(wbEntry.alias)) {
-			return wbEntry.alias.some(a => masterHeaderSet.has(String(a).trim().toLowerCase()));
-		}
-		return false;
-	}, [masterHeaderSet, workbookColumns]);
+	// preview state
+	const [previewBusy, setPreviewBusy] = React.useState(false);
 
 	// build quick lookup of workbookColumns by key (name/label)
 	const workbookLookup = React.useMemo(() => {
@@ -369,20 +350,25 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		setViewMode('choices');
 	};
 
-	// compute the visible (filtered) list — only columns present on master list
-	// each entry carries { key, orderIdx } so we can map back to the full orderList
-	const visibleList = React.useMemo(() => {
+	// split orderList into visible (not hidden) and hidden columns
+	const activeList = React.useMemo(() => {
 		return orderList
 			.map((key, idx) => ({ key, orderIdx: idx }))
-			.filter(({ key }) => isOnMasterList(key));
-	}, [orderList, isOnMasterList]);
+			.filter(({ key }) => !editableMap[key]?.hidden);
+	}, [orderList, editableMap]);
 
-	// move a visible-list item up/down within the full orderList
-	const moveVisibleItem = (visIdx, direction) => {
-		const targetVisIdx = visIdx + direction;
-		if (targetVisIdx < 0 || targetVisIdx >= visibleList.length) return;
-		const fromOrderIdx = visibleList[visIdx].orderIdx;
-		const toOrderIdx = visibleList[targetVisIdx].orderIdx;
+	const hiddenList = React.useMemo(() => {
+		return orderList
+			.map((key, idx) => ({ key, orderIdx: idx }))
+			.filter(({ key }) => !!editableMap[key]?.hidden);
+	}, [orderList, editableMap]);
+
+	// move an active-list item up/down within the full orderList
+	const moveActiveItem = (actIdx, direction) => {
+		const targetActIdx = actIdx + direction;
+		if (targetActIdx < 0 || targetActIdx >= activeList.length) return;
+		const fromOrderIdx = activeList[actIdx].orderIdx;
+		const toOrderIdx = activeList[targetActIdx].orderIdx;
 		const next = [...orderList];
 		[next[fromOrderIdx], next[toOrderIdx]] = [next[toOrderIdx], next[fromOrderIdx]];
 		const newOrder = {};
@@ -391,79 +377,257 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		setOrderMap(newOrder);
 	};
 
-	// helper to add a new empty row/column
-	const addNewRow = () => {
-		const base = 'New Column';
-		let counter = 1;
-		let key = base;
-		// ensure uniqueness
-		while (orderList.includes(key)) {
-			counter += 1;
-			key = `${base} ${counter}`;
-		}
-		const next = [...orderList, key];
+	// toggle hidden state for a column
+	const toggleHidden = (key) => {
+		setEditableMap(prev => {
+			const copy = { ...prev };
+			copy[key] = { ...(copy[key] || {}) };
+			if (copy[key].hidden) {
+				delete copy[key].hidden;
+			} else {
+				copy[key].hidden = true;
+			}
+			return copy;
+		});
+	};
+
+	// add a column from the master list (or blank)
+	const addColumn = (name) => {
+		if (orderList.includes(name)) return;
+		const next = [...orderList, name];
 		const newOrderMap = {};
 		next.forEach((k, i) => { newOrderMap[k] = i + 1; });
 		setOrderList(next);
 		setOrderMap(newOrderMap);
-		setEditableMap(prev => ({ ...(prev || {}), [key]: {} }));
-		setSelectedIdx(next.length - 1);
-		setViewMode('options');
-		setTitleInput(key);
-		// mark dirty so Save is enabled
+		// seed from workbook column definition if available
+		const wbEntry = workbookLookup[name];
+		const seed = {};
+		if (wbEntry && typeof wbEntry === 'object') {
+			Object.keys(wbEntry).forEach(k => {
+				if (k !== 'name' && k !== 'label') seed[k] = wbEntry[k];
+			});
+		}
+		// new columns added from picker are visible by default
+		delete seed.hidden;
+		setEditableMap(prev => ({ ...(prev || {}), [name]: seed }));
 		setIsDirty(true);
 	};
 
-	// Render
+	// compute master list columns not already configured (for the add picker)
+	const availableToAdd = React.useMemo(() => {
+		if (!Array.isArray(masterListHeaders)) return [];
+		const existing = new Set(orderList.map(k => k.toLowerCase()));
+		// also check aliases
+		orderList.forEach(k => {
+			const wbEntry = workbookLookup[k];
+			if (wbEntry && Array.isArray(wbEntry.alias)) {
+				wbEntry.alias.forEach(a => existing.add(String(a).trim().toLowerCase()));
+			}
+		});
+		return masterListHeaders.filter(h => h && !existing.has(h.toLowerCase()));
+	}, [masterListHeaders, orderList, workbookLookup]);
+
+	// preview: create a headers-only LDA sheet
+	const createPreview = async () => {
+		if (previewBusy) return;
+		setPreviewBusy(true);
+		try {
+			// first save current state
+			onSave();
+			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
+				await Excel.run(async (context) => {
+					const sheets = context.workbook.worksheets;
+					sheets.load('items/name');
+					await context.sync();
+
+					const today = new Date();
+					const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+					let sheetName = `LDA Preview ${dateStr}`;
+					let counter = 2;
+					const existingNames = sheets.items.map(s => s.name);
+					while (existingNames.includes(sheetName)) {
+						sheetName = `LDA Preview ${dateStr} (${counter++})`;
+					}
+
+					const newSheet = sheets.add(sheetName);
+					// write visible column headers
+					const visibleHeaders = activeList.map(({ key }) => key);
+					// also include hidden columns (they go at the end, hidden in Excel)
+					const hiddenHeaders = hiddenList.map(({ key }) => key);
+					const allHeaders = [...visibleHeaders, ...hiddenHeaders];
+
+					if (allHeaders.length > 0) {
+						const headerRange = newSheet.getRangeByIndexes(0, 0, 1, allHeaders.length);
+						headerRange.values = [allHeaders];
+						headerRange.format.font.bold = true;
+						headerRange.format.autofitColumns();
+
+						// hide the hidden columns
+						if (hiddenHeaders.length > 0) {
+							for (let i = visibleHeaders.length; i < allHeaders.length; i++) {
+								newSheet.getRangeByIndexes(0, i, 1, 1).getEntireColumn().columnHidden = true;
+							}
+						}
+					}
+
+					newSheet.activate();
+					await context.sync();
+				});
+			}
+		} catch (err) {
+			console.warn('Failed to create preview sheet', err);
+		} finally {
+			setPreviewBusy(false);
+		}
+	};
+
+	// eye icon (visible)
+	const EyeIcon = () => (
+		<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+			<circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6"/>
+		</svg>
+	);
+	// eye-off icon (hidden)
+	const EyeOffIcon = () => (
+		<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+			<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 01-4.24-4.24" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+			<line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+		</svg>
+	);
+
+	// Render: add view (pick from master list)
+	if (viewMode === 'add') {
+		return (
+			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto' }}>
+				<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+					<button
+						onClick={() => setViewMode('choices')}
+						style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', background: '#f8fafc', cursor: 'pointer' }}
+					>
+						Back
+					</button>
+					<div style={{ fontWeight: 600, fontSize: 14 }}>Add columns from Master List</div>
+				</div>
+				{availableToAdd.length === 0 ? (
+					<div style={{ color: '#6b7280', fontSize: 13 }}>All Master List columns are already configured.</div>
+				) : (
+					availableToAdd.map(header => (
+						<button
+							key={header}
+							type="button"
+							onClick={() => { addColumn(header); }}
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								width: '100%',
+								padding: '8px 10px',
+								marginBottom: 4,
+								borderRadius: 6,
+								border: '1px solid #e6e7eb',
+								background: '#fff',
+								cursor: 'pointer',
+								textAlign: 'left',
+								gap: 8,
+								fontSize: 14,
+								transition: 'background-color 120ms ease'
+							}}
+							onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; }}
+							onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: '#4f46e5' }}>
+								<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+							</svg>
+							{header}
+						</button>
+					))
+				)}
+			</div>
+		);
+	}
+
+	// Render: choices view (visible + hidden columns)
 	if (viewMode === 'choices') {
 		return (
-			<div
-				style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}
-			>
-				{/* header: Columns + add button */}
+			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}>
+				{/* header: Visible on LDA + add/preview buttons */}
 				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>Columns</div>
-					<button
-						type="button"
-						onClick={addNewRow}
-						title="Add column"
-						aria-label="Add column"
-						style={{
-							padding: '6px 8px',
-							borderRadius: 6,
-							background: '#eef2ff',
-							border: '1px solid rgba(79,70,229,0.12)',
-							cursor: 'pointer',
-							display: 'inline-flex',
-							alignItems: 'center',
-							justifyContent: 'center',
-							gap: 6,
-							fontSize: 13
-						}}
-					>
-						{/* plus icon */}
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-							<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-						</svg>
-						Add
-					</button>
+					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>Visible on LDA</div>
+					<div style={{ display: 'flex', gap: 6 }}>
+						<button
+							type="button"
+							onClick={createPreview}
+							disabled={previewBusy || activeList.length === 0}
+							title="Create a preview LDA sheet with just headers"
+							style={{
+								padding: '6px 8px',
+								borderRadius: 6,
+								background: previewBusy ? '#f3f4f6' : '#f0fdf4',
+								border: '1px solid rgba(22,163,74,0.12)',
+								cursor: (previewBusy || activeList.length === 0) ? 'not-allowed' : 'pointer',
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: 6,
+								fontSize: 13,
+								color: '#15803d'
+							}}
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+								<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+								<circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.4"/>
+							</svg>
+							{previewBusy ? 'Creating...' : 'Preview'}
+						</button>
+						<button
+							type="button"
+							onClick={() => {
+								if (Array.isArray(masterListHeaders) && masterListHeaders.length > 0) {
+									setViewMode('add');
+								} else {
+									// no master list, add blank column
+									const base = 'New Column';
+									let counter = 1;
+									let key = base;
+									while (orderList.includes(key)) { counter++; key = `${base} ${counter}`; }
+									addColumn(key);
+								}
+							}}
+							title="Add column"
+							aria-label="Add column"
+							style={{
+								padding: '6px 8px',
+								borderRadius: 6,
+								background: '#eef2ff',
+								border: '1px solid rgba(79,70,229,0.12)',
+								cursor: 'pointer',
+								display: 'inline-flex',
+								alignItems: 'center',
+								gap: 6,
+								fontSize: 13
+							}}
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+								<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+							</svg>
+							Add
+						</button>
+					</div>
 				</div>
 
-				{visibleList.length === 0 && (
-					<div style={{ color: '#6b7280', fontSize: 13 }}>
-						{masterHeaderSet ? 'No matching columns found on the Master List.' : 'No choices available'}
-					</div>
+				{activeList.length === 0 && (
+					<div style={{ color: '#6b7280', fontSize: 13, marginBottom: 8 }}>No visible columns. Click Add or unhide a column below.</div>
 				)}
 
-				{visibleList.map(({ key, orderIdx }, visIdx) => {
+				{activeList.map(({ key, orderIdx }, actIdx) => {
 					const choiceObj = getChoiceByKey(key);
 					const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
-					const num = visIdx + 1;
+					const num = actIdx + 1;
+					const hoverKey = 'active-' + actIdx;
 
 					return (
 						<div
 							key={key + orderIdx}
-							onMouseEnter={() => setHoverIdx(visIdx)}
+							onMouseEnter={() => setHoverIdx(hoverKey)}
 							onMouseLeave={() => setHoverIdx(null)}
 							style={{
 								display: 'flex',
@@ -472,8 +636,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								padding: '6px 8px',
 								marginBottom: 4,
 								borderRadius: 6,
-								background: (hoverIdx === visIdx) ? '#eef2ff' : 'transparent',
-								border: (hoverIdx === visIdx) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+								background: (hoverIdx === hoverKey) ? '#eef2ff' : 'transparent',
+								border: (hoverIdx === hoverKey) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
 								transition: 'background-color 120ms ease',
 								gap: 4
 							}}
@@ -488,7 +652,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 									alignItems: 'center',
 									justifyContent: 'center',
 									borderRadius: 6,
-									background: (hoverIdx === visIdx) ? '#eef2ff' : '#f3f4f6',
+									background: (hoverIdx === hoverKey) ? '#eef2ff' : '#f3f4f6',
 									color: '#374151',
 									fontWeight: 700,
 									flexShrink: 0,
@@ -519,12 +683,36 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								{label}
 							</button>
 
+							{/* hide button */}
+							<button
+								type="button"
+								onClick={(e) => { e.stopPropagation(); toggleHidden(key); }}
+								title="Hide from LDA"
+								aria-label={`Hide ${label}`}
+								style={{
+									padding: 2,
+									width: 24,
+									height: 24,
+									display: 'inline-flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									border: 'none',
+									borderRadius: 4,
+									background: 'transparent',
+									cursor: 'pointer',
+									color: '#6b7280',
+									flexShrink: 0
+								}}
+							>
+								<EyeIcon />
+							</button>
+
 							{/* up/down arrow buttons */}
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
 								<button
 									type="button"
-									onClick={(e) => { e.stopPropagation(); moveVisibleItem(visIdx, -1); }}
-									disabled={visIdx === 0}
+									onClick={(e) => { e.stopPropagation(); moveActiveItem(actIdx, -1); }}
+									disabled={actIdx === 0}
 									aria-label={`Move ${label} up`}
 									title="Move up"
 									style={{
@@ -536,9 +724,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 										justifyContent: 'center',
 										border: '1px solid #e6e7eb',
 										borderRadius: '4px 4px 0 0',
-										background: visIdx === 0 ? '#f9fafb' : '#f3f4f6',
-										cursor: visIdx === 0 ? 'not-allowed' : 'pointer',
-										color: visIdx === 0 ? '#d1d5db' : '#374151',
+										background: actIdx === 0 ? '#f9fafb' : '#f3f4f6',
+										cursor: actIdx === 0 ? 'not-allowed' : 'pointer',
+										color: actIdx === 0 ? '#d1d5db' : '#374151',
 										transition: 'background-color 120ms ease'
 									}}
 								>
@@ -548,8 +736,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								</button>
 								<button
 									type="button"
-									onClick={(e) => { e.stopPropagation(); moveVisibleItem(visIdx, 1); }}
-									disabled={visIdx === visibleList.length - 1}
+									onClick={(e) => { e.stopPropagation(); moveActiveItem(actIdx, 1); }}
+									disabled={actIdx === activeList.length - 1}
 									aria-label={`Move ${label} down`}
 									title="Move down"
 									style={{
@@ -561,9 +749,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 										justifyContent: 'center',
 										border: '1px solid #e6e7eb',
 										borderRadius: '0 0 4px 4px',
-										background: visIdx === visibleList.length - 1 ? '#f9fafb' : '#f3f4f6',
-										cursor: visIdx === visibleList.length - 1 ? 'not-allowed' : 'pointer',
-										color: visIdx === visibleList.length - 1 ? '#d1d5db' : '#374151',
+										background: actIdx === activeList.length - 1 ? '#f9fafb' : '#f3f4f6',
+										cursor: actIdx === activeList.length - 1 ? 'not-allowed' : 'pointer',
+										color: actIdx === activeList.length - 1 ? '#d1d5db' : '#374151',
 										transition: 'background-color 120ms ease'
 									}}
 								>
@@ -575,6 +763,97 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 						</div>
 					);
 				})}
+
+				{/* Hidden columns section */}
+				{hiddenList.length > 0 && (
+					<>
+						<div style={{ fontWeight: 600, fontSize: 13, color: '#6b7280', marginTop: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+							<EyeOffIcon /> Hidden on LDA
+						</div>
+						{hiddenList.map(({ key, orderIdx }) => {
+							const choiceObj = getChoiceByKey(key);
+							const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
+							const hoverKey = 'hidden-' + key;
+
+							return (
+								<div
+									key={key + orderIdx}
+									onMouseEnter={() => setHoverIdx(hoverKey)}
+									onMouseLeave={() => setHoverIdx(null)}
+									style={{
+										display: 'flex',
+										alignItems: 'center',
+										width: '100%',
+										padding: '6px 8px',
+										marginBottom: 4,
+										borderRadius: 6,
+										background: (hoverIdx === hoverKey) ? '#f9fafb' : 'transparent',
+										border: '1px solid transparent',
+										transition: 'background-color 120ms ease',
+										gap: 4,
+										opacity: 0.6
+									}}
+								>
+									<div
+										aria-hidden="true"
+										style={{
+											width: 28,
+											height: 28,
+											display: 'inline-flex',
+											alignItems: 'center',
+											justifyContent: 'center',
+											borderRadius: 6,
+											background: '#f3f4f6',
+											color: '#9ca3af',
+											fontWeight: 700,
+											flexShrink: 0,
+											fontSize: 13
+										}}
+									>
+										<EyeOffIcon />
+									</div>
+
+									<button
+										onClick={() => { setSelectedIdx(orderIdx); setViewMode('options'); }}
+										style={{
+											flex: 1,
+											background: 'none',
+											border: 'none',
+											textAlign: 'left',
+											cursor: 'pointer',
+											padding: '4px 0',
+											overflow: 'hidden',
+											textOverflow: 'ellipsis',
+											whiteSpace: 'nowrap',
+											fontSize: 14,
+											color: '#6b7280'
+										}}
+									>
+										{label}
+									</button>
+
+									<button
+										type="button"
+										onClick={(e) => { e.stopPropagation(); toggleHidden(key); }}
+										title="Show on LDA"
+										aria-label={`Show ${label}`}
+										style={{
+											padding: '4px 8px',
+											borderRadius: 4,
+											border: '1px solid #e6e7eb',
+											background: '#fff',
+											cursor: 'pointer',
+											fontSize: 12,
+											color: '#374151'
+										}}
+									>
+										Show
+									</button>
+								</div>
+							);
+						})}
+					</>
+				)}
 			</div>
 		);
 	}
