@@ -3,7 +3,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
-import { findColumnIndex, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList } from './utils/helpers';
+import { findColumnIndex, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
@@ -501,6 +501,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     if (headerIndex !== -1) customParamIndices[param.name] = headerIndex;
                 });
 
+                // Pre-load missing assignments cache once (instead of per-student)
+                let missingAssignmentsCache = null;
+                if (!skipSpecialParams && specialParamsToProcess.includes('MissingAssignmentsList')) {
+                    missingAssignmentsCache = await buildMissingAssignmentsCache(context);
+                }
+
                 for (let i = 1; i < values.length; i++) {
                     const row = values[i];
                     if (!row) continue;
@@ -569,14 +575,16 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         for (const paramName of specialParamsToProcess) {
                             if (paramName === 'MissingAssignmentsList') {
                                 const gradeBookIndex = colIndices.GradeBook;
-                                if (gradeBookIndex !== -1) {
-                                    const gradeBookValue = row[gradeBookIndex];
+                                if (gradeBookIndex !== -1 && missingAssignmentsCache) {
+                                    // Look up from pre-built cache
                                     const gradeBookFormula = formulas[i][gradeBookIndex];
-                                    student.MissingAssignmentsList = await generateMissingAssignmentsList(
-                                        gradeBookValue,
-                                        gradeBookFormula,
-                                        context
-                                    );
+                                    const gradeBookValue = row[gradeBookIndex];
+                                    let lookupUrl = gradeBookValue;
+                                    if (gradeBookFormula) {
+                                        const match = String(gradeBookFormula).match(/=HYPERLINK\("([^"]+)"/i);
+                                        if (match) lookupUrl = match[1];
+                                    }
+                                    student.MissingAssignmentsList = missingAssignmentsCache.get(String(lookupUrl ?? '').trim()) || '';
                                 } else {
                                     student.MissingAssignmentsList = '';
                                 }
