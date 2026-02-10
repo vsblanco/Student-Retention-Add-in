@@ -219,6 +219,23 @@ async function importMasterListFromExtension(payload) {
                 return masterIdx;
             });
 
+            // Detect new columns from incoming data not yet on Master List
+            const newColumns = [];
+            for (let i = 0; i < incomingHeaders.length; i++) {
+                if (colMapping[i] === -1) {
+                    const newColIdx = masterHeaders.length;
+                    masterHeaders.push(String(incomingHeaders[i] || ''));
+                    lowerCaseMasterHeaders.push(lowerCaseIncomingHeaders[i]);
+                    normalizedMasterHeaders.push(normalizedIncomingHeaders[i]);
+                    colMapping[i] = newColIdx;
+                    newColumns.push(String(incomingHeaders[i] || ''));
+                }
+            }
+
+            if (newColumns.length > 0) {
+                console.log(`ImportFromExtension: Adding ${newColumns.length} new column(s) to Master List: [${newColumns.join(', ')}]`);
+            }
+
             console.log(`ImportFromExtension: Column mapping: [${colMapping.join(', ')}]`);
 
             // Find the student name column in both incoming data and master list
@@ -315,6 +332,15 @@ async function importMasterListFromExtension(payload) {
                 rangeToClear.getEntireRow().delete(Excel.DeleteShiftDirection.up);
                 await context.sync();
                 console.log("ImportFromExtension: Sheet cleared");
+            }
+
+            // Update header row to include any new columns from import
+            if (newColumns.length > 0) {
+                const headerRange = sheet.getRangeByIndexes(0, 0, 1, masterHeaders.length);
+                headerRange.values = [masterHeaders];
+                headerRange.format.font.bold = true;
+                await context.sync();
+                console.log(`ImportFromExtension: Updated header row with ${newColumns.length} new column(s)`);
             }
 
             // Combine students (new first, then existing)
@@ -456,6 +482,27 @@ async function importMasterListFromExtension(payload) {
             await applyMissingAssignmentsConditionalFormatting(context, sheet, masterHeaders);
             await applyHoldConditionalFormatting(context, sheet, masterHeaders);
             await applyAdSAPStatusConditionalFormatting(context, sheet, masterHeaders);
+
+            // Update workbook settings with new columns for LDA column selector
+            if (newColumns.length > 0) {
+                try {
+                    const docSettings = Office.context.document.settings.get('workbookSettings');
+                    if (docSettings && Array.isArray(docSettings.columns)) {
+                        const normalize = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+                        const existingSet = new Set(docSettings.columns.map(c => normalize(c.name)));
+                        for (const colName of newColumns) {
+                            if (!existingSet.has(normalize(colName))) {
+                                docSettings.columns.push({ name: colName });
+                            }
+                        }
+                        Office.context.document.settings.set('workbookSettings', docSettings);
+                        Office.context.document.settings.saveAsync();
+                        console.log('ImportFromExtension: Updated workbook settings with new columns:', newColumns);
+                    }
+                } catch (e) {
+                    console.warn('ImportFromExtension: Failed to update workbook settings:', e);
+                }
+            }
 
             // Autofit columns
             console.log("ImportFromExtension: Autofitting columns...");
