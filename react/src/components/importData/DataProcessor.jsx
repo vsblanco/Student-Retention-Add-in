@@ -309,6 +309,31 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				}
 			}
 
+			// --- Merge new columns from imported data into sheet headers ---
+			let newColumnsFromImport = [];
+			if (sheetExisted && sheetHeaders.length > 0) {
+				const renamedFirst = dataToWrite[0];
+				let renamedDataHeaders = [];
+				if (renamedFirst && typeof renamedFirst === 'object' && !Array.isArray(renamedFirst)) {
+					renamedDataHeaders = Object.keys(renamedFirst).map(h => String(h).trim());
+				} else if (Array.isArray(renamedFirst)) {
+					renamedDataHeaders = renamedFirst.map(h => (h == null ? '' : String(h).trim()));
+				}
+
+				const sheetNormSet = new Set(sheetHeaders.map(h => normalizeKey(h)));
+				for (const dh of renamedDataHeaders) {
+					const norm = normalizeKey(dh);
+					if (norm && !sheetNormSet.has(norm)) {
+						sheetHeaders.push(dh);
+						sheetNormSet.add(norm);
+						newColumnsFromImport.push(dh);
+					}
+				}
+				if (newColumnsFromImport.length > 0) {
+					notifyStatus(`Adding ${newColumnsFromImport.length} new column(s) from import: ${newColumnsFromImport.join(', ')}`);
+				}
+			}
+
 			let dataFieldSet = new Set();
 			const firstAfter = dataToWrite[0];
 			if (firstAfter && typeof firstAfter === 'object' && !Array.isArray(firstAfter)) {
@@ -523,8 +548,30 @@ export default function DataProcessor({ data, sheetName, refreshSheetName, setti
 				await context.sync();
 			});
 
+			// Update workbook settings with newly discovered columns
+			if (newColumnsFromImport.length > 0) {
+				try {
+					if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
+						const docSettings = Office.context.document.settings.get('workbookSettings');
+						if (docSettings && Array.isArray(docSettings.columns)) {
+							const existingNormSet = new Set(docSettings.columns.map(c => normalizeKey(c.name)));
+							for (const colName of newColumnsFromImport) {
+								if (!existingNormSet.has(normalizeKey(colName))) {
+									docSettings.columns.push({ name: colName });
+								}
+							}
+							Office.context.document.settings.set('workbookSettings', docSettings);
+							Office.context.document.settings.saveAsync();
+							console.log('[DataProcessor] Updated workbook settings with new columns:', newColumnsFromImport);
+						}
+					}
+				} catch (e) {
+					console.warn('[DataProcessor] Failed to update workbook settings with new columns', e);
+				}
+			}
+
 			notifyStatus(`Refresh completed (${rowCount} rows) on ${targetSheetName}.`);
-			const result = { success: true, rowsWritten: rowCount };
+			const result = { success: true, rowsWritten: rowCount, newColumns: newColumnsFromImport };
 			if (!suppressCompletion) notifyComplete(result);
 			return result;
 
