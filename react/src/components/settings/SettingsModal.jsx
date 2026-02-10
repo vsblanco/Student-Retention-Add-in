@@ -56,7 +56,6 @@ export default SettingsModal;
 
 // Replace the existing EditableArrayInner component with this updated version
 const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [] }) => {
-	// ...existing state...
 	const [selectedIdx, setSelectedIdx] = React.useState(0);
 	const [viewMode, setViewMode] = React.useState('choices');
 	const [editableMap, setEditableMap] = React.useState({});
@@ -69,17 +68,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	// dirty tracking: initial snapshot + current dirty flag
 	const initialSnapshotRef = React.useRef(null);
 	const [isDirty, setIsDirty] = React.useState(false);
-	// drag state
-	const [dragIdx, setDragIdx] = React.useState(null);
-	const [dragOverIdx, setDragOverIdx] = React.useState(null);
-	const [draggedHeight, setDraggedHeight] = React.useState(0);
-	// preview that follows placeholder (now includes number)
-	const [preview, setPreview] = React.useState({ visible: false, x: 0, y: 0, key: null, label: '', height: 0, number: null });
-	// refs to row DOM nodes for measuring
-	const itemsRef = React.useRef({});
-	// container ref to compute end placeholder position
-	const containerRef = React.useRef(null);
-	// NEW: state to control delete confirmation modal
+	// state to control delete confirmation modal
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
 	// build quick lookup of workbookColumns by key (name/label)
@@ -356,100 +345,16 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		setViewMode('choices');
 	};
 
-	// drag handlers (placeholder + floating preview showing target number)
-	const handleDragStart = (e, idx, key, label) => {
-		setDragIdx(idx);
-		setDragOverIdx(idx);
-		// measure the row height for placeholder
-		const node = itemsRef.current[idx];
-		const h = node && node.getBoundingClientRect ? Math.round(node.getBoundingClientRect().height) : 40;
-		setDraggedHeight(h);
-		// initialize preview (position will be updated on dragOver)
-		const rect = node && node.getBoundingClientRect ? node.getBoundingClientRect() : null;
-		setPreview({
-			visible: true,
-			x: rect ? rect.left : (e.clientX || 0),
-			y: rect ? rect.top : (e.clientY || 0),
-			key,
-			label,
-			height: h,
-			number: idx + 1
-		});
-		try { e.dataTransfer.setData('text/plain', String(idx)); } catch (err) {}
-		e.dataTransfer.effectAllowed = 'move';
-		if (e.dataTransfer.setDragImage) {
-			const img = document.createElement('canvas');
-			img.width = img.height = 0;
-			e.dataTransfer.setDragImage(img, 0, 0);
-		}
-	};
-	const handleDragEnd = () => {
-		setDragIdx(null);
-		setDragOverIdx(null);
-		setDraggedHeight(0);
-		setPreview({ visible: false, x: 0, y: 0, key: null, label: '', height: 0, number: null });
-	};
-	// update preview position to the placeholder location
-	const positionPreviewAtIndex = idx => {
-		// compute target element rect (insert before index idx)
-		if (idx >= 0 && idx < orderList.length) {
-			const node = itemsRef.current[idx];
-			if (node && node.getBoundingClientRect) {
-				const r = node.getBoundingClientRect();
-				// position preview aligned with the row (left align with row content)
-				setPreview(prev => ({ ...prev, x: r.left + 12, y: r.top, number: idx + 1 }));
-				return;
-			}
-		}
-		// placeholder at end: place below last item or at container bottom
-		const lastNode = itemsRef.current[orderList.length - 1];
-		if (lastNode && lastNode.getBoundingClientRect) {
-			const r = lastNode.getBoundingClientRect();
-			setPreview(prev => ({ ...prev, x: r.left + 12, y: r.bottom + 6, number: orderList.length + 1 }));
-			return;
-		}
-		// fallback to container top
-		if (containerRef.current && containerRef.current.getBoundingClientRect) {
-			const cr = containerRef.current.getBoundingClientRect();
-			setPreview(prev => ({ ...prev, x: cr.left + 12, y: cr.top + 12, number: orderList.length ? orderList.length : 1 }));
-		}
-	};
-	// update preview based on dragover target
-	const handleDragOver = (e, idx) => {
-		e.preventDefault();
-		if (dragIdx === null) return;
-		if (dragOverIdx !== idx) setDragOverIdx(idx);
-		// update preview position & number to reflect where it would land
-		positionPreviewAtIndex(idx);
-	};
-	const handleContainerDragOver = e => {
-		// if dragging but not yet over a row, keep preview visible and update end placeholder if near bottom
-		if (!preview.visible) return;
-		e.preventDefault();
-		// if there is a known dragOverIdx, position accordingly; otherwise keep preview near cursor as fallback
-		if (typeof dragOverIdx === 'number') {
-			positionPreviewAtIndex(dragOverIdx);
-		} else {
-			setPreview(prev => ({ ...prev, x: e.clientX + 12, y: e.clientY + 12 }));
-		}
-	};
-	const handleDrop = (e, idx) => {
-		e.preventDefault();
-		if (dragIdx === null) return;
-		const from = dragIdx;
-		let to = typeof dragOverIdx === 'number' ? dragOverIdx : idx;
-		if (from === to) {
-			handleDragEnd();
-			return;
-		}
+	// move item up/down in the order list
+	const moveItem = (idx, direction) => {
+		const targetIdx = idx + direction;
+		if (targetIdx < 0 || targetIdx >= orderList.length) return;
 		const next = [...orderList];
-		const [moved] = next.splice(from, 1);
-		next.splice(to, 0, moved);
+		[next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
 		const newOrder = {};
 		next.forEach((k, i) => { newOrder[k] = i + 1; });
 		setOrderList(next);
 		setOrderMap(newOrder);
-		handleDragEnd();
 	};
 
 	// helper to add a new empty row/column
@@ -479,9 +384,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	if (viewMode === 'choices') {
 		return (
 			<div
-				ref={containerRef}
 				style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}
-				onDragOver={handleContainerDragOver}
 			>
 				{/* header: Columns + add button */}
 				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -515,154 +418,125 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 				{orderList.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No choices available</div>}
 
 				{orderList.map((key, i) => {
-					// show placeholder before row if appropriate
-					const showPlaceholderBefore = dragIdx !== null && dragOverIdx === i && dragIdx !== null && dragIdx !== i;
 					const choiceObj = getChoiceByKey(key);
 					const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
-					const selected = i === selectedIdx;
 					const num = orderMap[key] ?? (i + 1);
-					const isDragging = dragIdx === i;
-					const isHoverTarget = dragOverIdx === i && dragIdx !== i;
 
 					return (
-						<React.Fragment key={key + i}>
-							{showPlaceholderBefore && preview.visible && (
-								<div
-									style={{
-										height: draggedHeight || 44,
-										marginBottom: 6,
-										borderRadius: 6,
-										background: 'rgba(255,255,255,0.98)',
-										border: '1px solid rgba(0,0,0,0.06)',
-										boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
-										transition: 'height 120ms ease, margin 120ms ease, transform 120ms ease',
-										display: 'flex',
-										alignItems: 'center',
-										padding: '8px'
-									}}
-								>
-									{/* preview shows the dragged item's number + label inline */}
-									<div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-										<div style={{ width: 28, height: 28, borderRadius: 6, background: '#f3f4f6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#374151', fontSize: 13 }}>
-											{preview.number ?? (dragIdx + 1)}
-										</div>
-										<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111' }}>{preview.label}</div>
-									</div>
-								</div>
-							)}
-
-							<button
-								ref={el => { itemsRef.current[i] = el; }}
-								onMouseEnter={() => setHoverIdx(i)}
-								onMouseLeave={() => setHoverIdx(null)}
-								onClick={() => {
-									setSelectedIdx(i);
-									setViewMode('options');
-								}}
-								onDragOver={e => handleDragOver(e, i)}
-								onDrop={e => handleDrop(e, i)}
+						<div
+							key={key + i}
+							onMouseEnter={() => setHoverIdx(i)}
+							onMouseLeave={() => setHoverIdx(null)}
+							style={{
+								display: 'flex',
+								alignItems: 'center',
+								width: '100%',
+								padding: '6px 8px',
+								marginBottom: 4,
+								borderRadius: 6,
+								background: (hoverIdx === i) ? '#eef2ff' : 'transparent',
+								border: (hoverIdx === i) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+								transition: 'background-color 120ms ease',
+								gap: 4
+							}}
+						>
+							{/* position badge */}
+							<div
+								aria-hidden="true"
 								style={{
-									position: 'relative',
-									display: 'flex',
-									width: '100%',
-									textAlign: 'left',
-									padding: '8px',
-									marginBottom: 6,
+									width: 28,
+									height: 28,
+									display: 'inline-flex',
+									alignItems: 'center',
+									justifyContent: 'center',
 									borderRadius: 6,
-									// only show the hover visual effect when hovering — do not apply it for "selected"
-									background: (hoverIdx === i) ? '#eef2ff' : 'transparent',
-									border: (hoverIdx === i) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
-									boxShadow: isHoverTarget ? '0 8px 24px rgba(99,102,241,0.12)' : ((!selected && hoverIdx === i && !isDragging) ? '0 4px 10px rgba(2,6,23,0.06)' : 'none'),
-									transform: isHoverTarget ? 'translateY(6px)' : ((!selected && hoverIdx === i && !isDragging) ? 'translateY(-1px)' : 'none'),
+									background: (hoverIdx === i) ? '#eef2ff' : '#f3f4f6',
+									color: '#374151',
+									fontWeight: 700,
+									flexShrink: 0,
+									userSelect: 'none',
+									fontSize: 13
+								}}
+								title={`Position ${num}`}
+							>
+								{num}
+							</div>
+
+							{/* label - clickable to open options */}
+							<button
+								onClick={() => { setSelectedIdx(i); setViewMode('options'); }}
+								style={{
+									flex: 1,
+									background: 'none',
+									border: 'none',
+									textAlign: 'left',
 									cursor: 'pointer',
-									transition: 'transform 200ms cubic-bezier(.2,.9,.2,1), box-shadow 200ms ease, background-color 120ms ease'
+									padding: '4px 0',
+									overflow: 'hidden',
+									textOverflow: 'ellipsis',
+									whiteSpace: 'nowrap',
+									fontSize: 14
 								}}
 							>
-								{/* left: badge + label */}
-								<div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', minWidth: 0, flex: 1 }}>
-									<div
-										aria-hidden="true"
-										style={{
-											width: 28,
-											height: 28,
-											opacity: 0.95,
-											display: 'inline-flex',
-											alignItems: 'center',
-											justifyContent: 'center',
-											borderRadius: 6,
-											// only highlight badge on hover, not when item is selected
-											background: (hoverIdx === i) ? '#eef2ff' : '#f3f4f6',
-											color: '#374151',
-											fontWeight: 700,
-											flexShrink: 0,
-											userSelect: 'none',
-											fontSize: 13
-										}}
-										title={`Position ${num}`}
-									>
-										{num}
-									</div>
-	
-									<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</div>
-								</div>
-	
-								{/* draggable handle */}
-								<span
-									role="button"
-									draggable
-									tabIndex={-1}
-									aria-hidden="true"
-									onDragStart={e => handleDragStart(e, i, key, label)}
-									onDragEnd={handleDragEnd}
-									onClick={e => e.stopPropagation()}
+								{label}
+							</button>
+
+							{/* up/down arrow buttons */}
+							<div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+								<button
+									type="button"
+									onClick={(e) => { e.stopPropagation(); moveItem(i, -1); }}
+									disabled={i === 0}
+									aria-label={`Move ${label} up`}
+									title="Move up"
 									style={{
-										position: 'absolute',
-										right: 0,
-										top: 0,
-										bottom: 0,
-										width: 36,
-										background: isDragging ? 'rgba(240,240,240,0.95)' : '#f0f0f0',
-										borderLeft: '1px solid #e6e7eb',
-										borderTopRightRadius: 6,
-										borderBottomRightRadius: 6,
-										flexShrink: 0,
-										cursor: dragIdx === i ? 'grabbing' : 'grab',
-										userSelect: 'none',
+										padding: 0,
+										width: 22,
+										height: 16,
+										display: 'inline-flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										border: '1px solid #e6e7eb',
+										borderRadius: '4px 4px 0 0',
+										background: i === 0 ? '#f9fafb' : '#f3f4f6',
+										cursor: i === 0 ? 'not-allowed' : 'pointer',
+										color: i === 0 ? '#d1d5db' : '#374151',
 										transition: 'background-color 120ms ease'
 									}}
-								/>
-							</button>
-						</React.Fragment>
+								>
+									<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+										<path d="M18 15l-6-6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+									</svg>
+								</button>
+								<button
+									type="button"
+									onClick={(e) => { e.stopPropagation(); moveItem(i, 1); }}
+									disabled={i === orderList.length - 1}
+									aria-label={`Move ${label} down`}
+									title="Move down"
+									style={{
+										padding: 0,
+										width: 22,
+										height: 16,
+										display: 'inline-flex',
+										alignItems: 'center',
+										justifyContent: 'center',
+										border: '1px solid #e6e7eb',
+										borderRadius: '0 0 4px 4px',
+										background: i === orderList.length - 1 ? '#f9fafb' : '#f3f4f6',
+										cursor: i === orderList.length - 1 ? 'not-allowed' : 'pointer',
+										color: i === orderList.length - 1 ? '#d1d5db' : '#374151',
+										transition: 'background-color 120ms ease'
+									}}
+								>
+									<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+										<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+									</svg>
+								</button>
+							</div>
+						</div>
 					);
 				})}
-
-				{/* placeholder at end showing inline preview */}
-				{dragIdx !== null && dragOverIdx === orderList.length && preview.visible && (
-					<div
-						style={{
-							height: draggedHeight || 44,
-							marginBottom: 6,
-							borderRadius: 6,
-							background: 'rgba(255,255,255,0.98)',
-							border: '1px solid rgba(0,0,0,0.06)',
-							boxShadow: '0 8px 20px rgba(2,6,23,0.08)',
-							transition: 'height 120ms ease, margin 120ms ease, transform 120ms ease',
-							display: 'flex',
-							alignItems: 'center',
-							padding: '8px'
-						}}
-						onDragOver={e => { e.preventDefault(); if (dragOverIdx !== orderList.length) setDragOverIdx(orderList.length); positionPreviewAtIndex(orderList.length); }}
-						onDrop={e => handleDrop(e, orderList.length)}
-					>
-						<div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-							<div style={{ width: 28, height: 28, borderRadius: 6, background: '#f3f4f6', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#374151', fontSize: 13 }}>
-								{preview.number ?? (dragIdx + 1)}
-							</div>
-							<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#111' }}>{preview.label}</div>
-						</div>
-					</div>
-				)}
-
 			</div>
 		);
 	}
