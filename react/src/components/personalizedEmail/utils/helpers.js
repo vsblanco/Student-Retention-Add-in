@@ -125,6 +125,81 @@ export function parseHyperlinkFormula(formula) {
 }
 
 /**
+ * Pre-loads the "Missing Assignments" sheet and builds a lookup map
+ * of Grade Book URL → HTML assignment list.  Call once before the
+ * student loop, then use the returned Map for instant per-student lookups.
+ *
+ * @param {Excel.RequestContext} context
+ * @returns {Promise<Map<string, string>>}  gradeBookUrl → "<ul>…</ul>"
+ */
+export async function buildMissingAssignmentsCache(context) {
+    const cache = new Map();
+    try {
+        const missingSheet = context.workbook.worksheets.getItemOrNullObject("Missing Assignments");
+        await context.sync();
+        if (missingSheet.isNullObject) return cache;
+
+        const usedRange = missingSheet.getUsedRangeOrNullObject();
+        usedRange.load("values, formulas, isNullObject");
+        await context.sync();
+        if (usedRange.isNullObject) return cache;
+
+        const values = usedRange.values;
+        const formulas = usedRange.formulas;
+        const headers = values[0].map(h => String(h ?? '').toLowerCase());
+
+        const gradeBookColIndex = headers.findIndex(h =>
+            h.includes('grade book') || h.includes('gradebook')
+        );
+        const assignmentColIndex = headers.findIndex(h =>
+            h.includes('assignment')
+        );
+
+        if (gradeBookColIndex === -1 || assignmentColIndex === -1) return cache;
+
+        // Group assignments by Grade Book URL
+        const grouped = new Map(); // url → [{url, title}]
+        for (let i = 1; i < values.length; i++) {
+            const rowGradeBookFormula = formulas[i][gradeBookColIndex];
+            let rowGradeBookUrl = values[i][gradeBookColIndex];
+            if (rowGradeBookFormula) {
+                const parsed = parseHyperlinkFormula(rowGradeBookFormula);
+                if (parsed) rowGradeBookUrl = parsed.url;
+            }
+            const key = String(rowGradeBookUrl ?? '').trim();
+            if (!key) continue;
+
+            const assignmentFormula = formulas[i][assignmentColIndex];
+            const assignmentValue = values[i][assignmentColIndex];
+            const parsed = parseHyperlinkFormula(assignmentFormula);
+            let entry = null;
+            if (parsed) {
+                entry = { url: parsed.url, title: parsed.text };
+            } else if (assignmentValue) {
+                entry = { url: null, title: String(assignmentValue) };
+            }
+            if (entry) {
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key).push(entry);
+            }
+        }
+
+        // Convert each group into its HTML string
+        for (const [url, assignments] of grouped) {
+            const listItems = assignments.map(a =>
+                a.url
+                    ? `<li><a href="${a.url}" target="_blank">${a.title}</a></li>`
+                    : `<li>${a.title}</li>`
+            ).join('');
+            cache.set(url, `<ul>${listItems}</ul>`);
+        }
+    } catch (error) {
+        console.error('Error building missing assignments cache:', error);
+    }
+    return cache;
+}
+
+/**
  * Generates an HTML list of missing assignments for a student
  * Returns empty string if no assignments found
  */
