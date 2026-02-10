@@ -11,7 +11,9 @@ const SettingsModal = ({
 	closeModal = () => {},
 	saveModal = () => {},
 	// new: prefer workbook columns (from saved workbook settings) over default choices
-	workbookColumns = []
+	workbookColumns = [],
+	// master list headers to filter visible columns (null = show all)
+	masterListHeaders = null
 }) => {
 	return (
 		<>
@@ -44,6 +46,7 @@ const SettingsModal = ({
 							saveModal={saveModal}
 							// pass workbook columns so the modal uses the workbook's columns array when available
 							workbookColumns={workbookColumns}
+							masterListHeaders={masterListHeaders}
 						/>
 					</div>
 				</div>
@@ -55,7 +58,7 @@ const SettingsModal = ({
 export default SettingsModal;
 
 // Replace the existing EditableArrayInner component with this updated version
-const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [] }) => {
+const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null }) => {
 	const [selectedIdx, setSelectedIdx] = React.useState(0);
 	const [viewMode, setViewMode] = React.useState('choices');
 	const [editableMap, setEditableMap] = React.useState({});
@@ -70,6 +73,27 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	const [isDirty, setIsDirty] = React.useState(false);
 	// state to control delete confirmation modal
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+
+	// build a lowercase set of master list headers for fast matching
+	const masterHeaderSet = React.useMemo(() => {
+		if (!Array.isArray(masterListHeaders)) return null; // null = no filtering
+		const s = new Set();
+		masterListHeaders.forEach(h => { if (h) s.add(h.toLowerCase()); });
+		return s;
+	}, [masterListHeaders]);
+
+	// check if a column (by name + aliases) is present on the master list
+	const isOnMasterList = React.useCallback((key) => {
+		if (!masterHeaderSet) return true; // no master list = show all
+		const lk = key.toLowerCase();
+		if (masterHeaderSet.has(lk)) return true;
+		// check aliases from workbook column entry
+		const wbEntry = workbookColumns.find(e => String(e?.name ?? e?.label ?? e).trim().toLowerCase() === lk);
+		if (wbEntry && Array.isArray(wbEntry.alias)) {
+			return wbEntry.alias.some(a => masterHeaderSet.has(String(a).trim().toLowerCase()));
+		}
+		return false;
+	}, [masterHeaderSet, workbookColumns]);
 
 	// build quick lookup of workbookColumns by key (name/label)
 	const workbookLookup = React.useMemo(() => {
@@ -345,12 +369,22 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		setViewMode('choices');
 	};
 
-	// move item up/down in the order list
-	const moveItem = (idx, direction) => {
-		const targetIdx = idx + direction;
-		if (targetIdx < 0 || targetIdx >= orderList.length) return;
+	// compute the visible (filtered) list — only columns present on master list
+	// each entry carries { key, orderIdx } so we can map back to the full orderList
+	const visibleList = React.useMemo(() => {
+		return orderList
+			.map((key, idx) => ({ key, orderIdx: idx }))
+			.filter(({ key }) => isOnMasterList(key));
+	}, [orderList, isOnMasterList]);
+
+	// move a visible-list item up/down within the full orderList
+	const moveVisibleItem = (visIdx, direction) => {
+		const targetVisIdx = visIdx + direction;
+		if (targetVisIdx < 0 || targetVisIdx >= visibleList.length) return;
+		const fromOrderIdx = visibleList[visIdx].orderIdx;
+		const toOrderIdx = visibleList[targetVisIdx].orderIdx;
 		const next = [...orderList];
-		[next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+		[next[fromOrderIdx], next[toOrderIdx]] = [next[toOrderIdx], next[fromOrderIdx]];
 		const newOrder = {};
 		next.forEach((k, i) => { newOrder[k] = i + 1; });
 		setOrderList(next);
@@ -415,17 +449,21 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 					</button>
 				</div>
 
-				{orderList.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No choices available</div>}
+				{visibleList.length === 0 && (
+					<div style={{ color: '#6b7280', fontSize: 13 }}>
+						{masterHeaderSet ? 'No matching columns found on the Master List.' : 'No choices available'}
+					</div>
+				)}
 
-				{orderList.map((key, i) => {
+				{visibleList.map(({ key, orderIdx }, visIdx) => {
 					const choiceObj = getChoiceByKey(key);
 					const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
-					const num = orderMap[key] ?? (i + 1);
+					const num = visIdx + 1;
 
 					return (
 						<div
-							key={key + i}
-							onMouseEnter={() => setHoverIdx(i)}
+							key={key + orderIdx}
+							onMouseEnter={() => setHoverIdx(visIdx)}
 							onMouseLeave={() => setHoverIdx(null)}
 							style={{
 								display: 'flex',
@@ -434,8 +472,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								padding: '6px 8px',
 								marginBottom: 4,
 								borderRadius: 6,
-								background: (hoverIdx === i) ? '#eef2ff' : 'transparent',
-								border: (hoverIdx === i) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+								background: (hoverIdx === visIdx) ? '#eef2ff' : 'transparent',
+								border: (hoverIdx === visIdx) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
 								transition: 'background-color 120ms ease',
 								gap: 4
 							}}
@@ -450,7 +488,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 									alignItems: 'center',
 									justifyContent: 'center',
 									borderRadius: 6,
-									background: (hoverIdx === i) ? '#eef2ff' : '#f3f4f6',
+									background: (hoverIdx === visIdx) ? '#eef2ff' : '#f3f4f6',
 									color: '#374151',
 									fontWeight: 700,
 									flexShrink: 0,
@@ -464,7 +502,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 
 							{/* label - clickable to open options */}
 							<button
-								onClick={() => { setSelectedIdx(i); setViewMode('options'); }}
+								onClick={() => { setSelectedIdx(orderIdx); setViewMode('options'); }}
 								style={{
 									flex: 1,
 									background: 'none',
@@ -485,8 +523,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 							<div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
 								<button
 									type="button"
-									onClick={(e) => { e.stopPropagation(); moveItem(i, -1); }}
-									disabled={i === 0}
+									onClick={(e) => { e.stopPropagation(); moveVisibleItem(visIdx, -1); }}
+									disabled={visIdx === 0}
 									aria-label={`Move ${label} up`}
 									title="Move up"
 									style={{
@@ -498,9 +536,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 										justifyContent: 'center',
 										border: '1px solid #e6e7eb',
 										borderRadius: '4px 4px 0 0',
-										background: i === 0 ? '#f9fafb' : '#f3f4f6',
-										cursor: i === 0 ? 'not-allowed' : 'pointer',
-										color: i === 0 ? '#d1d5db' : '#374151',
+										background: visIdx === 0 ? '#f9fafb' : '#f3f4f6',
+										cursor: visIdx === 0 ? 'not-allowed' : 'pointer',
+										color: visIdx === 0 ? '#d1d5db' : '#374151',
 										transition: 'background-color 120ms ease'
 									}}
 								>
@@ -510,8 +548,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								</button>
 								<button
 									type="button"
-									onClick={(e) => { e.stopPropagation(); moveItem(i, 1); }}
-									disabled={i === orderList.length - 1}
+									onClick={(e) => { e.stopPropagation(); moveVisibleItem(visIdx, 1); }}
+									disabled={visIdx === visibleList.length - 1}
 									aria-label={`Move ${label} down`}
 									title="Move down"
 									style={{
@@ -523,9 +561,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 										justifyContent: 'center',
 										border: '1px solid #e6e7eb',
 										borderRadius: '0 0 4px 4px',
-										background: i === orderList.length - 1 ? '#f9fafb' : '#f3f4f6',
-										cursor: i === orderList.length - 1 ? 'not-allowed' : 'pointer',
-										color: i === orderList.length - 1 ? '#d1d5db' : '#374151',
+										background: visIdx === visibleList.length - 1 ? '#f9fafb' : '#f3f4f6',
+										cursor: visIdx === visibleList.length - 1 ? 'not-allowed' : 'pointer',
+										color: visIdx === visibleList.length - 1 ? '#d1d5db' : '#374151',
 										transition: 'background-color 120ms ease'
 									}}
 								>
