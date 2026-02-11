@@ -40,7 +40,8 @@ export const CONSTANTS = {
         primaryPhone: ["primary phone", "phone", "phonenumber", "contact number", "Phone", "Phone Number", "Contact Number"],
         otherPhone: ["other phone", "otherphone", "Other Phone", "OtherPhone"],
         PersonalEmail: ["personal email", "otheremail", "Personal Email"],
-        StudentEmail: ["student email", "school email", "email", "Email","Student Email"]
+        StudentEmail: ["student email", "school email", "email", "Email","Student Email"],
+        nextAssignmentDue: ["next assignment due", "Next Assignment Due", "nextassignmentdue"]
     }
 };
 
