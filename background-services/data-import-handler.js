@@ -538,9 +538,12 @@ async function handleUpdateMaster(message) {
                 ldaColumn.numberFormat = [["M-DD-YYYY"]];
             }
 
+            // Apply column formatting
+            await applyNextAssignmentDueFormatting(context);
+
             sendMessageToDialog("Autofitting columns for readability...");
             sheet.getUsedRange().format.autofitColumns();
-            
+
             await context.sync();
             sendMessageToDialog("Master List update process completed successfully.", 'complete');
         });
@@ -772,6 +775,7 @@ async function handleUpdateGrades(message) {
             await applyGradeConditionalFormatting(context);
             await applyMissingAssignmentsConditionalFormatting(context);
             await applyHoldConditionalFormatting(context);
+            await applyNextAssignmentDueFormatting(context);
 
             sendMessageToDialog("Grade update process completed successfully.", 'complete');
         });
@@ -911,4 +915,36 @@ async function applyHoldConditionalFormatting(context) {
 
     await context.sync();
     sendMessageToDialog("Hold conditional formatting applied ('Yes' highlighted in light red).");
+}
+
+/**
+ * Applies left text alignment to the Next Assignment Due column.
+ * @param {Excel.RequestContext} context The request context.
+ */
+async function applyNextAssignmentDueFormatting(context) {
+    sendMessageToDialog("Applying left alignment to Next Assignment Due column...");
+    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+    const range = sheet.getUsedRange(true);
+    range.load("values, rowCount");
+    await context.sync();
+
+    const headers = range.values[0].map(h => String(h || '').toLowerCase());
+    const nextAssignmentDueColIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.nextAssignmentDue);
+
+    if (nextAssignmentDueColIdx === -1) {
+        sendMessageToDialog("'Next Assignment Due' column not found, skipping formatting.", 'log');
+        return;
+    }
+
+    if (range.rowCount <= 1) {
+        sendMessageToDialog("No data rows to format.", 'log');
+        return;
+    }
+
+    // Apply left alignment to the entire column (header + data)
+    const columnRange = sheet.getRangeByIndexes(0, nextAssignmentDueColIdx, range.rowCount, 1);
+    columnRange.format.horizontalAlignment = Excel.HorizontalAlignment.left;
+
+    await context.sync();
+    sendMessageToDialog("Next Assignment Due left alignment applied.");
 }

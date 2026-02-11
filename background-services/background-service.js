@@ -482,6 +482,7 @@ async function importMasterListFromExtension(payload) {
             await applyMissingAssignmentsConditionalFormatting(context, sheet, masterHeaders);
             await applyHoldConditionalFormatting(context, sheet, masterHeaders);
             await applyAdSAPStatusConditionalFormatting(context, sheet, masterHeaders);
+            await applyNextAssignmentDueFormatting(context, sheet, masterHeaders);
 
             // Update workbook settings with new columns for LDA column selector
             if (newColumns.length > 0) {
@@ -723,6 +724,45 @@ async function applyAdSAPStatusConditionalFormatting(context, sheet, headers) {
         console.log("ImportFromExtension: Conditional formatting applied to AdSAPStatus column (cells containing 'Financial' highlighted in light red)");
     } catch (error) {
         console.error("ImportFromExtension: Error applying AdSAPStatus conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies left text alignment to the Next Assignment Due column
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyNextAssignmentDueFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying left alignment to Next Assignment Due column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const nextAssignmentDueColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.nextAssignmentDue);
+
+        if (nextAssignmentDueColIdx === -1) {
+            console.log("ImportFromExtension: Next Assignment Due column not found, skipping formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        // Apply left alignment to the entire column (header + data)
+        const columnRange = sheet.getRangeByIndexes(0, nextAssignmentDueColIdx, range.rowCount, 1);
+        columnRange.format.horizontalAlignment = Excel.HorizontalAlignment.left;
+
+        await context.sync();
+        console.log("ImportFromExtension: Left alignment applied to Next Assignment Due column");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying Next Assignment Due formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
