@@ -20,7 +20,9 @@ const BATCH_SIZE = 500;
 
 // Smaller batch size for formatting operations (colors, fonts, formulas per cell)
 // These are more expensive as each cell operation adds to the request queue
-const FORMAT_BATCH_SIZE = 100;
+// Kept small (50) to stay well under Excel's per-sync operation limits,
+// especially with partial-row cell highlights generating multiple range calls per row.
+const FORMAT_BATCH_SIZE = 50;
 
 /**
  * Helper to convert Excel serial date to MM-DD-YY string
@@ -664,7 +666,12 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
     const table = sheet.tables.add(fullRange, true);
     table.name = tableName + "_" + Math.floor(Math.random() * 1000);
     table.style = "TableStyleLight9";
-    await context.sync();
+    try {
+        await context.sync();
+    } catch (e) {
+        console.error(`Table creation sync failed for "${tableName}" (startRow=${startRow}, rows=${rowCount}, cols=${colCount})`, e);
+        throw e;
+    }
 
     // --- STEP 4: Copy Conditional Formatting from Master List (in batches) ---
     const cfChecks = [];
@@ -693,7 +700,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
                 targetColRange.numberFormat = [["mm-dd-yy;@"]];
             }
         });
-        await context.sync();
+        try {
+            await context.sync();
+        } catch (e) {
+            const colNames = batch.map(c => c.colName).join(', ');
+            console.error(`CF copy sync failed on columns: [${colNames}]`, e);
+            throw e;
+        }
     }
 
     // --- STEP 5: Apply Custom Row Colors & Cell Highlights (optimized) ---
@@ -780,7 +793,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         }
 
         // Sync after each batch
-        await context.sync();
+        try {
+            await context.sync();
+        } catch (e) {
+            console.error(`Formatting sync failed on batch ${formatBatch + 1}/${totalFormatBatches} (rows ${batchStart}-${batchEnd - 1}). ` +
+                `Ops: ${rowColorOps.length} rowColor, ${cellColorOps.length} cellColor, ${formulaOps.length} formula.`, e);
+            throw e;
+        }
 
         formatBatch++;
         if (onBatchProgress) {
