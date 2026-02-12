@@ -38,6 +38,68 @@ function formatExcelDate(serial) {
 }
 
 /**
+ * Helper to format a date value into a friendly relative day string.
+ * - "today" / "tomorrow" for 0/1 days out
+ * - "this [Day]" for 2-6 days out
+ * - "next [Day]" for 7-13 days out
+ * - Falls back to "Month Dayth" (e.g. March 14th) for anything else
+ */
+function formatFriendlyDate(value) {
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // Check if the value is already "Today" or "Tomorrow" (case-insensitive)
+    if (typeof value === 'string') {
+        const lower = value.trim().toLowerCase();
+        if (lower === 'today') return 'today';
+        if (lower === 'tomorrow') return 'tomorrow';
+    }
+
+    // Try to parse into a Date object
+    let targetDate = null;
+
+    if (typeof value === 'number') {
+        // Excel serial number
+        const date = new Date(Math.round((value - 25569) * 86400 * 1000));
+        targetDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
+    } else if (typeof value === 'string') {
+        // Try MM-DD-YY format
+        const match = value.trim().match(/^(\d{2})-(\d{2})-(\d{2})$/);
+        if (match) {
+            const year = 2000 + parseInt(match[3], 10);
+            const month = parseInt(match[1], 10) - 1;
+            const day = parseInt(match[2], 10);
+            targetDate = new Date(year, month, day);
+        }
+    }
+
+    if (!targetDate || isNaN(targetDate.getTime())) {
+        // Can't parse, return as-is
+        return typeof value === 'number' ? formatExcelDate(value) : value;
+    }
+
+    // Compare with today (strip time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((targetDate - today) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'tomorrow';
+    if (diffDays >= 2 && diffDays <= 6) return `this ${dayNames[targetDate.getDay()]}`;
+    if (diffDays >= 7 && diffDays <= 13) return `next ${dayNames[targetDate.getDay()]}`;
+
+    // Beyond 13 days or in the past, use "Month Dayth" format
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    const day = targetDate.getDate();
+    const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
+        : (day === 2 || day === 22) ? 'nd'
+        : (day === 3 || day === 23) ? 'rd' : 'th';
+    return `${monthNames[targetDate.getMonth()]} ${day}${suffix}`;
+}
+
+/**
  * Helper to generate the Retention Outreach Message.
  * Centralized logic for LDA tags, Missing Assignments, and Explicit DNC.
  * @param {string} sId - Student ID
@@ -75,9 +137,7 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
 
     // Priority 4: Zero missing assignments with a next assignment due date
     if (typeof missingVal === 'number' && missingVal === 0 && nextAssignmentDueVal) {
-        const formattedDate = typeof nextAssignmentDueVal === 'number'
-            ? formatExcelDate(nextAssignmentDueVal)
-            : nextAssignmentDueVal;
+        const formattedDate = formatFriendlyDate(nextAssignmentDueVal);
         return `Student's next assignment is due ${formattedDate}.`;
     }
 
