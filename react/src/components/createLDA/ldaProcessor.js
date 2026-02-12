@@ -476,14 +476,13 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 let partialRowColor = "#FFEDD5"; // Orange Default
                 if (retentionMsg && retentionMsg.includes("DNC")) {
                     partialRowColor = "#FFC7CE"; // Red for DNC
+                } else if (isNextAssignmentDue) {
+                    partialRowColor = "#e2efda"; // Light green for zero missing + next assignment due
                 }
 
-                if (isNextAssignmentDue) {
-                    // Full row highlight for zero missing assignments with next assignment due
-                    rowColor = "#e2efda";
-                } else if (isRetentionActive && outreachColIndex === -1) {
-                    // Fallback row color if Outreach column is missing
-                    rowColor = partialRowColor;
+                // Fallback row color if Outreach column is missing
+                if (isRetentionActive && outreachColIndex === -1) {
+                     rowColor = partialRowColor;
                 }
 
                 outputColumns.forEach((colConfig, colOutIdx) => {
@@ -500,8 +499,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // --- Apply Retention Highlight (Partial Row) ---
                     // Only apply up to outreach column if it exists and this column is within range
-                    // Skip for next assignment due case (uses full row highlight instead)
-                    if (isRetentionActive && !isNextAssignmentDue && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
+                    if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
                         cellHighlights.push({
                             colIndex: colOutIdx,
                             color: partialRowColor 
