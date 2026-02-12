@@ -42,7 +42,7 @@ function formatExcelDate(serial) {
  * - "today" / "tomorrow" for 0/1 days out
  * - "this [Day]" for 2-6 days out
  * - "next [Day]" for 7-13 days out
- * - Falls back to MM-DD-YY for anything else
+ * - Falls back to "Month Dayth" (e.g. March 14th) for anything else
  */
 function formatFriendlyDate(value) {
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -89,11 +89,14 @@ function formatFriendlyDate(value) {
     if (diffDays >= 2 && diffDays <= 6) return `this ${dayNames[targetDate.getDay()]}`;
     if (diffDays >= 7 && diffDays <= 13) return `next ${dayNames[targetDate.getDay()]}`;
 
-    // Beyond 13 days or in the past, keep MM-DD-YY
-    const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const dd = String(targetDate.getDate()).padStart(2, '0');
-    const yy = String(targetDate.getFullYear()).slice(-2);
-    return `${mm}-${dd}-${yy}`;
+    // Beyond 13 days or in the past, use "Month Dayth" format
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    const day = targetDate.getDate();
+    const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
+        : (day === 2 || day === 22) ? 'nd'
+        : (day === 3 || day === 23) ? 'rd' : 'th';
+    return `${monthNames[targetDate.getMonth()]} ${day}${suffix}`;
 }
 
 /**
