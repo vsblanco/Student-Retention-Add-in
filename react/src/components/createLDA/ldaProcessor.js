@@ -45,7 +45,7 @@ function formatExcelDate(serial) {
  * @param {Map} dncMap - Map of ID -> Tag Text
  * @returns {string|null} - The formatted message or null
  */
-function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
+function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal) {
     // Priority 1: Explicit DNC (Highest Priority - Stop everything)
     if (sId && dncMap.has(sId)) {
         const dncTag = dncMap.get(sId);
@@ -69,6 +69,14 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap) {
             const yy = String(ldaObj.date.getFullYear()).slice(-2);
             return `[Retention] Student will engage on ${mm}-${dd}-${yy}`;
         }
+    }
+
+    // Priority 4: Zero missing assignments with a next assignment due date
+    if (typeof missingVal === 'number' && missingVal === 0 && nextAssignmentDueVal) {
+        const formattedDate = typeof nextAssignmentDueVal === 'number'
+            ? formatExcelDate(nextAssignmentDueVal)
+            : nextAssignmentDueVal;
+        return `Student's next assignment is due ${formattedDate}.`;
     }
 
     return null;
@@ -239,6 +247,14 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             if (missingIdx === -1) {
                  // Fallback scan
                  missingIdx = headers.findIndex(h => String(h).trim().toLowerCase().includes('missing'));
+            }
+
+            // Look for "Next Assignment Due" column
+            let nextAssignmentDueIdx = getColIndex('Next Assignment Due');
+            if (nextAssignmentDueIdx === -1) {
+                nextAssignmentDueIdx = headers.findIndex(h =>
+                    String(h).trim().toLowerCase().replace(/\s+/g, '') === 'nextassignmentdue'
+                );
             }
 
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
@@ -446,23 +462,28 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                 // 1. Get critical values
                 const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
+                const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
 
                 // 2. Generate Retention Message using helper
-                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap);
-                
+                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
+
                 // 3. Determine Highlighting Logic
                 const isLda = sId && ldaFollowUpMap.has(sId);
                 const isRetentionActive = !!retentionMsg;
-                
+                const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
+
                 // Determine Row/Partial Color:
                 let partialRowColor = "#FFEDD5"; // Orange Default
                 if (retentionMsg && retentionMsg.includes("DNC")) {
                     partialRowColor = "#FFC7CE"; // Red for DNC
                 }
 
-                // Fallback row color if Outreach column is missing
-                if (isRetentionActive && outreachColIndex === -1) {
-                     rowColor = partialRowColor;
+                if (isNextAssignmentDue) {
+                    // Full row highlight for zero missing assignments with next assignment due
+                    rowColor = "#e2efda";
+                } else if (isRetentionActive && outreachColIndex === -1) {
+                    // Fallback row color if Outreach column is missing
+                    rowColor = partialRowColor;
                 }
 
                 outputColumns.forEach((colConfig, colOutIdx) => {
@@ -479,7 +500,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // --- Apply Retention Highlight (Partial Row) ---
                     // Only apply up to outreach column if it exists and this column is within range
-                    if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
+                    // Skip for next assignment due case (uses full row highlight instead)
+                    if (isRetentionActive && !isNextAssignmentDue && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
                         cellHighlights.push({
                             colIndex: colOutIdx,
                             color: partialRowColor 
