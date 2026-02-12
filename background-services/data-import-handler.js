@@ -539,6 +539,7 @@ async function handleUpdateMaster(message) {
             }
 
             // Apply column formatting
+            await applyLastCourseGradeConditionalFormatting(context);
             await applyNextAssignmentDueFormatting(context);
 
             sendMessageToDialog("Autofitting columns for readability...");
@@ -773,6 +774,7 @@ async function handleUpdateGrades(message) {
 
             // Apply conditional formatting after updates are synced
             await applyGradeConditionalFormatting(context);
+            await applyLastCourseGradeConditionalFormatting(context);
             await applyMissingAssignmentsConditionalFormatting(context);
             await applyHoldConditionalFormatting(context);
             await applyNextAssignmentDueFormatting(context);
@@ -839,6 +841,59 @@ async function applyGradeConditionalFormatting(context) {
 
     await context.sync();
     sendMessageToDialog("Conditional formatting applied.");
+}
+
+/**
+ * Applies a 3-color scale conditional formatting to the Last Course Grade column.
+ * (same Red-Yellow-Green scale as the Grade column)
+ * @param {Excel.RequestContext} context The request context.
+ */
+async function applyLastCourseGradeConditionalFormatting(context) {
+    sendMessageToDialog("Applying conditional formatting to Last Course Grade...");
+    const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
+    const range = sheet.getUsedRange(true);
+    range.load("values, rowCount");
+    await context.sync();
+
+    const headers = range.values[0].map(h => String(h || '').toLowerCase());
+    const colIdx = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.lastCourseGrade);
+
+    if (colIdx === -1) {
+        sendMessageToDialog("'Last Course Grade' column not found, skipping conditional formatting.", 'log');
+        return;
+    }
+
+    if (range.rowCount <= 1) {
+        sendMessageToDialog("No data rows to format.", 'log');
+        return;
+    }
+
+    const columnRange = sheet.getRangeByIndexes(1, colIdx, range.rowCount - 1, 1);
+
+    // Determine if grades are 0-1 or 0-100 scale by checking the first few values
+    let isPercentScale = false;
+    for (let i = 1; i < Math.min(range.rowCount, 10); i++) {
+        if (range.values[i] && typeof range.values[i][colIdx] === 'number' && range.values[i][colIdx] > 1) {
+            isPercentScale = true;
+            break;
+        }
+    }
+
+    sendMessageToDialog(`Detected Last Course Grade scale: ${isPercentScale ? '0-100' : '0-1'}. Applying 3-color scale.`);
+
+    // Clear existing conditional formats on the column to avoid duplicates
+    columnRange.conditionalFormats.clearAll();
+
+    const conditionalFormat = columnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+    const criteria = {
+        minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+        midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: isPercentScale ? "70" : "0.7", color: "#FFEB84" },
+        maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
+    };
+    conditionalFormat.colorScale.criteria = criteria;
+
+    await context.sync();
+    sendMessageToDialog("Last Course Grade conditional formatting applied.");
 }
 
 /**
