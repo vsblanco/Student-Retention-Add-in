@@ -9,6 +9,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
     const [customAuthor, setCustomAuthor] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
     const [confirmOverwrite, setConfirmOverwrite] = useState(null);
+    const [lastLoadedName, setLastLoadedName] = useState('');
 
     const isGuest = user === 'Guest';
     const canEditAuthor = userEmail?.toLowerCase() === 'vblanco1@ftccollege.edu';
@@ -32,6 +33,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
     };
 
     const handleLoadTemplate = (template) => {
+        setLastLoadedName(template.name);
         onLoadTemplate(template);
         onClose();
     };
@@ -189,7 +191,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                             <button
                                 onClick={() => {
                                     setEditingTemplate(null);
-                                    setTemplateName('');
+                                    setTemplateName(lastLoadedName);
                                     setCustomAuthor(user || 'Unknown');
                                     setShowSaveModal(true);
                                 }}
