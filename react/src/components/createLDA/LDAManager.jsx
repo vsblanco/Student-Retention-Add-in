@@ -441,12 +441,14 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         </button>
 
         <ToggleRow
+          key="toggle-lda-tag"
           label="Include LDA Tag"
           isOn={settings.includeLDATag}
           onToggle={() => handleToggle('includeLDATag')}
         />
 
         <ToggleRow
+          key="toggle-dnc-tag"
           label="Include DNC Tag"
           isOn={settings.includeDNCTag}
           onToggle={() => handleToggle('includeDNCTag')}
@@ -514,6 +516,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
       </div>
 
       <ToggleRow
+        key="toggle-failing-list"
         label="Include Failing List"
         isOn={settings.includeFailingList}
         onToggle={() => handleToggle('includeFailingList')}
