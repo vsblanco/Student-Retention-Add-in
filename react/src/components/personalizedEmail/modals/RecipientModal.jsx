@@ -92,15 +92,13 @@ export default function RecipientModal({
 
     if (!isOpen) return null;
 
-    const activeExclusionCount = (selection.excludeDNC ? 1 : 0) + (selection.excludeFillColor ? 1 : 0);
-
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50" onClick={onClose}>
+            <div className="bg-white rounded-lg shadow-xl p-4 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
 
                 {showExclusionsView ? (
                     <>
-                        <div className="flex items-center gap-2 mb-4">
+                        <div className="flex items-center gap-2 mb-3">
                             <button
                                 onClick={() => setShowExclusionsView(false)}
                                 className="p-1 rounded-md hover:bg-gray-100 text-gray-500 hover:text-gray-700"
@@ -114,7 +112,7 @@ export default function RecipientModal({
                         </div>
 
                         <div className="space-y-2">
-                            <div className="bg-gray-50 p-3 rounded-md">
+                            <div className="bg-gray-50 p-2.5 rounded-md">
                                 <label htmlFor="exclude-dnc-toggle" className="flex items-center justify-between cursor-pointer">
                                     <span className="text-sm text-gray-700 flex-grow pr-4">
                                         DNC-tagged students
@@ -132,7 +130,7 @@ export default function RecipientModal({
                                 </label>
                             </div>
 
-                            <div className="bg-gray-50 p-3 rounded-md">
+                            <div className="bg-gray-50 p-2.5 rounded-md">
                                 <label htmlFor="exclude-fill-color-toggle" className="flex items-center justify-between cursor-pointer">
                                     <span className="text-sm text-gray-700 flex-grow pr-4">
                                         Outreach Color Filled students
@@ -152,14 +150,14 @@ export default function RecipientModal({
                         </div>
 
                         {excludedStudents.length > 0 && (
-                            <div className="mt-4 border-t pt-3">
+                            <div className="mt-3 border-t pt-2">
                                 <p className="text-xs font-medium text-gray-500 mb-2">
                                     {excludedStudents.length} student{excludedStudents.length !== 1 ? 's' : ''} excluded
                                 </p>
                                 <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
                                     <ul className="divide-y divide-gray-200">
                                         {excludedStudents.map((student, index) => (
-                                            <li key={index} className="px-3 py-2 flex justify-between items-center">
+                                            <li key={index} className="px-3 py-1.5 flex justify-between items-center">
                                                 <span className="text-sm text-gray-700 truncate pr-2" title={student.name}>
                                                     {student.name}
                                                 </span>
@@ -183,64 +181,32 @@ export default function RecipientModal({
                         )}
 
                         {excludedStudents.length === 0 && (selection.excludeDNC || selection.excludeFillColor) && (
-                            <div className="mt-4 border-t pt-3">
+                            <div className="mt-3 border-t pt-2">
                                 <p className="text-xs text-gray-400 text-center">No students excluded</p>
                             </div>
                         )}
                     </>
                 ) : (
                     <>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Recipients</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-3">Select Recipients</h3>
 
-                        <div className="space-y-4">
-                            <p className="text-sm font-medium text-gray-700">Select students from:</p>
-                            <fieldset className="space-y-2">
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="recipient-lda"
-                                        name="recipient-source"
-                                        value="lda"
-                                        checked={selection.type === 'lda'}
-                                        onChange={(e) => handleSelectionChange('type', e.target.value)}
-                                        className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="recipient-lda" className="ml-3 text-sm text-gray-700">
-                                        Today's LDA Sheet
-                                    </label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="recipient-master"
-                                        name="recipient-source"
-                                        value="master"
-                                        checked={selection.type === 'master'}
-                                        onChange={(e) => handleSelectionChange('type', e.target.value)}
-                                        className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="recipient-master" className="ml-3 text-sm text-gray-700">
-                                        Master List
-                                    </label>
-                                </div>
-                                <div>
-                                    <input
-                                        type="radio"
-                                        id="recipient-custom"
-                                        name="recipient-source"
-                                        value="custom"
-                                        checked={selection.type === 'custom'}
-                                        onChange={(e) => handleSelectionChange('type', e.target.value)}
-                                        className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                                    />
-                                    <label htmlFor="recipient-custom" className="ml-3 text-sm text-gray-700">
-                                        Custom Sheet
-                                    </label>
-                                </div>
-                            </fieldset>
+                        <div className="space-y-3">
+                            <div>
+                                <label htmlFor="recipient-source" className="block text-sm font-medium text-gray-700 mb-1">Select students from:</label>
+                                <select
+                                    id="recipient-source"
+                                    value={selection.type}
+                                    onChange={(e) => handleSelectionChange('type', e.target.value)}
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                    <option value="lda">Today's LDA Sheet</option>
+                                    <option value="master">Master List</option>
+                                    <option value="custom">Custom Sheet</option>
+                                </select>
+                            </div>
 
                             {selection.type === 'custom' && (
-                                <div className="ml-7">
+                                <div>
                                     <label htmlFor="recipient-custom-sheet-name" className="block text-xs font-medium text-gray-600">
                                         Custom Sheet Name
                                     </label>
@@ -256,18 +222,13 @@ export default function RecipientModal({
                             )}
                         </div>
 
-                        <div className="mt-4 border-t pt-4">
+                        <div className="mt-3 border-t pt-3">
                             <button
                                 onClick={() => setShowExclusionsView(true)}
-                                className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
+                                className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors"
                             >
                                 <span className="text-sm font-medium text-gray-700">Exclusions</span>
                                 <div className="flex items-center gap-2">
-                                    {activeExclusionCount > 0 && (
-                                        <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-                                            {activeExclusionCount} active
-                                        </span>
-                                    )}
                                     {excludedStudents.length > 0 && (
                                         <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">
                                             {excludedStudents.length} excluded
@@ -280,11 +241,11 @@ export default function RecipientModal({
                             </button>
                         </div>
 
-                        <div className="mt-6 h-8 flex items-center justify-center">
+                        <div className="mt-4 h-8 flex items-center justify-center">
                             <p className="text-sm text-gray-600">{statusMessage}</p>
                         </div>
 
-                        <div className="flex justify-end gap-2 mt-4 border-t pt-4">
+                        <div className="flex justify-end gap-2 mt-3 border-t pt-3">
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
