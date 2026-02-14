@@ -445,6 +445,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                             const identifierIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.StudentIdentifier);
                             const tagsIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.Tags);
 
+                            if (identifierIndex === -1 || tagsIndex === -1) {
+                                console.warn("DNC exclusion: Could not find required columns in 'Student History' sheet.",
+                                    { identifierIndex, tagsIndex, historyHeaders });
+                            }
+
                             if (identifierIndex !== -1 && tagsIndex !== -1) {
                                 for (let i = 1; i < historyValues.length; i++) {
                                     const row = historyValues[i];
