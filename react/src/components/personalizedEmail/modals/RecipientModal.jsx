@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 export default function RecipientModal({
     isOpen,
@@ -14,6 +14,20 @@ export default function RecipientModal({
     const [statusMessage, setStatusMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showExclusionsView, setShowExclusionsView] = useState(false);
+    const debounceTimerRef = useRef(null);
+
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+        };
+    }, []);
+
+    const formatFoundMessage = (result) => {
+        if (result.included.length === 1 && result.included[0].StudentName) {
+            return `${result.included[0].StudentName} found.`;
+        }
+        return `${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`;
+    };
 
     const captureRowSelection = async () => {
         try {
@@ -66,7 +80,7 @@ export default function RecipientModal({
             const cachedResult = recipientDataCache.get(type);
             setStudentCount(cachedResult.included.length);
             setExcludedStudents(cachedResult.excluded);
-            setStatusMessage(`${cachedResult.included.length} student${cachedResult.included.length !== 1 ? 's' : ''} found.`);
+            setStatusMessage(formatFoundMessage(cachedResult));
             setIsLoading(false);
             return;
         }
@@ -77,7 +91,7 @@ export default function RecipientModal({
             });
             setStudentCount(result.included.length);
             setExcludedStudents(result.excluded);
-            setStatusMessage(`${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`);
+            setStatusMessage(formatFoundMessage(result));
             setIsLoading(false);
         } catch (error) {
             setStudentCount(0);
@@ -98,9 +112,27 @@ export default function RecipientModal({
         }
 
         setSelection(newSelection);
-        setTimeout(() => {
+
+        // Debounce text input fields (like custom sheet name) to avoid fetching on every keystroke
+        if (field === 'customSheetName') {
+            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = setTimeout(() => {
+                fetchStudentCountForSelection(newSelection);
+            }, 500);
+        } else {
+            setTimeout(() => {
+                fetchStudentCountForSelection(newSelection);
+            }, 100);
+        }
+    };
+
+    const handleRecheckSelection = async () => {
+        const rowData = await captureRowSelection();
+        if (rowData) {
+            const newSelection = { ...selection, selectionSheetName: rowData.sheetName, selectedRows: rowData.selectedRows };
+            setSelection(newSelection);
             fetchStudentCountForSelection(newSelection);
-        }, 100);
+        }
     };
 
     const fetchStudentCountForSelection = async (sel) => {
@@ -114,7 +146,7 @@ export default function RecipientModal({
             });
             setStudentCount(result.included.length);
             setExcludedStudents(result.excluded);
-            setStatusMessage(`${result.included.length} student${result.included.length !== 1 ? 's' : ''} found.`);
+            setStatusMessage(formatFoundMessage(result));
             setIsLoading(false);
         } catch (error) {
             setStudentCount(0);
@@ -245,10 +277,24 @@ export default function RecipientModal({
                                 </select>
                             </div>
 
-                            {selection.type === 'selection' && selection.selectedRows && (
-                                <p className="text-xs text-gray-500">
-                                    {selection.selectedRows.length} row{selection.selectedRows.length !== 1 ? 's' : ''} selected from "{selection.selectionSheetName}"
-                                </p>
+                            {selection.type === 'selection' && (
+                                <div className="flex items-center justify-between">
+                                    {selection.selectedRows && (
+                                        <p className="text-xs text-gray-500">
+                                            {selection.selectedRows.length} row{selection.selectedRows.length !== 1 ? 's' : ''} selected from "{selection.selectionSheetName}"
+                                        </p>
+                                    )}
+                                    <button
+                                        onClick={handleRecheckSelection}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                                        title="Re-check selected rows in Excel"
+                                    >
+                                        <svg className="h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                                        </svg>
+                                        Recheck
+                                    </button>
+                                </div>
                             )}
 
                             {selection.type === 'custom' && (
