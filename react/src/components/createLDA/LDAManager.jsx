@@ -33,6 +33,7 @@ export default function CreateLDAManager({ onReady } = {}) {
 
   // State for View Management: 'settings' | 'processing' | 'done' | 'error'
   const [view, setView] = useState('settings');
+  const [settingsView, setSettingsView] = useState('main');
   const [errorMessage, setErrorMessage] = useState('');
 
   // State for Progress Tracking: { [stepId]: 'pending' | 'active' | 'completed' }
@@ -176,20 +177,24 @@ export default function CreateLDAManager({ onReady } = {}) {
         {/* VIEW 1: Settings Form */}
         {view === 'settings' && (
           <section className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <LDASettings 
-              settings={ldaSettings} 
-              onSettingChange={handleSettingChange} 
+            <LDASettings
+              settings={ldaSettings}
+              onSettingChange={handleSettingChange}
+              settingsView={settingsView}
+              setSettingsView={setSettingsView}
             />
 
-            <div className="pt-4 border-t border-slate-100 mt-2">
-              <button
-                type="button"
-                className="w-full sm:w-auto bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-6 py-2.5 rounded-full shadow-lg shadow-[#145F82]/20 transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2"
-                onClick={handleCreateLDA}
-              >
-                Create LDA
-              </button>
-            </div>
+            {settingsView === 'main' && (
+              <div className="pt-4 border-t border-slate-100 mt-2">
+                <button
+                  type="button"
+                  className="w-full sm:w-auto bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-6 py-2.5 rounded-full shadow-lg shadow-[#145F82]/20 transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                  onClick={handleCreateLDA}
+                >
+                  Create LDA
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -286,8 +291,7 @@ export default function CreateLDAManager({ onReady } = {}) {
 
 // --- Sub-Components ---
 
-function LDASettings({ settings, onSettingChange }) {
-  const [settingsView, setSettingsView] = useState('main');
+function LDASettings({ settings, onSettingChange, settingsView, setSettingsView }) {
 
   const handleToggle = (key) => {
     onSettingChange(key, !settings[key]);
