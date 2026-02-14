@@ -39,8 +39,8 @@ export const COLUMN_MAPPINGS = {
     Grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
     DaysOut: ["days out", "daysout", "Days Out"],
     Assigned: ['assigned', 'advisor', 'counselor', 'assigned to', "Assigned", "Advisor"],
-    Tags: ['history', 'tags', 'tag', "Tag", "Tags"],
-    StudentIdentifier: ['student identifier','studentnumber', "Student Identifier", "Student Number"],
+    Tags: ['tag', 'tags', "Tag", "Tags", 'history'],
+    StudentIdentifier: ['student identifier', 'student id', 'studentnumber', 'studentid', 'systudentid', 'id', "Student Identifier", "Student ID", "SyStudentID", "Student Number", "StudentID"],
     Outreach: ['outreach', "Outreach"],
     GradeBook: ['grade book', 'gradebook', 'Grade Book', 'GradeBook'],
     Assignment: ['assignment', 'Assignment']
