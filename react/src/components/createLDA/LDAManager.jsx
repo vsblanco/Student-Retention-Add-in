@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight } from 'lucide-react';
 import { createLDA } from './ldaProcessor'; // Import the new logic
 
 // --- CONFIGURATION: Steps matching the processor logic ---
@@ -28,6 +28,7 @@ export default function CreateLDAManager({ onReady } = {}) {
     includeFailingList: false,
     includeLDATag: true,
     includeDNCTag: true,
+    sheetNameMode: 'date',
   });
 
   // State for View Management: 'settings' | 'processing' | 'done' | 'error'
@@ -56,6 +57,7 @@ export default function CreateLDAManager({ onReady } = {}) {
                 includeFailingList: (wb.includeFailingList !== undefined) ? !!wb.includeFailingList : prev.includeFailingList,
                 includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
                 includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
+                sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
               }));
             }
           }
@@ -285,6 +287,8 @@ export default function CreateLDAManager({ onReady } = {}) {
 // --- Sub-Components ---
 
 function LDASettings({ settings, onSettingChange }) {
+  const [settingsView, setSettingsView] = useState('main');
+
   const handleToggle = (key) => {
     onSettingChange(key, !settings[key]);
   };
@@ -292,6 +296,33 @@ function LDASettings({ settings, onSettingChange }) {
   const handleInputChange = (key, value) => {
     onSettingChange(key, value);
   };
+
+  if (settingsView === 'tags') {
+    return (
+      <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+        <button
+          type="button"
+          onClick={() => setSettingsView('main')}
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <ToggleRow
+          label="Include LDA Tag"
+          isOn={settings.includeLDATag}
+          onToggle={() => handleToggle('includeLDATag')}
+        />
+
+        <ToggleRow
+          label="Include DNC Tag"
+          isOn={settings.includeDNCTag}
+          onToggle={() => handleToggle('includeDNCTag')}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -319,17 +350,55 @@ function LDASettings({ settings, onSettingChange }) {
         onToggle={() => handleToggle('includeFailingList')}
       />
 
-      <ToggleRow
-        label="Include LDA Tag"
-        isOn={settings.includeLDATag}
-        onToggle={() => handleToggle('includeLDATag')}
-      />
+      <button
+        type="button"
+        onClick={() => setSettingsView('tags')}
+        className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-slate-700 font-medium text-sm">Tags</span>
+          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+        </div>
+        <ChevronRight className="w-4 h-4 text-slate-400" />
+      </button>
 
-      <ToggleRow
-        label="Include DNC Tag"
-        isOn={settings.includeDNCTag}
-        onToggle={() => handleToggle('includeDNCTag')}
-      />
+      <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-700 font-medium text-sm">Sheet Name</span>
+          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+        </div>
+        <div className="relative flex bg-slate-200 rounded-full p-0.5">
+          <button
+            type="button"
+            onClick={() => handleInputChange('sheetNameMode', 'date')}
+            className={`relative z-10 px-3 py-1 text-xs font-medium rounded-full transition-colors duration-200 ${
+              settings.sheetNameMode === 'date'
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Date
+          </button>
+          <button
+            type="button"
+            onClick={() => handleInputChange('sheetNameMode', 'campus')}
+            className={`relative z-10 px-3 py-1 text-xs font-medium rounded-full transition-colors duration-200 ${
+              settings.sheetNameMode === 'campus'
+                ? 'text-white'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Campus
+          </button>
+          <span
+            className="absolute top-0.5 bottom-0.5 rounded-full bg-[#145F82] transition-all duration-200"
+            style={{
+              width: settings.sheetNameMode === 'date' ? 'calc(50% - 2px)' : 'calc(50% + 2px)',
+              left: settings.sheetNameMode === 'date' ? '2px' : 'calc(50%)',
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
