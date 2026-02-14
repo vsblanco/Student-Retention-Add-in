@@ -8,6 +8,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
     const [templateName, setTemplateName] = useState('');
     const [customAuthor, setCustomAuthor] = useState('');
     const [saveStatus, setSaveStatus] = useState('');
+    const [confirmOverwrite, setConfirmOverwrite] = useState(null);
 
     const isGuest = user === 'Guest';
     const canEditAuthor = userEmail?.toLowerCase() === 'vblanco1@ftccollege.edu';
@@ -48,13 +49,24 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
         setShowSaveModal(false);
     };
 
-    const handleSaveTemplate = async () => {
+    const handleSaveTemplate = async (forceOverwrite = false) => {
         if (!templateName.trim()) {
             setSaveStatus('Template name is required.');
             return;
         }
 
         const authorToUse = canEditAuthor ? (customAuthor.trim() || user || 'Unknown') : (user || 'Unknown');
+
+        // Check for existing template with same name + author (only for new saves, not edits)
+        if (!editingTemplate && !forceOverwrite) {
+            const existing = templates.find(
+                t => t.name.toLowerCase() === templateName.trim().toLowerCase() && t.author === authorToUse
+            );
+            if (existing) {
+                setConfirmOverwrite(existing);
+                return;
+            }
+        }
 
         const templateData = {
             name: templateName.trim(),
@@ -71,6 +83,11 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
             if (index !== -1) {
                 updatedTemplates[index] = { ...updatedTemplates[index], ...templateData };
             }
+        } else if (forceOverwrite && confirmOverwrite) {
+            const index = updatedTemplates.findIndex(t => t.id === confirmOverwrite.id);
+            if (index !== -1) {
+                updatedTemplates[index] = { ...updatedTemplates[index], ...templateData };
+            }
         } else {
             updatedTemplates.push({
                 ...templateData,
@@ -80,6 +97,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
         }
 
         await saveTemplates(updatedTemplates);
+        setConfirmOverwrite(null);
         setSaveStatus('Template saved successfully!');
         setTimeout(() => {
             setShowSaveModal(false);
@@ -148,9 +166,12 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                                                         {!isGuest && (
                                                             <button
                                                                 onClick={() => handleEditTemplate(template)}
-                                                                className="px-2 py-1 bg-gray-200 text-gray-800 text-xs font-semibold rounded-md hover:bg-gray-300"
+                                                                className="p-1 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-200"
+                                                                title="Edit template"
                                                             >
-                                                                Edit
+                                                                <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                                                                </svg>
                                                             </button>
                                                         )}
                                                     </div>
@@ -191,70 +212,96 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
             {showSaveModal && (
                 <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-60">
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-                            {editingTemplate ? 'Edit Template' : 'Save Template'}
-                        </h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label htmlFor="template-name" className="block text-sm font-medium text-gray-700">
-                                    Template Name
-                                </label>
-                                <input
-                                    type="text"
-                                    id="template-name"
-                                    value={templateName}
-                                    onChange={(e) => setTemplateName(e.target.value)}
-                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
-                                    placeholder="e.g., Mid-term Check-in"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Author
-                                </label>
-                                {canEditAuthor ? (
-                                    <input
-                                        type="text"
-                                        value={customAuthor}
-                                        onChange={(e) => setCustomAuthor(e.target.value)}
-                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
-                                        placeholder="Enter author name"
-                                    />
-                                ) : (
-                                    <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700">
-                                        {user || 'Unknown'}
+                        {confirmOverwrite ? (
+                            <>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-3">Overwrite Template?</h3>
+                                <p className="text-sm text-gray-600">
+                                    A template named "<span className="font-medium">{confirmOverwrite.name}</span>" already exists. Do you want to replace it with your current email?
+                                </p>
+                                <div className="flex justify-end gap-2 mt-5">
+                                    <button
+                                        onClick={() => setConfirmOverwrite(null)}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => handleSaveTemplate(true)}
+                                        className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                    >
+                                        Overwrite
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                                    {editingTemplate ? 'Edit Template' : 'Save Template'}
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label htmlFor="template-name" className="block text-sm font-medium text-gray-700">
+                                            Template Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            id="template-name"
+                                            value={templateName}
+                                            onChange={(e) => setTemplateName(e.target.value)}
+                                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+                                            placeholder="e.g., Mid-term Check-in"
+                                        />
                                     </div>
-                                )}
-                            </div>
-                        </div>
-                        <p className="text-xs mt-2 h-4 text-center text-red-600">{saveStatus}</p>
-                        <div className="flex justify-between items-center mt-4">
-                            {editingTemplate && (
-                                <button
-                                    onClick={() => handleDeleteTemplate(editingTemplate)}
-                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                                >
-                                    Delete
-                                </button>
-                            )}
-                            <div className="flex gap-2 ml-auto">
-                                <button
-                                    onClick={() => {
-                                        setShowSaveModal(false);
-                                        setSaveStatus('');
-                                    }}
-                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSaveTemplate}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                >
-                                    Save
-                                </button>
-                            </div>
-                        </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Author
+                                        </label>
+                                        {canEditAuthor ? (
+                                            <input
+                                                type="text"
+                                                value={customAuthor}
+                                                onChange={(e) => setCustomAuthor(e.target.value)}
+                                                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+                                                placeholder="Enter author name"
+                                            />
+                                        ) : (
+                                            <div className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-700">
+                                                {user || 'Unknown'}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <p className="text-xs mt-2 h-4 text-center text-red-600">{saveStatus}</p>
+                                <div className="flex justify-between items-center mt-4">
+                                    {editingTemplate && (
+                                        <button
+                                            onClick={() => handleDeleteTemplate(editingTemplate)}
+                                            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                                        >
+                                            Delete
+                                        </button>
+                                    )}
+                                    <div className="flex gap-2 ml-auto">
+                                        <button
+                                            onClick={() => {
+                                                setShowSaveModal(false);
+                                                setSaveStatus('');
+                                                setConfirmOverwrite(null);
+                                            }}
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={() => handleSaveTemplate()}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
