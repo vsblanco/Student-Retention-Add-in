@@ -64,6 +64,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
+    const [lastSentInfo, setLastSentInfo] = useState(() => {
+        try {
+            const stored = localStorage.getItem('lastEmailSent');
+            return stored ? JSON.parse(stored) : null;
+        } catch { return null; }
+    });
 
     // Pre-loaded templates state
     const [templates, setTemplates] = useState(null); // null = loading, [] = loaded (empty or with data)
@@ -1075,6 +1081,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
 
         if (failureCount === 0) {
+            const info = { count: successCount, timestamp: new Date().toISOString() };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
             setStatus(`Successfully sent ${successCount} emails!`);
             setShowSuccessModal(true);
         } else {
@@ -1118,6 +1127,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 body: JSON.stringify(payloadWithReceipt)
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const info = { count: payload.emails.length, timestamp: new Date().toISOString() };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
             setStatus(`Successfully sent ${payload.emails.length} emails!`);
             setShowSuccessModal(true);
         } catch (error) {
@@ -1286,6 +1298,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         const isBodyValid = body && body.trim() !== '';
         const areRecipientsValid = recipientSelection.hasBeenSet && recipientCount > 0;
         return isFromValid && isSubjectValid && isBodyValid && areRecipientsValid;
+    };
+
+    const formatLastSent = (iso) => {
+        const diff = Date.now() - new Date(iso).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d ago`;
+        return new Date(iso).toLocaleDateString();
     };
 
     const getValidationMessage = () => {
@@ -1476,8 +1500,20 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             </div>
 
             {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
+            <div className="relative">
+            {lowerSectionDimmed && lastSentInfo && (
+                <div
+                    className="absolute inset-0 z-10 flex items-start justify-center pt-6 cursor-pointer"
+                    onClick={() => setLowerSectionDimmed(false)}
+                >
+                    <p className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full shadow-sm">
+                        Last sent {lastSentInfo.count} {lastSentInfo.count === 1 ? 'email' : 'emails'}{' '}
+                        {formatLastSent(lastSentInfo.timestamp)}
+                    </p>
+                </div>
+            )}
             <div
-                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-sm' : ''}`}
+                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-[2px]' : ''}`}
                 onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
             >
             <div className="space-y-4 mt-4">
@@ -1636,6 +1672,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 </p>
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
+            </div>
             </div>
 
             {/* Modals */}
