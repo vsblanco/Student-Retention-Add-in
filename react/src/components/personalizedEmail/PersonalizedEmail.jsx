@@ -50,9 +50,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
     const [lowerSectionDimmed, setLowerSectionDimmed] = useState(true);
     const [showSendContextMenu, setShowSendContextMenu] = useState(false);
+    const [showSendTooltip, setShowSendTooltip] = useState(false);
     const quillRef = useRef(null);
     const recipientButtonRef = useRef(null);
     const sendButtonRef = useRef(null);
+    const tooltipRef = useRef(null);
 
     // Modal states
     const [showExampleModal, setShowExampleModal] = useState(false);
@@ -62,6 +64,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
+    const [lastSentInfo, setLastSentInfo] = useState(() => {
+        try {
+            const stored = localStorage.getItem('lastEmailSent');
+            return stored ? JSON.parse(stored) : null;
+        } catch { return null; }
+    });
 
     // Pre-loaded templates state
     const [templates, setTemplates] = useState(null); // null = loading, [] = loaded (empty or with data)
@@ -1073,6 +1081,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
 
         if (failureCount === 0) {
+            const info = { count: successCount, timestamp: new Date().toISOString() };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
             setStatus(`Successfully sent ${successCount} emails!`);
             setShowSuccessModal(true);
         } else {
@@ -1116,6 +1127,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 body: JSON.stringify(payloadWithReceipt)
             });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const info = { count: payload.emails.length, timestamp: new Date().toISOString() };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
             setStatus(`Successfully sent ${payload.emails.length} emails!`);
             setShowSuccessModal(true);
         } catch (error) {
@@ -1286,6 +1300,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         return isFromValid && isSubjectValid && isBodyValid && areRecipientsValid;
     };
 
+    const formatLastSent = (iso) => {
+        const diff = Date.now() - new Date(iso).getTime();
+        const mins = Math.floor(diff / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d ago`;
+        return new Date(iso).toLocaleDateString();
+    };
+
     const getValidationMessage = () => {
         const missing = [];
         if (!fromPills[0] || !fromPills[0].trim()) missing.push('From address');
@@ -1294,6 +1320,30 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         if (!body || !body.trim()) missing.push('Body');
         return missing.length > 0 ? `Required: ${missing.join(', ')}.` : '';
     };
+
+    // Position the Send-button tooltip so it stays within the visible taskpane
+    useEffect(() => {
+        const btn = sendButtonRef.current;
+        const tip = tooltipRef.current;
+        if (!showSendTooltip || !btn || !tip) return;
+
+        const btnRect = btn.getBoundingClientRect();
+        const tipRect = tip.getBoundingClientRect();
+        const pad = 8;
+
+        // Try above the button first
+        let top = btnRect.top - tipRect.height - pad;
+        // If clipped at the top, flip below the button
+        if (top < pad) top = btnRect.bottom + pad;
+
+        // Center horizontally on the button, then clamp to viewport
+        let left = btnRect.left + btnRect.width / 2 - tipRect.width / 2;
+        left = Math.max(pad, Math.min(left, window.innerWidth - tipRect.width - pad));
+
+        tip.style.top = `${top}px`;
+        tip.style.left = `${left}px`;
+        tip.style.visibility = 'visible';
+    }, [showSendTooltip]);
 
     const renderParameterButton = (param) => {
         const isCustom = typeof param === 'object';
@@ -1450,8 +1500,20 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             </div>
 
             {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
+            <div className="relative">
+            {lowerSectionDimmed && lastSentInfo && (
+                <div
+                    className="absolute inset-0 z-10 flex items-start justify-center pt-6 cursor-pointer"
+                    onClick={() => setLowerSectionDimmed(false)}
+                >
+                    <p className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full shadow-sm">
+                        Last sent {lastSentInfo.count} {lastSentInfo.count === 1 ? 'email' : 'emails'}{' '}
+                        {formatLastSent(lastSentInfo.timestamp)}
+                    </p>
+                </div>
+            )}
             <div
-                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-sm' : ''}`}
+                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-[2px]' : ''}`}
                 onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
             >
             <div className="space-y-4 mt-4">
@@ -1561,7 +1623,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     Example
                 </button>
                 {user !== 'Guest' && (
-                    <div className="relative w-1/2 group">
+                    <div className="relative w-1/2">
                         <button
                             ref={sendButtonRef}
                             onClick={handleOpenConfirmModal}
@@ -1569,13 +1631,19 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                                 e.preventDefault();
                                 setShowSendContextMenu(true);
                             }}
+                            onMouseEnter={() => { if (!isFormValid()) setShowSendTooltip(true); }}
+                            onMouseLeave={() => setShowSendTooltip(false)}
                             disabled={!isFormValid()}
                             className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
                             Send Email
                         </button>
-                        {!isFormValid() && (
-                            <span className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-56 bg-gray-800 text-white text-xs rounded-md p-2 text-center">
+                        {!isFormValid() && showSendTooltip && (
+                            <span
+                                ref={tooltipRef}
+                                style={{ position: 'fixed', visibility: 'hidden', zIndex: 9999 }}
+                                className="w-56 bg-gray-800 text-white text-xs rounded-md p-2 text-center pointer-events-none"
+                            >
                                 {getValidationMessage()}
                             </span>
                         )}
@@ -1604,6 +1672,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 </p>
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
+            </div>
             </div>
 
             {/* Modals */}
