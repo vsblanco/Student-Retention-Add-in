@@ -48,6 +48,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [lastFocusedInput, setLastFocusedInput] = useState(null);
     const [showMoreParams, setShowMoreParams] = useState(false);
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
+    const [lowerSectionDimmed, setLowerSectionDimmed] = useState(true);
     const [showSendContextMenu, setShowSendContextMenu] = useState(false);
     const quillRef = useRef(null);
     const recipientButtonRef = useRef(null);
@@ -710,6 +711,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const handleRecipientUpdate = (newSelection, count) => {
         setRecipientSelection({ ...newSelection, hasBeenSet: true });
         setRecipientCount(count);
+        setLowerSectionDimmed(false);
         // Clear cache to ensure fresh data is fetched when needed
         setStudentDataCache([]);
     };
@@ -1445,6 +1447,14 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     </button>
                 </div>
 
+            </div>
+
+            {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
+            <div
+                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale' : ''}`}
+                onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
+            >
+            <div className="space-y-4 mt-4">
                 {/* CC Field */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700">CC</label>
@@ -1594,6 +1604,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                 </p>
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
+            </div>
 
             {/* Modals */}
             <ExampleModal
@@ -1622,6 +1633,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     setSubject(template.subject);
                     setBody(template.body);
                     setCcPills(template.cc || []);
+                    setLowerSectionDimmed(false);
                 }}
             />
 
