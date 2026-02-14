@@ -544,8 +544,13 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     if (selectedRowSet && !selectedRowSet.has(usedRangeRowStart + i)) continue;
 
                     const studentIdentifier = row[colIndices.StudentIdentifier];
-                    const studentNameForRow = row[colIndices.StudentName] || `ID: ${studentIdentifier || 'Unknown'}`;
+                    const studentName = row[colIndices.StudentName];
                     const studentEmail = row[colIndices.StudentEmail] ?? '';
+
+                    // Skip ghost/empty rows — no identifier, no name, no email
+                    if (!studentIdentifier && !studentName && !studentEmail) continue;
+
+                    const studentNameForRow = studentName || `ID: ${studentIdentifier || 'Unknown'}`;
 
                     if (!isValidEmail(studentEmail)) {
                         excludedStudents.push({ name: studentNameForRow, reason: 'Invalid Email' });
@@ -567,10 +572,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         }
                     }
 
-                    const studentName = row[colIndices.StudentName] ?? '';
-                    const nameParts = getNameParts(studentName);
+                    const nameParts = getNameParts(studentName || '');
                     const student = {
-                        StudentName: studentName,
+                        StudentName: studentName || '',
                         FirstName: nameParts.first,
                         LastName: nameParts.last,
                         StudentEmail: studentEmail,
