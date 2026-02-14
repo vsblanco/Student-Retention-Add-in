@@ -149,8 +149,9 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
  * @param {Object} userOverrides - The settings from the UI (daysOut, includeFailingList, etc.)
  * @param {Function} onProgress - Callback to update UI steps: (stepId, status) => void
  * @param {Function} onBatchProgress - Optional callback for batch progress: (current, total, phase, tableName) => void
+ * @param {Function} onCampusProgress - Optional callback for multi-campus progress: (campusName, campusIndex, totalCampuses, status) => void
  */
-export async function createLDA(userOverrides, onProgress, onBatchProgress = null) {
+export async function createLDA(userOverrides, onProgress, onBatchProgress = null, onCampusProgress = null) {
     try {
         // --- STEP 1: Validate Settings & Environment ---
         if (onProgress) onProgress('validate', 'active');
@@ -403,87 +404,62 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             if (onProgress) onProgress('failing', 'completed');
 
 
-            // --- STEP 5: Creating Sheet ---
-            if (onProgress) onProgress('createSheet', 'active');
+            // --- Detect Multi-Campus Mode ---
+            let isMultiCampus = false;
+            let campusList = [];
+            const campusIdx = getColIndex('Campus');
 
-            let baseName;
-            if (settings.sheetNameMode === 'campus') {
-                const campusIdx = getColIndex('Campus');
-                let campusName = '';
-                if (campusIdx !== -1) {
-                    // Use the first data row's campus value
-                    for (let i = 1; i < masterValues.length; i++) {
-                        const val = String(masterValues[i][campusIdx] || '').trim();
-                        if (val) { campusName = val; break; }
-                    }
+            if (settings.sheetNameMode === 'campus' && campusIdx !== -1) {
+                const campusSet = new Set();
+                for (let i = 1; i < masterValues.length; i++) {
+                    const val = String(masterValues[i][campusIdx] || '').trim();
+                    if (val) campusSet.add(val);
                 }
-                baseName = campusName || 'Campus';
-            } else {
-                const today = new Date();
-                const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-                baseName = `LDA ${dateStr}`;
-            }
-            let sheetName = baseName;
-            
-            let counter = 2;
-            const existingNames = sheets.items.map(s => s.name);
-            while (existingNames.includes(sheetName)) {
-                sheetName = `${baseName} (${counter++})`;
+                campusList = Array.from(campusSet).sort();
+                isMultiCampus = campusList.length > 1;
             }
 
-            const newSheet = sheets.add(sheetName);
-            newSheet.activate();
-            await context.sync();
-            if (onProgress) onProgress('createSheet', 'completed');
 
+            if (isMultiCampus) {
+                // ============================================================
+                // MULTI-CAMPUS FLOW: Create one LDA sheet per campus
+                // ============================================================
 
-            // --- STEP 6: Applying Tags (Data Processing) ---
-            if (onProgress) onProgress('tags', 'active');
+                // --- STEP 5 (Tags - global): Applying LDA & DNC Tags ---
+                if (onProgress) onProgress('tags', 'active');
 
-            const dncMap = new Map();
-            const ldaFollowUpMap = new Map();
-            
-            if (historyData && studentIdIdx !== -1) {
-                const hValues = historyData.values;
-                if (hValues.length > 0) {
-                    const hHeaders = hValues[0].map(h => String(h).toLowerCase().trim());
-                    const hIdIdx = hHeaders.findIndex(h => h.includes('student') && h.includes('id') || h.includes('number'));
-                    const hTagIdx = hHeaders.indexOf('tag');
+                const dncMap = new Map();
+                const ldaFollowUpMap = new Map();
 
-                    if (hIdIdx !== -1 && hTagIdx !== -1) {
-                        const todayTime = new Date().setHours(0,0,0,0);
-                        
-                        // Regex to find "LDA" followed by a Date (e.g., LDA 10/25/25, Contacted LDA 12-01-25)
-                        // \blda\b : Matches "lda" as a whole word (avoids matching "folder")
-                        // .*?     : Non-greedy match for any chars in between (spaces, colons, words)
-                        // (...)   : Captures the date part (digits, separator, digits, separator, digits)
-                        const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
+                if (historyData && studentIdIdx !== -1) {
+                    const hValues = historyData.values;
+                    if (hValues.length > 0) {
+                        const hHeaders = hValues[0].map(h => String(h).toLowerCase().trim());
+                        const hIdIdx = hHeaders.findIndex(h => h.includes('student') && h.includes('id') || h.includes('number'));
+                        const hTagIdx = hHeaders.indexOf('tag');
 
-                        for (let i = hValues.length - 1; i > 0; i--) {
-                            const hid = hValues[i][hIdIdx];
-                            const htagRaw = String(hValues[i][hTagIdx] || '');
-                            const htagLower = htagRaw.toLowerCase().trim();
-                            
-                            // Check for DNC (Only if toggle is ON)
-                            if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
-                                dncMap.set(hid, htagLower);
-                            }
+                        if (hIdIdx !== -1 && hTagIdx !== -1) {
+                            const todayTime = new Date().setHours(0,0,0,0);
+                            const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
-                            // Check for LDA (Improved Regex Logic)
-                            if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
-                                const match = htagRaw.match(ldaRegex); // Match against raw or lower, regex has /i flag
+                            for (let i = hValues.length - 1; i > 0; i--) {
+                                const hid = hValues[i][hIdIdx];
+                                const htagRaw = String(hValues[i][hTagIdx] || '');
+                                const htagLower = htagRaw.toLowerCase().trim();
 
-                                if (match) {
-                                    // match[1] contains the captured date string
-                                    const dateString = match[1];
-                                    const ldaDate = new Date(dateString);
+                                if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
+                                    dncMap.set(hid, htagLower);
+                                }
 
-                                    // Valid Date check & Future Date check
-                                    if (!isNaN(ldaDate.getTime())) {
-                                        ldaDate.setHours(0,0,0,0);
-                                        // Include Today or Future dates
-                                        if (ldaDate >= todayTime) {
-                                            ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
+                                    const match = htagRaw.match(ldaRegex);
+                                    if (match) {
+                                        const ldaDate = new Date(match[1]);
+                                        if (!isNaN(ldaDate.getTime())) {
+                                            ldaDate.setHours(0,0,0,0);
+                                            if (ldaDate >= todayTime) {
+                                                ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                            }
                                         }
                                     }
                                 }
@@ -491,198 +467,431 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         }
                     }
                 }
-            }
-            if (onProgress) onProgress('tags', 'completed');
+                if (onProgress) onProgress('tags', 'completed');
+
+                // --- Shared format helpers (used by all campus sheets) ---
+                const dateColumnIndices = new Set();
+                outputColumns.forEach((colConfig) => {
+                    const masterIdx = getColIndex(colConfig.name);
+                    if (masterIdx === -1) return;
+                    const excelHeader = String(masterValues[0][masterIdx] || '').toLowerCase();
+                    const isExcluded = /id|no\.|num|code|zip|postal|social|ssn|phone|grade|score|credit|fee|days|count/i.test(excelHeader);
+                    if (isExcluded) return;
+                    let dateCount = 0;
+                    let numCount = 0;
+                    const limit = Math.min(masterValues.length, 100);
+                    for (let i = 1; i < limit; i++) {
+                        const val = masterValues[i][masterIdx];
+                        if (typeof val === 'number') {
+                            numCount++;
+                            if (val > 10958 && val < 73051) dateCount++;
+                        }
+                    }
+                    if (numCount > 0 && (dateCount / numCount) > 0.5) {
+                        dateColumnIndices.add(colConfig.name);
+                    }
+                });
+
+                const outreachColIndex = outputColumns.findIndex(c => c.name === 'Outreach');
+
+                const buildOutputRow = (rowObj, tableContext) => {
+                    const cells = [];
+                    const formulas = [];
+                    let rowColor = null;
+                    let cellHighlights = [];
+                    const sId = rowObj.values[studentIdIdx];
+                    const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
+                    const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
+                    const isRetentionActive = !!retentionMsg;
+                    const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
+                    let partialRowColor = "#FFEDD5";
+                    if (retentionMsg && retentionMsg.includes("DNC")) {
+                        partialRowColor = "#FFC7CE";
+                    } else if (isNextAssignmentDue) {
+                        partialRowColor = "#e2efda";
+                    }
+                    if (isRetentionActive && outreachColIndex === -1) {
+                        rowColor = partialRowColor;
+                    }
+                    outputColumns.forEach((colConfig, colOutIdx) => {
+                        const masterIdx = getColIndex(colConfig.name);
+                        let val = (masterIdx !== -1) ? rowObj.values[masterIdx] : "";
+                        let form = (masterIdx !== -1) ? rowObj.formulas[masterIdx] : null;
+                        if (colConfig.name === 'Gradebook' && form && String(form).startsWith('=HYPERLINK')) {
+                            // Keep formula
+                        } else if (colConfig.name === 'Gradebook' && val && String(val).startsWith('http')) {
+                            form = `=HYPERLINK("${val}", "Link")`;
+                            val = "Link";
+                        }
+                        if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
+                            cellHighlights.push({ colIndex: colOutIdx, color: partialRowColor });
+                        }
+                        if (masterIdx !== -1 && val) {
+                            const colMap = columnColorMaps.get(masterIdx);
+                            if (colMap && colMap.has(String(val))) {
+                                cellHighlights.push({ colIndex: colOutIdx, color: colMap.get(String(val)) });
+                            }
+                        }
+                        if (colConfig.name === 'Outreach' && retentionMsg) {
+                            val = retentionMsg;
+                        }
+                        if (settings.includeDNCTag && dncMap.has(sId)) {
+                            if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFC7CE", strikethrough: true });
+                            }
+                        }
+                        cells.push(val);
+                        formulas.push(form);
+                    });
+                    return { cells, formulas, rowColor, cellHighlights };
+                };
+
+                // --- Process each campus ---
+                if (onProgress) onProgress('createSheet', 'active');
+
+                for (let ci = 0; ci < campusList.length; ci++) {
+                    const campusName = campusList[ci];
+                    if (onCampusProgress) onCampusProgress(campusName, ci, campusList.length, 'active');
+
+                    // Filter data for this campus
+                    const campusDataRows = dataRows.filter(r =>
+                        String(r.values[campusIdx] || '').trim() === campusName
+                    );
+                    const campusFailingRows = failingRows.filter(r =>
+                        String(r.values[campusIdx] || '').trim() === campusName
+                    );
+
+                    // Create sheet for this campus
+                    let sheetName = campusName;
+                    let counter = 2;
+                    sheets.load("items/name");
+                    await context.sync();
+                    const existingNames = sheets.items.map(s => s.name);
+                    while (existingNames.includes(sheetName)) {
+                        sheetName = `${campusName} (${counter++})`;
+                    }
+
+                    const newSheet = sheets.add(sheetName);
+                    if (ci === 0) newSheet.activate();
+                    await context.sync();
+
+                    // Write LDA table for this campus
+                    if (campusDataRows.length > 0) {
+                        await writeTable(
+                            context, newSheet, 0, `LDA_${ci}`,
+                            outputColumns,
+                            campusDataRows.map(r => buildOutputRow(r, 'LDA_Table')),
+                            masterSheet, getColIndex, dateColumnIndices, null
+                        );
+                    } else {
+                        const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
+                        headerRange.values = [outputColumns.map(c => c.name)];
+                    }
+
+                    // Write Failing table for this campus (if applicable)
+                    let nextRow = campusDataRows.length + 4;
+                    if (settings.includeFailingList && campusFailingRows.length > 0) {
+                        const title = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
+                        title.values = [["Failing Students (Active)"]];
+                        title.format.font.bold = true;
+
+                        await writeTable(
+                            context, newSheet, nextRow, `Failing_${ci}`,
+                            outputColumns,
+                            campusFailingRows.map(r => buildOutputRow(r, 'Failing_Table')),
+                            masterSheet, getColIndex, dateColumnIndices, null
+                        );
+                    }
+
+                    // Autofit & hide columns
+                    newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+                    outputColumns.forEach((colConfig, idx) => {
+                        if (colConfig.hidden) {
+                            newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
+                        }
+                    });
+
+                    await context.sync();
+                    if (onCampusProgress) onCampusProgress(campusName, ci, campusList.length, 'completed');
+                }
+
+                if (onProgress) onProgress('createSheet', 'completed');
+                if (onProgress) onProgress('format', 'completed');
+                if (onProgress) onProgress('finalize', 'completed');
+
+            } else {
+                // ============================================================
+                // SINGLE / DATE FLOW (original behavior)
+                // ============================================================
+
+                // --- STEP 5: Creating Sheet ---
+                if (onProgress) onProgress('createSheet', 'active');
+
+                let baseName;
+                if (settings.sheetNameMode === 'campus') {
+                    let campusName = '';
+                    if (campusIdx !== -1) {
+                        for (let i = 1; i < masterValues.length; i++) {
+                            const val = String(masterValues[i][campusIdx] || '').trim();
+                            if (val) { campusName = val; break; }
+                        }
+                    }
+                    baseName = campusName || 'Campus';
+                } else {
+                    const today = new Date();
+                    const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+                    baseName = `LDA ${dateStr}`;
+                }
+                let sheetName = baseName;
+
+                let counter = 2;
+                const existingNames = sheets.items.map(s => s.name);
+                while (existingNames.includes(sheetName)) {
+                    sheetName = `${baseName} (${counter++})`;
+                }
+
+                const newSheet = sheets.add(sheetName);
+                newSheet.activate();
+                await context.sync();
+                if (onProgress) onProgress('createSheet', 'completed');
 
 
-            // --- STEP 7: Formatting LDA Table ---
-            if (onProgress) onProgress('format', 'active');
+                // --- STEP 6: Applying Tags (Data Processing) ---
+                if (onProgress) onProgress('tags', 'active');
 
-            // --- 7a. Data-Driven Date Column Detection ---
-            const dateColumnIndices = new Set();
-            outputColumns.forEach((colConfig) => {
-                const masterIdx = getColIndex(colConfig.name);
-                if (masterIdx === -1) return;
+                const dncMap = new Map();
+                const ldaFollowUpMap = new Map();
 
-                const excelHeader = String(masterValues[0][masterIdx] || '').toLowerCase();
-                const isExcluded = /id|no\.|num|code|zip|postal|social|ssn|phone|grade|score|credit|fee|days|count/i.test(excelHeader);
-                if (isExcluded) return;
+                if (historyData && studentIdIdx !== -1) {
+                    const hValues = historyData.values;
+                    if (hValues.length > 0) {
+                        const hHeaders = hValues[0].map(h => String(h).toLowerCase().trim());
+                        const hIdIdx = hHeaders.findIndex(h => h.includes('student') && h.includes('id') || h.includes('number'));
+                        const hTagIdx = hHeaders.indexOf('tag');
 
-                let dateCount = 0;
-                let numCount = 0;
-                const limit = Math.min(masterValues.length, 100);
-                for (let i = 1; i < limit; i++) {
-                    const val = masterValues[i][masterIdx];
-                    if (typeof val === 'number') {
-                        numCount++;
-                        if (val > 10958 && val < 73051) {
-                            dateCount++;
+                        if (hIdIdx !== -1 && hTagIdx !== -1) {
+                            const todayTime = new Date().setHours(0,0,0,0);
+                            const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
+
+                            for (let i = hValues.length - 1; i > 0; i--) {
+                                const hid = hValues[i][hIdIdx];
+                                const htagRaw = String(hValues[i][hTagIdx] || '');
+                                const htagLower = htagRaw.toLowerCase().trim();
+
+                                if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
+                                    dncMap.set(hid, htagLower);
+                                }
+
+                                if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
+                                    const match = htagRaw.match(ldaRegex);
+                                    if (match) {
+                                        const dateString = match[1];
+                                        const ldaDate = new Date(dateString);
+                                        if (!isNaN(ldaDate.getTime())) {
+                                            ldaDate.setHours(0,0,0,0);
+                                            if (ldaDate >= todayTime) {
+                                                ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                if (numCount > 0 && (dateCount / numCount) > 0.5) {
-                    dateColumnIndices.add(colConfig.name);
-                }
-            });
+                if (onProgress) onProgress('tags', 'completed');
 
-            // Determine Outreach Column Index (It might be missing if implicit columns pushed it)
-            const outreachColIndex = outputColumns.findIndex(c => c.name === 'Outreach');
-            
-            // Row Builder
-            const buildOutputRow = (rowObj, tableContext) => {
-                const cells = [];
-                const formulas = [];
-                let rowColor = null;
-                let cellHighlights = [];
 
-                const sId = rowObj.values[studentIdIdx];
+                // --- STEP 7: Formatting LDA Table ---
+                if (onProgress) onProgress('format', 'active');
 
-                // 1. Get critical values
-                const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
-                const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
-
-                // 2. Generate Retention Message using helper
-                const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
-
-                // 3. Determine Highlighting Logic
-                const isLda = sId && ldaFollowUpMap.has(sId);
-                const isRetentionActive = !!retentionMsg;
-                const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
-
-                // Determine Row/Partial Color:
-                let partialRowColor = "#FFEDD5"; // Orange Default
-                if (retentionMsg && retentionMsg.includes("DNC")) {
-                    partialRowColor = "#FFC7CE"; // Red for DNC
-                } else if (isNextAssignmentDue) {
-                    partialRowColor = "#e2efda"; // Light green for zero missing + next assignment due
-                }
-
-                // Fallback row color if Outreach column is missing
-                if (isRetentionActive && outreachColIndex === -1) {
-                     rowColor = partialRowColor;
-                }
-
-                outputColumns.forEach((colConfig, colOutIdx) => {
+                // --- 7a. Data-Driven Date Column Detection ---
+                const dateColumnIndices = new Set();
+                outputColumns.forEach((colConfig) => {
                     const masterIdx = getColIndex(colConfig.name);
-                    let val = (masterIdx !== -1) ? rowObj.values[masterIdx] : "";
-                    let form = (masterIdx !== -1) ? rowObj.formulas[masterIdx] : null;
+                    if (masterIdx === -1) return;
 
-                    if (colConfig.name === 'Gradebook' && form && String(form).startsWith('=HYPERLINK')) {
-                        // Keep formula
-                    } else if (colConfig.name === 'Gradebook' && val && String(val).startsWith('http')) {
-                        form = `=HYPERLINK("${val}", "Link")`;
-                        val = "Link";
-                    }
+                    const excelHeader = String(masterValues[0][masterIdx] || '').toLowerCase();
+                    const isExcluded = /id|no\.|num|code|zip|postal|social|ssn|phone|grade|score|credit|fee|days|count/i.test(excelHeader);
+                    if (isExcluded) return;
 
-                    // --- Apply Retention Highlight (Partial Row) ---
-                    // Only apply up to outreach column if it exists and this column is within range
-                    if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
-                        cellHighlights.push({
-                            colIndex: colOutIdx,
-                            color: partialRowColor 
-                        });
+                    let dateCount = 0;
+                    let numCount = 0;
+                    const limit = Math.min(masterValues.length, 100);
+                    for (let i = 1; i < limit; i++) {
+                        const val = masterValues[i][masterIdx];
+                        if (typeof val === 'number') {
+                            numCount++;
+                            if (val > 10958 && val < 73051) {
+                                dateCount++;
+                            }
+                        }
                     }
-
-                    // --- Value-Based Color Mapping (Overrides Retention Highlight) ---
-                    if (masterIdx !== -1 && val) {
-                         const colMap = columnColorMaps.get(masterIdx);
-                         if (colMap && colMap.has(String(val))) {
-                             cellHighlights.push({
-                                 colIndex: colOutIdx,
-                                 color: colMap.get(String(val))
-                             });
-                         }
+                    if (numCount > 0 && (dateCount / numCount) > 0.5) {
+                        dateColumnIndices.add(colConfig.name);
                     }
-                    
-                    // --- Outreach Message Injection ---
-                    if (colConfig.name === 'Outreach' && retentionMsg) {
-                        val = retentionMsg;
-                    }
-
-                    // --- DNC Highlight (Highest Priority - Phone Columns) ---
-                    if (settings.includeDNCTag && dncMap.has(sId)) {
-                         if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
-                             cellHighlights.push({ 
-                                 colIndex: colOutIdx, 
-                                 color: "#FFC7CE", 
-                                 strikethrough: true 
-                             });
-                         }
-                    }
-
-                    cells.push(val);
-                    formulas.push(form);
                 });
 
-                return { cells, formulas, rowColor, cellHighlights };
-            };
+                // Determine Outreach Column Index (It might be missing if implicit columns pushed it)
+                const outreachColIndex = outputColumns.findIndex(c => c.name === 'Outreach');
 
-            // 7b. Write Main LDA Table
-            if (dataRows.length > 0) {
-                // Create a batch progress wrapper that includes table name
-                const ldaBatchProgress = onBatchProgress
-                    ? (current, total, phase) => onBatchProgress(current, total, phase, 'LDA_Table')
-                    : null;
+                // Row Builder
+                const buildOutputRow = (rowObj, tableContext) => {
+                    const cells = [];
+                    const formulas = [];
+                    let rowColor = null;
+                    let cellHighlights = [];
 
-                await writeTable(
-                    context,
-                    newSheet,
-                    0,
-                    "LDA_Table",
-                    outputColumns,
-                    dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
-                    masterSheet,
-                    getColIndex,
-                    dateColumnIndices,
-                    ldaBatchProgress
-                );
-            } else {
-                const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
-                headerRange.values = [outputColumns.map(c => c.name)];
-            }
+                    const sId = rowObj.values[studentIdIdx];
 
-            // 7c. Write Failing Table (if applicable)
-            let nextRow = dataRows.length + 4;
-            if (settings.includeFailingList && failingRows.length > 0) {
-                const title = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
-                title.values = [["Failing Students (Active)"]];
-                title.format.font.bold = true;
+                    // 1. Get critical values
+                    const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
+                    const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
 
-                // Create a batch progress wrapper that includes table name
-                const failingBatchProgress = onBatchProgress
-                    ? (current, total, phase) => onBatchProgress(current, total, phase, 'Failing_Table')
-                    : null;
+                    // 2. Generate Retention Message using helper
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
 
-                await writeTable(
-                    context,
-                    newSheet,
-                    nextRow,
-                    "Failing_Table",
-                    outputColumns,
-                    failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
-                    masterSheet,
-                    getColIndex,
-                    dateColumnIndices,
-                    failingBatchProgress
-                );
-            }
+                    // 3. Determine Highlighting Logic
+                    const isLda = sId && ldaFollowUpMap.has(sId);
+                    const isRetentionActive = !!retentionMsg;
+                    const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
 
-            // Autofit
-            newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+                    // Determine Row/Partial Color:
+                    let partialRowColor = "#FFEDD5"; // Orange Default
+                    if (retentionMsg && retentionMsg.includes("DNC")) {
+                        partialRowColor = "#FFC7CE"; // Red for DNC
+                    } else if (isNextAssignmentDue) {
+                        partialRowColor = "#e2efda"; // Light green for zero missing + next assignment due
+                    }
 
-            // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
-            outputColumns.forEach((colConfig, idx) => {
-                if (colConfig.hidden) {
-                    newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
+                    // Fallback row color if Outreach column is missing
+                    if (isRetentionActive && outreachColIndex === -1) {
+                         rowColor = partialRowColor;
+                    }
+
+                    outputColumns.forEach((colConfig, colOutIdx) => {
+                        const masterIdx = getColIndex(colConfig.name);
+                        let val = (masterIdx !== -1) ? rowObj.values[masterIdx] : "";
+                        let form = (masterIdx !== -1) ? rowObj.formulas[masterIdx] : null;
+
+                        if (colConfig.name === 'Gradebook' && form && String(form).startsWith('=HYPERLINK')) {
+                            // Keep formula
+                        } else if (colConfig.name === 'Gradebook' && val && String(val).startsWith('http')) {
+                            form = `=HYPERLINK("${val}", "Link")`;
+                            val = "Link";
+                        }
+
+                        // --- Apply Retention Highlight (Partial Row) ---
+                        // Only apply up to outreach column if it exists and this column is within range
+                        if (isRetentionActive && outreachColIndex !== -1 && colOutIdx <= outreachColIndex) {
+                            cellHighlights.push({
+                                colIndex: colOutIdx,
+                                color: partialRowColor
+                            });
+                        }
+
+                        // --- Value-Based Color Mapping (Overrides Retention Highlight) ---
+                        if (masterIdx !== -1 && val) {
+                             const colMap = columnColorMaps.get(masterIdx);
+                             if (colMap && colMap.has(String(val))) {
+                                 cellHighlights.push({
+                                     colIndex: colOutIdx,
+                                     color: colMap.get(String(val))
+                                 });
+                             }
+                        }
+
+                        // --- Outreach Message Injection ---
+                        if (colConfig.name === 'Outreach' && retentionMsg) {
+                            val = retentionMsg;
+                        }
+
+                        // --- DNC Highlight (Highest Priority - Phone Columns) ---
+                        if (settings.includeDNCTag && dncMap.has(sId)) {
+                             if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
+                                 cellHighlights.push({
+                                     colIndex: colOutIdx,
+                                     color: "#FFC7CE",
+                                     strikethrough: true
+                                 });
+                             }
+                        }
+
+                        cells.push(val);
+                        formulas.push(form);
+                    });
+
+                    return { cells, formulas, rowColor, cellHighlights };
+                };
+
+                // 7b. Write Main LDA Table
+                if (dataRows.length > 0) {
+                    // Create a batch progress wrapper that includes table name
+                    const ldaBatchProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'LDA_Table')
+                        : null;
+
+                    await writeTable(
+                        context,
+                        newSheet,
+                        0,
+                        "LDA_Table",
+                        outputColumns,
+                        dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
+                        masterSheet,
+                        getColIndex,
+                        dateColumnIndices,
+                        ldaBatchProgress
+                    );
+                } else {
+                    const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
+                    headerRange.values = [outputColumns.map(c => c.name)];
                 }
-            });
 
-            if (onProgress) onProgress('format', 'completed');
+                // 7c. Write Failing Table (if applicable)
+                let nextRow = dataRows.length + 4;
+                if (settings.includeFailingList && failingRows.length > 0) {
+                    const title = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
+                    title.values = [["Failing Students (Active)"]];
+                    title.format.font.bold = true;
 
-            // --- STEP 8: Finalize ---
-            if (onProgress) onProgress('finalize', 'active');
-            await context.sync();
-            if (onProgress) onProgress('finalize', 'completed');
+                    // Create a batch progress wrapper that includes table name
+                    const failingBatchProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'Failing_Table')
+                        : null;
+
+                    await writeTable(
+                        context,
+                        newSheet,
+                        nextRow,
+                        "Failing_Table",
+                        outputColumns,
+                        failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
+                        masterSheet,
+                        getColIndex,
+                        dateColumnIndices,
+                        failingBatchProgress
+                    );
+                }
+
+                // Autofit
+                newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
+
+                // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
+                outputColumns.forEach((colConfig, idx) => {
+                    if (colConfig.hidden) {
+                        newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
+                    }
+                });
+
+                if (onProgress) onProgress('format', 'completed');
+
+                // --- STEP 8: Finalize ---
+                if (onProgress) onProgress('finalize', 'active');
+                await context.sync();
+                if (onProgress) onProgress('finalize', 'completed');
+            }
 
         });
 
@@ -880,5 +1089,65 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         if (onBatchProgress) {
             onBatchProgress(formatBatch, totalFormatBatches, 'formatting');
         }
+    }
+}
+
+/**
+ * Detect unique campus values from the Master List.
+ * Reads only the Campus column in batches for efficiency.
+ * @returns {Promise<string[]>} Array of unique campus names, sorted alphabetically
+ */
+export async function detectCampuses() {
+    try {
+        return await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const hasMasterList = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+            if (!hasMasterList) return [];
+
+            const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
+            const masterRange = masterSheet.getUsedRange();
+            masterRange.load("rowCount, columnCount");
+            await context.sync();
+
+            const totalRows = masterRange.rowCount;
+            const totalCols = masterRange.columnCount;
+
+            // Read headers only
+            const headerRange = masterSheet.getRangeByIndexes(0, 0, 1, totalCols);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+
+            // Find Campus column with case/space insensitive matching
+            const campusIdx = headers.findIndex(h => {
+                const stripped = String(h || '').trim().toLowerCase().replace(/\s+/g, '');
+                return stripped === 'campus';
+            });
+
+            if (campusIdx === -1) return [];
+
+            // Read just the campus column in batches
+            const campusSet = new Set();
+            for (let startRow = 1; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = masterSheet.getRangeByIndexes(startRow, campusIdx, rowsToRead, 1);
+                batchRange.load("values");
+                await context.sync();
+
+                for (const row of batchRange.values) {
+                    const val = String(row[0] || '').trim();
+                    if (val) campusSet.add(val);
+                }
+            }
+
+            return Array.from(campusSet).sort();
+        });
+    } catch (error) {
+        console.error("Campus detection error:", error);
+        return [];
     }
 }
