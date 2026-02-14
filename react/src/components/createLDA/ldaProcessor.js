@@ -168,7 +168,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             includeFailingList: userOverrides.includeFailingList ?? false,
             includeLDATag: userOverrides.includeLDATag ?? true,
             includeDNCTag: userOverrides.includeDNCTag ?? true,
-            columns: workbookSettings.columns || [] 
+            sheetNameMode: userOverrides.sheetNameMode ?? 'date',
+            columns: workbookSettings.columns || []
         };
 
         if (settings.columns.length === 0) {
@@ -405,9 +406,23 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- STEP 5: Creating Sheet ---
             if (onProgress) onProgress('createSheet', 'active');
 
-            const today = new Date();
-            const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-            const baseName = `LDA ${dateStr}`;
+            let baseName;
+            if (settings.sheetNameMode === 'campus') {
+                const campusIdx = getColIndex('Campus');
+                let campusName = '';
+                if (campusIdx !== -1) {
+                    // Use the first data row's campus value
+                    for (let i = 1; i < masterValues.length; i++) {
+                        const val = String(masterValues[i][campusIdx] || '').trim();
+                        if (val) { campusName = val; break; }
+                    }
+                }
+                baseName = campusName ? `LDA ${campusName}` : `LDA Campus`;
+            } else {
+                const today = new Date();
+                const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
+                baseName = `LDA ${dateStr}`;
+            }
             let sheetName = baseName;
             
             let counter = 2;
