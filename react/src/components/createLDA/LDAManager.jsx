@@ -415,24 +415,19 @@ function ToggleRow({ label, isOn, onToggle }) {
         <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
       </div>
       
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={onToggle}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#145F82]/20 focus:ring-offset-1 ${
-            isOn ? 'bg-[#145F82]' : 'bg-slate-200'
-          }`}
-        >
-          <span
-            className={`${
-              isOn ? 'translate-x-6' : 'translate-x-1'
-            } inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200`}
-          />
-        </button>
-        <span className="text-xs font-medium text-slate-500 w-6">
-          {isOn ? 'On' : 'Off'}
-        </span>
-      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#145F82]/20 focus:ring-offset-1 ${
+          isOn ? 'bg-[#145F82]' : 'bg-slate-200'
+        }`}
+      >
+        <span
+          className={`${
+            isOn ? 'translate-x-6' : 'translate-x-1'
+          } inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200`}
+        />
+      </button>
     </div>
   );
 }
