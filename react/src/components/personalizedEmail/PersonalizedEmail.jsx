@@ -402,8 +402,17 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const getStudentDataCore = async (selection, skipSpecialParams = false, specialParamsToProcess = [], onProgress = null) => {
         const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
         let sheetName;
+        let selectedRowSet = null;
 
-        if (type === 'custom') {
+        if (type === 'selection') {
+            sheetName = selection.selectionSheetName;
+            if (!sheetName || !selection.selectedRows || selection.selectedRows.length === 0) {
+                const err = new Error('No rows selected. Please select rows in Excel first.');
+                err.userFacing = true;
+                throw err;
+            }
+            selectedRowSet = new Set(selection.selectedRows);
+        } else if (type === 'custom') {
             sheetName = customSheetName.trim();
             if (!sheetName) {
                 const err = new Error('Custom sheet name is required.');
@@ -477,9 +486,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                 // Only load formulas if we need to process special parameters
                 if (skipSpecialParams) {
-                    usedRange.load("values, rowCount, columnCount, isNullObject");
+                    usedRange.load("values, rowCount, columnCount, rowIndex, isNullObject");
                 } else {
-                    usedRange.load("values, formulas, rowCount, columnCount, isNullObject");
+                    usedRange.load("values, formulas, rowCount, columnCount, rowIndex, isNullObject");
                 }
                 await context.sync();
                 reportProgress();
@@ -525,9 +534,14 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     missingAssignmentsCache = await buildMissingAssignmentsCache(context);
                 }
 
+                const usedRangeRowStart = usedRange.rowIndex || 0;
+
                 for (let i = 1; i < values.length; i++) {
                     const row = values[i];
                     if (!row) continue;
+
+                    // For row selection mode, skip rows not in the user's selection
+                    if (selectedRowSet && !selectedRowSet.has(usedRangeRowStart + i)) continue;
 
                     const studentIdentifier = row[colIndices.StudentIdentifier];
                     const studentNameForRow = row[colIndices.StudentName] || `ID: ${studentIdentifier || 'Unknown'}`;

@@ -15,10 +15,42 @@ export default function RecipientModal({
     const [isLoading, setIsLoading] = useState(false);
     const [showExclusionsView, setShowExclusionsView] = useState(false);
 
+    const captureRowSelection = async () => {
+        try {
+            const result = await window.Excel.run(async (context) => {
+                const selectedRange = context.workbook.getSelectedRange();
+                const activeSheet = context.workbook.worksheets.getActiveWorksheet();
+                selectedRange.load(["rowIndex", "rowCount"]);
+                activeSheet.load("name");
+                await context.sync();
+
+                const rowIndices = [];
+                for (let r = 0; r < selectedRange.rowCount; r++) {
+                    rowIndices.push(selectedRange.rowIndex + r);
+                }
+                return { sheetName: activeSheet.name, selectedRows: rowIndices };
+            });
+            return result;
+        } catch (error) {
+            console.error("Failed to capture row selection:", error);
+            return null;
+        }
+    };
+
     useEffect(() => {
         if (isOpen) {
-            setSelection(currentSelection);
-            fetchStudentCount(currentSelection);
+            const init = async () => {
+                let sel = currentSelection;
+                if (sel.type === 'selection') {
+                    const rowData = await captureRowSelection();
+                    if (rowData) {
+                        sel = { ...sel, selectionSheetName: rowData.sheetName, selectedRows: rowData.selectedRows };
+                    }
+                }
+                setSelection(sel);
+                fetchStudentCount(sel);
+            };
+            init();
         }
     }, [isOpen, currentSelection]);
 
@@ -55,10 +87,17 @@ export default function RecipientModal({
         }
     };
 
-    const handleSelectionChange = (field, value) => {
-        const newSelection = { ...selection, [field]: value };
+    const handleSelectionChange = async (field, value) => {
+        let newSelection = { ...selection, [field]: value };
+
+        if (field === 'type' && value === 'selection') {
+            const rowData = await captureRowSelection();
+            if (rowData) {
+                newSelection = { ...newSelection, selectionSheetName: rowData.sheetName, selectedRows: rowData.selectedRows };
+            }
+        }
+
         setSelection(newSelection);
-        // Re-fetch count when selection changes
         setTimeout(() => {
             fetchStudentCountForSelection(newSelection);
         }, 100);
@@ -202,8 +241,15 @@ export default function RecipientModal({
                                     <option value="lda">Today's LDA Sheet</option>
                                     <option value="master">Master List</option>
                                     <option value="custom">Custom Sheet</option>
+                                    <option value="selection">Row Selection</option>
                                 </select>
                             </div>
+
+                            {selection.type === 'selection' && selection.selectedRows && (
+                                <p className="text-xs text-gray-500">
+                                    {selection.selectedRows.length} row{selection.selectedRows.length !== 1 ? 's' : ''} selected from "{selection.selectionSheetName}"
+                                </p>
+                            )}
 
                             {selection.type === 'custom' && (
                                 <div>
