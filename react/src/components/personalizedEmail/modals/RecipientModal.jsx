@@ -212,7 +212,7 @@ export default function RecipientModal({
                     <div className="bg-gray-50 p-3 rounded-md">
                         <label htmlFor="exclude-dnc-toggle" className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700 flex-grow pr-4">
-                                Exclude students with a "DNC" tag
+                                DNC-tagged students
                             </span>
                             <div className="relative inline-flex items-center flex-shrink-0">
                                 <input
@@ -230,7 +230,7 @@ export default function RecipientModal({
                     <div className="mt-2 bg-gray-50 p-3 rounded-md">
                         <label htmlFor="exclude-fill-color-toggle" className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700 flex-grow pr-4">
-                                Exclude students with a Fill Color in their Outreach column
+                                Outreach Color Filled students
                             </span>
                             <div className="relative inline-flex items-center flex-shrink-0">
                                 <input
