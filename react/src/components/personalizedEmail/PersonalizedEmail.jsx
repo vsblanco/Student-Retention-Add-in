@@ -1451,7 +1451,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
             {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
             <div
-                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale' : ''}`}
+                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-sm' : ''}`}
                 onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
             >
             <div className="space-y-4 mt-4">
