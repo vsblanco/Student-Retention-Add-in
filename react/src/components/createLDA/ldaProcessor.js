@@ -417,7 +417,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         if (val) { campusName = val; break; }
                     }
                 }
-                baseName = campusName ? `LDA ${campusName}` : `LDA Campus`;
+                baseName = campusName || 'Campus';
             } else {
                 const today = new Date();
                 const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
