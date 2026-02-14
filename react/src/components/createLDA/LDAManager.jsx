@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight } from 'lucide-react';
 import { createLDA } from './ldaProcessor'; // Import the new logic
 
 // --- CONFIGURATION: Steps matching the processor logic ---
@@ -285,6 +285,8 @@ export default function CreateLDAManager({ onReady } = {}) {
 // --- Sub-Components ---
 
 function LDASettings({ settings, onSettingChange }) {
+  const [settingsView, setSettingsView] = useState('main');
+
   const handleToggle = (key) => {
     onSettingChange(key, !settings[key]);
   };
@@ -292,6 +294,33 @@ function LDASettings({ settings, onSettingChange }) {
   const handleInputChange = (key, value) => {
     onSettingChange(key, value);
   };
+
+  if (settingsView === 'tags') {
+    return (
+      <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+        <button
+          type="button"
+          onClick={() => setSettingsView('main')}
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <ToggleRow
+          label="Include LDA Tag"
+          isOn={settings.includeLDATag}
+          onToggle={() => handleToggle('includeLDATag')}
+        />
+
+        <ToggleRow
+          label="Include DNC Tag"
+          isOn={settings.includeDNCTag}
+          onToggle={() => handleToggle('includeDNCTag')}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 w-full">
@@ -319,17 +348,17 @@ function LDASettings({ settings, onSettingChange }) {
         onToggle={() => handleToggle('includeFailingList')}
       />
 
-      <ToggleRow
-        label="Include LDA Tag"
-        isOn={settings.includeLDATag}
-        onToggle={() => handleToggle('includeLDATag')}
-      />
-
-      <ToggleRow
-        label="Include DNC Tag"
-        isOn={settings.includeDNCTag}
-        onToggle={() => handleToggle('includeDNCTag')}
-      />
+      <button
+        type="button"
+        onClick={() => setSettingsView('tags')}
+        className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-slate-700 font-medium text-sm">Tags</span>
+          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+        </div>
+        <ChevronRight className="w-4 h-4 text-slate-400" />
+      </button>
     </div>
   );
 }
