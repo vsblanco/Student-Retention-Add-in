@@ -163,8 +163,8 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                         )}
                     </div>
 
-                    <div className={`flex ${isGuest ? 'justify-end' : 'justify-between'} mt-4`}>
-                        {!isGuest && (
+                    <div className={`flex ${isGuest || !currentBody?.trim() ? 'justify-end' : 'justify-between'} mt-4`}>
+                        {!isGuest && currentBody?.trim() && (
                             <button
                                 onClick={() => {
                                     setEditingTemplate(null);
@@ -174,7 +174,7 @@ export default function TemplatesModal({ isOpen, onClose, onLoadTemplate, user, 
                                 }}
                                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                             >
-                                Save Current as Template
+                                Save
                             </button>
                         )}
                         <button
