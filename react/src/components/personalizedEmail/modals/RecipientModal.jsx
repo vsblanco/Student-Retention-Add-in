@@ -187,7 +187,16 @@ export default function RecipientModal({
                                                         <span className="text-gray-700 truncate pr-2" title={student.name}>
                                                             {student.name}
                                                         </span>
-                                                        <span className="flex-shrink-0 px-2 py-0.5 bg-gray-200 text-gray-600 rounded-full text-xs">
+                                                        <span
+                                                            className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs"
+                                                            style={
+                                                                student.reason === 'DNC Tag'
+                                                                    ? { backgroundColor: '#FEE2E2', color: '#991B1B' }
+                                                                    : student.reason === 'Fill Color' && student.color
+                                                                        ? { backgroundColor: student.color, color: '#374151' }
+                                                                        : { backgroundColor: '#E5E7EB', color: '#4B5563' }
+                                                            }
+                                                        >
                                                             {student.reason}
                                                         </span>
                                                     </li>
@@ -203,7 +212,7 @@ export default function RecipientModal({
                     <div className="bg-gray-50 p-3 rounded-md">
                         <label htmlFor="exclude-dnc-toggle" className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700 flex-grow pr-4">
-                                Exclude students with a "DNC" tag
+                                DNC-tagged students
                             </span>
                             <div className="relative inline-flex items-center flex-shrink-0">
                                 <input
@@ -221,7 +230,7 @@ export default function RecipientModal({
                     <div className="mt-2 bg-gray-50 p-3 rounded-md">
                         <label htmlFor="exclude-fill-color-toggle" className="flex items-center justify-between cursor-pointer">
                             <span className="text-sm text-gray-700 flex-grow pr-4">
-                                Exclude students with a Fill Color in their Outreach column
+                                Outreach Color Filled students
                             </span>
                             <div className="relative inline-flex items-center flex-shrink-0">
                                 <input

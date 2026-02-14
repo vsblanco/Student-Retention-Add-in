@@ -548,7 +548,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     if (excludeFillColor && outreachColors) {
                         const cellColor = outreachColors[i]?.[0]?.format?.fill?.color;
                         if (cellColor && cellColor !== '#FFFFFF' && cellColor !== '#000000') {
-                            excludedStudents.push({ name: studentNameForRow, reason: 'Fill Color' });
+                            excludedStudents.push({ name: studentNameForRow, reason: 'Fill Color', color: cellColor });
                             continue;
                         }
                     }
