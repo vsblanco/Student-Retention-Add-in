@@ -276,12 +276,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         }
     }, [isConnected]);
 
-    // Auto-populate From field in individual mode
+    // Auto-populate From field with user's email
     useEffect(() => {
-        if (mode === 'individual' && userEmail && fromPills.length === 0) {
+        if (userEmail && fromPills.length === 0) {
             setFromPills([userEmail]);
         }
-    }, [mode, userEmail, fromPills.length]);
+    }, [userEmail, fromPills.length]);
 
     const checkConnection = async () => {
         await Excel.run(async (context) => {
@@ -300,10 +300,6 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             } else {
                 setIsConnected(false);
                 setMode('individual');
-                // In individual mode, auto-populate From field with user's email
-                if (userEmail && fromPills.length === 0) {
-                    setFromPills([userEmail]);
-                }
             }
         });
     };
