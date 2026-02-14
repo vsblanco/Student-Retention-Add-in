@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight } from 'lucide-react';
-import { createLDA } from './ldaProcessor'; // Import the new logic
+import { createLDA, detectCampuses } from './ldaProcessor';
 
 // --- CONFIGURATION: Steps matching the processor logic ---
 const PROCESS_STEPS = [
@@ -42,6 +42,15 @@ export default function CreateLDAManager({ onReady } = {}) {
   // State for Batch Progress (for large datasets)
   // { current, total, phase, tableName } where phase is 'writing' | 'formatting'
   const [batchProgress, setBatchProgress] = useState(null);
+
+  // State for Campus Detection (when campus mode is active)
+  const [detectedCampuses, setDetectedCampuses] = useState([]);
+  const [campusLoading, setCampusLoading] = useState(false);
+
+  // State for Multi-Campus Processing Progress
+  // { campusName: 'pending' | 'active' | 'completed' }
+  const [campusStatuses, setCampusStatuses] = useState({});
+  const [isMultiCampus, setIsMultiCampus] = useState(false);
 
   // Load workbook settings on mount
   useEffect(() => {
@@ -87,6 +96,24 @@ export default function CreateLDAManager({ onReady } = {}) {
     }
   }, [onReady]);
 
+  // Detect campuses when campus mode is toggled on
+  useEffect(() => {
+    if (ldaSettings.sheetNameMode === 'campus') {
+      setCampusLoading(true);
+      detectCampuses()
+        .then(campuses => {
+          setDetectedCampuses(campuses);
+          setCampusLoading(false);
+        })
+        .catch(() => {
+          setDetectedCampuses([]);
+          setCampusLoading(false);
+        });
+    } else {
+      setDetectedCampuses([]);
+    }
+  }, [ldaSettings.sheetNameMode]);
+
   const handleSettingChange = (key, value) => {
     setLdaSettings((prev) => ({ ...prev, [key]: value }));
   };
@@ -95,15 +122,27 @@ export default function CreateLDAManager({ onReady } = {}) {
   const handleCreateLDA = async () => {
     console.log('Starting LDA Creation Process with:', ldaSettings);
 
+    const multiCampus = ldaSettings.sheetNameMode === 'campus' && detectedCampuses.length > 1;
+
     // 1. Switch View
     setView('processing');
     setErrorMessage('');
     setBatchProgress(null);
+    setIsMultiCampus(multiCampus);
 
     // 2. Reset Steps
     const initialStatus = {};
     PROCESS_STEPS.forEach(s => initialStatus[s.id] = 'pending');
     setStepStatus(initialStatus);
+
+    // Initialize campus statuses if multi-campus
+    if (multiCampus) {
+      const initial = {};
+      detectedCampuses.forEach(c => initial[c] = 'pending');
+      setCampusStatuses(initial);
+    } else {
+      setCampusStatuses({});
+    }
 
     try {
         // 3. Call the imported processor function
@@ -123,7 +162,14 @@ export default function CreateLDAManager({ onReady } = {}) {
             // Batch progress callback (for large datasets)
             (current, total, phase, tableName) => {
                 setBatchProgress({ current, total, phase, tableName });
-            }
+            },
+            // Campus progress callback (for multi-campus mode)
+            multiCampus ? (campusName, campusIndex, totalCampuses, status) => {
+                setCampusStatuses(prev => ({
+                    ...prev,
+                    [campusName]: status
+                }));
+            } : null
         );
 
         // 4. Success
@@ -143,6 +189,8 @@ export default function CreateLDAManager({ onReady } = {}) {
     setStepStatus({});
     setErrorMessage('');
     setBatchProgress(null);
+    setCampusStatuses({});
+    setIsMultiCampus(false);
   };
 
   return (
@@ -193,6 +241,52 @@ export default function CreateLDAManager({ onReady } = {}) {
                 >
                   Create LDA
                 </button>
+
+                {/* Campus Detection List - fades in when campus mode is active */}
+                <div
+                  className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                    ldaSettings.sheetNameMode === 'campus'
+                      ? 'opacity-100 max-h-96 mt-4'
+                      : 'opacity-0 max-h-0 mt-0'
+                  }`}
+                >
+                  {campusLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400 text-sm p-3">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Scanning for campuses...</span>
+                    </div>
+                  ) : detectedCampuses.length > 1 ? (
+                    <div className="bg-slate-50/80 rounded-xl border border-slate-100/80 p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-5 h-5 rounded-md bg-[#145F82]/10 flex items-center justify-center">
+                          <span className="text-[#145F82] text-xs font-bold">{detectedCampuses.length}</span>
+                        </div>
+                        <span className="text-sm font-medium text-slate-700">
+                          Campuses Detected
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {detectedCampuses.map(campus => (
+                          <div key={campus} className="flex items-center gap-2.5 text-sm text-slate-600 pl-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#145F82]/50" />
+                            <span>{campus}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-400 mt-3 pt-3 border-t border-slate-100">
+                        {detectedCampuses.length} separate LDA sheets will be created
+                      </p>
+                    </div>
+                  ) : detectedCampuses.length === 1 ? (
+                    <div className="text-sm text-slate-500 p-3 bg-slate-50/80 rounded-xl border border-slate-100/80">
+                      1 campus found: <span className="font-medium text-slate-700">{detectedCampuses[0]}</span>
+                    </div>
+                  ) : ldaSettings.sheetNameMode === 'campus' && !campusLoading ? (
+                    <div className="text-sm text-slate-400 italic p-3">
+                      No Campus column found in Master List
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
           </section>
@@ -202,23 +296,23 @@ export default function CreateLDAManager({ onReady } = {}) {
         {(view === 'processing' || view === 'done' || view === 'error') && (
            <section className="flex flex-col gap-4 animate-in fade-in slide-in-from-right-8 duration-500">
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
-                  {PROCESS_STEPS.map((step, index) => {
+                  {/* Render steps - for multi-campus, show global steps then campus list */}
+                  {(isMultiCampus
+                    ? PROCESS_STEPS.filter(s => ['validate', 'read', 'filter', 'failing', 'tags'].includes(s.id))
+                    : PROCESS_STEPS
+                  ).map((step) => {
                       const status = stepStatus[step.id] || 'pending';
-                      // Show batch progress for 'read' or 'format' steps when processing large datasets
                       const showBatchProgress = (step.id === 'format' || step.id === 'read') &&
                           status === 'active' && batchProgress && batchProgress.total > 1;
 
                       return (
                           <div key={step.id}>
                               <div className="flex items-center gap-3">
-                                  {/* Icon Column */}
                                   <div className="w-6 flex justify-center shrink-0">
                                       {status === 'pending' && <Circle className="w-4 h-4 text-slate-300" />}
                                       {status === 'active' && <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />}
                                       {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500 animate-in zoom-in duration-300" />}
                                   </div>
-
-                                  {/* Text Column */}
                                   <div className={`flex-1 text-sm font-medium transition-colors duration-300 ${
                                       status === 'pending' ? 'text-slate-400' :
                                       status === 'active' ? 'text-slate-800' : 'text-emerald-700'
@@ -227,7 +321,6 @@ export default function CreateLDAManager({ onReady } = {}) {
                                   </div>
                               </div>
 
-                              {/* Batch Progress (shown under format step for large datasets) */}
                               {showBatchProgress && (
                                   <div className="ml-9 mt-2 animate-in fade-in slide-in-from-top-2 duration-300">
                                       <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
@@ -252,6 +345,37 @@ export default function CreateLDAManager({ onReady } = {}) {
                           </div>
                       );
                   })}
+
+                  {/* Multi-Campus Progress Section */}
+                  {isMultiCampus && Object.keys(campusStatuses).length > 0 && (
+                      <div className="mt-1 pt-3 border-t border-slate-200/60">
+                          <div className="flex items-center gap-2 mb-2.5">
+                              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                  Campus Reports
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                  ({Object.values(campusStatuses).filter(s => s === 'completed').length} / {Object.keys(campusStatuses).length})
+                              </span>
+                          </div>
+                          <div className="space-y-2">
+                              {Object.entries(campusStatuses).map(([campusName, status]) => (
+                                  <div key={campusName} className="flex items-center gap-3 animate-in fade-in duration-300">
+                                      <div className="w-6 flex justify-center shrink-0">
+                                          {status === 'pending' && <Circle className="w-3.5 h-3.5 text-slate-300" />}
+                                          {status === 'active' && <Loader2 className="w-4 h-4 text-[#145F82] animate-spin" />}
+                                          {status === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-500 animate-in zoom-in duration-300" />}
+                                      </div>
+                                      <div className={`flex-1 text-sm transition-colors duration-300 ${
+                                          status === 'pending' ? 'text-slate-400' :
+                                          status === 'active' ? 'text-slate-700 font-medium' : 'text-emerald-600'
+                                      }`}>
+                                          {campusName}
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
               </div>
 
               {view === 'error' && (
@@ -260,7 +384,7 @@ export default function CreateLDAManager({ onReady } = {}) {
                           <AlertCircle className="w-5 h-5 shrink-0" />
                           <span>{errorMessage}</span>
                       </div>
-                      <button 
+                      <button
                         onClick={handleReset}
                         className="mt-4 w-full text-slate-500 hover:text-slate-700 text-sm font-medium hover:underline"
                       >
@@ -272,9 +396,12 @@ export default function CreateLDAManager({ onReady } = {}) {
               {view === 'done' && (
                   <div className="pt-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                       <div className="bg-emerald-50 text-emerald-700 px-4 py-3 rounded-lg text-sm font-medium flex items-center justify-center border border-emerald-100">
-                          LDA Generated Successfully!
+                          {isMultiCampus
+                            ? `${Object.keys(campusStatuses).length} LDA Sheets Generated Successfully!`
+                            : 'LDA Generated Successfully!'
+                          }
                       </div>
-                      <button 
+                      <button
                         onClick={handleReset}
                         className="mt-4 w-full text-slate-500 hover:text-slate-700 text-sm font-medium hover:underline"
                       >
