@@ -224,13 +224,24 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             const headers = masterValues[0];
 
-            // Read cell colors from a sample (first 500 rows) to build color map
-            // We don't need all rows - just enough to capture the value->color mappings
-            const colorSampleRows = Math.min(500, totalRows);
+            // Read cell colors from a sample to build color map
+            // getCellProperties returns ~100-200 bytes per cell; cap total cells to stay under ~5MB payload limit
+            const MAX_COLOR_CELLS = 12000;
+            const colorSampleRows = Math.min(
+                Math.max(50, Math.floor(MAX_COLOR_CELLS / totalCols)),
+                500,
+                totalRows
+            );
             const colorSampleRange = masterSheet.getRangeByIndexes(0, 0, colorSampleRows, totalCols);
-            const colorSampleProps = colorSampleRange.getCellProperties({
-                format: { fill: { color: true } }
-            });
+            let colorSampleProps;
+            try {
+                colorSampleProps = colorSampleRange.getCellProperties({
+                    format: { fill: { color: true } }
+                });
+            } catch (e) {
+                console.warn('getCellProperties failed, skipping color mapping', e);
+                colorSampleProps = null;
+            }
 
             let historyData = null;
             const hasHistory = sheets.items.some(s => s.name === SHEET_NAMES.HISTORY);
@@ -243,7 +254,16 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             await context.sync();
 
-            const masterColors = colorSampleProps.value;
+            // getCellProperties may have failed (null) or may not have resolved
+            let masterColors = null;
+            try {
+                if (colorSampleProps && colorSampleProps.value) {
+                    masterColors = colorSampleProps.value;
+                }
+            } catch (e) {
+                console.warn('Color sample resolution failed, skipping color mapping', e);
+                masterColors = null;
+            }
             
             // --- UPDATED: Space-Insensitive Matching ---
             const getColIndex = (settingName) => {
@@ -346,21 +366,23 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             ]);
 
             // Only iterate over the sampled color rows (masterColors has limited rows)
-            const colorRowLimit = Math.min(masterColors.length, masterValues.length);
-            for (let r = 1; r < colorRowLimit; r++) {
-                outputColIndices.forEach(cIdx => {
-                    const val = masterValues[r][cIdx];
-                    const rawColor = masterColors[r]?.[cIdx]?.format?.fill?.color;
-                    const normColor = String(rawColor || '').toLowerCase();
+            if (masterColors) {
+                const colorRowLimit = Math.min(masterColors.length, masterValues.length);
+                for (let r = 1; r < colorRowLimit; r++) {
+                    outputColIndices.forEach(cIdx => {
+                        const val = masterValues[r][cIdx];
+                        const rawColor = masterColors[r]?.[cIdx]?.format?.fill?.color;
+                        const normColor = String(rawColor || '').toLowerCase();
 
-                    // Check if value exists, color exists, and color is NOT in the excluded list
-                    if (val && rawColor && !EXCLUDED_COLORS.has(normColor)) {
-                        if (!columnColorMaps.has(cIdx)) {
-                            columnColorMaps.set(cIdx, new Map());
+                        // Check if value exists, color exists, and color is NOT in the excluded list
+                        if (val && rawColor && !EXCLUDED_COLORS.has(normColor)) {
+                            if (!columnColorMaps.has(cIdx)) {
+                                columnColorMaps.set(cIdx, new Map());
+                            }
+                            columnColorMaps.get(cIdx).set(String(val), rawColor);
                         }
-                        columnColorMaps.get(cIdx).set(String(val), rawColor);
-                    }
-                });
+                    });
+                }
             }
 
             // --- STEP 3: Filtering by Days Out ---
@@ -609,13 +631,20 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // Autofit & hide columns
                     newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
-                    outputColumns.forEach((colConfig, idx) => {
-                        if (colConfig.hidden) {
-                            newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
-                        }
-                    });
-
                     await context.sync();
+
+                    // Batch hidden column operations to avoid queue overflow
+                    const campusHiddenIndices = outputColumns
+                        .map((colConfig, idx) => colConfig.hidden ? idx : -1)
+                        .filter(idx => idx !== -1);
+                    const CAMPUS_HIDE_BATCH = 50;
+                    for (let hi = 0; hi < campusHiddenIndices.length; hi += CAMPUS_HIDE_BATCH) {
+                        const batch = campusHiddenIndices.slice(hi, hi + CAMPUS_HIDE_BATCH);
+                        batch.forEach(idx => {
+                            newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
+                        });
+                        await context.sync();
+                    }
                     if (onCampusProgress) onCampusProgress(campusName, ci, campusList.length, 'completed');
                 }
 
@@ -882,11 +911,18 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
 
                 // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
-                outputColumns.forEach((colConfig, idx) => {
-                    if (colConfig.hidden) {
+                // Batch hidden column operations to avoid queue overflow with many columns
+                const HIDE_BATCH = 50;
+                const hiddenIndices = outputColumns
+                    .map((colConfig, idx) => colConfig.hidden ? idx : -1)
+                    .filter(idx => idx !== -1);
+                for (let i = 0; i < hiddenIndices.length; i += HIDE_BATCH) {
+                    const batch = hiddenIndices.slice(i, i + HIDE_BATCH);
+                    batch.forEach(idx => {
                         newSheet.getRangeByIndexes(0, idx, 1, 1).getEntireColumn().columnHidden = true;
-                    }
-                });
+                    });
+                    await context.sync();
+                }
 
                 if (onProgress) onProgress('format', 'completed');
 
