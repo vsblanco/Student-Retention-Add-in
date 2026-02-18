@@ -13,7 +13,9 @@ const SettingsModal = ({
 	// new: prefer workbook columns (from saved workbook settings) over default choices
 	workbookColumns = [],
 	// master list headers to filter visible columns (null = show all)
-	masterListHeaders = null
+	masterListHeaders = null,
+	// set of ML headers that are new since last save (for "New" badge)
+	newMasterListHeaders = null
 }) => {
 	return (
 		<>
@@ -47,6 +49,7 @@ const SettingsModal = ({
 							// pass workbook columns so the modal uses the workbook's columns array when available
 							workbookColumns={workbookColumns}
 							masterListHeaders={masterListHeaders}
+							newMasterListHeaders={newMasterListHeaders}
 						/>
 					</div>
 				</div>
@@ -58,7 +61,7 @@ const SettingsModal = ({
 export default SettingsModal;
 
 // Replace the existing EditableArrayInner component with this updated version
-const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null }) => {
+const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null, newMasterListHeaders = null }) => {
 	const [selectedIdx, setSelectedIdx] = React.useState(0);
 	const [viewMode, setViewMode] = React.useState('choices'); // 'choices' | 'options' | 'add'
 	const [editableMap, setEditableMap] = React.useState({});
@@ -108,12 +111,15 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		const map = {};
 		const order = {};
 		let orderCounter = 0;
+		let hasSavedEntries = false;
 		// 1) seed map from modalArray (what was previously saved via Save)
 		// Filter out columns that were previously hidden — they are now implicitly hidden by not being in the list
 		if (Array.isArray(modalArray) && modalArray.length) {
 			modalArray.forEach((entry) => {
-				if (entry && entry.column) {
-					const key = String(entry.column).trim();
+				// support both {column: ...} (modal save format) and {name: ...} (workbook save format)
+				const rawKey = entry?.column ?? entry?.name;
+				if (entry && rawKey) {
+					const key = String(rawKey).trim();
 					// entry.options may be an object with the per-column settings
 					const fromOptions = (entry.options && typeof entry.options === 'object') ? { ...entry.options } : {};
 					// also preserve top-level properties that may have been saved (alias/static/etc)
@@ -128,50 +134,69 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 					map[key] = merged;
 					orderCounter++;
 					order[key] = orderCounter;
+					hasSavedEntries = true;
 				}
 			});
 		}
 
-		// 2) determine the choices source (prefer workbookColumns when available)
-		const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
-		// helper to extract non-name/label properties from a workbook entry
-		const seedFromWorkbookEntry = wbEntry => {
-			const seed = {};
-			if (!wbEntry || typeof wbEntry !== 'object') return seed;
-			Object.keys(wbEntry).forEach(k => {
-				if (k === 'name' || k === 'label') return;
-				// copy everything else (alias, static, format, options, etc) but NOT hidden
-				if (k === 'hidden') return;
-				seed[k] = wbEntry[k];
-			});
-			return seed;
-		};
+		// 2) Only seed from choices source on FIRST-TIME setup (no saved entries).
+		// Once the user has saved, the visible list is driven entirely by what was saved.
+		if (!hasSavedEntries) {
+			const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
+			// helper to extract non-name/label properties from a workbook entry
+			const seedFromWorkbookEntry = wbEntry => {
+				const seed = {};
+				if (!wbEntry || typeof wbEntry !== 'object') return seed;
+				Object.keys(wbEntry).forEach(k => {
+					if (k === 'name' || k === 'label') return;
+					// copy everything else (alias, static, format, options, etc) but NOT hidden
+					if (k === 'hidden') return;
+					seed[k] = wbEntry[k];
+				});
+				return seed;
+			};
 
-		choicesSource.forEach((choice, i) => {
-			const key = String(choice.name ?? choice.label ?? choice).trim();
-			// Skip hidden defaults — they go to the "Add" bank
-			if (choice.hidden) return;
-			if (!map[key]) {
-				// prefer seeding from the current workbook mapping if available
-				const wbEntry = workbookLookup[key];
-				if (wbEntry) {
-					// skip if the workbook entry is hidden
-					if (wbEntry.hidden) return;
-					// if workbook provided an .options object/structure use it, otherwise seed from other properties
-					if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
-						map[key] = { ...(wbEntry.options) };
+			choicesSource.forEach((choice, i) => {
+				const key = String(choice.name ?? choice.label ?? choice).trim();
+				// Skip hidden defaults — they go to the "Add" bank
+				if (choice.hidden) return;
+				if (!map[key]) {
+					// prefer seeding from the current workbook mapping if available
+					const wbEntry = workbookLookup[key];
+					if (wbEntry) {
+						// skip if the workbook entry is hidden
+						if (wbEntry.hidden) return;
+						// if workbook provided an .options object/structure use it, otherwise seed from other properties
+						if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
+							map[key] = { ...(wbEntry.options) };
+						} else {
+							map[key] = seedFromWorkbookEntry(wbEntry);
+						}
 					} else {
-						map[key] = seedFromWorkbookEntry(wbEntry);
+						map[key] = {};
 					}
-				} else {
-					map[key] = {};
 				}
-			}
-			if (!order[key]) {
-				orderCounter++;
-				order[key] = orderCounter;
-			}
-		});
+				if (!order[key]) {
+					orderCounter++;
+					order[key] = orderCounter;
+				}
+			});
+		} else {
+			// Even with saved entries, enrich map with workbook metadata (alias, static, format, etc.)
+			// that may not have been persisted in the modal save format
+			Object.keys(map).forEach(key => {
+				const wbEntry = workbookLookup[key];
+				if (wbEntry && typeof wbEntry === 'object') {
+					const existing = map[key];
+					// fill in any missing metadata from the workbook entry
+					['alias', 'static', 'format', 'identifier'].forEach(k => {
+						if (existing[k] === undefined && wbEntry[k] !== undefined) {
+							existing[k] = wbEntry[k];
+						}
+					});
+				}
+			});
+		}
 
 		setEditableMap(map);
 		setOrderMap(order);
@@ -484,6 +509,16 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 
 	// Render: add view (pick from master list)
 	if (viewMode === 'add') {
+		// sort new columns to the top for easy discovery
+		const sortedAvailable = [...availableToAdd].sort((a, b) => {
+			const aNew = newMasterListHeaders && newMasterListHeaders.has(a);
+			const bNew = newMasterListHeaders && newMasterListHeaders.has(b);
+			if (aNew && !bNew) return -1;
+			if (!aNew && bNew) return 1;
+			return 0;
+		});
+		const newCount = newMasterListHeaders ? sortedAvailable.filter(h => newMasterListHeaders.has(h)).length : 0;
+
 		return (
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto' }}>
 				<div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -494,39 +529,72 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 						Back
 					</button>
 					<div style={{ fontWeight: 600, fontSize: 14 }}>Add columns from Master List</div>
+					{newCount > 0 && (
+						<span style={{
+							padding: '2px 8px',
+							borderRadius: 10,
+							background: '#dbeafe',
+							color: '#1d4ed8',
+							fontSize: 11,
+							fontWeight: 600,
+							lineHeight: '16px'
+						}}>
+							{newCount} new
+						</span>
+					)}
 				</div>
-				{availableToAdd.length === 0 ? (
+				{sortedAvailable.length === 0 ? (
 					<div style={{ color: '#6b7280', fontSize: 13 }}>All Master List columns are already configured.</div>
 				) : (
-					availableToAdd.map(header => (
-						<button
-							key={header}
-							type="button"
-							onClick={() => { addColumn(header); }}
-							style={{
-								display: 'flex',
-								alignItems: 'center',
-								width: '100%',
-								padding: '8px 10px',
-								marginBottom: 4,
-								borderRadius: 6,
-								border: '1px solid #e6e7eb',
-								background: '#fff',
-								cursor: 'pointer',
-								textAlign: 'left',
-								gap: 8,
-								fontSize: 14,
-								transition: 'background-color 120ms ease'
-							}}
-							onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; }}
-							onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
-						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: '#4f46e5' }}>
-								<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-							</svg>
-							{header}
-						</button>
-					))
+					sortedAvailable.map(header => {
+						const isNew = newMasterListHeaders && newMasterListHeaders.has(header);
+						return (
+							<button
+								key={header}
+								type="button"
+								onClick={() => { addColumn(header); }}
+								style={{
+									display: 'flex',
+									alignItems: 'center',
+									width: '100%',
+									padding: '8px 10px',
+									marginBottom: 4,
+									borderRadius: 6,
+									border: isNew ? '1px solid rgba(29,78,216,0.2)' : '1px solid #e6e7eb',
+									background: isNew ? '#eff6ff' : '#fff',
+									cursor: 'pointer',
+									textAlign: 'left',
+									gap: 8,
+									fontSize: 14,
+									transition: 'background-color 120ms ease'
+								}}
+								onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; }}
+								onMouseLeave={e => { e.currentTarget.style.background = isNew ? '#eff6ff' : '#fff'; }}
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: '#4f46e5' }}>
+									<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+								</svg>
+								<span style={{ flex: 1 }}>{header}</span>
+								{isNew && (
+									<span
+										title="This column was recently added to the Master List"
+										style={{
+											padding: '2px 6px',
+											borderRadius: 4,
+											background: '#dbeafe',
+											color: '#1d4ed8',
+											fontSize: 11,
+											fontWeight: 600,
+											flexShrink: 0,
+											lineHeight: '16px'
+										}}
+									>
+										New
+									</span>
+								)}
+							</button>
+						);
+					})
 				)}
 			</div>
 		);

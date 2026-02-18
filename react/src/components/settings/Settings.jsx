@@ -43,6 +43,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// master list headers read from the active workbook (populated when columns modal opens)
 	const [masterListHeaders, setMasterListHeaders] = useState(null);
 
+	// set of Master List headers that are NEW (not seen when the user last saved columns)
+	const [newMasterListHeaders, setNewMasterListHeaders] = useState(null);
+
 	// read headers from the "Master List" worksheet via Excel API
 	const readMasterListHeaders = async () => {
 		try {
@@ -70,8 +73,24 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		if (setting.id === 'columns') {
 			const headers = await readMasterListHeaders();
 			setMasterListHeaders(headers); // null means no master list found (show all)
+
+			// detect new headers by comparing current ML headers against lastKnownHeaders
+			const lastKnown = workbookSettingsState.lastKnownHeaders;
+			if (headers && Array.isArray(lastKnown) && lastKnown.length > 0) {
+				const stripStr = s => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+				const knownSet = new Set(lastKnown.map(h => stripStr(h)));
+				const newSet = new Set();
+				headers.forEach(h => {
+					if (!knownSet.has(stripStr(h))) newSet.add(h);
+				});
+				setNewMasterListHeaders(newSet.size > 0 ? newSet : null);
+			} else {
+				// first time opening or no lastKnownHeaders — nothing is "new"
+				setNewMasterListHeaders(null);
+			}
 		} else {
 			setMasterListHeaders(null);
+			setNewMasterListHeaders(null);
 		}
 
 		setModalSetting(setting);
@@ -121,6 +140,12 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				...((it && it.options && typeof it.options === 'object') ? it.options : {})
 			}));
 			modalUpdater(modalSetting.id, cleaned);
+
+			// when saving columns, snapshot current Master List headers so we can detect new ones later
+			if (modalSetting.id === 'columns' && Array.isArray(masterListHeaders)) {
+				updateWorkbookSetting('lastKnownHeaders', masterListHeaders);
+				setNewMasterListHeaders(null); // clear "new" badges after save
+			}
 		}
 		// close modal via parent helper
 		closeModal();
@@ -576,6 +601,8 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				workbookColumns={workbookSettingsState.columns}
 				// master list headers to filter which columns are shown (null = show all)
 				masterListHeaders={masterListHeaders}
+				// set of ML headers that are new since last save (for "New" badge in Add picker)
+				newMasterListHeaders={newMasterListHeaders}
 			/>
 			{/* pass the document key constant so the modal can read the workbook-specific mapping */}
 			<WorkbookSettingsModal isOpen={workbookModalOpen} onClose={() => setWorkbookModalOpen(false)} docKey={DOC_KEY} />
