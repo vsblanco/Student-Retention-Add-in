@@ -279,17 +279,20 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 return -1;
             };
 
-            // --- NEW: Implicit Column Detection ---
-            // 1. Mark which Master List indices are covered by User Settings
+            // --- Implicit Column Detection ---
+            // 1. Filter settings columns to only those found in the Master List (skip missing)
+            const matchedColumns = settings.columns.filter(col => getColIndex(col.name) !== -1);
+
+            // 2. Mark which Master List indices are covered by matched settings columns
             const usedMasterIndices = new Set();
-            settings.columns.forEach(col => {
+            matchedColumns.forEach(col => {
                 const idx = getColIndex(col.name);
                 if (idx !== -1) usedMasterIndices.add(idx);
             });
 
-            // 2. Find unused Master List headers and append them as hidden
-            const outputColumns = [...settings.columns]; // Start with user config
-            
+            // 3. Find unused Master List headers and append them as hidden
+            const outputColumns = [...matchedColumns]; // Start with matched user config
+
             headers.forEach((h, idx) => {
                 if (!usedMasterIndices.has(idx) && h && String(h).trim() !== "") {
                     // This is a column in Master List not in settings.

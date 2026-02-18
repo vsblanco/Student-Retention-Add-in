@@ -3,8 +3,6 @@ import createLdaIcon from '../../assets/icons/create-lda-icon.png';
 
 export const defaultColumns =[
 	{ name: 'Assigned', alias: ['advisor'], static: true },
-	{ name: 'Student Number', alias: ['Student Numbers','Issued ID'], hidden: true },
-	{ name: 'SyStudentId', alias: ['student sis'], hidden: true, identifier: true },
 	{ name: 'Student Name', alias: ['Student']},
 	{ name: 'Gradebook', alias: ['Gradelink', 'gradeBookLink', 'Grade Book'], static: true, identifier: true, format: ['=HYPERLINK']},
 	{ name: 'ProgramVersion', alias: ['Program','ProgVersDescrip'] },
@@ -16,14 +14,9 @@ export const defaultColumns =[
 	{ name: 'Outreach', alias: ['Comments','Comment'] },
 	{ name: 'Phone', alias: ['Phone Number','Contact Number']},
 	{ name: 'Other Phone', alias: ['Second Phone', 'Alt Phone']},
-	{ name: 'StudentEmail', alias: ['Email', 'Student Email'], hidden: true, identifier: true },
-	{ name: 'PersonalEmail', alias: ['Other Email'], hidden: true},
-	{ name: 'Gender', alias: ['Sex'], hidden: true},
-	{ name: 'Photo', alias: ['pfp', 'profile photo'], static: true, hidden: true },
 ];
 
 export const Options = [
-	{ option: 'hidden', label: 'Hidden in LDA', type: 'boolean' },
 	{ option: 'identifier', label: 'Identifier', type: 'boolean' },
 	{ option: 'alias', label: 'Aliases', type: 'string' },
 ];
