@@ -467,7 +467,8 @@ useEffect(() => {
    // Contact rate: percentage of Contacted entries out of all Contacted + Outreach entries
    const contactRate = React.useMemo(() => {
      let contacted = 0, total = 0;
-     for (const entry of (history || [])) {
+     for (const raw of (localHistory || [])) {
+       const entry = normalizeKeys(raw || {});
        const tags = (entry.tag || '').toLowerCase();
        const hasContacted = tags.includes('contacted');
        const hasOutreach = tags.includes('outreach');
@@ -476,8 +477,9 @@ useEffect(() => {
          if (hasContacted) contacted++;
        }
      }
+     console.log('[ContactRate]', { contacted, total, rate: total > 0 ? Math.round((contacted / total) * 100) : null });
      return total > 0 ? Math.round((contacted / total) * 100) : null;
-   }, [history]);
+   }, [localHistory]);
 
    return (
      <div>
