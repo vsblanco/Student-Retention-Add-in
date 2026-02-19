@@ -113,9 +113,15 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
     // Priority 1: Explicit DNC (Highest Priority - Stop everything)
     if (sId && dncMap.has(sId)) {
         const dncTag = dncMap.get(sId);
-        // Check if tag is "dnc" by itself (trimmed and lowered)
-        if (dncTag && dncTag.trim() === 'dnc') {
-            return "[Retention] DNC";
+        if (dncTag) {
+            // Split comma-separated tags and check each individually
+            const individualTags = dncTag.split(',').map(t => t.trim());
+            const hasExcludableDnc = individualTags.some(tag =>
+                tag.includes('dnc') && tag !== 'dnc - phone' && tag !== 'dnc - other phone'
+            );
+            if (hasExcludableDnc) {
+                return "[Retention] DNC";
+            }
         }
     }
 
