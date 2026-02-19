@@ -137,6 +137,34 @@ function CommentModal({
     onDeleted(entry.commentid);
   };
 
+  // auto-pair double quotes: typing " inserts "" and places cursor between
+  const handleCommentKeyDown = (e) => {
+    if (e.key === '"') {
+      e.preventDefault();
+      const ta = e.target;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const val = modalComment;
+
+      let newVal, cursorPos;
+      if (start !== end) {
+        // wrap selected text in quotes
+        newVal = val.slice(0, start) + '"' + val.slice(start, end) + '"' + val.slice(end);
+        cursorPos = end + 1;
+      } else {
+        // insert "" and place cursor between
+        newVal = val.slice(0, start) + '""' + val.slice(start);
+        cursorPos = start + 1;
+      }
+      setModalComment(newVal);
+      // restore cursor after React re-render
+      requestAnimationFrame(() => {
+        ta.selectionStart = cursorPos;
+        ta.selectionEnd = start !== end ? cursorPos : cursorPos;
+      });
+    }
+  };
+
   const insertTagButtonTags = COMMENT_TAGS.map(tag => ({
     label: tag.label,
     spanClass: tag.tagClass,
@@ -488,6 +516,7 @@ function CommentModal({
       <textarea
         value={modalComment}
         onChange={e => setModalComment(e.target.value)}
+        onKeyDown={handleCommentKeyDown}
         style={{
           width: '100%',
           minHeight: 80,

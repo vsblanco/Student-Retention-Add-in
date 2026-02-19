@@ -95,6 +95,34 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
     }, delay);
   };
 
+  // auto-pair double quotes: typing " inserts "" and places cursor between
+  const handleKeyDown = (e) => {
+    if (e.key === '"') {
+      e.preventDefault();
+      const ta = newCommentInputRef.current;
+      if (!ta) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const val = ta.value;
+
+      if (start !== end) {
+        // wrap selected text in quotes
+        ta.value = val.slice(0, start) + '"' + val.slice(start, end) + '"' + val.slice(end);
+        ta.selectionStart = start + 1;
+        ta.selectionEnd = end + 1;
+      } else {
+        // insert "" and place cursor between
+        ta.value = val.slice(0, start) + '""' + val.slice(start);
+        ta.selectionStart = start + 1;
+        ta.selectionEnd = start + 1;
+      }
+
+      // fire input event so onChange (LDA detection) still triggers
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  };
+
   // insert tag label at cursor position inside textarea
   const handleTagClick = (label) => {
     // Special handling for DNC / LDA (open modals as in CommentModal)
@@ -273,6 +301,7 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
           rows={3}
           placeholder="Add a new comment..."
           onChange={handleInputChange} // attach watcher for LDA detection
+          onKeyDown={handleKeyDown}
         ></textarea>
         <div className="flex justify-end items-center mt-4">
            <button
