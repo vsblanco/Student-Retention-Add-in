@@ -92,22 +92,22 @@ export function normalizeKeys(obj) {
 // helper: format date as "MM/DD/YY HH:MM AM/PM"
 export function formatTimestamp(date = new Date()) {
   try {
-    // create Date from input
     const d = new Date(date);
 
-    // add 4 hours to match Eastern Time
-    const adjusted = new Date(d.getTime() + 4 * 60 * 60 * 1000);
+    // Use Intl to get Eastern Time components (handles EST/EDT automatically)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    }).formatToParts(d);
 
-    const mm = String(adjusted.getMonth() + 1).padStart(2, '0');
-    const dd = String(adjusted.getDate()).padStart(2, '0');
-    const yy = String(adjusted.getFullYear() % 100).padStart(2, '0');
-
-    let hours = adjusted.getHours();
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    if (hours === 0) hours = 12;
-    const hh = String(hours).padStart(2, '0');
-    const mins = String(adjusted.getMinutes()).padStart(2, '0');
+    const get = (type) => parts.find(p => p.type === type)?.value || '';
+    const mm = get('month');
+    const dd = get('day');
+    const yy = get('year').slice(-2);
+    const hh = get('hour').padStart(2, '0');
+    const mins = get('minute');
+    const ampm = get('dayPeriod');
 
     return `${mm}/${dd}/${yy} ${hh}:${mins} ${ampm}`;
   } catch (_) {
