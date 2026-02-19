@@ -72,6 +72,14 @@ export const defaultWorkbookSettings = [
 		defaultValue: null,
 		section: 'Send Emails',
 		description: 'Configure Power Automate flow URL for sending personalized emails.'
+	},
+	{
+		id: 'downloadHistoryCsv',
+		label: 'Download Copy',
+		type: 'action',
+		defaultValue: null,
+		section: 'Student History',
+		description: 'Download the Student History sheet as a CSV file.'
 	}
 ];
 
@@ -94,6 +102,12 @@ export const sectionIcons = {
 	'Send Emails': (
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 			<path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+		</svg>
+	),
+	'Student History': (
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+			<path d="M12 8v4l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+			<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6"/>
 		</svg>
 	)
 };
