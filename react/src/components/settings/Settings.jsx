@@ -40,6 +40,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// Power Automate config modal state
 	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
 
+	// Download CSV state
+	const [downloadingCsv, setDownloadingCsv] = useState(false);
+
 	// master list headers read from the active workbook (populated when columns modal opens)
 	const [masterListHeaders, setMasterListHeaders] = useState(null);
 
@@ -66,6 +69,54 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			console.warn('Failed to read Master List headers', err);
 		}
 		return null;
+	};
+
+	// Download "Student History" sheet as CSV
+	const downloadHistoryCsv = async () => {
+		if (downloadingCsv) return;
+		setDownloadingCsv(true);
+		try {
+			if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
+				throw new Error('Excel API not available');
+			}
+			const csvContent = await Excel.run(async (context) => {
+				const sheet = context.workbook.worksheets.getItemOrNullObject('Student History');
+				await context.sync();
+				if (sheet.isNullObject) throw new Error('Student History sheet not found');
+				const used = sheet.getUsedRangeOrNullObject();
+				used.load('values');
+				await context.sync();
+				if (used.isNullObject || !used.values || used.values.length === 0) {
+					throw new Error('Student History sheet is empty');
+				}
+				// Build CSV from the 2D values array
+				return used.values.map(row =>
+					row.map(cell => {
+						const val = cell == null ? '' : String(cell);
+						// Escape cells containing commas, quotes, or newlines
+						if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+							return `"${val.replace(/"/g, '""')}"`;
+						}
+						return val;
+					}).join(',')
+				).join('\n');
+			});
+			// Trigger download
+			const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'Student History.csv';
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			console.error('Failed to download Student History CSV:', err);
+			alert(err.message || 'Failed to download Student History');
+		} finally {
+			setDownloadingCsv(false);
+		}
 	};
 
 	const openArrayModal = async (setting, currentValue, updater) => {
@@ -379,6 +430,38 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										aria-label={`Configure Power Automate`}
 									>
 										Configure
+									</button>
+								);
+							}
+
+							if (setting.type === 'action') {
+								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
+								return (
+									<button
+										onClick={() => {
+											if (setting.id === 'downloadHistoryCsv') downloadHistoryCsv();
+										}}
+										disabled={isDownloading}
+										style={{
+											padding: '6px 10px',
+											borderRadius: 6,
+											background: isDownloading ? '#e5e7eb' : '#f3f4f6',
+											border: '1px solid #e6e7eb',
+											cursor: isDownloading ? 'not-allowed' : 'pointer',
+											display: 'inline-flex',
+											alignItems: 'center',
+											gap: 6,
+											fontSize: 13,
+										}}
+										aria-label={setting.label}
+									>
+										{/* download icon */}
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+											<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+											<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+											<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+										</svg>
+										{isDownloading ? 'Downloading...' : 'Download'}
 									</button>
 								);
 							}

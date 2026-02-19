@@ -120,7 +120,7 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
                 tag.includes('dnc') && tag !== 'dnc - phone' && tag !== 'dnc - other phone'
             );
             if (hasExcludableDnc) {
-                return "[Retention] DNC";
+                return "Do not contact";
             }
         }
     }
@@ -134,10 +134,14 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
     if (sId && ldaMap.has(sId)) {
         const ldaObj = ldaMap.get(sId);
         if (ldaObj && ldaObj.date) {
-            const mm = String(ldaObj.date.getMonth() + 1).padStart(2, '0');
-            const dd = String(ldaObj.date.getDate()).padStart(2, '0');
-            const yy = String(ldaObj.date.getFullYear()).slice(-2);
-            return `[Retention] Student will engage on ${mm}-${dd}-${yy}`;
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+            const day = ldaObj.date.getDate();
+            const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
+                : (day === 2 || day === 22) ? 'nd'
+                : (day === 3 || day === 23) ? 'rd' : 'th';
+            const friendlyDate = `${monthNames[ldaObj.date.getMonth()]} ${day}${suffix}`;
+            return `[Follow up] Student will engage on ${friendlyDate}`;
         }
     }
 
