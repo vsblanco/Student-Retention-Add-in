@@ -137,31 +137,18 @@ function CommentModal({
     onDeleted(entry.commentid);
   };
 
-  // auto-pair double quotes: typing " inserts "" and places cursor between
+  // auto-insert Quote tag when user types a closing pair of double quotes
   const handleCommentKeyDown = (e) => {
     if (e.key === '"') {
-      e.preventDefault();
-      const ta = e.target;
-      const start = ta.selectionStart;
-      const end = ta.selectionEnd;
       const val = modalComment;
-
-      let newVal, cursorPos;
-      if (start !== end) {
-        // wrap selected text in quotes
-        newVal = val.slice(0, start) + '"' + val.slice(start, end) + '"' + val.slice(end);
-        cursorPos = end + 1;
-      } else {
-        // insert "" and place cursor between
-        newVal = val.slice(0, start) + '""' + val.slice(start);
-        cursorPos = start + 1;
+      const pos = e.target.selectionStart;
+      // Check if there is already an unmatched opening " before the cursor
+      const before = val.slice(0, pos);
+      const quoteCount = (before.match(/"/g) || []).length;
+      if (quoteCount % 2 === 1) {
+        // This keystroke closes an open quote — auto-insert Quote tag
+        setEditTagContainer(prev => ({ ...prev, Quote: true }));
       }
-      setModalComment(newVal);
-      // restore cursor after React re-render
-      requestAnimationFrame(() => {
-        ta.selectionStart = cursorPos;
-        ta.selectionEnd = start !== end ? cursorPos : cursorPos;
-      });
     }
   };
 
