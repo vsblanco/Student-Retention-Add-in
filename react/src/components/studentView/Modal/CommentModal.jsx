@@ -137,6 +137,21 @@ function CommentModal({
     onDeleted(entry.commentid);
   };
 
+  // auto-insert Quote tag when user types a closing pair of double quotes
+  const handleCommentKeyDown = (e) => {
+    if (e.key === '"') {
+      const val = modalComment;
+      const pos = e.target.selectionStart;
+      // Check if there is already an unmatched opening " before the cursor
+      const before = val.slice(0, pos);
+      const quoteCount = (before.match(/"/g) || []).length;
+      if (quoteCount % 2 === 1) {
+        // This keystroke closes an open quote — auto-insert Quote tag
+        setEditTagContainer(prev => ({ ...prev, Quote: true }));
+      }
+    }
+  };
+
   const insertTagButtonTags = COMMENT_TAGS.map(tag => ({
     label: tag.label,
     spanClass: tag.tagClass,
@@ -488,6 +503,7 @@ function CommentModal({
       <textarea
         value={modalComment}
         onChange={e => setModalComment(e.target.value)}
+        onKeyDown={handleCommentKeyDown}
         style={{
           width: '100%',
           minHeight: 80,

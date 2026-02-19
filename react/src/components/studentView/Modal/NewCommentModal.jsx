@@ -95,6 +95,24 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
     }, delay);
   };
 
+  // auto-insert Quote tag when user types a closing pair of double quotes
+  const handleKeyDown = (e) => {
+    if (e.key === '"') {
+      const ta = newCommentInputRef.current;
+      if (!ta) return;
+      const val = ta.value;
+      const pos = ta.selectionStart;
+      // Check if there is already an unmatched opening " before the cursor
+      const before = val.slice(0, pos);
+      const quoteCount = (before.match(/"/g) || []).length;
+      if (quoteCount % 2 === 1) {
+        // This keystroke closes an open quote — auto-insert Quote tag
+        const tagObj = tags.find(t => t.label === 'Quote') || { label: 'Quote', spanClass: 'bg-blue-50 text-blue-800' };
+        setInsertedTags(prev => (prev.some(t => (typeof t === 'string' ? t : t.label) === 'Quote') ? prev : [...prev, tagObj]));
+      }
+    }
+  };
+
   // insert tag label at cursor position inside textarea
   const handleTagClick = (label) => {
     // Special handling for DNC / LDA (open modals as in CommentModal)
@@ -273,6 +291,7 @@ function NewComment({ show, onClose, addCommentToHistory, initialComment = "", p
           rows={3}
           placeholder="Add a new comment..."
           onChange={handleInputChange} // attach watcher for LDA detection
+          onKeyDown={handleKeyDown}
         ></textarea>
         <div className="flex justify-end items-center mt-4">
            <button
