@@ -464,6 +464,21 @@ useEffect(() => {
      };
    }, [externalLoading, history, ready]);
 
+   // Contact rate: percentage of Contacted entries out of all Contacted + Outreach entries
+   const contactRate = React.useMemo(() => {
+     let contacted = 0, total = 0;
+     for (const entry of (history || [])) {
+       const tags = (entry.tag || '').toLowerCase();
+       const hasContacted = tags.includes('contacted');
+       const hasOutreach = tags.includes('outreach');
+       if (hasContacted || hasOutreach) {
+         total++;
+         if (hasContacted) contacted++;
+       }
+     }
+     return total > 0 ? Math.round((contacted / total) * 100) : null;
+   }, [history]);
+
    return (
      <div>
        <style>{styles}</style>
@@ -472,6 +487,18 @@ useEffect(() => {
          <div className="flex justify-between items-center">
            <h3 className="text-lg font-bold text-gray-800">History</h3>
            <div className="flex items-center space-x-2">
+             {contactRate !== null && (
+               <div
+                 className={`w-8 h-8 rounded-full shadow-lg flex items-center justify-center text-[10px] font-bold ${
+                   contactRate >= 50 ? 'bg-green-100 text-green-800' :
+                   contactRate >= 25 ? 'bg-yellow-100 text-yellow-800' :
+                   'bg-red-100 text-red-800'
+                 }`}
+                 title={`Contact rate: ${contactRate}%`}
+               >
+                 {contactRate}%
+               </div>
+             )}
              <button
                id="search-history-button"
                className="bg-gray-600 text-white w-8 h-8 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-700"
