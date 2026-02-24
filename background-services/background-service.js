@@ -14,6 +14,12 @@ import { toggleHighlight, transferData } from './ribbon-actions.js';
 import chromeExtensionService from '../react/src/services/chromeExtensionService.js';
 import { CONSTANTS, findColumnIndex, normalizeName, formatToLastFirst } from './shared-utilities.js';
 
+// Batch size for chunked write operations to avoid Excel's ~5MB payload limit.
+// 500 rows is consistent with ldaProcessor.js and safely under the limit for ~37 columns.
+const WRITE_BATCH_SIZE = 500;
+// Smaller batch size for formatting operations (cell colors).
+const FORMAT_BATCH_SIZE = 50;
+
 // This function is required for the Analytics button, even if it does nothing,
 // because the manifest uses a ShowTaskpane action.
 function openAnalyticsPane(event) {
@@ -126,17 +132,30 @@ async function importMissingAssignments(studentsWithAssignments) {
             });
 
             if (dataToWrite.length > 0) {
-                console.log(`ImportMissingAssignments: Writing ${dataToWrite.length} assignment rows...`);
+                const totalBatches = Math.ceil(dataToWrite.length / WRITE_BATCH_SIZE);
+                console.log(`ImportMissingAssignments: Writing ${dataToWrite.length} assignment rows in ${totalBatches} batch(es)...`);
 
-                // Write data and formulas
-                const dataRange = maSheet.getRangeByIndexes(1, 0, dataToWrite.length, headers.length);
-                dataRange.values = dataToWrite;
-                dataRange.formulas = formulasToWrite;
+                for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += WRITE_BATCH_SIZE) {
+                    const batchEnd = Math.min(batchStart + WRITE_BATCH_SIZE, dataToWrite.length);
+                    const batchSize = batchEnd - batchStart;
 
-                // Autofit columns
+                    const batchValues = dataToWrite.slice(batchStart, batchEnd);
+                    const batchFormulas = formulasToWrite.slice(batchStart, batchEnd);
+
+                    const batchRange = maSheet.getRangeByIndexes(1 + batchStart, 0, batchSize, headers.length);
+                    batchRange.values = batchValues;
+                    batchRange.formulas = batchFormulas;
+
+                    await context.sync();
+
+                    const currentBatch = Math.floor(batchStart / WRITE_BATCH_SIZE) + 1;
+                    console.log(`ImportMissingAssignments: Batch ${currentBatch}/${totalBatches} completed (rows ${batchStart + 1}-${batchEnd})`);
+                }
+
+                // Autofit columns after all data is written
                 maSheet.getUsedRange().format.autofitColumns();
-
                 await context.sync();
+
                 console.log(`ImportMissingAssignments: Successfully imported ${dataToWrite.length} missing assignments`);
             } else {
                 console.log("ImportMissingAssignments: No missing assignments to import");
@@ -454,19 +473,40 @@ async function importMasterListFromExtension(payload) {
                 console.log(`ImportFromExtension: Preserved ${assignedUsersPreservedCount} Assigned users`);
             }
 
-            // Write all data and formulas
-            console.log("ImportFromExtension: Writing data to sheet...");
-            const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
-            writeRange.values = dataToWrite;
-            writeRange.formulas = formulasToWrite;
-            await context.sync();
-            console.log("ImportFromExtension: Data write completed");
+            // Write data and formulas in batches to avoid payload size limits
+            const totalBatches = Math.ceil(dataToWrite.length / WRITE_BATCH_SIZE);
+            console.log(`ImportFromExtension: Writing ${dataToWrite.length} rows in ${totalBatches} batch(es) of up to ${WRITE_BATCH_SIZE} rows...`);
 
-            // Apply preserved colors
+            for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += WRITE_BATCH_SIZE) {
+                const batchEnd = Math.min(batchStart + WRITE_BATCH_SIZE, dataToWrite.length);
+                const batchSize = batchEnd - batchStart;
+
+                const batchValues = dataToWrite.slice(batchStart, batchEnd);
+                const batchFormulas = formulasToWrite.slice(batchStart, batchEnd);
+
+                const batchRange = sheet.getRangeByIndexes(1 + batchStart, 0, batchSize, masterHeaders.length);
+                batchRange.values = batchValues;
+                batchRange.formulas = batchFormulas;
+
+                await context.sync();
+
+                const currentBatch = Math.floor(batchStart / WRITE_BATCH_SIZE) + 1;
+                console.log(`ImportFromExtension: Data write batch ${currentBatch}/${totalBatches} completed (rows ${batchStart + 1}-${batchEnd})`);
+            }
+            console.log("ImportFromExtension: All data writes completed");
+
+            // Apply preserved colors in batches
             if (cellsToColor.length > 0) {
-                console.log(`ImportFromExtension: Applying ${cellsToColor.length} preserved cell colors...`);
-                for (const cell of cellsToColor) {
-                    sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+                const colorBatches = Math.ceil(cellsToColor.length / FORMAT_BATCH_SIZE);
+                console.log(`ImportFromExtension: Applying ${cellsToColor.length} preserved cell colors in ${colorBatches} batch(es)...`);
+
+                for (let i = 0; i < cellsToColor.length; i += FORMAT_BATCH_SIZE) {
+                    const batchEnd = Math.min(i + FORMAT_BATCH_SIZE, cellsToColor.length);
+                    for (let j = i; j < batchEnd; j++) {
+                        const cell = cellsToColor[j];
+                        sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+                    }
+                    await context.sync();
                 }
             }
 
