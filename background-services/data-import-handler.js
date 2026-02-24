@@ -523,8 +523,33 @@ async function handleUpdateMaster(message) {
                 }
             }
 
-            // 7. Highlight new students
-            if (newStudents.length > 0) {
+            // 7. Highlight new students based on the latest ExpStartDate
+            const masterExpStartDateCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.expectedStartDate);
+            if (masterExpStartDateCol !== -1) {
+                // Find the latest ExpStartDate across all students
+                let latestDate = null;
+                for (let i = 0; i < dataToWrite.length; i++) {
+                    const dateVal = parseDate(dataToWrite[i][masterExpStartDateCol]);
+                    if (dateVal && (!latestDate || dateVal > latestDate)) {
+                        latestDate = dateVal;
+                    }
+                }
+
+                if (latestDate) {
+                    const latestDateStr = latestDate.toDateString();
+                    let highlightedCount = 0;
+                    for (let i = 0; i < dataToWrite.length; i++) {
+                        const dateVal = parseDate(dataToWrite[i][masterExpStartDateCol]);
+                        if (dateVal && dateVal.toDateString() === latestDateStr) {
+                            const rowRange = sheet.getRangeByIndexes(i + 1, 0, 1, masterHeaders.length);
+                            rowRange.format.fill.color = "#ADD8E6"; // Light Blue
+                            highlightedCount++;
+                        }
+                    }
+                    sendMessageToDialog(`Highlighted ${highlightedCount} students with latest ExpStartDate (${latestDateStr})`);
+                }
+            } else if (newStudents.length > 0) {
+                // Fallback: highlight new students if ExpStartDate column doesn't exist
                 sendMessageToDialog(`Highlighting ${newStudents.length} new students...`);
                 const highlightRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
