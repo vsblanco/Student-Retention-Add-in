@@ -434,7 +434,7 @@ async function handleUpdateMaster(message) {
                 for (let userColIdx = 0; userColIdx < userRow.length; userColIdx++) {
                     const masterColIdx = colMapping[userColIdx];
                     if (masterColIdx !== -1) {
-                        let cellValue = userRow[userColIdx] || "";
+                        let cellValue = userRow[userColIdx] ?? "";
                         if (masterColIdx === masterStudentNameCol) {
                             cellValue = formatToLastFirst(String(cellValue));
                         }

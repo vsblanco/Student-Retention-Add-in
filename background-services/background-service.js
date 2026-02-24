@@ -81,7 +81,7 @@ async function importMissingAssignments(studentsWithAssignments) {
 
             studentsWithAssignments.forEach(student => {
                 const studentName = student["Student Name"] || student.StudentName || "";
-                const grade = student.Grade || "";
+                const grade = student.Grade ?? "";
                 const gradeBookUrl = typeof student["Grade Book"] === 'object' ? student["Grade Book"].url : student["Grade Book"];
                 const gradeBookText = typeof student["Grade Book"] === 'object' ? student["Grade Book"].text : "Grade Book";
 
@@ -116,7 +116,7 @@ async function importMissingAssignments(studentsWithAssignments) {
                         row[4] = typeof assignment["Due Date"] === 'object' ? assignment["Due Date"].text : assignment.dueDate || assignment["Due Date"] || "";
 
                         // Score
-                        row[5] = typeof assignment.Score === 'object' ? assignment.Score.text : assignment.score || assignment.Score || "";
+                        row[5] = typeof assignment.Score === 'object' ? assignment.Score.text : assignment.score ?? assignment.Score ?? "";
 
                         // Submission (HYPERLINK with submission URL and "Missing" as friendly name)
                         const submissionUrl = typeof assignment.Submission === 'object' ? assignment.Submission.url : assignment.submissionLink || assignment.submissionUrl;
@@ -385,7 +385,7 @@ async function importMasterListFromExtension(payload) {
                 for (let incomingColIdx = 0; incomingColIdx < incomingRow.length; incomingColIdx++) {
                     const masterColIdx = colMapping[incomingColIdx];
                     if (masterColIdx !== -1) {
-                        let cellValue = incomingRow[incomingColIdx] || "";
+                        let cellValue = incomingRow[incomingColIdx] ?? "";
 
                         // Format student name to "Last, First"
                         if (masterColIdx === masterStudentNameCol) {
