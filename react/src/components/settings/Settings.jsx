@@ -49,11 +49,15 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// set of Master List headers that are NEW (not seen when the user last saved columns)
 	const [newMasterListHeaders, setNewMasterListHeaders] = useState(null);
 
+	// set of Master List headers whose data columns are entirely empty/blank
+	const [blankColumns, setBlankColumns] = useState(null);
+
 	// read headers from the "Master List" worksheet via Excel API
+	// Returns { headers, blankColumns } where blankColumns is a Set of header names whose data columns are entirely empty
 	const readMasterListHeaders = async () => {
 		try {
 			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
-				const headers = await Excel.run(async (context) => {
+				const result = await Excel.run(async (context) => {
 					const sheet = context.workbook.worksheets.getItemOrNullObject('Master List');
 					await context.sync();
 					if (sheet.isNullObject) return null;
@@ -61,9 +65,27 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 					used.load('values');
 					await context.sync();
 					if (used.isNullObject || !used.values || used.values.length === 0) return null;
-					return used.values[0].map(v => (v == null ? '' : String(v).trim())).filter(Boolean);
+					const allValues = used.values;
+					const headers = allValues[0].map(v => (v == null ? '' : String(v).trim())).filter(Boolean);
+					// detect blank columns: columns where every data row (rows 1+) is empty/null
+					const blankSet = new Set();
+					headers.forEach((header, colIdx) => {
+						let allEmpty = true;
+						for (let row = 1; row < allValues.length; row++) {
+							const cell = allValues[row][colIdx];
+							if (cell != null && String(cell).trim() !== '') {
+								allEmpty = false;
+								break;
+							}
+						}
+						// only mark as blank if there are data rows; a header-only sheet is not "blank"
+						if (allEmpty && allValues.length > 1) {
+							blankSet.add(header);
+						}
+					});
+					return { headers, blankColumns: blankSet };
 				});
-				return headers;
+				return result;
 			}
 		} catch (err) {
 			console.warn('Failed to read Master List headers', err);
@@ -122,8 +144,10 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	const openArrayModal = async (setting, currentValue, updater) => {
 		// if this is the columns setting, read master list headers first
 		if (setting.id === 'columns') {
-			const headers = await readMasterListHeaders();
+			const result = await readMasterListHeaders();
+			const headers = result ? result.headers : null;
 			setMasterListHeaders(headers); // null means no master list found (show all)
+			setBlankColumns(result ? result.blankColumns : null);
 
 			// detect new headers by comparing current ML headers against lastKnownHeaders
 			const lastKnown = workbookSettingsState.lastKnownHeaders;
@@ -142,6 +166,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		} else {
 			setMasterListHeaders(null);
 			setNewMasterListHeaders(null);
+			setBlankColumns(null);
 		}
 
 		setModalSetting(setting);
@@ -686,6 +711,8 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				masterListHeaders={masterListHeaders}
 				// set of ML headers that are new since last save (for "New" badge in Add picker)
 				newMasterListHeaders={newMasterListHeaders}
+				// set of ML headers whose data columns are entirely blank
+				blankColumns={blankColumns}
 			/>
 			{/* pass the document key constant so the modal can read the workbook-specific mapping */}
 			<WorkbookSettingsModal isOpen={workbookModalOpen} onClose={() => setWorkbookModalOpen(false)} docKey={DOC_KEY} />
