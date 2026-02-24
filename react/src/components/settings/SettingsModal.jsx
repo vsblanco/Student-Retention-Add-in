@@ -15,7 +15,9 @@ const SettingsModal = ({
 	// master list headers to filter visible columns (null = show all)
 	masterListHeaders = null,
 	// set of ML headers that are new since last save (for "New" badge)
-	newMasterListHeaders = null
+	newMasterListHeaders = null,
+	// set of ML headers whose data columns are entirely blank
+	blankColumns = null
 }) => {
 	return (
 		<>
@@ -50,6 +52,7 @@ const SettingsModal = ({
 							workbookColumns={workbookColumns}
 							masterListHeaders={masterListHeaders}
 							newMasterListHeaders={newMasterListHeaders}
+							blankColumns={blankColumns}
 						/>
 					</div>
 				</div>
@@ -61,7 +64,7 @@ const SettingsModal = ({
 export default SettingsModal;
 
 // Replace the existing EditableArrayInner component with this updated version
-const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null, newMasterListHeaders = null }) => {
+const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null, newMasterListHeaders = null, blankColumns = null }) => {
 	const [selectedIdx, setSelectedIdx] = React.useState(0);
 	const [viewMode, setViewMode] = React.useState('choices'); // 'choices' | 'options' | 'add'
 	const [editableMap, setEditableMap] = React.useState({});
@@ -415,6 +418,36 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		return missing;
 	}, [orderList, masterListHeaders, workbookLookup, editableMap]);
 
+	// detect which columns in the visible list are blank (exist in ML but have no data values)
+	const blankVisibleColumns = React.useMemo(() => {
+		const blank = new Set();
+		if (!blankColumns || blankColumns.size === 0) return blank;
+		if (!Array.isArray(masterListHeaders) || masterListHeaders.length === 0) return blank;
+		const stripStr = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+		// build a stripped set from blankColumns for lookup
+		const blankStripped = new Set();
+		blankColumns.forEach(h => blankStripped.add(stripStr(h)));
+		orderList.forEach(key => {
+			// skip columns already detected as missing — they can't be blank
+			if (missingColumns.has(key)) return;
+			const keyStripped = stripStr(key);
+			// check column name itself
+			if (blankStripped.has(keyStripped)) { blank.add(key); return; }
+			// check aliases
+			const wbEntry = workbookLookup[key];
+			const aliases = [];
+			if (wbEntry && Array.isArray(wbEntry.alias)) aliases.push(...wbEntry.alias);
+			const mapEntry = editableMap[key];
+			if (mapEntry && Array.isArray(mapEntry.alias)) aliases.push(...mapEntry.alias);
+			if (mapEntry && typeof mapEntry.alias === 'string' && mapEntry.alias) {
+				aliases.push(...mapEntry.alias.split(',').map(a => a.trim()).filter(Boolean));
+			}
+			const found = aliases.some(a => blankStripped.has(stripStr(a)));
+			if (found) blank.add(key);
+		});
+		return blank;
+	}, [orderList, blankColumns, masterListHeaders, missingColumns, workbookLookup, editableMap]);
+
 	// move an item up/down within orderList
 	const moveItem = (idx, direction) => {
 		const targetIdx = idx + direction;
@@ -766,6 +799,25 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 									}}
 								>
 									Missing
+								</span>
+							)}
+
+							{/* blank badge */}
+							{!isMissing && blankVisibleColumns.has(key) && (
+								<span
+									title="This column exists in the Master List but contains no data values"
+									style={{
+										padding: '2px 6px',
+										borderRadius: 4,
+										background: '#e0e7ff',
+										color: '#3730a3',
+										fontSize: 11,
+										fontWeight: 600,
+										flexShrink: 0,
+										lineHeight: '16px'
+									}}
+								>
+									Blank
 								</span>
 							)}
 
