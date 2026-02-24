@@ -483,7 +483,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 const htagLower = htagRaw.toLowerCase().trim();
 
                                 if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
-                                    dncMap.set(hid, htagLower);
+                                    // Accumulate DNC tags so multiple entries (e.g. "DNC - Phone" and "DNC - Other Phone") are preserved
+                                    dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
                                 }
 
                                 if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
@@ -571,8 +572,19 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         if (colConfig.name === 'Outreach' && retentionMsg) {
                             val = retentionMsg;
                         }
+                        // --- DNC Highlight (Highest Priority - Phone Columns) ---
+                        // Only strikethrough the specific phone column matching the DNC type.
+                        // General "DNC" strikes both. "DNC - Phone" only strikes Phone, etc.
                         if (settings.includeDNCTag && dncMap.has(sId)) {
-                            if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
+                            const dncTags = dncMap.get(sId).split(',').map(t => t.trim());
+                            const hasGeneralDnc = dncTags.some(t => t === 'dnc');
+                            const hasPhoneDnc = dncTags.some(t => t === 'dnc - phone');
+                            const hasOtherPhoneDnc = dncTags.some(t => t === 'dnc - other phone');
+
+                            if (colConfig.name === 'Phone' && (hasGeneralDnc || hasPhoneDnc)) {
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFC7CE", strikethrough: true });
+                            }
+                            if (colConfig.name === 'Other Phone' && (hasGeneralDnc || hasOtherPhoneDnc)) {
                                 cellHighlights.push({ colIndex: colOutIdx, color: "#FFC7CE", strikethrough: true });
                             }
                         }
@@ -722,7 +734,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 const htagLower = htagRaw.toLowerCase().trim();
 
                                 if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
-                                    dncMap.set(hid, htagLower);
+                                    // Accumulate DNC tags so multiple entries (e.g. "DNC - Phone" and "DNC - Other Phone") are preserved
+                                    dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
                                 }
 
                                 if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
@@ -850,14 +863,20 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         }
 
                         // --- DNC Highlight (Highest Priority - Phone Columns) ---
+                        // Only strikethrough the specific phone column matching the DNC type.
+                        // General "DNC" strikes both. "DNC - Phone" only strikes Phone, etc.
                         if (settings.includeDNCTag && dncMap.has(sId)) {
-                             if (colConfig.name === 'Phone' || colConfig.name === 'Other Phone') {
-                                 cellHighlights.push({
-                                     colIndex: colOutIdx,
-                                     color: "#FFC7CE",
-                                     strikethrough: true
-                                 });
-                             }
+                            const dncTags = dncMap.get(sId).split(',').map(t => t.trim());
+                            const hasGeneralDnc = dncTags.some(t => t === 'dnc');
+                            const hasPhoneDnc = dncTags.some(t => t === 'dnc - phone');
+                            const hasOtherPhoneDnc = dncTags.some(t => t === 'dnc - other phone');
+
+                            if (colConfig.name === 'Phone' && (hasGeneralDnc || hasPhoneDnc)) {
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFC7CE", strikethrough: true });
+                            }
+                            if (colConfig.name === 'Other Phone' && (hasGeneralDnc || hasOtherPhoneDnc)) {
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFC7CE", strikethrough: true });
+                            }
                         }
 
                         cells.push(val);
