@@ -13,6 +13,9 @@
  */
 import { CONSTANTS, errorHandler, parseDate, jsDateToExcelDate, normalizeName, formatToLastFirst, dataUrlToArrayBuffer, parseCsvRow, findColumnIndex, getSettings } from './shared-utilities.js';
 
+// Batch size for chunked read/write operations to avoid Excel's ~5MB payload limit.
+const BATCH_SIZE = 500;
+
 let importDialog = null;
 
 /**
@@ -316,15 +319,34 @@ async function handleUpdateMaster(message) {
             sendMessageToDialog("Reading current 'Master List' to preserve cell data...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            // Load values and formulas first. We will get colors in a separate, targeted step.
-            usedRange.load("values, formulas, rowIndex, columnIndex");
+            // Load only metadata first to avoid payload size limit on large sheets.
+            usedRange.load("rowCount, columnCount, rowIndex, columnIndex");
             await context.sync();
 
-            if (usedRange.values.length < 1) {
+            const totalRows = usedRange.rowCount;
+            const totalCols = usedRange.columnCount;
+
+            // Read values and formulas in batches to stay under ~5MB response limit
+            let allValues = [];
+            let allFormulas = [];
+
+            for (let startRow = 0; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = sheet.getRangeByIndexes(
+                    usedRange.rowIndex + startRow, usedRange.columnIndex, rowsToRead, totalCols
+                );
+                batchRange.load("values, formulas");
+                await context.sync();
+
+                allValues = allValues.concat(batchRange.values);
+                allFormulas = allFormulas.concat(batchRange.formulas);
+            }
+
+            if (allValues.length < 1) {
                 throw new Error("'Master List' is empty or has no header row.");
             }
 
-            masterHeaders = usedRange.values[0].map(h => String(h || ''));
+            masterHeaders = allValues[0].map(h => String(h || ''));
             lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
             const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
@@ -336,12 +358,12 @@ async function handleUpdateMaster(message) {
             }
 
             // First pass: Get all data except colors
-            for (let i = 1; i < usedRange.values.length; i++) {
-                const name = usedRange.values[i][masterStudentNameCol];
+            for (let i = 1; i < allValues.length; i++) {
+                const name = allValues[i][masterStudentNameCol];
                 if (name) {
                     const normalizedName = normalizeName(name);
-                    const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
-                    const assignedValue = (masterAssignedCol !== -1) ? usedRange.values[i][masterAssignedCol] : null;
+                    const gradebookFormula = (masterGradebookCol !== -1 && allFormulas[i][masterGradebookCol]) ? allFormulas[i][masterGradebookCol] : null;
+                    const assignedValue = (masterAssignedCol !== -1) ? allValues[i][masterAssignedCol] : null;
                     
                     masterDataMap.set(normalizedName, {
                         gradebookFormula: gradebookFormula,
@@ -353,7 +375,7 @@ async function handleUpdateMaster(message) {
             
             // Get colors based on unique values in the "Assigned" column, using the user-provided method
             if (masterAssignedCol !== -1) {
-                const allAssignedValues = usedRange.values.map(row => row[masterAssignedCol]);
+                const allAssignedValues = allValues.map(row => row[masterAssignedCol]);
                 const uniqueValues = [...new Set(allAssignedValues.slice(1).filter(v => v && String(v).trim() !== ""))];
                 
                 if (uniqueValues.length > 0) {
@@ -403,8 +425,8 @@ async function handleUpdateMaster(message) {
                 // Check which unmatched columns have any non-blank data
                 for (const colIdx of unmatchedMasterCols) {
                     let hasData = false;
-                    for (let i = 1; i < usedRange.values.length; i++) {
-                        const val = usedRange.values[i][colIdx];
+                    for (let i = 1; i < allValues.length; i++) {
+                        const val = allValues[i][colIdx];
                         if (val !== null && val !== undefined && String(val).trim() !== '') {
                             hasData = true;
                             break;
@@ -415,16 +437,16 @@ async function handleUpdateMaster(message) {
 
                 // Build preservation data per student (keyed by Student ID, fallback to name)
                 if (nonBlankUnmatchedCols.length > 0) {
-                    for (let i = 1; i < usedRange.values.length; i++) {
+                    for (let i = 1; i < allValues.length; i++) {
                         let key;
                         if (masterIdCol !== -1) {
-                            const idValue = usedRange.values[i][masterIdCol];
+                            const idValue = allValues[i][masterIdCol];
                             if (idValue != null && String(idValue).trim() !== '') {
                                 key = String(idValue).trim();
                             }
                         }
                         if (!key) {
-                            const name = usedRange.values[i][masterStudentNameCol];
+                            const name = allValues[i][masterStudentNameCol];
                             if (name) key = normalizeName(name);
                         }
                         if (!key) continue;
@@ -432,8 +454,8 @@ async function handleUpdateMaster(message) {
                         const preservedValues = {};
                         const preservedFormulas = {};
                         for (const colIdx of nonBlankUnmatchedCols) {
-                            const val = usedRange.values[i][colIdx];
-                            const formula = usedRange.formulas[i][colIdx];
+                            const val = allValues[i][colIdx];
+                            const formula = allFormulas[i][colIdx];
                             if (formula && typeof formula === 'string' && formula.startsWith('=')) {
                                 preservedFormulas[colIdx] = formula;
                                 preservedValues[colIdx] = val;
@@ -596,12 +618,15 @@ async function handleUpdateMaster(message) {
             if (cellsToColor.length > 0) sendMessageToDialog(`Preparing to re-apply ${cellsToColor.length} cell colors.`);
 
 
-            // 5. Write all data and formulas in separate batches
-            sendMessageToDialog("Writing data and formulas to the sheet...");
-            const writeRange = sheet.getRangeByIndexes(1, 0, dataToWrite.length, masterHeaders.length);
-            writeRange.values = dataToWrite;
-            writeRange.formulas = formulasToWrite;
-            await context.sync();
+            // 5. Write all data and formulas in batches to avoid payload size limit
+            sendMessageToDialog("Writing data and formulas to the sheet in batches...");
+            for (let startRow = 0; startRow < dataToWrite.length; startRow += BATCH_SIZE) {
+                const rowsToWrite = Math.min(BATCH_SIZE, dataToWrite.length - startRow);
+                const batchRange = sheet.getRangeByIndexes(1 + startRow, 0, rowsToWrite, masterHeaders.length);
+                batchRange.values = dataToWrite.slice(startRow, startRow + rowsToWrite);
+                batchRange.formulas = formulasToWrite.slice(startRow, startRow + rowsToWrite);
+                await context.sync();
+            }
             sendMessageToDialog("Data write completed.");
 
             // 6. Apply colors
@@ -785,17 +810,34 @@ async function handleUpdateGrades(message) {
             sendMessageToDialog("Reading current 'Master List' data and formulas into memory...");
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const range = sheet.getUsedRange();
-            
-            // Load both values and formulas from the sheet into memory
-            range.load("values, formulas, rowCount");
+
+            // Load only dimensions first to avoid payload size limit
+            range.load("rowCount, columnCount");
             await context.sync();
+
+            const grTotalRows = range.rowCount;
+            const grTotalCols = range.columnCount;
+
+            // Read values and formulas in batches
+            let grValues = [];
+            let grFormulas = [];
+
+            for (let startRow = 0; startRow < grTotalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, grTotalRows - startRow);
+                const batchRange = sheet.getRangeByIndexes(startRow, 0, rowsToRead, grTotalCols);
+                batchRange.load("values, formulas");
+                await context.sync();
+
+                grValues = grValues.concat(batchRange.values);
+                grFormulas = grFormulas.concat(batchRange.formulas);
+            }
             sendMessageToDialog("'Master List' data and formulas loaded.");
 
-            const masterFormulas = range.formulas;
+            const masterFormulas = grFormulas;
             // Create a mutable copy of the formulas to preserve existing data/formulas
             const valuesToWrite = masterFormulas.map(row => [...row]);
 
-            const masterHeaders = range.values[0].map(h => String(h || '').toLowerCase());
+            const masterHeaders = grValues[0].map(h => String(h || '').toLowerCase());
 
             // Find column indices in the Master List
             const masterStudentNameCol = findColumnIndex(masterHeaders, CONSTANTS.STUDENT_NAME_COLS);
@@ -816,8 +858,8 @@ async function handleUpdateGrades(message) {
             let linksUpdated = 0;
 
             // Iterate through the Master List data (in memory) and update the valuesToWrite array
-            for (let i = 1; i < range.rowCount; i++) {
-                const masterName = range.values[i][masterStudentNameCol]; // Use original values for matching
+            for (let i = 1; i < grTotalRows; i++) {
+                const masterName = grValues[i][masterStudentNameCol]; // Use original values for matching
                 if (masterName) {
                     const normalizedName = normalizeName(masterName);
                     if (studentDataMap.has(normalizedName)) {
@@ -886,10 +928,14 @@ async function handleUpdateGrades(message) {
 
 
             if (updatedCount > 0) {
-                // Write the updated data back to the sheet in a single operation.
-                // Excel will automatically interpret values starting with '=' as formulas.
-                sendMessageToDialog("Writing all updates to the sheet at once...");
-                range.values = valuesToWrite;
+                // Write the updated data back to the sheet in batches
+                sendMessageToDialog("Writing all updates to the sheet in batches...");
+                for (let startRow = 0; startRow < grTotalRows; startRow += BATCH_SIZE) {
+                    const rowsToWrite = Math.min(BATCH_SIZE, grTotalRows - startRow);
+                    const batchRange = sheet.getRangeByIndexes(startRow, 0, rowsToWrite, grTotalCols);
+                    batchRange.values = valuesToWrite.slice(startRow, startRow + rowsToWrite);
+                    await context.sync();
+                }
                 sheet.getUsedRange().format.autofitColumns();
             }
             
