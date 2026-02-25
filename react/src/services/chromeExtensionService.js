@@ -74,6 +74,27 @@ class ChromeExtensionService {
   }
 
   /**
+   * Send a highlight confirmation message back to the Chrome extension via window.postMessage
+   * @param {string} syStudentId - The student ID (may be empty if unknown)
+   * @param {"success"|"error"} status - Whether the highlight succeeded or failed
+   * @param {string} message - Human-readable description of the result
+   */
+  sendHighlightConfirmation(syStudentId, status, message) {
+    const confirmation = {
+      type: "SRK_HIGHLIGHT_CONFIRMATION",
+      data: {
+        syStudentId: syStudentId || "",
+        status,
+        message,
+        timestamp: Date.now()
+      }
+    };
+
+    console.log(`ChromeExtensionService: Sending highlight confirmation (${status}):`, confirmation);
+    this.sendMessage(confirmation);
+  }
+
+  /**
    * Handle highlighting a student row based on extension request
    * Runs in the background - no side panel required
    * @param {Object} payload - Highlight request payload
@@ -89,13 +110,17 @@ class ChromeExtensionService {
   async handleHighlightStudentRow(payload) {
     // Validate Excel is available
     if (typeof window.Excel === "undefined") {
-      console.warn("ChromeExtensionService: Excel API not available");
+      const msg = "Excel API is not available. The add-in may not be running inside Excel.";
+      console.warn("ChromeExtensionService:", msg);
+      this.sendHighlightConfirmation(payload?.syStudentId, "error", msg);
       return;
     }
 
     // Validate required parameters
     if (!payload || !payload.syStudentId || !payload.targetSheet) {
-      console.error("ChromeExtensionService: Missing required parameters for highlight", payload);
+      const msg = "Missing required parameters: syStudentId and targetSheet are required.";
+      console.error("ChromeExtensionService:", msg, payload);
+      this.sendHighlightConfirmation(payload?.syStudentId, "error", msg);
       return;
     }
 
@@ -103,28 +128,38 @@ class ChromeExtensionService {
 
     // Validate column parameters (can be number or string)
     if (startCol === undefined || startCol === null) {
-      console.error("ChromeExtensionService: startCol is required", { startCol });
+      const msg = "startCol is required but was not provided.";
+      console.error("ChromeExtensionService:", msg, { startCol });
+      this.sendHighlightConfirmation(syStudentId, "error", msg);
       return;
     }
 
     if (endCol === undefined || endCol === null) {
-      console.error("ChromeExtensionService: endCol is required", { endCol });
+      const msg = "endCol is required but was not provided.";
+      console.error("ChromeExtensionService:", msg, { endCol });
+      this.sendHighlightConfirmation(syStudentId, "error", msg);
       return;
     }
 
     // Validate types
     if (typeof startCol !== 'number' && typeof startCol !== 'string') {
-      console.error("ChromeExtensionService: startCol must be a number or string", { startCol });
+      const msg = `startCol must be a number or string, but received ${typeof startCol}.`;
+      console.error("ChromeExtensionService:", msg, { startCol });
+      this.sendHighlightConfirmation(syStudentId, "error", msg);
       return;
     }
 
     if (typeof endCol !== 'number' && typeof endCol !== 'string') {
-      console.error("ChromeExtensionService: endCol must be a number or string", { endCol });
+      const msg = `endCol must be a number or string, but received ${typeof endCol}.`;
+      console.error("ChromeExtensionService:", msg, { endCol });
+      this.sendHighlightConfirmation(syStudentId, "error", msg);
       return;
     }
 
     if (editColumn !== undefined && typeof editColumn !== 'number' && typeof editColumn !== 'string') {
-      console.error("ChromeExtensionService: editColumn must be a number or string", { editColumn });
+      const msg = `editColumn must be a number or string, but received ${typeof editColumn}.`;
+      console.error("ChromeExtensionService:", msg, { editColumn });
+      this.sendHighlightConfirmation(syStudentId, "error", msg);
       return;
     }
 
@@ -230,7 +265,9 @@ class ChromeExtensionService {
         await context.sync();
 
         if (worksheet.isNullObject) {
-          console.error(`ChromeExtensionService: Sheet "${targetSheet}" not found (tried date format variations)`);
+          const msg = `Sheet "${targetSheet}" not found in the workbook. Verify the sheet name is correct (sheet names are case-sensitive).`;
+          console.error("ChromeExtensionService:", msg);
+          this.sendHighlightConfirmation(syStudentId, "error", msg);
           return;
         }
 
@@ -243,52 +280,65 @@ class ChromeExtensionService {
         const headers = values[0]; // First row is headers
 
         // Helper function to resolve column name to index
+        // Returns { index, error } where error is a message string if resolution failed
         const resolveColumnIndex = (column, paramName) => {
           // If it's already a number, validate and return it
           if (typeof column === 'number') {
             if (column < 0) {
-              console.error(`ChromeExtensionService: ${paramName} must be >= 0`, { [paramName]: column });
-              return -1;
+              const msg = `${paramName} must be >= 0, but received ${column}.`;
+              console.error("ChromeExtensionService:", msg, { [paramName]: column });
+              return { index: -1, error: msg };
             }
             if (column >= headers.length) {
-              console.error(`ChromeExtensionService: ${paramName} (${column}) exceeds sheet column count (${headers.length})`, { [paramName]: column });
-              return -1;
+              const msg = `${paramName} index (${column}) exceeds the number of columns in the sheet (${headers.length}).`;
+              console.error("ChromeExtensionService:", msg, { [paramName]: column });
+              return { index: -1, error: msg };
             }
-            return column;
+            return { index: column, error: null };
           }
 
           // It's a string, find the column by name
           const columnName = String(column).trim();
           for (let col = 0; col < headers.length; col++) {
             if (String(headers[col]).trim().toLowerCase() === columnName.toLowerCase()) {
-              return col;
+              return { index: col, error: null };
             }
           }
 
           // Column name not found
-          console.error(`ChromeExtensionService: Column "${columnName}" not found in sheet "${targetSheet}"`, { [paramName]: column });
-          return -1;
+          const msg = `Column "${columnName}" not found in sheet "${targetSheet}". Check that the column header exists in row 1.`;
+          console.error("ChromeExtensionService:", msg, { [paramName]: column });
+          return { index: -1, error: msg };
         };
 
         // Resolve startCol, endCol, and editColumn to indices
-        const startColIndex = resolveColumnIndex(startCol, 'startCol');
-        const endColIndex = resolveColumnIndex(endCol, 'endCol');
+        const startColResult = resolveColumnIndex(startCol, 'startCol');
+        const endColResult = resolveColumnIndex(endCol, 'endCol');
 
-        if (startColIndex === -1 || endColIndex === -1) {
-          return; // Error already logged
+        if (startColResult.error || endColResult.error) {
+          const msg = startColResult.error || endColResult.error;
+          this.sendHighlightConfirmation(syStudentId, "error", msg);
+          return;
         }
 
+        const startColIndex = startColResult.index;
+        const endColIndex = endColResult.index;
+
         if (startColIndex > endColIndex) {
-          console.error("ChromeExtensionService: startCol must be <= endCol", { startCol, endCol, startColIndex, endColIndex });
+          const msg = `startCol (${startCol}, index ${startColIndex}) must be less than or equal to endCol (${endCol}, index ${endColIndex}).`;
+          console.error("ChromeExtensionService:", msg);
+          this.sendHighlightConfirmation(syStudentId, "error", msg);
           return;
         }
 
         let editColumnIndex = -1;
         if (editColumn !== undefined) {
-          editColumnIndex = resolveColumnIndex(editColumn, 'editColumn');
-          if (editColumnIndex === -1) {
-            return; // Error already logged
+          const editColResult = resolveColumnIndex(editColumn, 'editColumn');
+          if (editColResult.error) {
+            this.sendHighlightConfirmation(syStudentId, "error", editColResult.error);
+            return;
           }
+          editColumnIndex = editColResult.index;
         }
 
         // Find the ID column index
@@ -305,7 +355,9 @@ class ChromeExtensionService {
         }
 
         if (idColumnIndex === -1) {
-          console.error("ChromeExtensionService: Could not find Student ID column in sheet");
+          const msg = `Could not find a Student ID column in sheet "${targetSheet}". Expected one of: ${idAliases.join(', ')}.`;
+          console.error("ChromeExtensionService:", msg);
+          this.sendHighlightConfirmation(syStudentId, "error", msg);
           return;
         }
 
@@ -320,7 +372,9 @@ class ChromeExtensionService {
         }
 
         if (targetRowIndex === -1) {
-          console.warn(`ChromeExtensionService: Student with ID "${syStudentId}" not found in sheet "${targetSheet}"`);
+          const msg = `Student with ID "${syStudentId}" not found in sheet "${targetSheet}". Verify the student ID exists in the sheet.`;
+          console.warn("ChromeExtensionService:", msg);
+          this.sendHighlightConfirmation(syStudentId, "error", msg);
           return;
         }
 
@@ -358,6 +412,9 @@ class ChromeExtensionService {
 
         console.log(`ChromeExtensionService: Successfully highlighted student "${studentName}" (ID: ${syStudentId}) in "${targetSheet}" from column "${startCol}" (index ${startColIndex}) to "${endCol}" (index ${endColIndex})`);
 
+        // Send confirmation back to Chrome extension
+        this.sendHighlightConfirmation(syStudentId, "success", "Row highlighted successfully");
+
         // Notify listeners of successful highlight
         this.notifyListeners({
           type: "highlight_complete",
@@ -380,6 +437,21 @@ class ChromeExtensionService {
     } catch (error) {
       console.error("ChromeExtensionService: Error highlighting student row:", error);
 
+      // Determine a helpful error message based on common failure scenarios
+      let errorMessage = error.message || "An unknown error occurred while highlighting the row.";
+      if (error.code === "InvalidReference") {
+        errorMessage = "Invalid cell reference. The worksheet structure may have changed.";
+      } else if (error.code === "GeneralException") {
+        errorMessage = "Excel encountered an error. The workbook may be protected, read-only, or in use by another process.";
+      } else if (error.code === "AccessDenied") {
+        errorMessage = "Access denied. The workbook or sheet may be protected.";
+      } else if (error.message && error.message.includes("network")) {
+        errorMessage = "A network error occurred. Check your connection to Excel Online.";
+      }
+
+      // Send error confirmation back to Chrome extension
+      this.sendHighlightConfirmation(syStudentId, "error", errorMessage);
+
       // Notify listeners of error
       this.notifyListeners({
         type: "highlight_error",
@@ -388,7 +460,7 @@ class ChromeExtensionService {
           syStudentId,
           editColumn,
           editText,
-          error: error.message,
+          error: errorMessage,
           timestamp: new Date().toISOString()
         }
       });

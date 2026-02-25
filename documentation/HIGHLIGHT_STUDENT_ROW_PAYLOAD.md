@@ -387,11 +387,182 @@ The Add-in logs helpful error messages to the console:
 "ChromeExtensionService: Student with ID '12345678' not found in sheet 'SheetName'"
 ```
 
-## Listening for Results (Optional)
+## Highlight Confirmation Response
 
-The Add-in emits events through its listener system when highlighting succeeds or fails.
+After processing a `SRK_HIGHLIGHT_STUDENT_ROW` request, the Add-in sends a confirmation message back to the Chrome extension via `window.postMessage`. This allows the extension to know whether the highlight succeeded or failed, and why.
 
-### Subscribe to Events
+### Confirmation Message Type
+
+```
+SRK_HIGHLIGHT_CONFIRMATION
+```
+
+### Confirmation Payload Structure
+
+```javascript
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: string,       // The student ID from the original request (or "" if unknown)
+    status: "success" | "error", // Whether the highlight succeeded or failed
+    message: string,           // Human-readable description of the result
+    timestamp: number          // Unix timestamp in milliseconds (Date.now())
+  }
+}
+```
+
+### Success Response Example
+
+```javascript
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "success",
+    message: "Row highlighted successfully",
+    timestamp: 1740500000000
+  }
+}
+```
+
+### Error Response Examples
+
+```javascript
+// Excel API not available (add-in not running in Excel)
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Excel API is not available. The add-in may not be running inside Excel.",
+    timestamp: 1740500000000
+  }
+}
+
+// Missing required parameters
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "",
+    status: "error",
+    message: "Missing required parameters: syStudentId and targetSheet are required.",
+    timestamp: 1740500000000
+  }
+}
+
+// Sheet not found
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Sheet \"Fall 2024\" not found in the workbook. Verify the sheet name is correct (sheet names are case-sensitive).",
+    timestamp: 1740500000000
+  }
+}
+
+// Column name not found in headers
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Column \"Outreach\" not found in sheet \"Fall 2024\". Check that the column header exists in row 1.",
+    timestamp: 1740500000000
+  }
+}
+
+// Student ID not found in the sheet
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Student with ID \"12345\" not found in sheet \"Fall 2024\". Verify the student ID exists in the sheet.",
+    timestamp: 1740500000000
+  }
+}
+
+// No Student ID column found
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Could not find a Student ID column in sheet \"Fall 2024\". Expected one of: Student ID, SyStudentID, Student identifier, ID.",
+    timestamp: 1740500000000
+  }
+}
+
+// Workbook is protected or read-only
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "Excel encountered an error. The workbook may be protected, read-only, or in use by another process.",
+    timestamp: 1740500000000
+  }
+}
+
+// Network error (Excel Online)
+{
+  type: "SRK_HIGHLIGHT_CONFIRMATION",
+  data: {
+    syStudentId: "12345",
+    status: "error",
+    message: "A network error occurred. Check your connection to Excel Online.",
+    timestamp: 1740500000000
+  }
+}
+```
+
+### All Possible Error Scenarios
+
+| Scenario | Error Message |
+|----------|--------------|
+| Excel API unavailable | `Excel API is not available. The add-in may not be running inside Excel.` |
+| Missing syStudentId or targetSheet | `Missing required parameters: syStudentId and targetSheet are required.` |
+| Missing startCol | `startCol is required but was not provided.` |
+| Missing endCol | `endCol is required but was not provided.` |
+| Invalid startCol type | `startCol must be a number or string, but received <type>.` |
+| Invalid endCol type | `endCol must be a number or string, but received <type>.` |
+| Invalid editColumn type | `editColumn must be a number or string, but received <type>.` |
+| Sheet not found | `Sheet "<name>" not found in the workbook. Verify the sheet name is correct (sheet names are case-sensitive).` |
+| Column name not in headers | `Column "<name>" not found in sheet "<sheet>". Check that the column header exists in row 1.` |
+| Column index out of bounds | `<param> index (<n>) exceeds the number of columns in the sheet (<total>).` |
+| Negative column index | `<param> must be >= 0, but received <n>.` |
+| startCol > endCol | `startCol (<val>, index <n>) must be less than or equal to endCol (<val>, index <n>).` |
+| No Student ID column | `Could not find a Student ID column in sheet "<sheet>". Expected one of: Student ID, SyStudentID, Student identifier, ID.` |
+| Student not found | `Student with ID "<id>" not found in sheet "<sheet>". Verify the student ID exists in the sheet.` |
+| Invalid cell reference | `Invalid cell reference. The worksheet structure may have changed.` |
+| Workbook protected/read-only | `Excel encountered an error. The workbook may be protected, read-only, or in use by another process.` |
+| Access denied | `Access denied. The workbook or sheet may be protected.` |
+| Network error | `A network error occurred. Check your connection to Excel Online.` |
+
+### Listening for Confirmations in the Chrome Extension
+
+```javascript
+// In your content script, listen for confirmation messages
+window.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SRK_HIGHLIGHT_CONFIRMATION") {
+    const { syStudentId, status, message, timestamp } = event.data.data;
+
+    if (status === "success") {
+      console.log(`Highlight succeeded for student ${syStudentId}: ${message}`);
+    } else {
+      console.error(`Highlight failed for student ${syStudentId}: ${message}`);
+      // Show error to user, retry, or handle accordingly
+    }
+  }
+});
+```
+
+## Internal Listener Events (Optional)
+
+The Add-in also emits events through its internal listener system. These are available within the Add-in's own context (not via `window.postMessage`).
+
+### Subscribe to Internal Events
 
 ```javascript
 // In your content script, add listener to chromeExtensionService
@@ -401,12 +572,12 @@ The Add-in emits events through its listener system when highlighting succeeds o
 chromeExtensionService.addListener((event) => {
   switch (event.type) {
     case 'highlight_complete':
-      console.log('✅ Highlight successful:', event.data);
+      console.log('Highlight successful:', event.data);
       // event.data contains: studentName, syStudentId, targetSheet, startCol, endCol, color, editColumn, editText, timestamp
       break;
 
     case 'highlight_error':
-      console.error('❌ Highlight failed:', event.data);
+      console.error('Highlight failed:', event.data);
       // event.data contains: studentName, syStudentId, editColumn, editText, error, timestamp
       break;
   }
@@ -442,7 +613,7 @@ chromeExtensionService.addListener((event) => {
     syStudentId: "12345678",
     editColumn: 8,              // Present if editing was attempted
     editText: "Submitted Quiz", // Present if editing was attempted
-    error: "Sheet 'Fall 2024' not found",
+    error: "Sheet \"Fall 2024\" not found in the workbook. Verify the sheet name is correct (sheet names are case-sensitive).",
     timestamp: "2025-12-23T10:30:00.000Z"
   }
 }
@@ -542,6 +713,6 @@ For issues or questions, refer to the main Student Retention Add-in documentatio
 
 ---
 
-**Last Updated**: December 2025
+**Last Updated**: February 2026
 **Add-in Version**: 1.x
 **Excel API Version**: 1.1+
