@@ -14,9 +14,9 @@ import { toggleHighlight, transferData } from './ribbon-actions.js';
 import chromeExtensionService from '../react/src/services/chromeExtensionService.js';
 import { CONSTANTS, findColumnIndex, normalizeName, formatToLastFirst, parseDate } from './shared-utilities.js';
 
-// Batch size for chunked write operations to avoid Excel's ~5MB payload limit.
+// Batch size for chunked read/write operations to avoid Excel's ~5MB payload limit.
 // 500 rows is consistent with ldaProcessor.js and safely under the limit for ~37 columns.
-const WRITE_BATCH_SIZE = 500;
+const BATCH_SIZE = 500;
 // Smaller batch size for formatting operations (cell colors).
 const FORMAT_BATCH_SIZE = 50;
 
@@ -132,11 +132,11 @@ async function importMissingAssignments(studentsWithAssignments) {
             });
 
             if (dataToWrite.length > 0) {
-                const totalBatches = Math.ceil(dataToWrite.length / WRITE_BATCH_SIZE);
+                const totalBatches = Math.ceil(dataToWrite.length / BATCH_SIZE);
                 console.log(`ImportMissingAssignments: Writing ${dataToWrite.length} assignment rows in ${totalBatches} batch(es)...`);
 
-                for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += WRITE_BATCH_SIZE) {
-                    const batchEnd = Math.min(batchStart + WRITE_BATCH_SIZE, dataToWrite.length);
+                for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += BATCH_SIZE) {
+                    const batchEnd = Math.min(batchStart + BATCH_SIZE, dataToWrite.length);
                     const batchSize = batchEnd - batchStart;
 
                     const batchValues = dataToWrite.slice(batchStart, batchEnd);
@@ -148,7 +148,7 @@ async function importMissingAssignments(studentsWithAssignments) {
 
                     await context.sync();
 
-                    const currentBatch = Math.floor(batchStart / WRITE_BATCH_SIZE) + 1;
+                    const currentBatch = Math.floor(batchStart / BATCH_SIZE) + 1;
                     console.log(`ImportMissingAssignments: Batch ${currentBatch}/${totalBatches} completed (rows ${batchStart + 1}-${batchEnd})`);
                 }
 
@@ -207,11 +207,37 @@ async function importMasterListFromExtension(payload) {
             // Get the Master List sheet
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, formulas, rowCount, rowIndex, columnIndex");
+            // Load only dimensions first to avoid payload size limit
+            usedRange.load("rowCount, columnCount, rowIndex, columnIndex");
             await context.sync();
 
+            const totalRows = usedRange.rowCount;
+            const totalCols = usedRange.columnCount;
+
+            // Read values and formulas in batches to avoid response payload limits
+            let allValues = [];
+            let allFormulas = [];
+
+            for (let startRow = 0; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = sheet.getRangeByIndexes(usedRange.rowIndex + startRow, usedRange.columnIndex, rowsToRead, totalCols);
+                batchRange.load("values, formulas");
+                await context.sync();
+
+                allValues = allValues.concat(batchRange.values);
+                allFormulas = allFormulas.concat(batchRange.formulas);
+
+                if (totalRows > BATCH_SIZE) {
+                    const currentBatch = Math.floor(startRow / BATCH_SIZE) + 1;
+                    const totalBatchCount = Math.ceil(totalRows / BATCH_SIZE);
+                    console.log(`ImportFromExtension: Read batch ${currentBatch}/${totalBatchCount} (rows ${startRow + 1}-${startRow + rowsToRead})`);
+                }
+            }
+
+            console.log(`ImportFromExtension: Read ${allValues.length} rows in ${Math.ceil(totalRows / BATCH_SIZE)} batch(es)`);
+
             // Get Master List headers
-            const masterHeaders = usedRange.values[0].map(h => String(h || ''));
+            const masterHeaders = allValues[0].map(h => String(h || ''));
             const lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
             const lowerCaseIncomingHeaders = incomingHeaders.map(h => String(h || '').toLowerCase());
 
@@ -291,12 +317,12 @@ async function importMasterListFromExtension(payload) {
             const valueToColorMap = new Map();
 
             // First pass: Get existing data to preserve
-            for (let i = 1; i < usedRange.values.length; i++) {
-                const name = usedRange.values[i][masterStudentNameCol];
+            for (let i = 1; i < allValues.length; i++) {
+                const name = allValues[i][masterStudentNameCol];
                 if (name) {
                     const normalizedName = normalizeName(name);
-                    const gradebookFormula = (masterGradebookCol !== -1 && usedRange.formulas[i][masterGradebookCol]) ? usedRange.formulas[i][masterGradebookCol] : null;
-                    const assignedValue = (masterAssignedCol !== -1) ? usedRange.values[i][masterAssignedCol] : null;
+                    const gradebookFormula = (masterGradebookCol !== -1 && allFormulas[i][masterGradebookCol]) ? allFormulas[i][masterGradebookCol] : null;
+                    const assignedValue = (masterAssignedCol !== -1) ? allValues[i][masterAssignedCol] : null;
 
                     masterDataMap.set(normalizedName, {
                         gradebookFormula: gradebookFormula,
@@ -314,8 +340,8 @@ async function importMasterListFromExtension(payload) {
                 // Check which unmatched columns have any non-blank data
                 for (const colIdx of unmatchedMasterCols) {
                     let hasData = false;
-                    for (let i = 1; i < usedRange.values.length; i++) {
-                        const val = usedRange.values[i][colIdx];
+                    for (let i = 1; i < allValues.length; i++) {
+                        const val = allValues[i][colIdx];
                         if (val !== null && val !== undefined && String(val).trim() !== '') {
                             hasData = true;
                             break;
@@ -326,16 +352,16 @@ async function importMasterListFromExtension(payload) {
 
                 // Build preservation data per student (keyed by Student ID, fallback to name)
                 if (nonBlankUnmatchedCols.length > 0) {
-                    for (let i = 1; i < usedRange.values.length; i++) {
+                    for (let i = 1; i < allValues.length; i++) {
                         let key;
                         if (masterIdCol !== -1) {
-                            const idValue = usedRange.values[i][masterIdCol];
+                            const idValue = allValues[i][masterIdCol];
                             if (idValue != null && String(idValue).trim() !== '') {
                                 key = String(idValue).trim();
                             }
                         }
                         if (!key) {
-                            const name = usedRange.values[i][masterStudentNameCol];
+                            const name = allValues[i][masterStudentNameCol];
                             if (name) key = normalizeName(name);
                         }
                         if (!key) continue;
@@ -343,8 +369,8 @@ async function importMasterListFromExtension(payload) {
                         const preservedValues = {};
                         const preservedFormulas = {};
                         for (const colIdx of nonBlankUnmatchedCols) {
-                            const val = usedRange.values[i][colIdx];
-                            const formula = usedRange.formulas[i][colIdx];
+                            const val = allValues[i][colIdx];
+                            const formula = allFormulas[i][colIdx];
                             if (formula && typeof formula === 'string' && formula.startsWith('=')) {
                                 preservedFormulas[colIdx] = formula;
                                 preservedValues[colIdx] = val;
@@ -360,7 +386,7 @@ async function importMasterListFromExtension(payload) {
 
             // Get colors for assigned column values
             if (masterAssignedCol !== -1) {
-                const allAssignedValues = usedRange.values.map(row => row[masterAssignedCol]);
+                const allAssignedValues = allValues.map(row => row[masterAssignedCol]);
                 const uniqueValues = [...new Set(allAssignedValues.slice(1).filter(v => v && String(v).trim() !== ""))];
 
                 if (uniqueValues.length > 0) {
@@ -407,8 +433,8 @@ async function importMasterListFromExtension(payload) {
             console.log(`ImportFromExtension: Found ${newStudents.length} new students and ${existingStudents.length} existing students`);
 
             // Clear the sheet (keeping headers)
-            if (usedRange.rowCount > 1) {
-                const rangeToClear = sheet.getRangeByIndexes(1, 0, usedRange.rowCount - 1, masterHeaders.length);
+            if (totalRows > 1) {
+                const rangeToClear = sheet.getRangeByIndexes(1, 0, totalRows - 1, masterHeaders.length);
                 rangeToClear.clear(Excel.ClearApplyTo.all);
                 rangeToClear.getEntireRow().delete(Excel.DeleteShiftDirection.up);
                 await context.sync();
@@ -562,11 +588,11 @@ async function importMasterListFromExtension(payload) {
             }
 
             // Write data and formulas in batches to avoid payload size limits
-            const totalBatches = Math.ceil(dataToWrite.length / WRITE_BATCH_SIZE);
-            console.log(`ImportFromExtension: Writing ${dataToWrite.length} rows in ${totalBatches} batch(es) of up to ${WRITE_BATCH_SIZE} rows...`);
+            const totalBatches = Math.ceil(dataToWrite.length / BATCH_SIZE);
+            console.log(`ImportFromExtension: Writing ${dataToWrite.length} rows in ${totalBatches} batch(es) of up to ${BATCH_SIZE} rows...`);
 
-            for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += WRITE_BATCH_SIZE) {
-                const batchEnd = Math.min(batchStart + WRITE_BATCH_SIZE, dataToWrite.length);
+            for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += BATCH_SIZE) {
+                const batchEnd = Math.min(batchStart + BATCH_SIZE, dataToWrite.length);
                 const batchSize = batchEnd - batchStart;
 
                 const batchValues = dataToWrite.slice(batchStart, batchEnd);
@@ -578,7 +604,7 @@ async function importMasterListFromExtension(payload) {
 
                 await context.sync();
 
-                const currentBatch = Math.floor(batchStart / WRITE_BATCH_SIZE) + 1;
+                const currentBatch = Math.floor(batchStart / BATCH_SIZE) + 1;
                 console.log(`ImportFromExtension: Data write batch ${currentBatch}/${totalBatches} completed (rows ${batchStart + 1}-${batchEnd})`);
             }
             console.log("ImportFromExtension: All data writes completed");
@@ -1013,11 +1039,29 @@ async function transferMasterList() {
 
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
             const usedRange = sheet.getUsedRange();
-            usedRange.load("values, formulas");
+            // Load only dimensions first to avoid payload size limit
+            usedRange.load("rowCount, columnCount");
             await context.sync();
 
+            const mlTotalRows = usedRange.rowCount;
+            const mlTotalCols = usedRange.columnCount;
+
+            // Read values and formulas in batches to avoid response payload limits
+            let mlValues = [];
+            let mlFormulas = [];
+
+            for (let startRow = 0; startRow < mlTotalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, mlTotalRows - startRow);
+                const batchRange = sheet.getRangeByIndexes(startRow, 0, rowsToRead, mlTotalCols);
+                batchRange.load("values, formulas");
+                await context.sync();
+
+                mlValues = mlValues.concat(batchRange.values);
+                mlFormulas = mlFormulas.concat(batchRange.formulas);
+            }
+
             // Parse headers - keep original case for headers array
-            const rawHeaders = usedRange.values[0];
+            const rawHeaders = mlValues[0];
             const headers = rawHeaders.map(header => String(header || ''));
             const lowerCaseHeaders = headers.map(h => h.toLowerCase());
 
@@ -1037,9 +1081,9 @@ async function transferMasterList() {
             const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
 
             // Process each row (skip header row)
-            for (let i = 1; i < usedRange.values.length; i++) {
-                const rowValues = usedRange.values[i];
-                const rowFormulas = usedRange.formulas[i];
+            for (let i = 1; i < mlValues.length; i++) {
+                const rowValues = mlValues[i];
+                const rowFormulas = mlFormulas[i];
 
                 // Only include row if it has a student name
                 if (studentNameColIdx !== -1 && rowValues[studentNameColIdx]) {
@@ -1081,12 +1125,30 @@ async function transferMasterList() {
                     console.log("TransferMasterList: Found Missing Assignments sheet, parsing data...");
                     const maSheet = context.workbook.worksheets.getItem("Missing Assignments");
                     const maRange = maSheet.getUsedRange();
-                    maRange.load("values, formulas");
+                    // Load only dimensions first to avoid payload size limit
+                    maRange.load("rowCount, columnCount");
                     await context.sync();
 
-                    if (maRange.values.length > 0) {
+                    const maTotalRows = maRange.rowCount;
+                    const maTotalCols = maRange.columnCount;
+
+                    // Read values and formulas in batches
+                    let maValues = [];
+                    let maFormulasArr = [];
+
+                    for (let startRow = 0; startRow < maTotalRows; startRow += BATCH_SIZE) {
+                        const rowsToRead = Math.min(BATCH_SIZE, maTotalRows - startRow);
+                        const batchRange = maSheet.getRangeByIndexes(startRow, 0, rowsToRead, maTotalCols);
+                        batchRange.load("values, formulas");
+                        await context.sync();
+
+                        maValues = maValues.concat(batchRange.values);
+                        maFormulasArr = maFormulasArr.concat(batchRange.formulas);
+                    }
+
+                    if (maValues.length > 0) {
                         // Parse headers from Missing Assignments sheet
-                        const maHeaders = maRange.values[0].map(h => String(h || ''));
+                        const maHeaders = maValues[0].map(h => String(h || ''));
                         const maLowerHeaders = maHeaders.map(h => h.toLowerCase());
 
                         // Find the Gradebook column in Missing Assignments sheet
@@ -1098,9 +1160,9 @@ async function transferMasterList() {
                         // Create a map of gradebook URL -> assignment data
                         const gradebookToAssignmentsMap = new Map();
 
-                        for (let i = 1; i < maRange.values.length; i++) {
-                            const rowValues = maRange.values[i];
-                            const rowFormulas = maRange.formulas[i];
+                        for (let i = 1; i < maValues.length; i++) {
+                            const rowValues = maValues[i];
+                            const rowFormulas = maFormulasArr[i];
 
                             // Get the gradebook URL (extract from HYPERLINK if needed)
                             let gradebookUrl = null;
