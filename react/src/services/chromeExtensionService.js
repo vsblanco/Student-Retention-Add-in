@@ -49,6 +49,11 @@ class ChromeExtensionService {
         this.handleHighlightStudentRow(event.data.data);
         break;
 
+      case "SRK_NAVIGATE_TO_STUDENT":
+        console.log("ChromeExtensionService: Navigate to student request received:", event.data);
+        this.handleNavigateToStudent(event.data.data);
+        break;
+
       case "SRK_IMPORT_MASTER_LIST":
         console.log("ChromeExtensionService: Import master list request received:", event.data);
         // Forward to listeners (background-service.js will handle the actual import)
@@ -464,6 +469,137 @@ class ChromeExtensionService {
           timestamp: new Date().toISOString()
         }
       });
+    }
+  }
+
+  /**
+   * Handle navigating to a student's row based on extension request.
+   * Activates the target sheet and selects the student's row so that the
+   * existing onSelectionChanged listener in StudentView picks it up automatically.
+   * No confirmation message is sent back.
+   * @param {Object} payload - Navigation request payload
+   * @param {string} payload.syStudentId - Student's SyStudentID
+   * @param {string} payload.targetSheet - Name of the worksheet to navigate to
+   */
+  async handleNavigateToStudent(payload) {
+    if (typeof window.Excel === "undefined") {
+      console.warn("ChromeExtensionService: Excel API is not available for navigation.");
+      return;
+    }
+
+    if (!payload || !payload.syStudentId || !payload.targetSheet) {
+      console.error("ChromeExtensionService: Navigate requires syStudentId and targetSheet.", payload);
+      return;
+    }
+
+    const { syStudentId, targetSheet } = payload;
+
+    try {
+      await Excel.run(async (context) => {
+        // --- Resolve the target worksheet (with date-format normalization) ---
+        const normalizeDateFormat = (dateStr) => {
+          if (!dateStr || typeof dateStr !== 'string') return [dateStr];
+          const datePattern = /^(.*?)(\d{1,2}[/-]\d{1,2}[/-]\d{4})$/;
+          const match = dateStr.match(datePattern);
+          if (!match) return [dateStr];
+
+          const prefix = match[1];
+          const datePart = match[2];
+          const separator = datePart.includes('/') ? '/' : datePart.includes('-') ? '-' : null;
+          if (!separator) return [dateStr];
+
+          const parts = datePart.split(separator);
+          if (parts.length !== 3) return [dateStr];
+          const [month, day, year] = parts;
+
+          const variations = new Set();
+          variations.add(dateStr);
+          ['/', '-'].forEach(sep => {
+            variations.add(`${prefix}${month.padStart(2, '0')}${sep}${day.padStart(2, '0')}${sep}${year}`);
+            variations.add(`${prefix}${parseInt(month, 10)}${sep}${parseInt(day, 10)}${sep}${year}`);
+            variations.add(`${prefix}${month.padStart(2, '0')}${sep}${parseInt(day, 10)}${sep}${year}`);
+            variations.add(`${prefix}${parseInt(month, 10)}${sep}${day.padStart(2, '0')}${sep}${year}`);
+          });
+          return Array.from(variations);
+        };
+
+        let worksheet = context.workbook.worksheets.getItemOrNullObject(targetSheet);
+        worksheet.load("isNullObject");
+        await context.sync();
+
+        if (worksheet.isNullObject) {
+          const variations = normalizeDateFormat(targetSheet);
+          if (variations.length > 1) {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+            let foundSheetName = null;
+            for (const variation of variations) {
+              const matchingSheet = sheets.items.find(s => s.name === variation);
+              if (matchingSheet) { foundSheetName = matchingSheet.name; break; }
+            }
+            if (foundSheetName) {
+              console.log(`ChromeExtensionService: Navigate - found sheet "${foundSheetName}" via date normalization (requested: "${targetSheet}")`);
+              worksheet = context.workbook.worksheets.getItem(foundSheetName);
+            }
+          }
+        }
+
+        worksheet.load("isNullObject");
+        await context.sync();
+
+        if (worksheet.isNullObject) {
+          console.error(`ChromeExtensionService: Navigate - sheet "${targetSheet}" not found.`);
+          return;
+        }
+
+        // --- Find the student row ---
+        const usedRange = worksheet.getUsedRange();
+        usedRange.load(["values", "rowCount", "columnCount", "rowIndex"]);
+        await context.sync();
+
+        const values = usedRange.values;
+        const headers = values[0];
+
+        const idAliases = ['Student ID', 'SyStudentID', 'Student identifier', 'ID'];
+        let idColumnIndex = -1;
+        for (let col = 0; col < headers.length; col++) {
+          if (idAliases.some(alias => String(headers[col]).trim().toLowerCase() === alias.toLowerCase())) {
+            idColumnIndex = col;
+            break;
+          }
+        }
+
+        if (idColumnIndex === -1) {
+          console.error(`ChromeExtensionService: Navigate - no Student ID column found in "${targetSheet}".`);
+          return;
+        }
+
+        let targetRowIndex = -1;
+        for (let row = 1; row < values.length; row++) {
+          if (String(values[row][idColumnIndex]).trim() === String(syStudentId).trim()) {
+            targetRowIndex = row;
+            break;
+          }
+        }
+
+        if (targetRowIndex === -1) {
+          console.warn(`ChromeExtensionService: Navigate - student "${syStudentId}" not found in "${targetSheet}".`);
+          return;
+        }
+
+        // --- Activate sheet and select the student's row ---
+        const actualRowIndex = usedRange.rowIndex + targetRowIndex;
+        const studentRow = worksheet.getRangeByIndexes(actualRowIndex, 0, 1, headers.length);
+
+        worksheet.activate();
+        studentRow.select();
+        await context.sync();
+
+        console.log(`ChromeExtensionService: Navigated to student "${syStudentId}" in "${targetSheet}" (row ${actualRowIndex + 1}).`);
+      });
+    } catch (error) {
+      console.error("ChromeExtensionService: Error navigating to student row:", error);
     }
   }
 
