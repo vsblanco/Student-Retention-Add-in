@@ -298,6 +298,7 @@ async function handleUpdateMaster(message) {
         if (userStudentNameCol === -1) {
             throw new Error("Imported file is missing a 'Student Name' column.");
         }
+        const userIdCol = findColumnIndex(lowerCaseUserHeaders, CONSTANTS.STUDENT_ID_COLS);
 
         // 2. Read existing Master List to identify new students and save cell-specific data
         let newStudents = [];
@@ -308,6 +309,8 @@ async function handleUpdateMaster(message) {
         let colMapping;
         const masterDataMap = new Map();
         const valueToColorMap = new Map(); // Map to store color for each unique 'Assigned' value
+        const preservationMap = new Map(); // Map for preserving unmatched column values
+        let nonBlankUnmatchedCols = [];
 
         await Excel.run(async (context) => {
             sendMessageToDialog("Reading current 'Master List' to preserve cell data...");
@@ -383,6 +386,66 @@ async function handleUpdateMaster(message) {
                 lowerCaseMasterHeaders.indexOf(userHeader)
             );
             sendMessageToDialog(`Column mapping created: [${colMapping.join(', ')}]`);
+
+            // Determine which master columns are NOT covered by the imported file
+            const matchedMasterCols = new Set(colMapping.filter(idx => idx !== -1));
+            const unmatchedMasterCols = [];
+            for (let i = 0; i < masterHeaders.length; i++) {
+                if (!matchedMasterCols.has(i)) {
+                    unmatchedMasterCols.push(i);
+                }
+            }
+
+            // Build preservation map for unmatched columns with data
+            if (unmatchedMasterCols.length > 0) {
+                const masterIdCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_ID_COLS);
+
+                // Check which unmatched columns have any non-blank data
+                for (const colIdx of unmatchedMasterCols) {
+                    let hasData = false;
+                    for (let i = 1; i < usedRange.values.length; i++) {
+                        const val = usedRange.values[i][colIdx];
+                        if (val !== null && val !== undefined && String(val).trim() !== '') {
+                            hasData = true;
+                            break;
+                        }
+                    }
+                    if (hasData) nonBlankUnmatchedCols.push(colIdx);
+                }
+
+                // Build preservation data per student (keyed by Student ID, fallback to name)
+                if (nonBlankUnmatchedCols.length > 0) {
+                    for (let i = 1; i < usedRange.values.length; i++) {
+                        let key;
+                        if (masterIdCol !== -1) {
+                            const idValue = usedRange.values[i][masterIdCol];
+                            if (idValue != null && String(idValue).trim() !== '') {
+                                key = String(idValue).trim();
+                            }
+                        }
+                        if (!key) {
+                            const name = usedRange.values[i][masterStudentNameCol];
+                            if (name) key = normalizeName(name);
+                        }
+                        if (!key) continue;
+
+                        const preservedValues = {};
+                        const preservedFormulas = {};
+                        for (const colIdx of nonBlankUnmatchedCols) {
+                            const val = usedRange.values[i][colIdx];
+                            const formula = usedRange.formulas[i][colIdx];
+                            if (formula && typeof formula === 'string' && formula.startsWith('=')) {
+                                preservedFormulas[colIdx] = formula;
+                                preservedValues[colIdx] = val;
+                            } else if (val !== null && val !== undefined && String(val).trim() !== '') {
+                                preservedValues[colIdx] = val;
+                            }
+                        }
+                        preservationMap.set(key, { values: preservedValues, formulas: preservedFormulas });
+                    }
+                    sendMessageToDialog(`Built preservation map for ${nonBlankUnmatchedCols.length} unmatched column(s): [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
+                }
+            }
 
             for (const userRow of userData) {
                 const studentName = userRow[userStudentNameCol];
@@ -462,6 +525,32 @@ async function handleUpdateMaster(message) {
                         if (masterAssignedColIdx !== -1 && !newRow[masterAssignedColIdx]) {
                             newRow[masterAssignedColIdx] = existingData.assigned;
                             assignedUsersPreservedCount++;
+                        }
+                    }
+                }
+
+                // Preserve values from unmatched master columns
+                if (nonBlankUnmatchedCols.length > 0) {
+                    let preserveKey;
+                    if (userIdCol !== -1) {
+                        const idValue = userRow[userIdCol];
+                        if (idValue != null && String(idValue).trim() !== '') {
+                            preserveKey = String(idValue).trim();
+                        }
+                    }
+                    if (!preserveKey) {
+                        preserveKey = normalizedName;
+                    }
+
+                    if (preserveKey && preservationMap.has(preserveKey)) {
+                        const preserved = preservationMap.get(preserveKey);
+                        for (const colIdx of nonBlankUnmatchedCols) {
+                            if (preserved.formulas[colIdx]) {
+                                formulaRow[colIdx] = preserved.formulas[colIdx];
+                                newRow[colIdx] = preserved.values[colIdx] || "";
+                            } else if (preserved.values[colIdx] !== undefined) {
+                                newRow[colIdx] = preserved.values[colIdx];
+                            }
                         }
                     }
                 }
@@ -555,7 +644,16 @@ async function handleUpdateMaster(message) {
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
             
-            // 8. Final formatting and autofit
+            // 8. Highlight preserved columns in light gray
+            if (nonBlankUnmatchedCols.length > 0) {
+                for (const colIdx of nonBlankUnmatchedCols) {
+                    const colRange = sheet.getRangeByIndexes(0, colIdx, dataToWrite.length + 1, 1);
+                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
+                }
+                sendMessageToDialog(`Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
+            }
+
+            // 9. Final formatting and autofit
             const masterLdaColIdx = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.lastLda);
             if (masterLdaColIdx !== -1) {
                 sendMessageToDialog("Formatting 'LDA' column as date...");
