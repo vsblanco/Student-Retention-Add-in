@@ -14,6 +14,16 @@ class ChromeExtensionService {
     // Intervals and timeouts
     this.pingInterval = null;
     this.keepAliveInterval = null;
+    this.healthCheckInterval = null;
+
+    // Excel API health state
+    this.isExcelApiHealthy = true;
+    this.lastSuccessfulExcelCall = Date.now();
+    this.excelHealthCheckFailures = 0;
+
+    // Message listener health state
+    this.messageListenerHealthy = true;
+    this._pendingSelfPing = null;
 
     // Callbacks for extension state changes
     this.listeners = new Set();
@@ -39,6 +49,13 @@ class ChromeExtensionService {
     if (!event.data || !event.data.type) return;
 
     switch (event.data.type) {
+      case "SRK_SELF_HEALTH_PING":
+        // Self-health-check: clear the pending ping to signal the listener is alive
+        if (this._pendingSelfPing && event.data.pingId === this._pendingSelfPing) {
+          this._pendingSelfPing = null;
+        }
+        break;
+
       case "SRK_EXTENSION_INSTALLED":
         console.log("ChromeExtensionService: Extension detected!");
         this.handleExtensionDetected();
@@ -46,6 +63,11 @@ class ChromeExtensionService {
 
       case "SRK_HIGHLIGHT_STUDENT_ROW":
         console.log("ChromeExtensionService: Highlight student row request received:", event.data);
+        console.log(
+          "ChromeExtensionService: Excel API status - healthy:", this.isExcelApiHealthy,
+          ", last success:", Math.round((Date.now() - this.lastSuccessfulExcelCall) / 1000) + "s ago",
+          ", Excel available:", typeof window.Excel !== "undefined"
+        );
         this.handleHighlightStudentRow(event.data.data);
         break;
 
@@ -97,6 +119,145 @@ class ChromeExtensionService {
 
     console.log(`ChromeExtensionService: Sending highlight confirmation (${status}):`, confirmation);
     this.sendMessage(confirmation);
+  }
+
+  /**
+   * Run an Excel.run() call with a timeout to detect stale/hung API sessions.
+   * @param {Function} batchFn - The function to pass to Excel.run()
+   * @param {number} timeoutMs - Timeout in milliseconds (default: 30000)
+   * @returns {Promise<*>} The result of Excel.run()
+   */
+  async excelRunWithTimeout(batchFn, timeoutMs = 30000) {
+    return Promise.race([
+      Excel.run(batchFn),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("EXCEL_API_TIMEOUT")), timeoutMs)
+      )
+    ]);
+  }
+
+  /**
+   * Test if the Excel API is still responsive.
+   * Performs a lightweight read operation to verify the session is alive.
+   * @returns {Promise<boolean>} true if healthy, false if stale/unresponsive
+   */
+  async checkExcelApiHealth() {
+    if (typeof window.Excel === "undefined") {
+      return false;
+    }
+
+    try {
+      await this.excelRunWithTimeout(async (context) => {
+        // Minimal operation: just read the active worksheet name
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        sheet.load("name");
+        await context.sync();
+      }, 10000); // 10s timeout for health check
+
+      this.isExcelApiHealthy = true;
+      this.lastSuccessfulExcelCall = Date.now();
+      this.excelHealthCheckFailures = 0;
+      return true;
+    } catch (error) {
+      this.excelHealthCheckFailures++;
+      const wasHealthy = this.isExcelApiHealthy;
+      this.isExcelApiHealthy = false;
+
+      console.warn(
+        `ChromeExtensionService: Excel API health check FAILED (attempt ${this.excelHealthCheckFailures}):`,
+        error.message || error
+      );
+
+      if (wasHealthy) {
+        console.error(
+          "ChromeExtensionService: ⚠️ Excel API session appears stale. " +
+          `Last successful call was ${Math.round((Date.now() - this.lastSuccessfulExcelCall) / 1000)}s ago. ` +
+          "Incoming highlight requests may fail until the page is refreshed."
+        );
+        this.notifyListeners({
+          type: "excel_api_stale",
+          data: {
+            lastSuccessfulCall: this.lastSuccessfulExcelCall,
+            failureCount: this.excelHealthCheckFailures,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }
+
+      return false;
+    }
+  }
+
+  /**
+   * Verify the message listener is still active by posting a self-ping
+   * and checking that we receive it.
+   * @returns {Promise<boolean>} true if the listener is healthy
+   */
+  checkMessageListenerHealth() {
+    return new Promise((resolve) => {
+      const pingId = `health_${Date.now()}_${Math.random()}`;
+      this._pendingSelfPing = pingId;
+
+      const timeout = setTimeout(() => {
+        if (this._pendingSelfPing === pingId) {
+          this._pendingSelfPing = null;
+          this.messageListenerHealthy = false;
+          console.error(
+            "ChromeExtensionService: ⚠️ Message listener health check FAILED. " +
+            "The window message listener may have been removed or the execution context is stale. " +
+            "Attempting to re-register..."
+          );
+          // Attempt recovery: re-register the listener
+          this.setupMessageListener();
+          resolve(false);
+        }
+      }, 3000);
+
+      // Post a self-ping message
+      window.postMessage({ type: "SRK_SELF_HEALTH_PING", pingId }, "*");
+
+      // If we receive it, the pending handler in handleMessage will resolve
+      const checkResolved = setInterval(() => {
+        if (this._pendingSelfPing !== pingId) {
+          clearInterval(checkResolved);
+          clearTimeout(timeout);
+          this.messageListenerHealthy = true;
+          resolve(true);
+        }
+      }, 100);
+    });
+  }
+
+  /**
+   * Start periodic health checks for both Excel API and message listener.
+   * @param {number} interval - Milliseconds between checks (default: 60000 = 1 minute)
+   */
+  startHealthChecks(interval = 60000) {
+    if (this.healthCheckInterval) return;
+
+    console.log(`ChromeExtensionService: Starting health checks (every ${interval / 1000}s)...`);
+
+    this.healthCheckInterval = setInterval(async () => {
+      // Check message listener health
+      const listenerOk = await this.checkMessageListenerHealth();
+      if (!listenerOk) {
+        console.warn("ChromeExtensionService: Message listener recovered after re-registration.");
+      }
+
+      // Check Excel API health
+      await this.checkExcelApiHealth();
+    }, interval);
+  }
+
+  /**
+   * Stop periodic health checks.
+   */
+  stopHealthChecks() {
+    if (this.healthCheckInterval) {
+      console.log("ChromeExtensionService: Stopping health checks.");
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
   }
 
   /**
@@ -173,10 +334,63 @@ class ChromeExtensionService {
       console.warn("ChromeExtensionService: editColumn specified but editText is missing");
     }
 
-    try {
-      await Excel.run(async (context) => {
-        // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026" <-> "LDA 01-11-2026")
-        const normalizeDateFormat = (dateStr) => {
+    const MAX_RETRIES = 2;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 1) {
+          console.log(`ChromeExtensionService: Retry attempt ${attempt}/${MAX_RETRIES} for highlight (student ${syStudentId})...`);
+          // Brief delay before retry to allow session recovery
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+
+        await this._executeHighlight(payload);
+
+        // If we got here, the operation succeeded - update health state
+        this.isExcelApiHealthy = true;
+        this.lastSuccessfulExcelCall = Date.now();
+        this.excelHealthCheckFailures = 0;
+        return; // Success - exit the retry loop
+
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `ChromeExtensionService: Highlight attempt ${attempt}/${MAX_RETRIES} failed:`,
+          error.message || error
+        );
+
+        // Don't retry on validation errors or sheet-not-found - only on API/timeout errors
+        const isRetryable = (
+          error.message === "EXCEL_API_TIMEOUT" ||
+          error.code === "GeneralException" ||
+          error.code === "Retry" ||
+          error.code === "InvalidOperationException" ||
+          (error.message && error.message.includes("network")) ||
+          (error.message && error.message.includes("session"))
+        );
+
+        if (!isRetryable) {
+          break; // Non-retryable error, skip to error handling
+        }
+      }
+    }
+
+    // All retries exhausted - handle the final error
+    this._handleHighlightError(lastError, studentName, syStudentId, editColumn, editText);
+  }
+
+  /**
+   * Execute the actual Excel highlight operation with a timeout.
+   * Separated from retry logic for clarity.
+   * @param {Object} payload - The highlight payload
+   */
+  async _executeHighlight(payload) {
+    const { studentName, syStudentId, startCol, endCol, targetSheet, color = '#FFFF00', editColumn, editText } = payload;
+
+    await this.excelRunWithTimeout(async (context) => {
+      // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026" <-> "LDA 01-11-2026")
+      const normalizeDateFormat = (dateStr) => {
           // Check if the string looks like a date format (contains / or -)
           if (!dateStr || typeof dateStr !== 'string') {
             return [dateStr]; // Not a string, return as-is
@@ -439,37 +653,70 @@ class ChromeExtensionService {
           }
         });
       });
-    } catch (error) {
-      console.error("ChromeExtensionService: Error highlighting student row:", error);
+  }
 
-      // Determine a helpful error message based on common failure scenarios
-      let errorMessage = error.message || "An unknown error occurred while highlighting the row.";
-      if (error.code === "InvalidReference") {
-        errorMessage = "Invalid cell reference. The worksheet structure may have changed.";
-      } else if (error.code === "GeneralException") {
-        errorMessage = "Excel encountered an error. The workbook may be protected, read-only, or in use by another process.";
-      } else if (error.code === "AccessDenied") {
-        errorMessage = "Access denied. The workbook or sheet may be protected.";
-      } else if (error.message && error.message.includes("network")) {
-        errorMessage = "A network error occurred. Check your connection to Excel Online.";
-      }
+  /**
+   * Handle errors from highlight attempts after all retries are exhausted.
+   * Produces detailed diagnostic messages and notifies both the extension and listeners.
+   * @param {Error} error - The final error
+   * @param {string} studentName
+   * @param {string|number} syStudentId
+   * @param {string|number} editColumn
+   * @param {string} editText
+   */
+  _handleHighlightError(error, studentName, syStudentId, editColumn, editText) {
+    console.error("ChromeExtensionService: Error highlighting student row (all retries exhausted):", error);
 
-      // Send error confirmation back to Chrome extension
-      this.sendHighlightConfirmation(syStudentId, "error", errorMessage);
+    // Determine a helpful error message based on common failure scenarios
+    let errorMessage = error.message || "An unknown error occurred while highlighting the row.";
 
-      // Notify listeners of error
-      this.notifyListeners({
-        type: "highlight_error",
-        data: {
-          studentName,
-          syStudentId,
-          editColumn,
-          editText,
-          error: errorMessage,
-          timestamp: new Date().toISOString()
-        }
-      });
+    if (error.message === "EXCEL_API_TIMEOUT") {
+      this.isExcelApiHealthy = false;
+      errorMessage = "The Excel API did not respond in time. The session may have expired — try refreshing the page.";
+    } else if (error.code === "InvalidReference") {
+      errorMessage = "Invalid cell reference. The worksheet structure may have changed.";
+    } else if (error.code === "GeneralException") {
+      errorMessage = "Excel encountered an error. The workbook may be protected, read-only, or the session may have expired. Try refreshing the page.";
+    } else if (error.code === "InvalidOperationException") {
+      this.isExcelApiHealthy = false;
+      errorMessage = "The Excel API session appears to be invalid. Please refresh the page and try again.";
+    } else if (error.code === "Retry") {
+      errorMessage = "Excel is temporarily busy. The operation was retried but did not succeed. Please try again shortly.";
+    } else if (error.code === "AccessDenied") {
+      errorMessage = "Access denied. The workbook or sheet may be protected.";
+    } else if (error.message && (error.message.includes("network") || error.message.includes("fetch"))) {
+      errorMessage = "A network error occurred. Check your connection to Excel Online.";
+    } else if (error.message && error.message.includes("session")) {
+      this.isExcelApiHealthy = false;
+      errorMessage = "The Excel session has expired. Please refresh the page and try again.";
     }
+
+    console.error(
+      "ChromeExtensionService: Diagnostic info -",
+      "isExcelApiHealthy:", this.isExcelApiHealthy,
+      ", lastSuccessfulExcelCall:", Math.round((Date.now() - this.lastSuccessfulExcelCall) / 1000) + "s ago",
+      ", healthCheckFailures:", this.excelHealthCheckFailures,
+      ", errorCode:", error.code || "none",
+      ", errorMessage:", error.message
+    );
+
+    // Send error confirmation back to Chrome extension
+    this.sendHighlightConfirmation(syStudentId, "error", errorMessage);
+
+    // Notify listeners of error
+    this.notifyListeners({
+      type: "highlight_error",
+      data: {
+        studentName,
+        syStudentId,
+        editColumn,
+        editText,
+        error: errorMessage,
+        errorCode: error.code || null,
+        isExcelApiHealthy: this.isExcelApiHealthy,
+        timestamp: new Date().toISOString()
+      }
+    });
   }
 
   /**
@@ -792,8 +1039,14 @@ class ChromeExtensionService {
   reset() {
     this.stopPinging();
     this.stopKeepAlive();
+    this.stopHealthChecks();
     this.isExtensionInstalled = false;
     this.isChecking = false;
+    this.isExcelApiHealthy = true;
+    this.lastSuccessfulExcelCall = Date.now();
+    this.excelHealthCheckFailures = 0;
+    this.messageListenerHealthy = true;
+    this._pendingSelfPing = null;
   }
 
   /**
@@ -802,6 +1055,7 @@ class ChromeExtensionService {
   cleanup() {
     this.stopPinging();
     this.stopKeepAlive();
+    this.stopHealthChecks();
     window.removeEventListener("message", this.handleMessage);
     this.listeners.clear();
   }

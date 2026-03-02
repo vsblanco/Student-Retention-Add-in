@@ -119,10 +119,16 @@ function App() {
     // Start keep-alive heartbeat
     chromeExtensionService.startKeepAlive();
 
+    // Start periodic health checks for Excel API and message listener
+    chromeExtensionService.startHealthChecks();
+
     // Listen for extension events
     const removeListener = chromeExtensionService.addListener((event) => {
       if (event.type === "installed") {
         console.log("App: Chrome Extension is installed and ready!");
+      }
+      if (event.type === "excel_api_stale") {
+        console.warn("App: Excel API session appears stale. User may need to refresh.", event.data);
       }
     });
 
@@ -132,6 +138,7 @@ function App() {
       removeListener();
       chromeExtensionService.stopPinging();
       chromeExtensionService.stopKeepAlive();
+      chromeExtensionService.stopHealthChecks();
     };
   }, []);
 

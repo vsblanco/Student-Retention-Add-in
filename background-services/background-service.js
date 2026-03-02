@@ -1434,6 +1434,9 @@ Office.onReady(() => {
   // Start keep-alive heartbeat to prevent extension from going dormant
   chromeExtensionService.startKeepAlive();
 
+  // Start periodic health checks for Excel API and message listener
+  chromeExtensionService.startHealthChecks();
+
   // Add a listener for extension events
   chromeExtensionService.addListener((event) => {
     console.log("Background: Chrome Extension event:", event);
