@@ -14,6 +14,14 @@ class ChromeExtensionService {
     // Intervals and timeouts
     this.pingInterval = null;
     this.keepAliveInterval = null;
+    this.messageListenerWatchdogInterval = null;
+
+    // Excel API health tracking
+    this.lastExcelHealthCheck = null;
+    this.excelHealthy = null; // null = unknown, true/false = last check result
+    this.highlightRetryCount = 0;
+    this.MAX_HIGHLIGHT_RETRIES = 3;
+    this.EXCEL_RUN_TIMEOUT_MS = 30000; // 30 seconds
 
     // Callbacks for extension state changes
     this.listeners = new Set();
@@ -21,15 +29,185 @@ class ChromeExtensionService {
     // Message handler bound to this instance
     this.handleMessage = this.handleMessage.bind(this);
 
+    // Track whether message listener is attached
+    this._messageListenerAttached = false;
+
     // Setup message listener
     this.setupMessageListener();
   }
 
   /**
-   * Setup the global message listener for extension responses
+   * Setup the global message listener for extension responses.
+   * Tracks attachment state so we can detect and recover if the listener is lost.
    */
   setupMessageListener() {
     window.addEventListener("message", this.handleMessage);
+    this._messageListenerAttached = true;
+    console.log("ChromeExtensionService: Message listener attached.");
+  }
+
+  /**
+   * Verify the message listener is still attached by posting a test message
+   * to ourselves and checking if we receive it. If the listener appears dead,
+   * re-attach it.
+   */
+  verifyMessageListener() {
+    const testId = `_srk_listener_check_${Date.now()}`;
+    let received = false;
+
+    const tempHandler = (event) => {
+      if (event.data && event.data._srkListenerCheck === testId) {
+        received = true;
+      }
+    };
+
+    window.addEventListener("message", tempHandler);
+    window.postMessage({ _srkListenerCheck: testId }, "*");
+
+    // Check after a short delay
+    setTimeout(() => {
+      window.removeEventListener("message", tempHandler);
+      if (!received) {
+        console.warn("ChromeExtensionService: Message listener self-check FAILED. Re-attaching listener.");
+        this._messageListenerAttached = false;
+        // Re-attach the main handler
+        window.removeEventListener("message", this.handleMessage);
+        window.addEventListener("message", this.handleMessage);
+        this._messageListenerAttached = true;
+        console.log("ChromeExtensionService: Message listener re-attached.");
+      }
+    }, 500);
+  }
+
+  /**
+   * Start a watchdog that periodically verifies the message listener is alive.
+   * This helps recover from cases where the Office Add-in iframe context
+   * is silently recycled.
+   * @param {number} interval - Milliseconds between checks (default: 60000 = 1 min)
+   */
+  startMessageListenerWatchdog(interval = 60000) {
+    if (this.messageListenerWatchdogInterval) return;
+
+    console.log("ChromeExtensionService: Starting message listener watchdog.");
+    this.messageListenerWatchdogInterval = setInterval(() => {
+      this.verifyMessageListener();
+    }, interval);
+  }
+
+  /**
+   * Stop the message listener watchdog.
+   */
+  stopMessageListenerWatchdog() {
+    if (this.messageListenerWatchdogInterval) {
+      clearInterval(this.messageListenerWatchdogInterval);
+      this.messageListenerWatchdogInterval = null;
+    }
+  }
+
+  /**
+   * Run an Excel.run() call with a timeout. If the Excel API does not respond
+   * within the timeout, the returned promise rejects with a descriptive error.
+   * This helps detect stale sessions in Excel Online.
+   *
+   * @param {Function} batchFn - The callback to pass to Excel.run(callback)
+   * @param {number} [timeoutMs] - Max milliseconds to wait (default: this.EXCEL_RUN_TIMEOUT_MS)
+   * @returns {Promise<void>}
+   */
+  excelRunWithTimeout(batchFn, timeoutMs) {
+    const timeout = timeoutMs || this.EXCEL_RUN_TIMEOUT_MS;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          const err = new Error(
+            `Excel API did not respond within ${timeout / 1000}s. ` +
+            "The session may have expired. Try refreshing the page."
+          );
+          err.code = "Timeout";
+          reject(err);
+        }
+      }, timeout);
+
+      Excel.run(batchFn)
+        .then((result) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+          }
+        })
+        .catch((err) => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timer);
+            reject(err);
+          }
+        });
+    });
+  }
+
+  /**
+   * Quick health check of the Excel API. Performs a minimal Excel.run() to
+   * verify the API is responsive.
+   * @param {number} [timeoutMs=5000] - How long to wait before declaring unhealthy
+   * @returns {Promise<boolean>} true if healthy, false if not
+   */
+  async checkExcelHealth(timeoutMs = 5000) {
+    if (typeof window.Excel === "undefined") {
+      this.excelHealthy = false;
+      return false;
+    }
+
+    try {
+      await this.excelRunWithTimeout(async (context) => {
+        // Minimal operation: just load the active worksheet name
+        context.workbook.worksheets.getActiveWorksheet().load("name");
+        await context.sync();
+      }, timeoutMs);
+      this.excelHealthy = true;
+      this.lastExcelHealthCheck = Date.now();
+      return true;
+    } catch (error) {
+      console.warn("ChromeExtensionService: Excel health check failed:", error.message);
+      this.excelHealthy = false;
+      this.lastExcelHealthCheck = Date.now();
+      return false;
+    }
+  }
+
+  /**
+   * Determine whether an error is retryable (session/timeout issues vs
+   * permanent failures like missing sheets or bad parameters).
+   * @param {Error} error
+   * @returns {boolean}
+   */
+  isRetryableError(error) {
+    if (!error) return false;
+
+    // Timeout errors are retryable
+    if (error.code === "Timeout") return true;
+
+    // InvalidObjectPath usually means the session/context is stale
+    if (error.code === "InvalidObjectPath") return true;
+
+    // GeneralException can be transient
+    if (error.code === "GeneralException") return true;
+
+    // Network errors are retryable
+    if (error.message && error.message.toLowerCase().includes("network")) return true;
+
+    // Session-related errors
+    if (error.message && (
+      error.message.toLowerCase().includes("session") ||
+      error.message.toLowerCase().includes("expired") ||
+      error.message.toLowerCase().includes("timed out") ||
+      error.message.toLowerCase().includes("request failed")
+    )) return true;
+
+    return false;
   }
 
   /**
@@ -37,6 +215,9 @@ class ChromeExtensionService {
    */
   handleMessage(event) {
     if (!event.data || !event.data.type) return;
+
+    // Skip our own internal listener-check messages
+    if (event.data._srkListenerCheck) return;
 
     switch (event.data.type) {
       case "SRK_EXTENSION_INSTALLED":
@@ -46,7 +227,9 @@ class ChromeExtensionService {
 
       case "SRK_HIGHLIGHT_STUDENT_ROW":
         console.log("ChromeExtensionService: Highlight student row request received:", event.data);
-        this.handleHighlightStudentRow(event.data.data);
+        console.log("ChromeExtensionService: Excel API available:", typeof window.Excel !== "undefined");
+        console.log("ChromeExtensionService: Last Excel health:", this.excelHealthy, "checked at:", this.lastExcelHealthCheck ? new Date(this.lastExcelHealthCheck).toISOString() : "never");
+        this.handleHighlightStudentRowWithRetry(event.data.data);
         break;
 
       case "SRK_NAVIGATE_TO_STUDENT":
@@ -100,8 +283,56 @@ class ChromeExtensionService {
   }
 
   /**
+   * Retry wrapper for handleHighlightStudentRow.
+   * If the first attempt fails with a retryable error (timeout, stale session),
+   * performs up to MAX_HIGHLIGHT_RETRIES retries with exponential backoff.
+   * Non-retryable errors (bad params, missing sheet) fail immediately.
+   * @param {Object} payload - Highlight request payload (same as handleHighlightStudentRow)
+   */
+  async handleHighlightStudentRowWithRetry(payload) {
+    this.highlightRetryCount = 0;
+
+    // Run an Excel health check first if we haven't checked recently (within 2 minutes)
+    const healthCheckAge = this.lastExcelHealthCheck ? Date.now() - this.lastExcelHealthCheck : Infinity;
+    if (healthCheckAge > 120000) {
+      console.log("ChromeExtensionService: Running Excel health check before highlight...");
+      const healthy = await this.checkExcelHealth();
+      if (!healthy) {
+        console.warn("ChromeExtensionService: Excel API health check failed. Will still attempt highlight.");
+      }
+    }
+
+    while (this.highlightRetryCount <= this.MAX_HIGHLIGHT_RETRIES) {
+      try {
+        await this.handleHighlightStudentRow(payload);
+        return; // Success - exit retry loop
+      } catch (error) {
+        if (this.isRetryableError(error) && this.highlightRetryCount < this.MAX_HIGHLIGHT_RETRIES) {
+          this.highlightRetryCount++;
+          const backoffMs = Math.pow(2, this.highlightRetryCount) * 1000; // 2s, 4s, 8s
+          console.warn(
+            `ChromeExtensionService: Highlight attempt ${this.highlightRetryCount} failed with retryable error: ${error.message}. ` +
+            `Retrying in ${backoffMs / 1000}s... (${this.highlightRetryCount}/${this.MAX_HIGHLIGHT_RETRIES})`
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffMs));
+        } else {
+          // Non-retryable or out of retries - error already sent to extension by handleHighlightStudentRow
+          if (this.highlightRetryCount >= this.MAX_HIGHLIGHT_RETRIES) {
+            console.error(
+              `ChromeExtensionService: Highlight failed after ${this.MAX_HIGHLIGHT_RETRIES} retries. ` +
+              "The Excel API session may need a page refresh."
+            );
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  /**
    * Handle highlighting a student row based on extension request
-   * Runs in the background - no side panel required
+   * Runs in the background - no side panel required.
+   * Throws retryable errors so the retry wrapper can catch them.
    * @param {Object} payload - Highlight request payload
    * @param {string} payload.studentName - Student's full name
    * @param {string} payload.syStudentId - Student's SyStudentID
@@ -174,7 +405,7 @@ class ChromeExtensionService {
     }
 
     try {
-      await Excel.run(async (context) => {
+      await this.excelRunWithTimeout(async (context) => {
         // Helper function to normalize date formats (e.g., "01/11/2026" <-> "1/11/2026" <-> "LDA 01-11-2026")
         const normalizeDateFormat = (dateStr) => {
           // Check if the string looks like a date format (contains / or -)
@@ -441,21 +672,43 @@ class ChromeExtensionService {
       });
     } catch (error) {
       console.error("ChromeExtensionService: Error highlighting student row:", error);
+      console.error("ChromeExtensionService: Error details - code:", error.code, "message:", error.message);
 
       // Determine a helpful error message based on common failure scenarios
       let errorMessage = error.message || "An unknown error occurred while highlighting the row.";
-      if (error.code === "InvalidReference") {
+      let isRetryable = this.isRetryableError(error);
+
+      if (error.code === "Timeout") {
+        errorMessage = `Excel API did not respond within ${this.EXCEL_RUN_TIMEOUT_MS / 1000}s. ` +
+          "The session may have expired. Try refreshing the page.";
+        this.excelHealthy = false;
+      } else if (error.code === "InvalidObjectPath") {
+        errorMessage = "Excel session appears stale. The API context may have expired. Try refreshing the page.";
+        this.excelHealthy = false;
+      } else if (error.code === "InvalidReference") {
         errorMessage = "Invalid cell reference. The worksheet structure may have changed.";
       } else if (error.code === "GeneralException") {
         errorMessage = "Excel encountered an error. The workbook may be protected, read-only, or in use by another process.";
       } else if (error.code === "AccessDenied") {
         errorMessage = "Access denied. The workbook or sheet may be protected.";
-      } else if (error.message && error.message.includes("network")) {
+      } else if (error.message && error.message.toLowerCase().includes("network")) {
         errorMessage = "A network error occurred. Check your connection to Excel Online.";
       }
 
+      // If retryable, re-throw so the retry wrapper can handle it
+      if (isRetryable && this.highlightRetryCount < this.MAX_HIGHLIGHT_RETRIES) {
+        console.warn(`ChromeExtensionService: Error is retryable (code: ${error.code}). Will retry.`);
+        throw error;
+      }
+
+      // Non-retryable or final retry exhausted - report to extension
+      const retryInfo = this.highlightRetryCount > 0
+        ? ` (failed after ${this.highlightRetryCount} retries)`
+        : "";
+      const finalMessage = errorMessage + retryInfo;
+
       // Send error confirmation back to Chrome extension
-      this.sendHighlightConfirmation(syStudentId, "error", errorMessage);
+      this.sendHighlightConfirmation(syStudentId, "error", finalMessage);
 
       // Notify listeners of error
       this.notifyListeners({
@@ -465,7 +718,9 @@ class ChromeExtensionService {
           syStudentId,
           editColumn,
           editText,
-          error: errorMessage,
+          error: finalMessage,
+          retryCount: this.highlightRetryCount,
+          errorCode: error.code || "unknown",
           timestamp: new Date().toISOString()
         }
       });
@@ -656,7 +911,8 @@ class ChromeExtensionService {
 
   /**
    * Start keep-alive heartbeat for Chrome extension context
-   * This prevents the extension from going dormant
+   * This prevents the extension from going dormant.
+   * Also starts the message listener watchdog to detect stale listeners.
    * @param {number} interval - Milliseconds between pings (default: 20000)
    */
   startKeepAlive(interval = 20000) {
@@ -673,6 +929,9 @@ class ChromeExtensionService {
         });
       }
     }, interval);
+
+    // Also start the message listener watchdog
+    this.startMessageListenerWatchdog();
   }
 
   /**
@@ -792,8 +1051,12 @@ class ChromeExtensionService {
   reset() {
     this.stopPinging();
     this.stopKeepAlive();
+    this.stopMessageListenerWatchdog();
     this.isExtensionInstalled = false;
     this.isChecking = false;
+    this.excelHealthy = null;
+    this.lastExcelHealthCheck = null;
+    this.highlightRetryCount = 0;
   }
 
   /**
@@ -802,7 +1065,9 @@ class ChromeExtensionService {
   cleanup() {
     this.stopPinging();
     this.stopKeepAlive();
+    this.stopMessageListenerWatchdog();
     window.removeEventListener("message", this.handleMessage);
+    this._messageListenerAttached = false;
     this.listeners.clear();
   }
 }
