@@ -629,12 +629,13 @@ async function handleUpdateMaster(message) {
             }
             sendMessageToDialog("Data write completed.");
 
-            // 6. Apply colors
-            if (cellsToColor.length > 0) {
-                sendMessageToDialog("Applying preserved cell colors...");
-                for (const cell of cellsToColor) {
-                    sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+            // 6. Highlight preserved columns in light gray (applied first so cell-level colors can override)
+            if (nonBlankUnmatchedCols.length > 0) {
+                for (const colIdx of nonBlankUnmatchedCols) {
+                    const colRange = sheet.getRangeByIndexes(1, colIdx, dataToWrite.length, 1);
+                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
                 }
+                sendMessageToDialog(`Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
             }
 
             // 7. Highlight new students based on the latest ExpStartDate
@@ -668,14 +669,13 @@ async function handleUpdateMaster(message) {
                 const highlightRange = sheet.getRangeByIndexes(1, 0, newStudents.length, masterHeaders.length);
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
-            
-            // 8. Highlight preserved columns in light gray
-            if (nonBlankUnmatchedCols.length > 0) {
-                for (const colIdx of nonBlankUnmatchedCols) {
-                    const colRange = sheet.getRangeByIndexes(0, colIdx, dataToWrite.length + 1, 1);
-                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
+
+            // 8. Apply preserved cell colors (applied last so they are not overwritten by column/row fills)
+            if (cellsToColor.length > 0) {
+                sendMessageToDialog("Applying preserved cell colors...");
+                for (const cell of cellsToColor) {
+                    sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
                 }
-                sendMessageToDialog(`Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
             }
 
             // 9. Final formatting and autofit

@@ -227,11 +227,12 @@ export function computeSavedStaticFromValues(values = [], sheetHeaders = [], sta
 					if (hasProps && cellProps[r] && cellProps[r][colIdx]) {
 						const fill = cellProps[r][colIdx].format.fill;
 						
-                        // v1.8 FIX: We must IGNORE 'lightblue' (#ADD8E6) because that is the automatic 
+                        // v1.8 FIX: We must IGNORE 'lightblue' (#ADD8E6) because that is the automatic
                         // "New Row" highlight. If we save it, it becomes permanent.
+                        // Also ignore '#D3D3D3' (Light Gray) used for retained/preserved column highlighting.
                         if (fill && fill.color) {
                             const hexColor = fill.color.toUpperCase();
-                            if (hexColor !== '#FFFFFF' && hexColor !== '#ADD8E6') {
+                            if (hexColor !== '#FFFFFF' && hexColor !== '#ADD8E6' && hexColor !== '#D3D3D3') {
                                 // Log the first few captures to debug
                                 if (colorMap.get(colName).size < 5) {
                                     console.log(`[Utility] Stored color ${fill.color} for value "${asStr}" in col "${colName}" (Row ${r})`);
