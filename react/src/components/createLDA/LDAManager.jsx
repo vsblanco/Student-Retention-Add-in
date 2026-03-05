@@ -15,6 +15,7 @@ const PROCESS_STEPS = [
   { id: 'read', label: 'Reading Master List' },
   { id: 'filter', label: 'Filtering by Days Out' },
   { id: 'failing', label: 'Filtering by Grades' },
+  { id: 'attendance', label: 'Filtering by Attendance' },
   { id: 'createSheet', label: 'Creating Sheet' },
   { id: 'tags', label: 'Applying LDA & DNC Tags' },
   { id: 'format', label: 'Formatting LDA Table' },
@@ -26,6 +27,7 @@ export default function CreateLDAManager({ onReady } = {}) {
   const [ldaSettings, setLdaSettings] = useState({
     daysOut: 5,
     includeFailingList: false,
+    includeAttendanceList: false,
     includeLDATag: true,
     includeDNCTag: true,
     sheetNameMode: 'date',
@@ -65,6 +67,7 @@ export default function CreateLDAManager({ onReady } = {}) {
               setLdaSettings(prev => ({
                 daysOut: (wb.daysOut !== undefined && wb.daysOut !== null) ? Number(wb.daysOut) : prev.daysOut,
                 includeFailingList: (wb.includeFailingList !== undefined) ? !!wb.includeFailingList : prev.includeFailingList,
+                includeAttendanceList: (wb.includeAttendanceList !== undefined) ? !!wb.includeAttendanceList : prev.includeAttendanceList,
                 includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
                 includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
                 sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
@@ -298,7 +301,7 @@ export default function CreateLDAManager({ onReady } = {}) {
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
                   {/* Render steps - for multi-campus, show global steps then campus list */}
                   {(isMultiCampus
-                    ? PROCESS_STEPS.filter(s => ['validate', 'read', 'filter', 'failing', 'tags'].includes(s.id))
+                    ? PROCESS_STEPS.filter(s => ['validate', 'read', 'filter', 'failing', 'attendance', 'tags'].includes(s.id))
                     : PROCESS_STEPS
                   ).map((step) => {
                       const status = stepStatus[step.id] || 'pending';
@@ -328,7 +331,8 @@ export default function CreateLDAManager({ onReady } = {}) {
                                               {batchProgress.phase === 'reading' ? 'Reading' :
                                                batchProgress.phase === 'writing' ? 'Writing' : 'Formatting'}{' '}
                                               {batchProgress.tableName === 'Master_List' ? 'Master List' :
-                                               batchProgress.tableName === 'LDA_Table' ? 'LDA' : 'Failing'} data
+                                               batchProgress.tableName === 'LDA_Table' ? 'LDA' :
+                                               batchProgress.tableName === 'Attendance_Table' ? 'Attendance' : 'Failing'} data
                                           </span>
                                           <span className="font-medium">
                                               {batchProgress.current} / {batchProgress.total}
@@ -520,6 +524,13 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         label="Include Failing List"
         isOn={settings.includeFailingList}
         onToggle={() => handleToggle('includeFailingList')}
+      />
+
+      <ToggleRow
+        key="toggle-attendance-list"
+        label="Include Attendance List"
+        isOn={settings.includeAttendanceList}
+        onToggle={() => handleToggle('includeAttendanceList')}
       />
 
       <button
