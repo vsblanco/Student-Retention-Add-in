@@ -632,7 +632,7 @@ async function handleUpdateMaster(message) {
             // 6. Highlight preserved columns in light gray (applied first so cell-level colors can override)
             if (nonBlankUnmatchedCols.length > 0) {
                 for (const colIdx of nonBlankUnmatchedCols) {
-                    const colRange = sheet.getRangeByIndexes(0, colIdx, dataToWrite.length + 1, 1);
+                    const colRange = sheet.getRangeByIndexes(1, colIdx, dataToWrite.length, 1);
                     colRange.format.fill.color = "#D3D3D3"; // Light Gray
                 }
                 sendMessageToDialog(`Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
