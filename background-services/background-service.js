@@ -609,19 +609,13 @@ async function importMasterListFromExtension(payload) {
             }
             console.log("ImportFromExtension: All data writes completed");
 
-            // Apply preserved colors in batches
-            if (cellsToColor.length > 0) {
-                const colorBatches = Math.ceil(cellsToColor.length / FORMAT_BATCH_SIZE);
-                console.log(`ImportFromExtension: Applying ${cellsToColor.length} preserved cell colors in ${colorBatches} batch(es)...`);
-
-                for (let i = 0; i < cellsToColor.length; i += FORMAT_BATCH_SIZE) {
-                    const batchEnd = Math.min(i + FORMAT_BATCH_SIZE, cellsToColor.length);
-                    for (let j = i; j < batchEnd; j++) {
-                        const cell = cellsToColor[j];
-                        sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
-                    }
-                    await context.sync();
+            // Highlight preserved columns in light gray (applied first so cell-level colors can override)
+            if (nonBlankUnmatchedCols.length > 0) {
+                for (const colIdx of nonBlankUnmatchedCols) {
+                    const colRange = sheet.getRangeByIndexes(1, colIdx, dataToWrite.length, 1);
+                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
                 }
+                console.log(`ImportFromExtension: Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
             }
 
             // Highlight new students based on the latest ExpStartDate
@@ -656,13 +650,19 @@ async function importMasterListFromExtension(payload) {
                 highlightRange.format.fill.color = "#ADD8E6"; // Light Blue
             }
 
-            // Highlight preserved columns in light gray
-            if (nonBlankUnmatchedCols.length > 0) {
-                for (const colIdx of nonBlankUnmatchedCols) {
-                    const colRange = sheet.getRangeByIndexes(0, colIdx, dataToWrite.length + 1, 1);
-                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
+            // Apply preserved cell colors last so they are not overwritten by column/row fills
+            if (cellsToColor.length > 0) {
+                const colorBatches = Math.ceil(cellsToColor.length / FORMAT_BATCH_SIZE);
+                console.log(`ImportFromExtension: Applying ${cellsToColor.length} preserved cell colors in ${colorBatches} batch(es)...`);
+
+                for (let i = 0; i < cellsToColor.length; i += FORMAT_BATCH_SIZE) {
+                    const batchEnd = Math.min(i + FORMAT_BATCH_SIZE, cellsToColor.length);
+                    for (let j = i; j < batchEnd; j++) {
+                        const cell = cellsToColor[j];
+                        sheet.getCell(cell.rowIndex, cell.colIndex).format.fill.color = cell.color;
+                    }
+                    await context.sync();
                 }
-                console.log(`ImportFromExtension: Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
             }
 
             // Apply conditional formatting to columns
