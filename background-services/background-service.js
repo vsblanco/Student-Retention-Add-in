@@ -9,7 +9,6 @@
  * - Manages Chrome Extension Service communication
  * - Handles Master List data synchronization
  */
-import { openImportDialog } from './data-import-handler.js';
 import { toggleHighlight, transferData } from './ribbon-actions.js';
 import chromeExtensionService from '../react/src/services/chromeExtensionService.js';
 import { CONSTANTS, findColumnIndex, normalizeName, formatToLastFirst, parseDate } from './shared-utilities.js';
@@ -1413,7 +1412,6 @@ async function sendSheetListToExtension() {
 
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
-Office.actions.associate("openImportDialog", openImportDialog);
 Office.actions.associate("transferData", transferData);
 Office.actions.associate("openAnalyticsPane", openAnalyticsPane);
 

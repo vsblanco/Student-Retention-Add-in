@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import StudentView from './components/studentView/StudentView.jsx';
 import About from './components/about/About.jsx';
 import Settings from './components/settings/Settings.jsx';
-import ImportManager from './components/importData/ImportManager.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
 import PersonalizedEmail from './components/personalizedEmail/PersonalizedEmail.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
@@ -150,9 +149,7 @@ function App() {
     switch (page) {
       case 'settings':
         return <Settings user={currentUser} accessToken={accessToken} onReady={handleFeatureReady} />;
-      case 'import':
-        return <ImportManager user={currentUser} onReady={handleFeatureReady} />;
-      case 'about':
+case 'about':
         return <About onReady={handleFeatureReady} />;
       case 'create-lda':
         return <LDAManager user={currentUser} onReady={handleFeatureReady} />;
