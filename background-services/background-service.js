@@ -612,7 +612,7 @@ async function importMasterListFromExtension(payload) {
             if (nonBlankUnmatchedCols.length > 0) {
                 for (const colIdx of nonBlankUnmatchedCols) {
                     const colRange = sheet.getRangeByIndexes(1, colIdx, dataToWrite.length, 1);
-                    colRange.format.fill.color = "#D3D3D3"; // Light Gray
+                    colRange.format.fill.color = "#EDEDED"; // Lighter Gray
                 }
                 console.log(`ImportFromExtension: Highlighted ${nonBlankUnmatchedCols.length} preserved column(s) in light gray: [${nonBlankUnmatchedCols.map(i => masterHeaders[i]).join(', ')}]`);
             }
