@@ -278,11 +278,10 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             }
             
             // --- UPDATED: Space-Insensitive Matching ---
-            const getColIndex = (settingName) => {
-                // Helpers: clean (trim/lower) and strip (remove all spaces)
-                const cleanStr = (s) => String(s || '').trim().toLowerCase();
-                const stripStr = (s) => cleanStr(s).replace(/\s+/g, '');
+            const cleanStr = (s) => String(s || '').trim().toLowerCase();
+            const stripStr = (s) => cleanStr(s).replace(/\s+/g, '');
 
+            const getColIndex = (settingName) => {
                 const targetNameStripped = stripStr(settingName);
 
                 // 1. Find Config
