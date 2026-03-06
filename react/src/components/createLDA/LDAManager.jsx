@@ -6,8 +6,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight } from 'lucide-react';
-import { createLDA, detectCampuses } from './ldaProcessor';
+import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution } from './ldaProcessor';
 
 // --- CONFIGURATION: Steps matching the processor logic ---
 const PROCESS_STEPS = [
@@ -31,11 +31,15 @@ export default function CreateLDAManager({ onReady } = {}) {
     includeLDATag: true,
     includeDNCTag: true,
     sheetNameMode: 'date',
+    advisorAssignment: {
+      enabled: false,
+      advisors: []
+    }
   });
 
   // State for View Management: 'settings' | 'processing' | 'done' | 'error'
   const [view, setView] = useState('settings');
-  const [settingsView, setSettingsView] = useState('main');
+  const [settingsView, setSettingsView] = useState('main'); // 'main' | 'tags' | 'assigned'
   const [errorMessage, setErrorMessage] = useState('');
 
   // State for Progress Tracking: { [stepId]: 'pending' | 'active' | 'completed' }
@@ -71,6 +75,7 @@ export default function CreateLDAManager({ onReady } = {}) {
                 includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
                 includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
                 sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
+                advisorAssignment: wb.advisorAssignment || prev.advisorAssignment,
               }));
             }
           }
@@ -118,7 +123,27 @@ export default function CreateLDAManager({ onReady } = {}) {
   }, [ldaSettings.sheetNameMode]);
 
   const handleSettingChange = (key, value) => {
-    setLdaSettings((prev) => ({ ...prev, [key]: value }));
+    setLdaSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      // Persist advisorAssignment to workbook settings
+      if (key === 'advisorAssignment') {
+        saveAdvisorAssignmentToWorkbook(value);
+      }
+      return next;
+    });
+  };
+
+  const saveAdvisorAssignmentToWorkbook = (advisorAssignment) => {
+    try {
+      if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
+        const wb = Office.context.document.settings.get('workbookSettings') || {};
+        wb.advisorAssignment = advisorAssignment;
+        Office.context.document.settings.set('workbookSettings', wb);
+        Office.context.document.settings.saveAsync(() => {});
+      }
+    } catch (e) {
+      console.error('Failed to save advisor assignment:', e);
+    }
   };
 
   // --- REAL LOGIC: Trigger the Processor ---
@@ -461,6 +486,16 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
     );
   }
 
+  if (settingsView === 'assigned') {
+    return (
+      <AssignedSettings
+        settings={settings}
+        onSettingChange={onSettingChange}
+        onBack={() => setSettingsView('main')}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
@@ -544,6 +579,20 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
+
+      <button
+        type="button"
+        onClick={() => setSettingsView('assigned')}
+        className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-slate-700 font-medium text-sm">Assigned</span>
+          {settings.advisorAssignment?.enabled && (
+            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">ON</span>
+          )}
+        </div>
+        <ChevronRight className="w-4 h-4 text-slate-400" />
+      </button>
     </div>
   );
 }
@@ -555,7 +604,7 @@ function ToggleRow({ label, isOn, onToggle }) {
         <span className="text-slate-700 font-medium text-sm">{label}</span>
         <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
       </div>
-      
+
       <button
         type="button"
         onClick={onToggle}
@@ -570,5 +619,349 @@ function ToggleRow({ label, isOn, onToggle }) {
         />
       </button>
     </div>
+  );
+}
+
+// --- Assigned Settings (Advisor Auto-Assignment) ---
+
+const DEFAULT_COLORS = ['#ADD8E6', '#FFDAB9', '#D4EDDA', '#E8D5F5', '#FFE0B2', '#B2DFDB', '#F8BBD0', '#C5CAE9'];
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function AssignedSettings({ settings, onSettingChange, onBack }) {
+  const assignment = settings.advisorAssignment || { enabled: false, advisors: [] };
+  const advisors = assignment.advisors || [];
+
+  const [programVersions, setProgramVersions] = useState([]);
+  const [pvLoading, setPvLoading] = useState(false);
+  const [distribution, setDistribution] = useState([]);
+  const [distLoading, setDistLoading] = useState(false);
+  const [expandedAdvisor, setExpandedAdvisor] = useState(null);
+  const [editingName, setEditingName] = useState(null);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  // Load ProgramVersions from Master List
+  useEffect(() => {
+    setPvLoading(true);
+    detectProgramVersions()
+      .then(pvs => { setProgramVersions(pvs); setPvLoading(false); })
+      .catch(() => { setProgramVersions([]); setPvLoading(false); });
+  }, []);
+
+  // Predict distribution whenever advisors or daysOut changes
+  useEffect(() => {
+    if (!assignment.enabled || advisors.length === 0) {
+      setDistribution([]);
+      return;
+    }
+    setDistLoading(true);
+    const timer = setTimeout(() => {
+      predictAdvisorDistribution(settings, advisors)
+        .then(d => { setDistribution(d); setDistLoading(false); })
+        .catch(() => { setDistribution([]); setDistLoading(false); });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [assignment.enabled, advisors, settings.daysOut]);
+
+  const updateAssignment = (updates) => {
+    onSettingChange('advisorAssignment', { ...assignment, ...updates });
+  };
+
+  const addAdvisor = () => {
+    const colorIdx = advisors.length % DEFAULT_COLORS.length;
+    const newAdvisor = {
+      id: generateId(),
+      name: `Advisor ${advisors.length + 1}`,
+      color: DEFAULT_COLORS[colorIdx],
+      programVersions: []
+    };
+    updateAssignment({ advisors: [...advisors, newAdvisor] });
+    setEditingName(newAdvisor.id);
+    setEditNameValue(newAdvisor.name);
+  };
+
+  const removeAdvisor = (id) => {
+    updateAssignment({ advisors: advisors.filter(a => a.id !== id) });
+    if (expandedAdvisor === id) setExpandedAdvisor(null);
+  };
+
+  const updateAdvisor = (id, updates) => {
+    updateAssignment({
+      advisors: advisors.map(a => a.id === id ? { ...a, ...updates } : a)
+    });
+  };
+
+  const toggleProgramVersion = (advisorId, pv) => {
+    const advisor = advisors.find(a => a.id === advisorId);
+    if (!advisor) return;
+    const pvs = advisor.programVersions || [];
+    const next = pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv];
+    updateAdvisor(advisorId, { programVersions: next });
+  };
+
+  const startEditName = (advisor) => {
+    setEditingName(advisor.id);
+    setEditNameValue(advisor.name);
+  };
+
+  const confirmEditName = (id) => {
+    if (editNameValue.trim()) {
+      updateAdvisor(id, { name: editNameValue.trim() });
+    }
+    setEditingName(null);
+  };
+
+  const totalStudents = distribution.reduce((sum, d) => sum + d.count, 0);
+
+  return (
+    <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors w-fit"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back
+      </button>
+
+      {/* Enable toggle */}
+      <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-700 font-medium text-sm">Auto-Assign Advisors</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => updateAssignment({ enabled: !assignment.enabled })}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#145F82]/20 focus:ring-offset-1 ${
+            assignment.enabled ? 'bg-[#145F82]' : 'bg-slate-200'
+          }`}
+        >
+          <span
+            className={`${
+              assignment.enabled ? 'translate-x-6' : 'translate-x-1'
+            } inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200`}
+          />
+        </button>
+      </div>
+
+      {/* Advisor list (only visible when enabled) */}
+      <div className={`transition-all duration-300 overflow-hidden ${assignment.enabled ? 'opacity-100 max-h-[2000px]' : 'opacity-0 max-h-0'}`}>
+        <div className="flex flex-col gap-3">
+          {/* Advisor items */}
+          {advisors.map((advisor, idx) => (
+            <div key={advisor.id} className="rounded-xl border border-slate-100/80 overflow-hidden">
+              {/* Advisor header row */}
+              <div
+                className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-slate-50/50 transition-colors"
+                style={{ backgroundColor: advisor.color + '33' }}
+              >
+                <div
+                  className="w-6 h-6 rounded-md border border-black/10 shrink-0 relative overflow-hidden"
+                  style={{ backgroundColor: advisor.color }}
+                >
+                  <input
+                    type="color"
+                    value={advisor.color}
+                    onChange={(e) => updateAdvisor(advisor.id, { color: e.target.value })}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title="Change color"
+                  />
+                </div>
+
+                {editingName === advisor.id ? (
+                  <div className="flex items-center gap-1 flex-1 min-w-0">
+                    <input
+                      type="text"
+                      value={editNameValue}
+                      onChange={(e) => setEditNameValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') confirmEditName(advisor.id); if (e.key === 'Escape') setEditingName(null); }}
+                      autoFocus
+                      className="flex-1 min-w-0 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
+                    />
+                    <button onClick={() => confirmEditName(advisor.id)} className="text-emerald-500 hover:text-emerald-700 p-0.5">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setEditingName(null)} className="text-slate-400 hover:text-slate-600 p-0.5">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={() => setExpandedAdvisor(expandedAdvisor === advisor.id ? null : advisor.id)}>
+                    <span className="text-sm font-medium text-slate-700 truncate">{advisor.name}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startEditName(advisor); }}
+                      className="text-slate-300 hover:text-slate-500 p-0.5 shrink-0"
+                      title="Edit name"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {advisor.programVersions?.length > 0 && (
+                  <span className="text-[10px] text-slate-500 bg-white/60 px-1.5 py-0.5 rounded-full shrink-0">
+                    {advisor.programVersions.length} filter{advisor.programVersions.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeAdvisor(advisor.id); }}
+                  className="text-slate-300 hover:text-red-400 p-0.5 shrink-0 transition-colors"
+                  title="Remove advisor"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={() => setExpandedAdvisor(expandedAdvisor === advisor.id ? null : advisor.id)}
+                  className="text-slate-400 shrink-0 transition-transform duration-200"
+                  style={{ transform: expandedAdvisor === advisor.id ? 'rotate(90deg)' : 'none' }}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Expanded: ProgramVersion filter list */}
+              {expandedAdvisor === advisor.id && (
+                <div className="border-t border-slate-100 bg-white p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <p className="text-xs font-medium text-slate-500 mb-2">
+                    Program Version Filters
+                  </p>
+                  {pvLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Loading programs...
+                    </div>
+                  ) : programVersions.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-1">No ProgramVersion column found</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                      {programVersions.map(pv => {
+                        const isSelected = (advisor.programVersions || []).includes(pv);
+                        return (
+                          <button
+                            key={pv}
+                            type="button"
+                            onClick={() => toggleProgramVersion(advisor.id, pv)}
+                            className={`text-xs px-2 py-1 rounded-full border transition-all duration-150 ${
+                              isSelected
+                                ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
+                                : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                            }`}
+                          >
+                            {pv}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {!pvLoading && programVersions.length > 0 && (advisor.programVersions || []).length === 0 && (
+                    <p className="text-[10px] text-slate-400 mt-2 italic">
+                      No filters set — students assigned via even distribution
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Add advisor button */}
+          <button
+            type="button"
+            onClick={addAdvisor}
+            className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl border border-dashed border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300 transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Advisor
+          </button>
+
+          {/* Pie Chart Distribution Preview */}
+          {advisors.length > 0 && (
+            <div className="mt-2 p-4 bg-slate-50/50 rounded-xl border border-slate-100/50">
+              <p className="text-xs font-medium text-slate-500 mb-3">Predicted Distribution</p>
+              {distLoading ? (
+                <div className="flex items-center justify-center gap-2 text-slate-400 text-xs py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Calculating...
+                </div>
+              ) : totalStudents === 0 ? (
+                <p className="text-xs text-slate-400 italic text-center py-4">No students match current filters</p>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <AdvisorPieChart distribution={distribution} size={120} />
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    {distribution.map(d => (
+                      <div key={d.id} className="flex items-center gap-2 text-xs">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="text-slate-600 truncate flex-1">{d.name}</span>
+                        <span className="text-slate-500 font-medium shrink-0">
+                          {d.count} <span className="text-slate-400 font-normal">({totalStudents > 0 ? Math.round((d.count / totalStudents) * 100) : 0}%)</span>
+                        </span>
+                      </div>
+                    ))}
+                    <div className="border-t border-slate-100 pt-1 mt-0.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-medium">Total</span>
+                        <span className="text-slate-700 font-semibold">{totalStudents} students</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- SVG Pie Chart ---
+
+function AdvisorPieChart({ distribution, size = 120 }) {
+  const total = distribution.reduce((sum, d) => sum + d.count, 0);
+  if (total === 0) return null;
+
+  const radius = size / 2;
+  const center = radius;
+  let cumulativeAngle = -Math.PI / 2; // Start from top
+
+  const slices = distribution.filter(d => d.count > 0).map(d => {
+    const angle = (d.count / total) * 2 * Math.PI;
+    const startAngle = cumulativeAngle;
+    cumulativeAngle += angle;
+    const endAngle = cumulativeAngle;
+
+    const x1 = center + radius * Math.cos(startAngle);
+    const y1 = center + radius * Math.sin(startAngle);
+    const x2 = center + radius * Math.cos(endAngle);
+    const y2 = center + radius * Math.sin(endAngle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+
+    const path = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+    return { ...d, path };
+  });
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0">
+      {slices.length === 1 ? (
+        <circle cx={center} cy={center} r={radius} fill={slices[0].color} />
+      ) : (
+        slices.map((s, i) => (
+          <path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth="1.5" />
+        ))
+      )}
+      {/* Center hole for donut effect */}
+      <circle cx={center} cy={center} r={radius * 0.45} fill="white" />
+      <text x={center} y={center - 4} textAnchor="middle" className="text-sm font-bold fill-slate-700">
+        {total}
+      </text>
+      <text x={center} y={center + 10} textAnchor="middle" className="text-[8px] fill-slate-400">
+        students
+      </text>
+    </svg>
   );
 }

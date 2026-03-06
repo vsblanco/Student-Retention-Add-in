@@ -181,7 +181,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             includeLDATag: userOverrides.includeLDATag ?? true,
             includeDNCTag: userOverrides.includeDNCTag ?? true,
             sheetNameMode: userOverrides.sheetNameMode ?? 'date',
-            columns: workbookSettings.columns || []
+            columns: workbookSettings.columns || [],
+            advisorAssignment: userOverrides.advisorAssignment ?? { enabled: false, advisors: [] }
         };
 
         if (settings.columns.length === 0) {
@@ -339,6 +340,10 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             const daysOutIdx = getColIndex('Days Out');
             const gradeIdx = getColIndex('Grade');
             const studentIdIdx = getColIndex('Student Number');
+
+            // --- ProgramVersion index for advisor assignment ---
+            const pvAliases = ['programversion', 'program', 'progversdescrip'];
+            const programVersionIdx = headers.findIndex(h => pvAliases.includes(stripStr(h)));
             
             // Look for "Missing Assignments" column
             let missingIdx = getColIndex('Missing Assignments');
@@ -504,6 +509,43 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             if (onProgress) onProgress('attendance', 'completed');
 
+            // --- Advisor Auto-Assignment Map ---
+            // When enabled, pre-compute which advisor each student row maps to
+            const advisorAssignmentMap = new Map(); // originalIndex -> { name, color }
+            const advisorConfig = settings.advisorAssignment;
+            if (advisorConfig && advisorConfig.enabled && advisorConfig.advisors && advisorConfig.advisors.length > 0) {
+                const allFilteredRows = [...dataRows, ...failingRows, ...attendanceRows];
+                const students = allFilteredRows.map(r => ({
+                    programVersion: programVersionIdx !== -1 ? String(r.values[programVersionIdx] || '').trim() : '',
+                    originalIndex: r.originalIndex
+                }));
+                const results = assignStudentsToAdvisors(students, advisorConfig.advisors);
+                // Build per-student mapping using the same algorithm inline
+                const assigned = new Array(students.length).fill(null);
+                for (const advisor of advisorConfig.advisors) {
+                    if (advisor.programVersions && advisor.programVersions.length > 0) {
+                        const pvSet = new Set(advisor.programVersions.map(pv => pv.toLowerCase()));
+                        for (let i = 0; i < students.length; i++) {
+                            if (!assigned[i] && pvSet.has(students[i].programVersion.toLowerCase())) {
+                                assigned[i] = advisor;
+                            }
+                        }
+                    }
+                }
+                let rrIdx = 0;
+                for (let i = 0; i < students.length; i++) {
+                    if (!assigned[i]) {
+                        assigned[i] = advisorConfig.advisors[rrIdx % advisorConfig.advisors.length];
+                        rrIdx++;
+                    }
+                    advisorAssignmentMap.set(students[i].originalIndex, {
+                        name: assigned[i].name,
+                        color: assigned[i].color
+                    });
+                }
+                console.log(`LDA: Auto-assigned ${students.length} students across ${advisorConfig.advisors.length} advisors`);
+            }
+
             // --- Detect Multi-Campus Mode ---
             let isMultiCampus = false;
             let campusList = [];
@@ -632,6 +674,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             const colMap = columnColorMaps.get(masterIdx);
                             if (colMap && colMap.has(String(val))) {
                                 cellHighlights.push({ colIndex: colOutIdx, color: colMap.get(String(val)) });
+                            }
+                        }
+                        // --- Advisor Auto-Assignment Override ---
+                        if (colConfig.name === 'Assigned' && advisorAssignmentMap.size > 0) {
+                            const advisorInfo = advisorAssignmentMap.get(rowObj.originalIndex);
+                            if (advisorInfo) {
+                                val = advisorInfo.name;
+                                form = null;
+                                cellHighlights.push({ colIndex: colOutIdx, color: advisorInfo.color });
                             }
                         }
                         if (colConfig.name === 'Outreach' && retentionMsg) {
@@ -941,6 +992,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         }
 
                         // --- Outreach Message Injection ---
+                        // --- Advisor Auto-Assignment Override ---
+                        if (colConfig.name === 'Assigned' && advisorAssignmentMap.size > 0) {
+                            const advisorInfo = advisorAssignmentMap.get(rowObj.originalIndex);
+                            if (advisorInfo) {
+                                val = advisorInfo.name;
+                                form = null;
+                                cellHighlights.push({ colIndex: colOutIdx, color: advisorInfo.color });
+                            }
+                        }
                         if (colConfig.name === 'Outreach' && retentionMsg) {
                             val = retentionMsg;
                         }
@@ -1326,4 +1386,178 @@ export async function detectCampuses() {
         console.error("Campus detection error:", error);
         return [];
     }
+}
+
+/**
+ * Scans the Master List to return all unique ProgramVersion values.
+ * @returns {Promise<string[]>} Sorted array of unique ProgramVersion values.
+ */
+export async function detectProgramVersions() {
+    try {
+        return await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const hasMasterList = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+            if (!hasMasterList) return [];
+
+            const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
+            const masterRange = masterSheet.getUsedRange();
+            masterRange.load("rowCount, columnCount");
+            await context.sync();
+
+            const totalRows = masterRange.rowCount;
+            const totalCols = masterRange.columnCount;
+
+            const headerRange = masterSheet.getRangeByIndexes(0, 0, 1, totalCols);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const pvAliases = ['programversion', 'program', 'progversdescrip'];
+            const pvIdx = headers.findIndex(h => {
+                const stripped = String(h || '').trim().toLowerCase().replace(/\s+/g, '');
+                return pvAliases.includes(stripped);
+            });
+
+            if (pvIdx === -1) return [];
+
+            const pvSet = new Set();
+            for (let startRow = 1; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = masterSheet.getRangeByIndexes(startRow, pvIdx, rowsToRead, 1);
+                batchRange.load("values");
+                await context.sync();
+
+                for (const row of batchRange.values) {
+                    const val = String(row[0] || '').trim();
+                    if (val) pvSet.add(val);
+                }
+            }
+
+            return Array.from(pvSet).sort();
+        });
+    } catch (error) {
+        console.error("ProgramVersion detection error:", error);
+        return [];
+    }
+}
+
+/**
+ * Predicts how students would be distributed among advisors on the LDA list.
+ * Runs a lightweight version of the Days Out filter + advisor assignment logic.
+ * @param {object} ldaSettings - The current LDA settings (needs daysOut)
+ * @param {Array} advisors - Array of advisor objects: { id, name, color, programVersions }
+ * @returns {Promise<Array>} Array of { name, color, count } per advisor
+ */
+export async function predictAdvisorDistribution(ldaSettings, advisors) {
+    if (!advisors || advisors.length === 0) return [];
+
+    try {
+        return await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const hasMasterList = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+            if (!hasMasterList) return [];
+
+            const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
+            const masterRange = masterSheet.getUsedRange();
+            masterRange.load("rowCount, columnCount");
+            await context.sync();
+
+            const totalRows = masterRange.rowCount;
+            const totalCols = masterRange.columnCount;
+
+            const headerRange = masterSheet.getRangeByIndexes(0, 0, 1, totalCols);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0];
+            const stripStr = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+
+            // Find Days Out column
+            const daysOutIdx = headers.findIndex(h => {
+                const s = stripStr(h);
+                return s === 'daysout' || s === 'days out';
+            });
+
+            // Find ProgramVersion column
+            const pvAliases = ['programversion', 'program', 'progversdescrip'];
+            const pvIdx = headers.findIndex(h => pvAliases.includes(stripStr(h)));
+
+            if (daysOutIdx === -1) return [];
+
+            // Read Days Out + ProgramVersion columns in batches
+            const students = []; // { programVersion }
+            for (let startRow = 1; startRow < totalRows; startRow += BATCH_SIZE) {
+                const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
+                const batchRange = masterSheet.getRangeByIndexes(startRow, 0, rowsToRead, totalCols);
+                batchRange.load("values");
+                await context.sync();
+
+                for (const row of batchRange.values) {
+                    const daysOutVal = row[daysOutIdx];
+                    if (typeof daysOutVal === 'number' && daysOutVal >= (ldaSettings.daysOut ?? 5)) {
+                        students.push({
+                            programVersion: pvIdx !== -1 ? String(row[pvIdx] || '').trim() : ''
+                        });
+                    }
+                }
+            }
+
+            // Assign students to advisors using the same logic as createLDA
+            return assignStudentsToAdvisors(students, advisors);
+        });
+    } catch (error) {
+        console.error("Advisor distribution prediction error:", error);
+        return [];
+    }
+}
+
+/**
+ * Core assignment algorithm: assigns students to advisors.
+ * 1. Advisors with ProgramVersion filters get their matching students (in advisor order).
+ * 2. Remaining students are distributed evenly (round-robin) across ALL advisors.
+ * @param {Array} students - Array of { programVersion }
+ * @param {Array} advisors - Array of { id, name, color, programVersions }
+ * @returns {Array} Array of { id, name, color, count }
+ */
+function assignStudentsToAdvisors(students, advisors) {
+    const counts = new Map();
+    advisors.forEach(a => counts.set(a.id, 0));
+
+    const assigned = new Array(students.length).fill(false);
+
+    // Phase 1: Advisors with PV filters claim their matching students
+    for (const advisor of advisors) {
+        if (advisor.programVersions && advisor.programVersions.length > 0) {
+            const pvSet = new Set(advisor.programVersions.map(pv => pv.toLowerCase()));
+            for (let i = 0; i < students.length; i++) {
+                if (!assigned[i] && pvSet.has(students[i].programVersion.toLowerCase())) {
+                    assigned[i] = true;
+                    counts.set(advisor.id, counts.get(advisor.id) + 1);
+                }
+            }
+        }
+    }
+
+    // Phase 2: Remaining students distributed round-robin across ALL advisors
+    let rrIndex = 0;
+    for (let i = 0; i < students.length; i++) {
+        if (!assigned[i]) {
+            const advisor = advisors[rrIndex % advisors.length];
+            counts.set(advisor.id, counts.get(advisor.id) + 1);
+            rrIndex++;
+        }
+    }
+
+    return advisors.map(a => ({
+        id: a.id,
+        name: a.name,
+        color: a.color,
+        count: counts.get(a.id)
+    }));
 }
