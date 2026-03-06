@@ -663,7 +663,7 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
         .catch(() => { setDistribution([]); setDistLoading(false); });
     }, 300);
     return () => clearTimeout(timer);
-  }, [assignment.enabled, advisors, settings.daysOut]);
+  }, [assignment.enabled, advisors, settings.daysOut, settings.includeFailingList, settings.includeAttendanceList]);
 
   const updateAssignment = (updates) => {
     onSettingChange('advisorAssignment', { ...assignment, ...updates });
@@ -675,7 +675,10 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
       id: generateId(),
       name: `Advisor ${advisors.length + 1}`,
       color: DEFAULT_COLORS[colorIdx],
-      programVersions: []
+      programVersions: [],
+      listPreference: [],
+      daysOutMin: null,
+      daysOutMax: null
     };
     updateAssignment({ advisors: [...advisors, newAdvisor] });
     setEditingName(newAdvisor.id);
@@ -699,6 +702,19 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
     const pvs = advisor.programVersions || [];
     const next = pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv];
     updateAdvisor(advisorId, { programVersions: next });
+  };
+
+  const toggleListPreference = (advisorId, listType) => {
+    const advisor = advisors.find(a => a.id === advisorId);
+    if (!advisor) return;
+    const prefs = advisor.listPreference || [];
+    const next = prefs.includes(listType) ? prefs.filter(p => p !== listType) : [...prefs, listType];
+    updateAdvisor(advisorId, { listPreference: next });
+  };
+
+  const updateDaysOutRange = (advisorId, field, value) => {
+    const parsed = value === '' ? null : Number(value);
+    updateAdvisor(advisorId, { [field]: isNaN(parsed) ? null : parsed });
   };
 
   const startEditName = (advisor) => {
@@ -800,11 +816,14 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
                   </div>
                 )}
 
-                {advisor.programVersions?.length > 0 && (
-                  <span className="text-[10px] text-slate-500 bg-white/60 px-1.5 py-0.5 rounded-full shrink-0">
-                    {advisor.programVersions.length} filter{advisor.programVersions.length !== 1 ? 's' : ''}
-                  </span>
-                )}
+                {(() => {
+                  const fc = (advisor.programVersions?.length || 0) + (advisor.listPreference?.length || 0) + (advisor.daysOutMin != null ? 1 : 0) + (advisor.daysOutMax != null ? 1 : 0);
+                  return fc > 0 ? (
+                    <span className="text-[10px] text-slate-500 bg-white/60 px-1.5 py-0.5 rounded-full shrink-0">
+                      {fc} filter{fc !== 1 ? 's' : ''}
+                    </span>
+                  ) : null;
+                })()}
 
                 <button
                   onClick={(e) => { e.stopPropagation(); removeAdvisor(advisor.id); }}
@@ -823,45 +842,107 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
                 </button>
               </div>
 
-              {/* Expanded: ProgramVersion filter list */}
+              {/* Expanded: Filter panels */}
               {expandedAdvisor === advisor.id && (
-                <div className="border-t border-slate-100 bg-white p-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <p className="text-xs font-medium text-slate-500 mb-2">
-                    Program Version Filters
-                  </p>
-                  {pvLoading ? (
-                    <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Loading programs...
-                    </div>
-                  ) : programVersions.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic py-1">No ProgramVersion column found</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-                      {programVersions.map(pv => {
-                        const isSelected = (advisor.programVersions || []).includes(pv);
+                <div className="border-t border-slate-100 bg-white p-3 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+
+                  {/* List Preference */}
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2">List Preference</p>
+                    <div className="flex gap-1.5">
+                      {[{ key: 'lda', label: 'LDA' }, { key: 'failing', label: 'Failing' }, { key: 'attendance', label: 'Attendance' }].map(({ key, label }) => {
+                        const isSelected = (advisor.listPreference || []).includes(key);
                         return (
                           <button
-                            key={pv}
+                            key={key}
                             type="button"
-                            onClick={() => toggleProgramVersion(advisor.id, pv)}
-                            className={`text-xs px-2 py-1 rounded-full border transition-all duration-150 ${
+                            onClick={() => toggleListPreference(advisor.id, key)}
+                            className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
                               isSelected
                                 ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
                                 : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
                             }`}
                           >
-                            {pv}
+                            {label}
                           </button>
                         );
                       })}
                     </div>
-                  )}
-                  {!pvLoading && programVersions.length > 0 && (advisor.programVersions || []).length === 0 && (
-                    <p className="text-[10px] text-slate-400 mt-2 italic">
-                      No filters set — students assigned via even distribution
-                    </p>
-                  )}
+                    {(advisor.listPreference || []).length === 0 && (
+                      <p className="text-[10px] text-slate-400 mt-1 italic">No preference — receives from all lists</p>
+                    )}
+                  </div>
+
+                  {/* Days Out Range */}
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2">Days Out Range</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="Min"
+                        value={advisor.daysOutMin ?? ''}
+                        onChange={(e) => updateDaysOutRange(advisor.id, 'daysOutMin', e.target.value)}
+                        className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
+                      />
+                      <span className="text-slate-400 text-xs">to</span>
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        value={advisor.daysOutMax ?? ''}
+                        onChange={(e) => updateDaysOutRange(advisor.id, 'daysOutMax', e.target.value)}
+                        className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
+                      />
+                    </div>
+                    {advisor.daysOutMin == null && advisor.daysOutMax == null && (
+                      <p className="text-[10px] text-slate-400 mt-1 italic">No range — all days out values</p>
+                    )}
+                  </div>
+
+                  {/* Program Version Filters */}
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-2">Program Version Filters</p>
+                    {pvLoading ? (
+                      <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Loading programs...
+                      </div>
+                    ) : programVersions.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic py-1">No ProgramVersion column found</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                        {programVersions.map(pv => {
+                          const isSelected = (advisor.programVersions || []).includes(pv);
+                          return (
+                            <button
+                              key={pv}
+                              type="button"
+                              onClick={() => toggleProgramVersion(advisor.id, pv)}
+                              className={`text-xs px-2 py-1 rounded-full border transition-all duration-150 ${
+                                isSelected
+                                  ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
+                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                              }`}
+                            >
+                              {pv}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {!pvLoading && programVersions.length > 0 && (advisor.programVersions || []).length === 0 && (
+                      <p className="text-[10px] text-slate-400 mt-1 italic">No filter — all program versions</p>
+                    )}
+                  </div>
+
+                  {/* Summary hint */}
+                  {(() => {
+                    const fc = (advisor.programVersions?.length || 0) + (advisor.listPreference?.length || 0) + (advisor.daysOutMin != null ? 1 : 0) + (advisor.daysOutMax != null ? 1 : 0);
+                    return fc === 0 ? (
+                      <p className="text-[10px] text-slate-400 pt-1 border-t border-slate-50 italic">
+                        No filters set — students assigned via even distribution
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
               )}
             </div>

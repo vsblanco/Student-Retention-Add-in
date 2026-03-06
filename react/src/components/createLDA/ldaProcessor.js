@@ -514,36 +514,95 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             const advisorAssignmentMap = new Map(); // originalIndex -> { name, color }
             const advisorConfig = settings.advisorAssignment;
             if (advisorConfig && advisorConfig.enabled && advisorConfig.advisors && advisorConfig.advisors.length > 0) {
-                const allFilteredRows = [...dataRows, ...failingRows, ...attendanceRows];
-                const students = allFilteredRows.map(r => ({
-                    programVersion: programVersionIdx !== -1 ? String(r.values[programVersionIdx] || '').trim() : '',
-                    originalIndex: r.originalIndex
-                }));
-                const results = assignStudentsToAdvisors(students, advisorConfig.advisors);
-                // Build per-student mapping using the same algorithm inline
-                const assigned = new Array(students.length).fill(null);
-                for (const advisor of advisorConfig.advisors) {
-                    if (advisor.programVersions && advisor.programVersions.length > 0) {
-                        const pvSet = new Set(advisor.programVersions.map(pv => pv.toLowerCase()));
-                        for (let i = 0; i < students.length; i++) {
-                            if (!assigned[i] && pvSet.has(students[i].programVersion.toLowerCase())) {
-                                assigned[i] = advisor;
-                            }
+                // Build student list with metadata for multi-filter assignment
+                const taggedStudents = [];
+                for (const r of dataRows) {
+                    taggedStudents.push({
+                        programVersion: programVersionIdx !== -1 ? String(r.values[programVersionIdx] || '').trim() : '',
+                        daysOut: typeof r.values[daysOutIdx] === 'number' ? r.values[daysOutIdx] : 0,
+                        listType: 'lda',
+                        originalIndex: r.originalIndex
+                    });
+                }
+                for (const r of failingRows) {
+                    taggedStudents.push({
+                        programVersion: programVersionIdx !== -1 ? String(r.values[programVersionIdx] || '').trim() : '',
+                        daysOut: typeof r.values[daysOutIdx] === 'number' ? r.values[daysOutIdx] : 0,
+                        listType: 'failing',
+                        originalIndex: r.originalIndex
+                    });
+                }
+                for (const r of attendanceRows) {
+                    taggedStudents.push({
+                        programVersion: programVersionIdx !== -1 ? String(r.values[programVersionIdx] || '').trim() : '',
+                        daysOut: typeof r.values[daysOutIdx] === 'number' ? r.values[daysOutIdx] : 0,
+                        listType: 'attendance',
+                        originalIndex: r.originalIndex
+                    });
+                }
+
+                // Use the shared algorithm to get counts (for logging)
+                const results = assignStudentsToAdvisors(taggedStudents, advisorConfig.advisors);
+
+                // Re-run inline to build the per-student map (same logic as assignStudentsToAdvisors)
+                const hasAnyFilter = (a) => (a.programVersions?.length > 0) || (a.listPreference?.length > 0) || (a.daysOutMin != null) || (a.daysOutMax != null);
+                const advisorMatches = (a, s) => {
+                    if (a.programVersions?.length > 0) {
+                        const pvSet = new Set(a.programVersions.map(pv => pv.toLowerCase()));
+                        if (!pvSet.has((s.programVersion || '').toLowerCase())) return false;
+                    }
+                    if (a.listPreference?.length > 0) {
+                        if (!a.listPreference.includes(s.listType)) return false;
+                    }
+                    if (a.daysOutMin != null && typeof s.daysOut === 'number' && s.daysOut < a.daysOutMin) return false;
+                    if (a.daysOutMax != null && typeof s.daysOut === 'number' && s.daysOut > a.daysOutMax) return false;
+                    return true;
+                };
+                const getFilterSig = (a) => {
+                    const parts = [];
+                    if (a.programVersions?.length) parts.push('pv:' + [...a.programVersions].sort().join(',').toLowerCase());
+                    if (a.listPreference?.length) parts.push('list:' + [...a.listPreference].sort().join(','));
+                    if (a.daysOutMin != null) parts.push('doMin:' + a.daysOutMin);
+                    if (a.daysOutMax != null) parts.push('doMax:' + a.daysOutMax);
+                    return parts.join('|');
+                };
+
+                const assignedArr = new Array(taggedStudents.length).fill(null);
+                const processedSigs = new Set();
+                const sigGroups = new Map();
+                for (const a of advisorConfig.advisors) {
+                    if (!hasAnyFilter(a)) continue;
+                    const sig = getFilterSig(a);
+                    if (!sigGroups.has(sig)) sigGroups.set(sig, []);
+                    sigGroups.get(sig).push(a);
+                }
+                for (const a of advisorConfig.advisors) {
+                    if (!hasAnyFilter(a)) continue;
+                    const sig = getFilterSig(a);
+                    if (processedSigs.has(sig)) continue;
+                    processedSigs.add(sig);
+                    const group = sigGroups.get(sig);
+                    let rr = 0;
+                    for (let i = 0; i < taggedStudents.length; i++) {
+                        if (assignedArr[i]) continue;
+                        if (advisorMatches(group[0], taggedStudents[i])) {
+                            assignedArr[i] = group[rr % group.length];
+                            rr++;
                         }
                     }
                 }
                 let rrIdx = 0;
-                for (let i = 0; i < students.length; i++) {
-                    if (!assigned[i]) {
-                        assigned[i] = advisorConfig.advisors[rrIdx % advisorConfig.advisors.length];
+                for (let i = 0; i < taggedStudents.length; i++) {
+                    if (!assignedArr[i]) {
+                        assignedArr[i] = advisorConfig.advisors[rrIdx % advisorConfig.advisors.length];
                         rrIdx++;
                     }
-                    advisorAssignmentMap.set(students[i].originalIndex, {
-                        name: assigned[i].name,
-                        color: assigned[i].color
+                    advisorAssignmentMap.set(taggedStudents[i].originalIndex, {
+                        name: assignedArr[i].name,
+                        color: assignedArr[i].color
                     });
                 }
-                console.log(`LDA: Auto-assigned ${students.length} students across ${advisorConfig.advisors.length} advisors`);
+                console.log(`LDA: Auto-assigned ${taggedStudents.length} students across ${advisorConfig.advisors.length} advisors`);
             }
 
             // --- Detect Multi-Campus Mode ---
@@ -1446,10 +1505,11 @@ export async function detectProgramVersions() {
 
 /**
  * Predicts how students would be distributed among advisors on the LDA list.
- * Runs a lightweight version of the Days Out filter + advisor assignment logic.
- * @param {object} ldaSettings - The current LDA settings (needs daysOut)
- * @param {Array} advisors - Array of advisor objects: { id, name, color, programVersions }
- * @returns {Promise<Array>} Array of { name, color, count } per advisor
+ * Runs a lightweight version of the Days Out + Failing + Attendance filters,
+ * then applies the advisor assignment algorithm.
+ * @param {object} ldaSettings - The current LDA settings
+ * @param {Array} advisors - Array of advisor config objects
+ * @returns {Promise<Array>} Array of { id, name, color, count } per advisor
  */
 export async function predictAdvisorDistribution(ldaSettings, advisors) {
     if (!advisors || advisors.length === 0) return [];
@@ -1478,37 +1538,94 @@ export async function predictAdvisorDistribution(ldaSettings, advisors) {
             const headers = headerRange.values[0];
             const stripStr = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
 
-            // Find Days Out column
+            // Find column indices
             const daysOutIdx = headers.findIndex(h => {
                 const s = stripStr(h);
                 return s === 'daysout' || s === 'days out';
             });
-
-            // Find ProgramVersion column
             const pvAliases = ['programversion', 'program', 'progversdescrip'];
             const pvIdx = headers.findIndex(h => pvAliases.includes(stripStr(h)));
+            const gradeIdx = headers.findIndex(h => {
+                const s = stripStr(h);
+                return s === 'grade' || s === 'coursegrade' || s === 'currentscore' || s === 'currentgrade';
+            });
+            const attIdx = headers.findIndex(h => {
+                const s = stripStr(h);
+                return s === 'attendance%' || s === 'attendancepercent' || s === 'attendance';
+            });
+            const studentIdIdx = headers.findIndex(h => {
+                const s = stripStr(h);
+                return s === 'studentnumber' || s === 'studentid';
+            });
 
             if (daysOutIdx === -1) return [];
 
-            // Read Days Out + ProgramVersion columns in batches
-            const students = []; // { programVersion }
+            // Read all rows in batches and categorize
+            const students = []; // { programVersion, daysOut, listType }
+            const ldaStudentIds = new Set();
+
+            // First pass: collect all rows
+            const allRows = [];
             for (let startRow = 1; startRow < totalRows; startRow += BATCH_SIZE) {
                 const rowsToRead = Math.min(BATCH_SIZE, totalRows - startRow);
                 const batchRange = masterSheet.getRangeByIndexes(startRow, 0, rowsToRead, totalCols);
                 batchRange.load("values");
                 await context.sync();
+                for (const row of batchRange.values) allRows.push(row);
+            }
 
-                for (const row of batchRange.values) {
+            // LDA list (Days Out >= threshold)
+            for (const row of allRows) {
+                const daysOutVal = row[daysOutIdx];
+                if (typeof daysOutVal === 'number' && daysOutVal >= (ldaSettings.daysOut ?? 5)) {
+                    students.push({
+                        programVersion: pvIdx !== -1 ? String(row[pvIdx] || '').trim() : '',
+                        daysOut: daysOutVal,
+                        listType: 'lda'
+                    });
+                    const sId = studentIdIdx !== -1 ? row[studentIdIdx] : null;
+                    if (sId) ldaStudentIds.add(sId);
+                }
+            }
+
+            // Failing list (grade < 60% AND days out <= 4)
+            if (ldaSettings.includeFailingList && gradeIdx !== -1) {
+                for (const row of allRows) {
+                    const gradeVal = row[gradeIdx];
                     const daysOutVal = row[daysOutIdx];
-                    if (typeof daysOutVal === 'number' && daysOutVal >= (ldaSettings.daysOut ?? 5)) {
+                    const isFailing = (typeof gradeVal === 'number') && (gradeVal < 0.60 || (gradeVal >= 1 && gradeVal < 60));
+                    const isRecent = (typeof daysOutVal === 'number') && (daysOutVal <= 4);
+                    if (isFailing && isRecent) {
                         students.push({
-                            programVersion: pvIdx !== -1 ? String(row[pvIdx] || '').trim() : ''
+                            programVersion: pvIdx !== -1 ? String(row[pvIdx] || '').trim() : '',
+                            daysOut: typeof daysOutVal === 'number' ? daysOutVal : 0,
+                            listType: 'failing'
                         });
                     }
                 }
             }
 
-            // Assign students to advisors using the same logic as createLDA
+            // Attendance list (attendance < 60% AND not already on LDA)
+            if (ldaSettings.includeAttendanceList && attIdx !== -1) {
+                for (const row of allRows) {
+                    const sId = studentIdIdx !== -1 ? row[studentIdIdx] : null;
+                    if (sId && ldaStudentIds.has(sId)) continue;
+                    const attVal = row[attIdx];
+                    let attPercent = null;
+                    if (typeof attVal === 'number') {
+                        attPercent = attVal <= 1 ? attVal * 100 : attVal;
+                    }
+                    if (attPercent !== null && attPercent < 60) {
+                        const daysOutVal = row[daysOutIdx];
+                        students.push({
+                            programVersion: pvIdx !== -1 ? String(row[pvIdx] || '').trim() : '',
+                            daysOut: typeof daysOutVal === 'number' ? daysOutVal : 0,
+                            listType: 'attendance'
+                        });
+                    }
+                }
+            }
+
             return assignStudentsToAdvisors(students, advisors);
         });
     } catch (error) {
@@ -1519,10 +1636,21 @@ export async function predictAdvisorDistribution(ldaSettings, advisors) {
 
 /**
  * Core assignment algorithm: assigns students to advisors.
- * 1. Advisors with ProgramVersion filters get their matching students (in advisor order).
- * 2. Remaining students are distributed evenly (round-robin) across ALL advisors.
- * @param {Array} students - Array of { programVersion }
- * @param {Array} advisors - Array of { id, name, color, programVersions }
+ * Filters: programVersions, listPreference (lda/failing/attendance), daysOut range.
+ *
+ * Phase 1: For each student, go through advisors top-to-bottom.
+ *   An advisor "matches" if ALL of their active filters pass:
+ *     - programVersions (non-empty): student PV must be in the set
+ *     - listPreference (non-empty): student listType must be in the set
+ *     - daysOutMin/daysOutMax (set): student daysOut must be in range
+ *   If multiple advisors share the exact same filter signature, they share
+ *   students via round-robin within that group.
+ *   An advisor with NO filters set is skipped in Phase 1.
+ *
+ * Phase 2: Remaining unmatched students distributed round-robin across ALL advisors.
+ *
+ * @param {Array} students - Array of { programVersion, daysOut, listType }
+ * @param {Array} advisors - Array of advisor config objects
  * @returns {Array} Array of { id, name, color, count }
  */
 function assignStudentsToAdvisors(students, advisors) {
@@ -1531,15 +1659,71 @@ function assignStudentsToAdvisors(students, advisors) {
 
     const assigned = new Array(students.length).fill(false);
 
-    // Phase 1: Advisors with PV filters claim their matching students
-    for (const advisor of advisors) {
-        if (advisor.programVersions && advisor.programVersions.length > 0) {
+    // Build filter signature for each advisor to detect shared filters
+    const getFilterSig = (a) => {
+        const parts = [];
+        if (a.programVersions?.length) parts.push('pv:' + [...a.programVersions].sort().join(',').toLowerCase());
+        if (a.listPreference?.length) parts.push('list:' + [...a.listPreference].sort().join(','));
+        if (a.daysOutMin != null) parts.push('doMin:' + a.daysOutMin);
+        if (a.daysOutMax != null) parts.push('doMax:' + a.daysOutMax);
+        return parts.join('|');
+    };
+
+    const hasAnyFilter = (a) => {
+        return (a.programVersions?.length > 0) ||
+               (a.listPreference?.length > 0) ||
+               (a.daysOutMin != null) ||
+               (a.daysOutMax != null);
+    };
+
+    const advisorMatches = (advisor, student) => {
+        if (advisor.programVersions?.length > 0) {
             const pvSet = new Set(advisor.programVersions.map(pv => pv.toLowerCase()));
-            for (let i = 0; i < students.length; i++) {
-                if (!assigned[i] && pvSet.has(students[i].programVersion.toLowerCase())) {
-                    assigned[i] = true;
-                    counts.set(advisor.id, counts.get(advisor.id) + 1);
-                }
+            if (!pvSet.has((student.programVersion || '').toLowerCase())) return false;
+        }
+        if (advisor.listPreference?.length > 0) {
+            if (!advisor.listPreference.includes(student.listType)) return false;
+        }
+        if (advisor.daysOutMin != null && typeof student.daysOut === 'number') {
+            if (student.daysOut < advisor.daysOutMin) return false;
+        }
+        if (advisor.daysOutMax != null && typeof student.daysOut === 'number') {
+            if (student.daysOut > advisor.daysOutMax) return false;
+        }
+        return true;
+    };
+
+    // Group advisors with identical filter signatures for shared round-robin
+    const sigGroups = new Map(); // sig -> [advisor, ...]
+    for (const advisor of advisors) {
+        if (!hasAnyFilter(advisor)) continue;
+        const sig = getFilterSig(advisor);
+        if (!sigGroups.has(sig)) sigGroups.set(sig, []);
+        sigGroups.get(sig).push(advisor);
+    }
+
+    // Phase 1: Filtered advisors claim matching students
+    // Process groups in advisor-list order (by first advisor in group)
+    const processedSigs = new Set();
+    const rrCounters = new Map(); // sig -> round-robin counter
+
+    for (const advisor of advisors) {
+        if (!hasAnyFilter(advisor)) continue;
+        const sig = getFilterSig(advisor);
+        if (processedSigs.has(sig)) continue;
+        processedSigs.add(sig);
+
+        const group = sigGroups.get(sig);
+        let rr = 0;
+
+        for (let i = 0; i < students.length; i++) {
+            if (assigned[i]) continue;
+            // Check if the first advisor in this group matches (they all share the same filters)
+            if (advisorMatches(group[0], students[i])) {
+                const target = group[rr % group.length];
+                counts.set(target.id, counts.get(target.id) + 1);
+                assigned[i] = true;
+                rr++;
             }
         }
     }
