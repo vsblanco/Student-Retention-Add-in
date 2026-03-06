@@ -43,7 +43,8 @@ export const CONSTANTS = {
         StudentEmail: ["student email", "school email", "email", "Email","Student Email"],
         nextAssignmentDue: ["next assignment due", "Next Assignment Due", "nextassignmentdue"],
         lastCourseGrade: ["last course grade", "Last Course Grade", "lastcoursegrade"],
-        expectedStartDate: ["expected start date", "start date", "expstartdate"]
+        expectedStartDate: ["expected start date", "start date", "expstartdate"],
+        attendance: ["attendance %", "attendance%", "attendancepercent", "attendance"]
     }
 };
 

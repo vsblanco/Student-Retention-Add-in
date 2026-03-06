@@ -671,6 +671,7 @@ async function importMasterListFromExtension(payload) {
             await applyHoldConditionalFormatting(context, sheet, masterHeaders);
             await applyAdSAPStatusConditionalFormatting(context, sheet, masterHeaders);
             await applyNextAssignmentDueFormatting(context, sheet, masterHeaders);
+            await applyAttendanceConditionalFormatting(context, sheet, masterHeaders);
 
             // Update workbook settings with new columns for LDA column selector
             if (newColumns.length > 0) {
@@ -1012,6 +1013,59 @@ async function applyNextAssignmentDueFormatting(context, sheet, headers) {
         console.log("ImportFromExtension: Left alignment applied to Next Assignment Due column");
     } catch (error) {
         console.error("ImportFromExtension: Error applying Next Assignment Due formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies conditional formatting and percentage number format to the Attendance % column.
+ * 3-color scale: Red (lowest) -> Yellow (70%) -> Green (highest)
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyAttendanceConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to Attendance % column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const attendanceColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.attendance);
+
+        if (attendanceColIdx === -1) {
+            console.log("ImportFromExtension: Attendance % column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const attendanceColumnRange = sheet.getRangeByIndexes(1, attendanceColIdx, range.rowCount - 1, 1);
+
+        // Format as percentage so 0.38 displays as "38%"
+        attendanceColumnRange.numberFormat = [["0%"]];
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        attendanceColumnRange.conditionalFormats.clearAll();
+
+        // Apply 3-color scale: Red (low) -> Yellow (70%) -> Green (high)
+        const conditionalFormat = attendanceColumnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+        const criteria = {
+            minimum: { type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+            midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "0.7", color: "#FFEB84" },
+            maximum: { type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" }
+        };
+        conditionalFormat.colorScale.criteria = criteria;
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting and percentage format applied to Attendance % column");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying attendance conditional formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
