@@ -44,7 +44,9 @@ export const CONSTANTS = {
         nextAssignmentDue: ["next assignment due", "Next Assignment Due", "nextassignmentdue"],
         lastCourseGrade: ["last course grade", "Last Course Grade", "lastcoursegrade"],
         expectedStartDate: ["expected start date", "start date", "expstartdate"],
-        attendance: ["attendance %", "attendance%", "attendancepercent", "attendance"]
+        attendance: ["attendance %", "attendance%", "attendancepercent", "attendance"],
+        letterGrade: ["letter grade", "lettergrade", "Letter Grade", "LetterGrade"],
+        lastCourseLetterGrade: ["last course letter grade", "lastcourselettergrade", "Last Course Letter Grade", "LastCourseLetterGrade"]
     }
 };
 

@@ -672,6 +672,7 @@ async function importMasterListFromExtension(payload) {
             await applyAdSAPStatusConditionalFormatting(context, sheet, masterHeaders);
             await applyNextAssignmentDueFormatting(context, sheet, masterHeaders);
             await applyAttendanceConditionalFormatting(context, sheet, masterHeaders);
+            await applyLetterGradeConditionalFormatting(context, sheet, masterHeaders);
 
             // Update workbook settings with new columns for LDA column selector
             if (newColumns.length > 0) {
@@ -1066,6 +1067,65 @@ async function applyAttendanceConditionalFormatting(context, sheet, headers) {
         console.log("ImportFromExtension: Conditional formatting and percentage format applied to Attendance % column");
     } catch (error) {
         console.error("ImportFromExtension: Error applying attendance conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies conditional formatting to Letter Grade and Last Course Letter Grade columns.
+ * Highlights cells beginning with "D" in light red and cells beginning with "F" in a darker red.
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyLetterGradeConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to letter grade columns...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const letterGradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.letterGrade);
+        const lastCourseLetterGradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.lastCourseLetterGrade);
+
+        const colIndices = [];
+        if (letterGradeColIdx !== -1) colIndices.push({ idx: letterGradeColIdx, name: "Letter Grade" });
+        if (lastCourseLetterGradeColIdx !== -1) colIndices.push({ idx: lastCourseLetterGradeColIdx, name: "Last Course Letter Grade" });
+
+        if (colIndices.length === 0) {
+            console.log("ImportFromExtension: No letter grade columns found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        for (const col of colIndices) {
+            const columnRange = sheet.getRangeByIndexes(1, col.idx, range.rowCount - 1, 1);
+
+            // Clear existing conditional formats on the column to avoid duplicates
+            columnRange.conditionalFormats.clearAll();
+
+            // Highlight cells beginning with "F" (darker red) - added first so it has lower priority
+            const fFormat = columnRange.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+            fFormat.textComparison.format.fill.color = "#FF6B6B";
+            fFormat.textComparison.rule = { operator: Excel.ConditionalTextOperator.beginsWith, text: "F" };
+
+            // Highlight cells beginning with "D" (light red) - added second so it has higher priority
+            const dFormat = columnRange.conditionalFormats.add(Excel.ConditionalFormatType.containsText);
+            dFormat.textComparison.format.fill.color = "#FFB6C1";
+            dFormat.textComparison.rule = { operator: Excel.ConditionalTextOperator.beginsWith, text: "D" };
+
+            console.log(`ImportFromExtension: Conditional formatting applied to ${col.name} column (D=light red, F=darker red)`);
+        }
+
+        await context.sync();
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying letter grade conditional formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
