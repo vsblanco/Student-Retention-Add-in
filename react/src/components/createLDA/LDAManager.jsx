@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution } from './ldaProcessor';
 
 // --- CONFIGURATION: Steps matching the processor logic ---
@@ -711,11 +711,6 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
     });
   };
 
-  const startEditName = (advisor) => {
-    setEditingName(advisor.id);
-    setEditNameValue(advisor.name);
-  };
-
   const confirmEditName = (id) => {
     if (editNameValue.trim()) {
       updateAdvisor(id, { name: editNameValue.trim() });
@@ -789,33 +784,17 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
                   </div>
 
                   {editingName === advisor.id ? (
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                      <input
-                        type="text"
-                        value={editNameValue}
-                        onChange={(e) => setEditNameValue(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') confirmEditName(advisor.id); if (e.key === 'Escape') setEditingName(null); }}
-                        autoFocus
-                        className="flex-1 min-w-0 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
-                      />
-                      <button onClick={() => confirmEditName(advisor.id)} className="text-emerald-500 hover:text-emerald-700 p-0.5">
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => setEditingName(null)} className="text-slate-400 hover:text-slate-600 p-0.5">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <input
+                      type="text"
+                      value={editNameValue}
+                      onChange={(e) => setEditNameValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
+                      onBlur={() => confirmEditName(advisor.id)}
+                      autoFocus
+                      className="flex-1 min-w-0 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
+                    />
                   ) : (
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      <span className={`text-sm font-medium truncate ${excluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{advisor.name}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); startEditName(advisor); }}
-                        className="text-slate-300 hover:text-slate-500 p-0.5 shrink-0"
-                        title="Edit name"
-                      >
-                        <Pencil className="w-3 h-3" />
-                      </button>
-                    </div>
+                    <span className={`text-sm font-medium truncate flex-1 min-w-0 ${excluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{advisor.name}</span>
                   )}
 
                   {excluded && (
@@ -920,6 +899,16 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
 // --- Advisor Filter Modal ---
 
 function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onClose }) {
+  const [editingModalName, setEditingModalName] = useState(false);
+  const [modalNameValue, setModalNameValue] = useState(advisor.name);
+
+  const confirmModalName = () => {
+    if (modalNameValue.trim() && modalNameValue.trim() !== advisor.name) {
+      onUpdate({ name: modalNameValue.trim() });
+    }
+    setEditingModalName(false);
+  };
+
   const togglePV = (pv) => {
     const pvs = advisor.programVersions || [];
     onUpdate({ programVersions: pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv] });
@@ -951,11 +940,32 @@ function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onC
       >
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-slate-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className="w-4 h-4 rounded shrink-0" style={{ backgroundColor: advisor.color }} />
-            <h3 className="text-sm font-semibold text-slate-800 truncate">{advisor.name}</h3>
+            {editingModalName ? (
+              <input
+                type="text"
+                value={modalNameValue}
+                onChange={(e) => setModalNameValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
+                onBlur={confirmModalName}
+                autoFocus
+                className="flex-1 min-w-0 text-sm font-semibold text-slate-800 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
+              />
+            ) : (
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h3 className="text-sm font-semibold text-slate-800 truncate">{advisor.name}</h3>
+                <button
+                  onClick={() => { setModalNameValue(advisor.name); setEditingModalName(true); }}
+                  className="text-slate-300 hover:text-slate-500 p-0.5 shrink-0"
+                  title="Edit name"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
