@@ -604,6 +604,53 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             assignedArr[i] = activeAdvisors[rrIdx % activeAdvisors.length];
                             rrIdx++;
                         }
+                    }
+
+                    // Even Split redistribution for inline assignment
+                    if (advisorConfig.evenSplit && activeAdvisors.length > 1) {
+                        const total = taggedStudents.length;
+                        const base = Math.floor(total / activeAdvisors.length);
+                        const extra = total % activeAdvisors.length;
+                        const targets = new Map();
+                        activeAdvisors.forEach((a, idx) => targets.set(a.id, base + (idx < extra ? 1 : 0)));
+
+                        const inlineCounts = new Map();
+                        activeAdvisors.forEach(a => inlineCounts.set(a.id, 0));
+                        for (let i = 0; i < taggedStudents.length; i++) {
+                            inlineCounts.set(assignedArr[i].id, inlineCounts.get(assignedArr[i].id) + 1);
+                        }
+
+                        const perAdvisor = new Map();
+                        activeAdvisors.forEach(a => perAdvisor.set(a.id, []));
+                        for (let i = 0; i < taggedStudents.length; i++) {
+                            perAdvisor.get(assignedArr[i].id).push(i);
+                        }
+
+                        const overAdvs = activeAdvisors.filter(a => inlineCounts.get(a.id) > targets.get(a.id));
+                        const underAdvs = activeAdvisors.filter(a => inlineCounts.get(a.id) < targets.get(a.id));
+
+                        for (const overAdv of overAdvs) {
+                            const surplus = inlineCounts.get(overAdv.id) - targets.get(overAdv.id);
+                            if (surplus <= 0) continue;
+                            const indices = perAdvisor.get(overAdv.id);
+                            indices.sort((a, b) => (taggedStudents[a].daysOut || 0) - (taggedStudents[b].daysOut || 0));
+                            let moved = 0;
+                            for (let si = 0; si < indices.length && moved < surplus; si++) {
+                                const stuIdx = indices[si];
+                                for (const underAdv of underAdvs) {
+                                    if (inlineCounts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
+                                    const advObj = activeAdvisors.find(a => a.id === underAdv.id);
+                                    assignedArr[stuIdx] = advObj;
+                                    inlineCounts.set(overAdv.id, inlineCounts.get(overAdv.id) - 1);
+                                    inlineCounts.set(underAdv.id, inlineCounts.get(underAdv.id) + 1);
+                                    moved++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    for (let i = 0; i < taggedStudents.length; i++) {
                         advisorAssignmentMap.set(taggedStudents[i].originalIndex, {
                             name: assignedArr[i].name,
                             color: assignedArr[i].color
@@ -1634,7 +1681,8 @@ export async function predictAdvisorDistribution(ldaSettings, advisors) {
                 }
             }
 
-            return assignStudentsToAdvisors(students, advisors);
+            const evenSplit = ldaSettings.advisorAssignment?.evenSplit ?? false;
+            return assignStudentsToAdvisors(students, advisors, { evenSplit });
         });
     } catch (error) {
         console.error("Advisor distribution prediction error:", error);
@@ -1659,9 +1707,11 @@ export async function predictAdvisorDistribution(ldaSettings, advisors) {
  *
  * @param {Array} students - Array of { programVersion, daysOut, listType }
  * @param {Array} advisors - Array of advisor config objects
+ * @param {Object} [options] - Optional settings
+ * @param {boolean} [options.evenSplit=false] - Redistribute to even out advisor counts
  * @returns {Array} Array of { id, name, color, count }
  */
-function assignStudentsToAdvisors(students, advisors) {
+function assignStudentsToAdvisors(students, advisors, options = {}) {
     const counts = new Map();
     advisors.forEach(a => counts.set(a.id, 0));
 
@@ -1737,12 +1787,81 @@ function assignStudentsToAdvisors(students, advisors) {
     }
 
     // Phase 2: Remaining students distributed round-robin across ALL advisors
+    // Track which advisor each student is assigned to for even split redistribution
+    const studentAdvisorMap = new Array(students.length).fill(null);
+
+    // Replay Phase 1 to build studentAdvisorMap
+    const processedSigs2 = new Set();
+    for (const advisor of advisors) {
+        if (!hasAnyFilter(advisor)) continue;
+        const sig = getFilterSig(advisor);
+        if (processedSigs2.has(sig)) continue;
+        processedSigs2.add(sig);
+        const group = sigGroups.get(sig);
+        let rr2 = 0;
+        for (let i = 0; i < students.length; i++) {
+            if (studentAdvisorMap[i]) continue;
+            if (assigned[i] && advisorMatches(group[0], students[i])) {
+                studentAdvisorMap[i] = group[rr2 % group.length].id;
+                rr2++;
+            }
+        }
+    }
+
     let rrIndex = 0;
     for (let i = 0; i < students.length; i++) {
         if (!assigned[i]) {
             const advisor = advisors[rrIndex % advisors.length];
             counts.set(advisor.id, counts.get(advisor.id) + 1);
+            studentAdvisorMap[i] = advisor.id;
             rrIndex++;
+        }
+    }
+
+    // Phase 3 (Even Split): Redistribute students to balance advisor counts
+    if (options.evenSplit && advisors.length > 1) {
+        const total = students.length;
+        const base = Math.floor(total / advisors.length);
+        const extra = total % advisors.length;
+        // Target: first `extra` advisors (by current order) get base+1, rest get base
+        const targets = new Map();
+        advisors.forEach((a, idx) => targets.set(a.id, base + (idx < extra ? 1 : 0)));
+
+        // Build per-advisor student index lists
+        const advisorStudents = new Map();
+        advisors.forEach(a => advisorStudents.set(a.id, []));
+        for (let i = 0; i < students.length; i++) {
+            advisorStudents.get(studentAdvisorMap[i]).push(i);
+        }
+
+        // Identify over/under advisors
+        const overAdvisors = advisors.filter(a => counts.get(a.id) > targets.get(a.id));
+        const underAdvisors = advisors.filter(a => counts.get(a.id) < targets.get(a.id));
+
+        for (const overAdv of overAdvisors) {
+            const surplus = counts.get(overAdv.id) - targets.get(overAdv.id);
+            if (surplus <= 0) continue;
+
+            // Sort this advisor's students by daysOut ascending (lowest first = easiest to move)
+            const indices = advisorStudents.get(overAdv.id);
+            indices.sort((a, b) => (students[a].daysOut || 0) - (students[b].daysOut || 0));
+
+            let moved = 0;
+            for (let si = 0; si < indices.length && moved < surplus; si++) {
+                const stuIdx = indices[si];
+                // Find an under advisor that can take this student
+                for (const underAdv of underAdvisors) {
+                    if (counts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
+                    // Move student
+                    studentAdvisorMap[stuIdx] = underAdv.id;
+                    counts.set(overAdv.id, counts.get(overAdv.id) - 1);
+                    counts.set(underAdv.id, counts.get(underAdv.id) + 1);
+                    advisorStudents.get(overAdv.id).splice(advisorStudents.get(overAdv.id).indexOf(stuIdx), 1);
+                    advisorStudents.get(underAdv.id).push(stuIdx);
+                    moved++;
+                    break;
+                }
+            }
         }
     }
 
