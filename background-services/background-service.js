@@ -673,6 +673,7 @@ async function importMasterListFromExtension(payload) {
             await applyNextAssignmentDueFormatting(context, sheet, masterHeaders);
             await applyAttendanceConditionalFormatting(context, sheet, masterHeaders);
             await applyLetterGradeConditionalFormatting(context, sheet, masterHeaders);
+            await applyEnrollGpaConditionalFormatting(context, sheet, masterHeaders);
 
             // Update workbook settings with new columns for LDA column selector
             if (newColumns.length > 0) {
@@ -1126,6 +1127,56 @@ async function applyLetterGradeConditionalFormatting(context, sheet, headers) {
         await context.sync();
     } catch (error) {
         console.error("ImportFromExtension: Error applying letter grade conditional formatting:", error);
+        // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Applies a 3-color scale conditional formatting to the Enroll GPA column.
+ * Pink (0) -> Baby Blue (2) -> Light Green (4)
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ */
+async function applyEnrollGpaConditionalFormatting(context, sheet, headers) {
+    try {
+        console.log("ImportFromExtension: Applying conditional formatting to Enroll GPA column...");
+
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const enrollGpaColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.enrollGpa);
+
+        if (enrollGpaColIdx === -1) {
+            console.log("ImportFromExtension: Enroll GPA column not found, skipping conditional formatting");
+            return;
+        }
+
+        const range = sheet.getUsedRange();
+        range.load("rowCount");
+        await context.sync();
+
+        if (range.rowCount <= 1) {
+            console.log("ImportFromExtension: No data rows to format");
+            return;
+        }
+
+        const columnRange = sheet.getRangeByIndexes(1, enrollGpaColIdx, range.rowCount - 1, 1);
+
+        // Clear existing conditional formats on the column to avoid duplicates
+        columnRange.conditionalFormats.clearAll();
+
+        // Apply 3-color scale: Pastel Pink (0) -> Baby Blue (2) -> Light Green (4)
+        const conditionalFormat = columnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+        const criteria = {
+            minimum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "0", color: "#FFB6C1" },
+            midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "2", color: "#ADD8E6" },
+            maximum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "4", color: "#90EE90" }
+        };
+        conditionalFormat.colorScale.criteria = criteria;
+
+        await context.sync();
+        console.log("ImportFromExtension: Conditional formatting applied to Enroll GPA column (Pink 0 -> Blue 2 -> Green 4)");
+    } catch (error) {
+        console.error("ImportFromExtension: Error applying Enroll GPA conditional formatting:", error);
         // Don't throw - formatting is not critical
     }
 }
