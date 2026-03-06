@@ -664,6 +664,8 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
   const activeAdvisors = advisors.filter(a => !isAdvisorExcludedToday(a));
 
   useEffect(() => {
+    // Defer recalculation until the filter modal is closed
+    if (filterModalAdvisor) return;
     if (!assignment.enabled || activeAdvisors.length === 0) {
       setDistribution([]);
       return;
@@ -675,7 +677,7 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
         .catch(() => { setDistribution([]); setDistLoading(false); });
     }, 300);
     return () => clearTimeout(timer);
-  }, [assignment.enabled, advisors, settings.daysOut, settings.includeFailingList, settings.includeAttendanceList]);
+  }, [assignment.enabled, advisors, settings.daysOut, settings.includeFailingList, settings.includeAttendanceList, filterModalAdvisor]);
 
   const updateAssignment = (updates) => {
     onSettingChange('advisorAssignment', { ...assignment, ...updates });
@@ -757,7 +759,7 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
 
       {/* Advisor list (only visible when enabled) */}
       <div className={`transition-all duration-300 overflow-hidden ${assignment.enabled ? 'opacity-100 max-h-[2000px]' : 'opacity-0 max-h-0'}`}>
-        <div className="flex flex-col gap-3">
+        <div className={`flex flex-col gap-3 ${advisors.length > 6 ? 'max-h-[360px] overflow-y-auto pr-1' : ''}`}>
           {advisors.map((advisor) => {
             const excluded = isAdvisorExcludedToday(advisor);
             return (
