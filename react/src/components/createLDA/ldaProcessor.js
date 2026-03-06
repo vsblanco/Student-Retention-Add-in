@@ -177,6 +177,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
         const settings = {
             daysOut: userOverrides.daysOut ?? 5,
             includeFailingList: userOverrides.includeFailingList ?? false,
+            includeAttendanceList: userOverrides.includeAttendanceList ?? false,
             includeLDATag: userOverrides.includeLDATag ?? true,
             includeDNCTag: userOverrides.includeDNCTag ?? true,
             sheetNameMode: userOverrides.sheetNameMode ?? 'date',
@@ -354,6 +355,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 );
             }
 
+            // Look for "Attendance %" column
+            let attendanceIdx = getColIndex('Attendance %');
+            if (attendanceIdx === -1) {
+                attendanceIdx = headers.findIndex(h => {
+                    const stripped = String(h || '').trim().toLowerCase().replace(/\s+/g, '');
+                    return stripped === 'attendance%' || stripped === 'attendancepercent' || stripped === 'attendance';
+                });
+            }
+
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
 
             if (onProgress) onProgress('read', 'completed');
@@ -438,6 +448,61 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             }
             if (onProgress) onProgress('failing', 'completed');
 
+            // --- STEP 4b: Filtering by Attendance ---
+            if (onProgress) onProgress('attendance', 'active');
+
+            let attendanceRows = [];
+            if (settings.includeAttendanceList && attendanceIdx !== -1) {
+                // Build set of LDA student IDs (students on the days-out table)
+                const ldaStudentIds = new Set();
+                if (studentIdIdx !== -1) {
+                    for (const row of dataRows) {
+                        const sId = row.values[studentIdIdx];
+                        if (sId) ldaStudentIds.add(sId);
+                    }
+                }
+
+                // Track which student IDs end up in the attendance list
+                const attendanceStudentIds = new Set();
+
+                // Scan ALL master list rows for low attendance (not just failing)
+                for (let i = 1; i < masterValues.length; i++) {
+                    const sId = studentIdIdx !== -1 ? masterValues[i][studentIdIdx] : null;
+
+                    // Skip students already on the LDA (days out) table
+                    if (sId && ldaStudentIds.has(sId)) continue;
+
+                    const attVal = masterValues[i][attendanceIdx];
+                    // Parse attendance value - handle both decimal (0.59) and whole number (59) formats
+                    let attPercent = null;
+                    if (typeof attVal === 'number') {
+                        attPercent = attVal <= 1 ? attVal * 100 : attVal;
+                    }
+
+                    if (attPercent !== null && attPercent < 60) {
+                        attendanceRows.push({
+                            values: masterValues[i],
+                            formulas: masterFormulas[i],
+                            originalIndex: i,
+                            attendancePercent: attPercent
+                        });
+                        if (sId) attendanceStudentIds.add(sId);
+                    }
+                }
+
+                // Sort attendance rows from lowest to highest attendance
+                attendanceRows.sort((a, b) => (a.attendancePercent || 0) - (b.attendancePercent || 0));
+
+                // Remove students with low attendance from the failing list (no duplicates)
+                if (attendanceStudentIds.size > 0) {
+                    failingRows = failingRows.filter(row => {
+                        const sId = studentIdIdx !== -1 ? row.values[studentIdIdx] : null;
+                        return !sId || !attendanceStudentIds.has(sId);
+                    });
+                }
+            }
+
+            if (onProgress) onProgress('attendance', 'completed');
 
             // --- Detect Multi-Campus Mode ---
             let isMultiCampus = false;
@@ -608,6 +673,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const campusFailingRows = failingRows.filter(r =>
                         String(r.values[campusIdx] || '').trim() === campusName
                     );
+                    const campusAttendanceRows = attendanceRows.filter(r =>
+                        String(r.values[campusIdx] || '').trim() === campusName
+                    );
 
                     // Create sheet for this campus
                     let sheetName = campusName;
@@ -647,6 +715,21 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             context, newSheet, nextRow, `Failing_${ci}`,
                             outputColumns,
                             campusFailingRows.map(r => buildOutputRow(r, 'Failing_Table')),
+                            masterSheet, getColIndex, dateColumnIndices, null
+                        );
+                        nextRow += campusFailingRows.length + 4;
+                    }
+
+                    // Write Attendance table for this campus (if applicable)
+                    if (settings.includeAttendanceList && campusAttendanceRows.length > 0) {
+                        const attTitle = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
+                        attTitle.values = [["Low Attendance Students"]];
+                        attTitle.format.font.bold = true;
+
+                        await writeTable(
+                            context, newSheet, nextRow, `Attendance_${ci}`,
+                            outputColumns,
+                            campusAttendanceRows.map(r => buildOutputRow(r, 'Attendance_Table')),
                             masterSheet, getColIndex, dateColumnIndices, null
                         );
                     }
@@ -933,6 +1016,31 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         getColIndex,
                         dateColumnIndices,
                         failingBatchProgress
+                    );
+                    nextRow += failingRows.length + 4;
+                }
+
+                // 7d. Write Attendance Table (if applicable)
+                if (settings.includeAttendanceList && attendanceRows.length > 0) {
+                    const attTitle = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
+                    attTitle.values = [["Low Attendance Students"]];
+                    attTitle.format.font.bold = true;
+
+                    const attendanceBatchProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'Attendance_Table')
+                        : null;
+
+                    await writeTable(
+                        context,
+                        newSheet,
+                        nextRow,
+                        "Attendance_Table",
+                        outputColumns,
+                        attendanceRows.map(r => buildOutputRow(r, 'Attendance_Table')),
+                        masterSheet,
+                        getColIndex,
+                        dateColumnIndices,
+                        attendanceBatchProgress
                     );
                 }
 
