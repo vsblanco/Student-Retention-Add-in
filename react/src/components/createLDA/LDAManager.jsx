@@ -625,9 +625,20 @@ function ToggleRow({ label, isOn, onToggle }) {
 // --- Assigned Settings (Advisor Auto-Assignment) ---
 
 const DEFAULT_COLORS = ['#ADD8E6', '#FFDAB9', '#D4EDDA', '#E8D5F5', '#FFE0B2', '#B2DFDB', '#F8BBD0', '#C5CAE9'];
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAY_LABELS = ['SU', 'M', 'T', 'W', 'TH', 'F', 'SA'];
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function getTodayDayKey() {
+  return DAY_KEYS[new Date().getDay()];
+}
+
+function isAdvisorExcludedToday(advisor) {
+  const todayKey = getTodayDayKey();
+  return (advisor.excludeDays || []).includes(todayKey);
 }
 
 function AssignedSettings({ settings, onSettingChange, onBack }) {
@@ -638,11 +649,10 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
   const [pvLoading, setPvLoading] = useState(false);
   const [distribution, setDistribution] = useState([]);
   const [distLoading, setDistLoading] = useState(false);
-  const [expandedAdvisor, setExpandedAdvisor] = useState(null);
+  const [filterModalAdvisor, setFilterModalAdvisor] = useState(null);
   const [editingName, setEditingName] = useState(null);
   const [editNameValue, setEditNameValue] = useState('');
 
-  // Load ProgramVersions from Master List
   useEffect(() => {
     setPvLoading(true);
     detectProgramVersions()
@@ -650,15 +660,17 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
       .catch(() => { setProgramVersions([]); setPvLoading(false); });
   }, []);
 
-  // Predict distribution whenever advisors or daysOut changes
+  // Filter out day-excluded advisors for prediction
+  const activeAdvisors = advisors.filter(a => !isAdvisorExcludedToday(a));
+
   useEffect(() => {
-    if (!assignment.enabled || advisors.length === 0) {
+    if (!assignment.enabled || activeAdvisors.length === 0) {
       setDistribution([]);
       return;
     }
     setDistLoading(true);
     const timer = setTimeout(() => {
-      predictAdvisorDistribution(settings, advisors)
+      predictAdvisorDistribution(settings, activeAdvisors)
         .then(d => { setDistribution(d); setDistLoading(false); })
         .catch(() => { setDistribution([]); setDistLoading(false); });
     }, 300);
@@ -678,7 +690,8 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
       programVersions: [],
       listPreference: [],
       daysOutMin: null,
-      daysOutMax: null
+      daysOutMax: null,
+      excludeDays: []
     };
     updateAssignment({ advisors: [...advisors, newAdvisor] });
     setEditingName(newAdvisor.id);
@@ -687,34 +700,13 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
 
   const removeAdvisor = (id) => {
     updateAssignment({ advisors: advisors.filter(a => a.id !== id) });
-    if (expandedAdvisor === id) setExpandedAdvisor(null);
+    if (filterModalAdvisor?.id === id) setFilterModalAdvisor(null);
   };
 
   const updateAdvisor = (id, updates) => {
     updateAssignment({
       advisors: advisors.map(a => a.id === id ? { ...a, ...updates } : a)
     });
-  };
-
-  const toggleProgramVersion = (advisorId, pv) => {
-    const advisor = advisors.find(a => a.id === advisorId);
-    if (!advisor) return;
-    const pvs = advisor.programVersions || [];
-    const next = pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv];
-    updateAdvisor(advisorId, { programVersions: next });
-  };
-
-  const toggleListPreference = (advisorId, listType) => {
-    const advisor = advisors.find(a => a.id === advisorId);
-    if (!advisor) return;
-    const prefs = advisor.listPreference || [];
-    const next = prefs.includes(listType) ? prefs.filter(p => p !== listType) : [...prefs, listType];
-    updateAdvisor(advisorId, { listPreference: next });
-  };
-
-  const updateDaysOutRange = (advisorId, field, value) => {
-    const parsed = value === '' ? null : Number(value);
-    updateAdvisor(advisorId, { [field]: isNaN(parsed) ? null : parsed });
   };
 
   const startEditName = (advisor) => {
@@ -730,6 +722,7 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
   };
 
   const totalStudents = distribution.reduce((sum, d) => sum + d.count, 0);
+  const todayKey = getTodayDayKey();
 
   return (
     <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
@@ -765,188 +758,98 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
       {/* Advisor list (only visible when enabled) */}
       <div className={`transition-all duration-300 overflow-hidden ${assignment.enabled ? 'opacity-100 max-h-[2000px]' : 'opacity-0 max-h-0'}`}>
         <div className="flex flex-col gap-3">
-          {/* Advisor items */}
-          {advisors.map((advisor, idx) => (
-            <div key={advisor.id} className="rounded-xl border border-slate-100/80 overflow-hidden">
-              {/* Advisor header row */}
+          {advisors.map((advisor) => {
+            const excluded = isAdvisorExcludedToday(advisor);
+            return (
               <div
-                className="flex items-center gap-2 p-2.5 cursor-pointer hover:bg-slate-50/50 transition-colors"
-                style={{ backgroundColor: advisor.color + '33' }}
+                key={advisor.id}
+                className={`rounded-xl border overflow-hidden transition-all duration-200 ${
+                  excluded ? 'border-red-200/60 opacity-60' : 'border-slate-100/80'
+                }`}
               >
                 <div
-                  className="w-6 h-6 rounded-md border border-black/10 shrink-0 relative overflow-hidden"
-                  style={{ backgroundColor: advisor.color }}
+                  className={`flex items-center gap-2 p-2.5 transition-colors ${excluded ? 'bg-red-50/50' : 'hover:bg-slate-50/50'}`}
+                  style={excluded ? {} : { backgroundColor: advisor.color + '33' }}
                 >
-                  <input
-                    type="color"
-                    value={advisor.color}
-                    onChange={(e) => updateAdvisor(advisor.id, { color: e.target.value })}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title="Change color"
-                  />
-                </div>
-
-                {editingName === advisor.id ? (
-                  <div className="flex items-center gap-1 flex-1 min-w-0">
-                    <input
-                      type="text"
-                      value={editNameValue}
-                      onChange={(e) => setEditNameValue(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') confirmEditName(advisor.id); if (e.key === 'Escape') setEditingName(null); }}
-                      autoFocus
-                      className="flex-1 min-w-0 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
-                    />
-                    <button onClick={() => confirmEditName(advisor.id)} className="text-emerald-500 hover:text-emerald-700 p-0.5">
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setEditingName(null)} className="text-slate-400 hover:text-slate-600 p-0.5">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                  <div
+                    className={`w-6 h-6 rounded-md border shrink-0 relative overflow-hidden ${excluded ? 'border-red-200 grayscale' : 'border-black/10'}`}
+                    style={{ backgroundColor: excluded ? '#e5e7eb' : advisor.color }}
+                  >
+                    {!excluded && (
+                      <input
+                        type="color"
+                        value={advisor.color}
+                        onChange={(e) => updateAdvisor(advisor.id, { color: e.target.value })}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        title="Change color"
+                      />
+                    )}
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0" onClick={() => setExpandedAdvisor(expandedAdvisor === advisor.id ? null : advisor.id)}>
-                    <span className="text-sm font-medium text-slate-700 truncate">{advisor.name}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); startEditName(advisor); }}
-                      className="text-slate-300 hover:text-slate-500 p-0.5 shrink-0"
-                      title="Edit name"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
 
-                {(() => {
-                  const fc = (advisor.programVersions?.length || 0) + (advisor.listPreference?.length || 0) + (advisor.daysOutMin != null ? 1 : 0) + (advisor.daysOutMax != null ? 1 : 0);
-                  return fc > 0 ? (
-                    <span className="text-[10px] text-slate-500 bg-white/60 px-1.5 py-0.5 rounded-full shrink-0">
-                      {fc} filter{fc !== 1 ? 's' : ''}
+                  {editingName === advisor.id ? (
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={editNameValue}
+                        onChange={(e) => setEditNameValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') confirmEditName(advisor.id); if (e.key === 'Escape') setEditingName(null); }}
+                        autoFocus
+                        className="flex-1 min-w-0 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-md px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#145F82]/30"
+                      />
+                      <button onClick={() => confirmEditName(advisor.id)} className="text-emerald-500 hover:text-emerald-700 p-0.5">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setEditingName(null)} className="text-slate-400 hover:text-slate-600 p-0.5">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <span className={`text-sm font-medium truncate ${excluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{advisor.name}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEditName(advisor); }}
+                        className="text-slate-300 hover:text-slate-500 p-0.5 shrink-0"
+                        title="Edit name"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  {excluded && (
+                    <span className="text-[10px] text-red-400 bg-red-50 px-1.5 py-0.5 rounded-full shrink-0 font-medium">
+                      Off today
                     </span>
-                  ) : null;
-                })()}
+                  )}
 
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeAdvisor(advisor.id); }}
-                  className="text-slate-300 hover:text-red-400 p-0.5 shrink-0 transition-colors"
-                  title="Remove advisor"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-
-                <button
-                  onClick={() => setExpandedAdvisor(expandedAdvisor === advisor.id ? null : advisor.id)}
-                  className="text-slate-400 shrink-0 transition-transform duration-200"
-                  style={{ transform: expandedAdvisor === advisor.id ? 'rotate(90deg)' : 'none' }}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Expanded: Filter panels */}
-              {expandedAdvisor === advisor.id && (
-                <div className="border-t border-slate-100 bg-white p-3 animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
-
-                  {/* List Preference */}
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-2">List Preference</p>
-                    <div className="flex gap-1.5">
-                      {[{ key: 'lda', label: 'LDA' }, { key: 'failing', label: 'Failing' }, { key: 'attendance', label: 'Attendance' }].map(({ key, label }) => {
-                        const isSelected = (advisor.listPreference || []).includes(key);
-                        return (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => toggleListPreference(advisor.id, key)}
-                            className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
-                              isSelected
-                                ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
-                                : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {(advisor.listPreference || []).length === 0 && (
-                      <p className="text-[10px] text-slate-400 mt-1 italic">No preference — receives from all lists</p>
-                    )}
-                  </div>
-
-                  {/* Days Out Range */}
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-2">Days Out Range</p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        placeholder="Min"
-                        value={advisor.daysOutMin ?? ''}
-                        onChange={(e) => updateDaysOutRange(advisor.id, 'daysOutMin', e.target.value)}
-                        className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
-                      />
-                      <span className="text-slate-400 text-xs">to</span>
-                      <input
-                        type="number"
-                        placeholder="Max"
-                        value={advisor.daysOutMax ?? ''}
-                        onChange={(e) => updateDaysOutRange(advisor.id, 'daysOutMax', e.target.value)}
-                        className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
-                      />
-                    </div>
-                    {advisor.daysOutMin == null && advisor.daysOutMax == null && (
-                      <p className="text-[10px] text-slate-400 mt-1 italic">No range — all days out values</p>
-                    )}
-                  </div>
-
-                  {/* Program Version Filters */}
-                  <div>
-                    <p className="text-xs font-medium text-slate-500 mb-2">Program Version Filters</p>
-                    {pvLoading ? (
-                      <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Loading programs...
-                      </div>
-                    ) : programVersions.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic py-1">No ProgramVersion column found</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
-                        {programVersions.map(pv => {
-                          const isSelected = (advisor.programVersions || []).includes(pv);
-                          return (
-                            <button
-                              key={pv}
-                              type="button"
-                              onClick={() => toggleProgramVersion(advisor.id, pv)}
-                              className={`text-xs px-2 py-1 rounded-full border transition-all duration-150 ${
-                                isSelected
-                                  ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
-                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                              }`}
-                            >
-                              {pv}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {!pvLoading && programVersions.length > 0 && (advisor.programVersions || []).length === 0 && (
-                      <p className="text-[10px] text-slate-400 mt-1 italic">No filter — all program versions</p>
-                    )}
-                  </div>
-
-                  {/* Summary hint */}
                   {(() => {
-                    const fc = (advisor.programVersions?.length || 0) + (advisor.listPreference?.length || 0) + (advisor.daysOutMin != null ? 1 : 0) + (advisor.daysOutMax != null ? 1 : 0);
-                    return fc === 0 ? (
-                      <p className="text-[10px] text-slate-400 pt-1 border-t border-slate-50 italic">
-                        No filters set — students assigned via even distribution
-                      </p>
+                    const fc = (advisor.programVersions?.length || 0) + (advisor.listPreference?.length || 0) + (advisor.daysOutMin != null ? 1 : 0) + (advisor.daysOutMax != null ? 1 : 0) + (advisor.excludeDays?.length || 0);
+                    return !excluded && fc > 0 ? (
+                      <span className="text-[10px] text-slate-500 bg-white/60 px-1.5 py-0.5 rounded-full shrink-0">
+                        {fc} filter{fc !== 1 ? 's' : ''}
+                      </span>
                     ) : null;
                   })()}
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setFilterModalAdvisor(advisor); }}
+                    className="text-slate-400 hover:text-[#145F82] p-0.5 shrink-0 transition-colors"
+                    title="Edit filters"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeAdvisor(advisor.id); }}
+                    className="text-slate-300 hover:text-red-400 p-0.5 shrink-0 transition-colors"
+                    title="Remove advisor"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
 
           {/* Add advisor button */}
           <button
@@ -968,7 +871,9 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
                   Calculating...
                 </div>
               ) : totalStudents === 0 ? (
-                <p className="text-xs text-slate-400 italic text-center py-4">No students match current filters</p>
+                <p className="text-xs text-slate-400 italic text-center py-4">
+                  {activeAdvisors.length === 0 ? 'All advisors are excluded today' : 'No students match current filters'}
+                </p>
               ) : (
                 <div className="flex items-center gap-4">
                   <AdvisorPieChart distribution={distribution} size={120} />
@@ -993,6 +898,190 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
               )}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Filter Modal */}
+      {filterModalAdvisor && (
+        <AdvisorFilterModal
+          advisor={filterModalAdvisor}
+          programVersions={programVersions}
+          pvLoading={pvLoading}
+          onUpdate={(updates) => updateAdvisor(filterModalAdvisor.id, updates)}
+          onClose={() => setFilterModalAdvisor(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// --- Advisor Filter Modal ---
+
+function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onClose }) {
+  const togglePV = (pv) => {
+    const pvs = advisor.programVersions || [];
+    onUpdate({ programVersions: pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv] });
+  };
+
+  const toggleList = (listType) => {
+    const prefs = advisor.listPreference || [];
+    onUpdate({ listPreference: prefs.includes(listType) ? prefs.filter(p => p !== listType) : [...prefs, listType] });
+  };
+
+  const toggleDay = (dayKey) => {
+    const days = advisor.excludeDays || [];
+    onUpdate({ excludeDays: days.includes(dayKey) ? days.filter(d => d !== dayKey) : [...days, dayKey] });
+  };
+
+  const setRange = (field, value) => {
+    const parsed = value === '' ? null : Number(value);
+    onUpdate({ [field]: isNaN(parsed) ? null : parsed });
+  };
+
+  const todayKey = getTodayDayKey();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+      <div
+        className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-slate-100 p-4 flex items-center justify-between rounded-t-2xl z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded shrink-0" style={{ backgroundColor: advisor.color }} />
+            <h3 className="text-sm font-semibold text-slate-800 truncate">{advisor.name}</h3>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-5">
+
+          {/* Exclude Days */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Exclude Days</p>
+            <p className="text-[10px] text-slate-400 mb-2">Select days this advisor is excluded from the LDA report</p>
+            <div className="flex gap-1">
+              {DAY_KEYS.map((dayKey, i) => {
+                const isExcluded = (advisor.excludeDays || []).includes(dayKey);
+                const isToday = dayKey === todayKey;
+                return (
+                  <button
+                    key={dayKey}
+                    type="button"
+                    onClick={() => toggleDay(dayKey)}
+                    className={`w-9 h-9 rounded-lg text-[11px] font-semibold border transition-all duration-150 ${
+                      isExcluded
+                        ? 'bg-red-50 border-red-200 text-red-500'
+                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                    } ${isToday ? 'ring-2 ring-offset-1 ring-[#145F82]/30' : ''}`}
+                  >
+                    {DAY_LABELS[i]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* List Preference */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">List Preference</p>
+            <div className="flex gap-1.5">
+              {[{ key: 'lda', label: 'LDA' }, { key: 'failing', label: 'Failing' }, { key: 'attendance', label: 'Attendance' }].map(({ key, label }) => {
+                const isSelected = (advisor.listPreference || []).includes(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleList(key)}
+                    className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all duration-150 ${
+                      isSelected
+                        ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {(advisor.listPreference || []).length === 0 && (
+              <p className="text-[10px] text-slate-400 mt-1.5 italic">No preference — receives from all lists</p>
+            )}
+          </div>
+
+          {/* Days Out Range */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Days Out Range</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="Min"
+                value={advisor.daysOutMin ?? ''}
+                onChange={(e) => setRange('daysOutMin', e.target.value)}
+                className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
+              />
+              <span className="text-slate-400 text-xs">to</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={advisor.daysOutMax ?? ''}
+                onChange={(e) => setRange('daysOutMax', e.target.value)}
+                className="w-20 border border-slate-200 bg-white rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#145F82]/30 focus:border-[#145F82]"
+              />
+            </div>
+            {advisor.daysOutMin == null && advisor.daysOutMax == null && (
+              <p className="text-[10px] text-slate-400 mt-1.5 italic">No range — all days out values</p>
+            )}
+          </div>
+
+          {/* Program Version Filters */}
+          <div>
+            <p className="text-xs font-medium text-slate-500 mb-2">Program Versions</p>
+            {pvLoading ? (
+              <div className="flex items-center gap-2 text-slate-400 text-xs py-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> Loading...
+              </div>
+            ) : programVersions.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">No ProgramVersion column found</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto">
+                {programVersions.map(pv => {
+                  const isSelected = (advisor.programVersions || []).includes(pv);
+                  return (
+                    <button
+                      key={pv}
+                      type="button"
+                      onClick={() => togglePV(pv)}
+                      className={`text-xs px-2 py-1 rounded-full border transition-all duration-150 ${
+                        isSelected
+                          ? 'border-[#145F82] bg-[#145F82]/10 text-[#145F82] font-medium'
+                          : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      {pv}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {!pvLoading && programVersions.length > 0 && (advisor.programVersions || []).length === 0 && (
+              <p className="text-[10px] text-slate-400 mt-1.5 italic">No filter — all program versions</p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="w-full bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

@@ -514,6 +514,13 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             const advisorAssignmentMap = new Map(); // originalIndex -> { name, color }
             const advisorConfig = settings.advisorAssignment;
             if (advisorConfig && advisorConfig.enabled && advisorConfig.advisors && advisorConfig.advisors.length > 0) {
+                // Filter out advisors excluded today (by day of week)
+                const todayDayKey = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date().getDay()];
+                const activeAdvisors = advisorConfig.advisors.filter(a => !(a.excludeDays || []).includes(todayDayKey));
+                if (activeAdvisors.length === 0) {
+                    console.log('LDA: All advisors are excluded today, skipping auto-assignment');
+                }
+
                 // Build student list with metadata for multi-filter assignment
                 const taggedStudents = [];
                 for (const r of dataRows) {
@@ -541,68 +548,70 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     });
                 }
 
-                // Use the shared algorithm to get counts (for logging)
-                const results = assignStudentsToAdvisors(taggedStudents, advisorConfig.advisors);
+                if (activeAdvisors.length > 0) {
+                    // Use the shared algorithm with only active (non-excluded) advisors
+                    const results = assignStudentsToAdvisors(taggedStudents, activeAdvisors);
 
-                // Re-run inline to build the per-student map (same logic as assignStudentsToAdvisors)
-                const hasAnyFilter = (a) => (a.programVersions?.length > 0) || (a.listPreference?.length > 0) || (a.daysOutMin != null) || (a.daysOutMax != null);
-                const advisorMatches = (a, s) => {
-                    if (a.programVersions?.length > 0) {
-                        const pvSet = new Set(a.programVersions.map(pv => pv.toLowerCase()));
-                        if (!pvSet.has((s.programVersion || '').toLowerCase())) return false;
-                    }
-                    if (a.listPreference?.length > 0) {
-                        if (!a.listPreference.includes(s.listType)) return false;
-                    }
-                    if (a.daysOutMin != null && typeof s.daysOut === 'number' && s.daysOut < a.daysOutMin) return false;
-                    if (a.daysOutMax != null && typeof s.daysOut === 'number' && s.daysOut > a.daysOutMax) return false;
-                    return true;
-                };
-                const getFilterSig = (a) => {
-                    const parts = [];
-                    if (a.programVersions?.length) parts.push('pv:' + [...a.programVersions].sort().join(',').toLowerCase());
-                    if (a.listPreference?.length) parts.push('list:' + [...a.listPreference].sort().join(','));
-                    if (a.daysOutMin != null) parts.push('doMin:' + a.daysOutMin);
-                    if (a.daysOutMax != null) parts.push('doMax:' + a.daysOutMax);
-                    return parts.join('|');
-                };
+                    // Re-run inline to build the per-student map
+                    const hasAnyFilter = (a) => (a.programVersions?.length > 0) || (a.listPreference?.length > 0) || (a.daysOutMin != null) || (a.daysOutMax != null);
+                    const advisorMatches = (a, s) => {
+                        if (a.programVersions?.length > 0) {
+                            const pvSet = new Set(a.programVersions.map(pv => pv.toLowerCase()));
+                            if (!pvSet.has((s.programVersion || '').toLowerCase())) return false;
+                        }
+                        if (a.listPreference?.length > 0) {
+                            if (!a.listPreference.includes(s.listType)) return false;
+                        }
+                        if (a.daysOutMin != null && typeof s.daysOut === 'number' && s.daysOut < a.daysOutMin) return false;
+                        if (a.daysOutMax != null && typeof s.daysOut === 'number' && s.daysOut > a.daysOutMax) return false;
+                        return true;
+                    };
+                    const getFilterSig = (a) => {
+                        const parts = [];
+                        if (a.programVersions?.length) parts.push('pv:' + [...a.programVersions].sort().join(',').toLowerCase());
+                        if (a.listPreference?.length) parts.push('list:' + [...a.listPreference].sort().join(','));
+                        if (a.daysOutMin != null) parts.push('doMin:' + a.daysOutMin);
+                        if (a.daysOutMax != null) parts.push('doMax:' + a.daysOutMax);
+                        return parts.join('|');
+                    };
 
-                const assignedArr = new Array(taggedStudents.length).fill(null);
-                const processedSigs = new Set();
-                const sigGroups = new Map();
-                for (const a of advisorConfig.advisors) {
-                    if (!hasAnyFilter(a)) continue;
-                    const sig = getFilterSig(a);
-                    if (!sigGroups.has(sig)) sigGroups.set(sig, []);
-                    sigGroups.get(sig).push(a);
-                }
-                for (const a of advisorConfig.advisors) {
-                    if (!hasAnyFilter(a)) continue;
-                    const sig = getFilterSig(a);
-                    if (processedSigs.has(sig)) continue;
-                    processedSigs.add(sig);
-                    const group = sigGroups.get(sig);
-                    let rr = 0;
-                    for (let i = 0; i < taggedStudents.length; i++) {
-                        if (assignedArr[i]) continue;
-                        if (advisorMatches(group[0], taggedStudents[i])) {
-                            assignedArr[i] = group[rr % group.length];
-                            rr++;
+                    const assignedArr = new Array(taggedStudents.length).fill(null);
+                    const processedSigs = new Set();
+                    const sigGroups = new Map();
+                    for (const a of activeAdvisors) {
+                        if (!hasAnyFilter(a)) continue;
+                        const sig = getFilterSig(a);
+                        if (!sigGroups.has(sig)) sigGroups.set(sig, []);
+                        sigGroups.get(sig).push(a);
+                    }
+                    for (const a of activeAdvisors) {
+                        if (!hasAnyFilter(a)) continue;
+                        const sig = getFilterSig(a);
+                        if (processedSigs.has(sig)) continue;
+                        processedSigs.add(sig);
+                        const group = sigGroups.get(sig);
+                        let rr = 0;
+                        for (let i = 0; i < taggedStudents.length; i++) {
+                            if (assignedArr[i]) continue;
+                            if (advisorMatches(group[0], taggedStudents[i])) {
+                                assignedArr[i] = group[rr % group.length];
+                                rr++;
+                            }
                         }
                     }
-                }
-                let rrIdx = 0;
-                for (let i = 0; i < taggedStudents.length; i++) {
-                    if (!assignedArr[i]) {
-                        assignedArr[i] = advisorConfig.advisors[rrIdx % advisorConfig.advisors.length];
-                        rrIdx++;
+                    let rrIdx = 0;
+                    for (let i = 0; i < taggedStudents.length; i++) {
+                        if (!assignedArr[i]) {
+                            assignedArr[i] = activeAdvisors[rrIdx % activeAdvisors.length];
+                            rrIdx++;
+                        }
+                        advisorAssignmentMap.set(taggedStudents[i].originalIndex, {
+                            name: assignedArr[i].name,
+                            color: assignedArr[i].color
+                        });
                     }
-                    advisorAssignmentMap.set(taggedStudents[i].originalIndex, {
-                        name: assignedArr[i].name,
-                        color: assignedArr[i].color
-                    });
+                    console.log(`LDA: Auto-assigned ${taggedStudents.length} students across ${activeAdvisors.length} active advisors (${advisorConfig.advisors.length - activeAdvisors.length} excluded today)`);
                 }
-                console.log(`LDA: Auto-assigned ${taggedStudents.length} students across ${advisorConfig.advisors.length} advisors`);
             }
 
             // --- Detect Multi-Campus Mode ---
