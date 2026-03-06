@@ -677,7 +677,7 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
         .catch(() => { setDistribution([]); setDistLoading(false); });
     }, 300);
     return () => clearTimeout(timer);
-  }, [assignment.enabled, advisors, settings.daysOut, settings.includeFailingList, settings.includeAttendanceList, filterModalAdvisor]);
+  }, [assignment.enabled, assignment.evenSplit, advisors, settings.daysOut, settings.includeFailingList, settings.includeAttendanceList, filterModalAdvisor]);
 
   const updateAssignment = (updates) => {
     onSettingChange('advisorAssignment', { ...assignment, ...updates });
@@ -750,6 +750,34 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
             } inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200`}
           />
         </button>
+      </div>
+
+      {/* Even Split toggle (only visible when enabled) */}
+      <div className={`transition-all duration-300 overflow-hidden ${assignment.enabled ? 'opacity-100 max-h-20' : 'opacity-0 max-h-0'}`}>
+        <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-700 font-medium text-sm">Even Split</span>
+            <div className="group relative">
+              <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+              <div className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-52 p-2 bg-slate-800 text-white text-[10px] rounded-lg shadow-lg z-50 leading-relaxed">
+                Redistributes students so each advisor gets as close to the same number as possible. Moves students with the lowest days out first.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateAssignment({ evenSplit: !assignment.evenSplit })}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#145F82]/20 focus:ring-offset-1 ${
+              assignment.evenSplit ? 'bg-[#145F82]' : 'bg-slate-200'
+            }`}
+          >
+            <span
+              className={`${
+                assignment.evenSplit ? 'translate-x-6' : 'translate-x-1'
+              } inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200`}
+            />
+          </button>
+        </div>
       </div>
 
       {/* Advisor list (only visible when enabled) */}
