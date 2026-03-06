@@ -898,41 +898,63 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
 
 // --- Advisor Filter Modal ---
 
-function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onClose }) {
+function AdvisorFilterModal({ advisor: initialAdvisor, programVersions, pvLoading, onUpdate, onClose }) {
+  const [localAdvisor, setLocalAdvisor] = useState(initialAdvisor);
   const [editingModalName, setEditingModalName] = useState(false);
-  const [modalNameValue, setModalNameValue] = useState(advisor.name);
+  const [modalNameValue, setModalNameValue] = useState(initialAdvisor.name);
+
+  const localUpdate = (updates) => {
+    setLocalAdvisor(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleClose = () => {
+    // Compute diff and apply all changes at once on close
+    const changes = {};
+    for (const key of Object.keys(localAdvisor)) {
+      if (key === 'id' || key === 'color') continue;
+      if (JSON.stringify(localAdvisor[key]) !== JSON.stringify(initialAdvisor[key])) {
+        changes[key] = localAdvisor[key];
+      }
+    }
+    if (Object.keys(changes).length > 0) {
+      onUpdate(changes);
+    }
+    onClose();
+  };
 
   const confirmModalName = () => {
-    if (modalNameValue.trim() && modalNameValue.trim() !== advisor.name) {
-      onUpdate({ name: modalNameValue.trim() });
+    if (modalNameValue.trim()) {
+      localUpdate({ name: modalNameValue.trim() });
     }
     setEditingModalName(false);
   };
 
+  const advisor = localAdvisor;
+
   const togglePV = (pv) => {
     const pvs = advisor.programVersions || [];
-    onUpdate({ programVersions: pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv] });
+    localUpdate({ programVersions: pvs.includes(pv) ? pvs.filter(p => p !== pv) : [...pvs, pv] });
   };
 
   const toggleList = (listType) => {
     const prefs = advisor.listPreference || [];
-    onUpdate({ listPreference: prefs.includes(listType) ? prefs.filter(p => p !== listType) : [...prefs, listType] });
+    localUpdate({ listPreference: prefs.includes(listType) ? prefs.filter(p => p !== listType) : [...prefs, listType] });
   };
 
   const toggleDay = (dayKey) => {
     const days = advisor.excludeDays || [];
-    onUpdate({ excludeDays: days.includes(dayKey) ? days.filter(d => d !== dayKey) : [...days, dayKey] });
+    localUpdate({ excludeDays: days.includes(dayKey) ? days.filter(d => d !== dayKey) : [...days, dayKey] });
   };
 
   const setRange = (field, value) => {
     const parsed = value === '' ? null : Number(value);
-    onUpdate({ [field]: isNaN(parsed) ? null : parsed });
+    localUpdate({ [field]: isNaN(parsed) ? null : parsed });
   };
 
   const todayKey = getTodayDayKey();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
       <div
         className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200"
@@ -965,7 +987,7 @@ function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onC
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0">
+          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -1089,7 +1111,7 @@ function AdvisorFilterModal({ advisor, programVersions, pvLoading, onUpdate, onC
         {/* Footer */}
         <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 rounded-b-2xl">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-full bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors"
           >
             Done
