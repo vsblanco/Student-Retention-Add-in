@@ -1164,17 +1164,17 @@ async function applyEnrollGpaConditionalFormatting(context, sheet, headers) {
         // Clear existing conditional formats on the column to avoid duplicates
         columnRange.conditionalFormats.clearAll();
 
-        // Apply 3-color scale: Pastel Pink (0) -> Baby Blue (2) -> Light Green (4)
+        // Apply 3-color scale: Pink (0) -> Blue (2) -> Green (4)
         const conditionalFormat = columnRange.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
         const criteria = {
-            minimum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "0", color: "#FFB6C1" },
-            midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "2", color: "#ADD8E6" },
-            maximum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "4", color: "#90EE90" }
+            minimum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "0", color: "#FFC7CE" },
+            midpoint: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "2", color: "#9BC2E6" },
+            maximum: { type: Excel.ConditionalFormatColorCriterionType.number, formula: "4", color: "#C6EFCE" }
         };
         conditionalFormat.colorScale.criteria = criteria;
 
         await context.sync();
-        console.log("ImportFromExtension: Conditional formatting applied to Enroll GPA column (Pink 0 -> Blue 2 -> Green 4)");
+        console.log("ImportFromExtension: Conditional formatting applied to Enroll GPA column (Pink #FFC7CE -> Blue #9BC2E6 -> Green #C6EFCE)");
     } catch (error) {
         console.error("ImportFromExtension: Error applying Enroll GPA conditional formatting:", error);
         // Don't throw - formatting is not critical
