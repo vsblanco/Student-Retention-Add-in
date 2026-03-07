@@ -47,7 +47,9 @@ export const CONSTANTS = {
         attendance: ["attendance %", "attendance%", "attendancepercent", "attendance"],
         letterGrade: ["letter grade", "lettergrade", "Letter Grade", "LetterGrade"],
         lastCourseLetterGrade: ["last course letter grade", "lastcourselettergrade", "Last Course Letter Grade", "LastCourseLetterGrade"],
-        enrollGpa: ["enroll gpa", "enrollgpa", "Enroll GPA", "EnrollGPA", "Enroll Gpa"]
+        enrollGpa: ["enroll gpa", "enrollgpa", "Enroll GPA", "EnrollGPA", "Enroll Gpa"],
+        courseStart: ["course start", "coursestart", "Course Start", "CourseStart"],
+        courseEnd: ["course end", "courseend", "Course End", "CourseEnd"]
     }
 };
 

@@ -586,6 +586,9 @@ async function importMasterListFromExtension(payload) {
                 console.log(`ImportFromExtension: Preserved ${assignedUsersPreservedCount} Assigned users`);
             }
 
+            // Convert Excel serial date numbers in Course Start/End columns before writing
+            await applyCourseDateFormatting(context, sheet, masterHeaders, dataToWrite);
+
             // Write data and formulas in batches to avoid payload size limits
             const totalBatches = Math.ceil(dataToWrite.length / BATCH_SIZE);
             console.log(`ImportFromExtension: Writing ${dataToWrite.length} rows in ${totalBatches} batch(es) of up to ${BATCH_SIZE} rows...`);
@@ -1178,6 +1181,60 @@ async function applyEnrollGpaConditionalFormatting(context, sheet, headers) {
     } catch (error) {
         console.error("ImportFromExtension: Error applying Enroll GPA conditional formatting:", error);
         // Don't throw - formatting is not critical
+    }
+}
+
+/**
+ * Converts Excel serial date numbers to M/DD/YYYY formatted strings in the
+ * Course Start and Course End columns, then applies a date number format.
+ * @param {Excel.RequestContext} context The request context
+ * @param {Excel.Worksheet} sheet The worksheet to format
+ * @param {string[]} headers The header row values
+ * @param {Array[]} dataToWrite The data rows (mutated in place)
+ */
+async function applyCourseDateFormatting(context, sheet, headers, dataToWrite) {
+    try {
+        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
+        const courseStartColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseStart);
+        const courseEndColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseEnd);
+
+        const colIndices = [];
+        if (courseStartColIdx !== -1) colIndices.push({ idx: courseStartColIdx, name: "Course Start" });
+        if (courseEndColIdx !== -1) colIndices.push({ idx: courseEndColIdx, name: "Course End" });
+
+        if (colIndices.length === 0) {
+            return;
+        }
+
+        console.log(`ImportFromExtension: Formatting date columns: ${colIndices.map(c => c.name).join(', ')}`);
+
+        // Convert Excel serial numbers to M/DD/YYYY strings in the data
+        const excelSerialToDateString = (serial) => {
+            if (typeof serial !== 'number' || serial < 1) return serial;
+            // Excel serial: days since 1900-01-01 (with the 1900 leap year bug)
+            const date = new Date((serial - 25569) * 86400 * 1000);
+            if (isNaN(date.getTime())) return serial;
+            const month = date.getUTCMonth() + 1;
+            const day = date.getUTCDate();
+            const year = date.getUTCFullYear();
+            return `${month}/${String(day).padStart(2, '0')}/${year}`;
+        };
+
+        for (const col of colIndices) {
+            let convertedCount = 0;
+            for (let i = 0; i < dataToWrite.length; i++) {
+                const val = dataToWrite[i][col.idx];
+                if (typeof val === 'number' && val > 25569) {
+                    dataToWrite[i][col.idx] = excelSerialToDateString(val);
+                    convertedCount++;
+                }
+            }
+            if (convertedCount > 0) {
+                console.log(`ImportFromExtension: Converted ${convertedCount} serial dates in ${col.name} column`);
+            }
+        }
+    } catch (error) {
+        console.error("ImportFromExtension: Error formatting course date columns:", error);
     }
 }
 
