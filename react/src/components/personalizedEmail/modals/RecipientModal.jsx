@@ -237,9 +237,11 @@ export default function RecipientModal({
                                                     style={
                                                         student.reason === 'DNC Tag'
                                                             ? { backgroundColor: '#FEE2E2', color: '#991B1B' }
-                                                            : student.reason === 'Fill Color' && student.color
-                                                                ? { backgroundColor: student.color, color: '#374151' }
-                                                                : { backgroundColor: '#E5E7EB', color: '#4B5563' }
+                                                            : student.reason === 'Duplicate'
+                                                                ? { backgroundColor: '#FEF3C7', color: '#92400E' }
+                                                                : student.reason === 'Fill Color' && student.color
+                                                                    ? { backgroundColor: student.color, color: '#374151' }
+                                                                    : { backgroundColor: '#E5E7EB', color: '#4B5563' }
                                                     }
                                                 >
                                                     {student.reason}

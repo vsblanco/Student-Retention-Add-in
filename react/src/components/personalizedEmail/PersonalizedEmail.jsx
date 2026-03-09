@@ -586,7 +586,8 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         PersonalEmail: row[colIndices.PersonalEmail] ?? '',
                         Grade: row[colIndices.Grade] ?? '',
                         DaysOut: row[colIndices.DaysOut] ?? '',
-                        Assigned: row[colIndices.Assigned] ?? ''
+                        Assigned: row[colIndices.Assigned] ?? '',
+                        StudentIdentifier: studentIdentifier ?? ''
                     };
 
                     for (const param of customParameters) {
@@ -654,6 +655,34 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
                     includedStudents.push(student);
                 }
+
+                // Deduplicate by StudentIdentifier — if the same ID appears more than once,
+                // keep only the first occurrence and exclude the rest to prevent sending
+                // multiple emails to the same student.
+                const seenIdentifiers = new Map(); // identifier → first index
+                const duplicateIndices = new Set();
+                for (let idx = 0; idx < includedStudents.length; idx++) {
+                    const id = String(includedStudents[idx].StudentIdentifier || '').trim();
+                    if (!id) continue; // skip students with no identifier
+                    if (seenIdentifiers.has(id)) {
+                        duplicateIndices.add(idx);
+                    } else {
+                        seenIdentifiers.set(id, idx);
+                    }
+                }
+                if (duplicateIndices.size > 0) {
+                    // Remove duplicates from included (iterate in reverse to preserve indices)
+                    const removedStudents = [];
+                    for (let idx = includedStudents.length - 1; idx >= 0; idx--) {
+                        if (duplicateIndices.has(idx)) {
+                            removedStudents.push(includedStudents.splice(idx, 1)[0]);
+                        }
+                    }
+                    for (const s of removedStudents) {
+                        excludedStudents.push({ name: s.StudentName || `ID: ${s.StudentIdentifier}`, reason: 'Duplicate' });
+                    }
+                }
+
                 reportProgress();
             });
             return { included: includedStudents, excluded: excludedStudents };
