@@ -87,6 +87,7 @@ function StudentView({ onReady, user }) {
     const [selectedRowCount, setSelectedRowCount] = useState(1);
     const [selectedStudents, setSelectedStudents] = useState([]);
     const [hiddenRowCount, setHiddenRowCount] = useState(0);
+    const [selectedCellPhone, setSelectedCellPhone] = useState(null); // Direct phone from single cell selection
 
     // Track sheet version to force re-binding of listeners on sheet switch
     const [sheetVersion, setSheetVersion] = useState(0);
@@ -261,18 +262,27 @@ function StudentView({ onReady, user }) {
     let handlerRef = null;
     (async () => {
       try {
-        handlerRef = await onSelectionChanged(({ address, values, data, rowCount, allRows, hiddenRowCount }) => {
+        handlerRef = await onSelectionChanged(({ address, values, data, rowCount, allRows, hiddenRowCount, selectedCellValue, selectedCellHeader }) => {
           if (isHeaderRowAddress(address)) {
             setActiveStudentState({});
             setSelectedRowCount(1);
             setSelectedStudents([]);
             setHiddenRowCount(0);
+            setSelectedCellPhone(null);
             return;
           }
           setSelectedRowCount(rowCount || 1);
           setSelectedStudents(allRows || []);
           setHiddenRowCount(hiddenRowCount || 0);
           setActiveStudentState(prev => ({ ...prev, ...data }));
+
+          // Fast-path: if user selected a single cell in a Phone column (or a cell
+          // whose value looks like a phone number), expose it for quick dialing.
+          const PHONE_HEADERS = ['Phone', 'OtherPhone'];
+          const isPhoneColumn = selectedCellHeader && PHONE_HEADERS.includes(selectedCellHeader);
+          const cellStr = selectedCellValue != null ? String(selectedCellValue) : '';
+          const looksLikePhone = /^\+?[\d\s\-().]{7,}$/.test(cellStr.trim());
+          setSelectedCellPhone((isPhoneColumn || looksLikePhone) && cellStr.trim() ? cellStr.trim() : null);
         }, COLUMN_ALIASES);
 
         try {
@@ -371,10 +381,10 @@ function StudentView({ onReady, user }) {
       // Multiple students selected
       chromeExtensionService.sendSelectedStudents(selectedStudents);
     } else if (selectedRowCount === 1 && activeStudentState?.ID) {
-      // Single student selected
-      chromeExtensionService.sendSelectedStudents(activeStudentState);
+      // Single student selected — include directPhone if user clicked a phone cell
+      chromeExtensionService.sendSelectedStudents(activeStudentState, selectedCellPhone);
     }
-  }, [selectedRowCount, selectedStudents, activeStudentState]);
+  }, [selectedRowCount, selectedStudents, activeStudentState, selectedCellPhone]);
 
   // RENDER (User is guaranteed to be logged in by App.jsx)
   return (
