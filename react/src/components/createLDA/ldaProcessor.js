@@ -811,8 +811,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         if (csIsEmpty) {
                             courseStartMsg = 'Please check Grade Book. Missing current class';
                         } else if (String(csVal) !== String(courseStartModeValue)) {
-                            const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
-                            courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            // Compare numerically for dates; values less than mode = missing/wrong class
+                            const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
+                            const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
+                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                            } else {
+                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
+                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            }
                         }
                     }
 
@@ -1127,8 +1134,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         if (csIsEmpty) {
                             courseStartMsg = 'Please check Grade Book. Missing current class';
                         } else if (String(csVal) !== String(courseStartModeValue)) {
-                            const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
-                            courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            // Compare numerically for dates; values less than mode = missing/wrong class
+                            const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
+                            const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
+                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                            } else {
+                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
+                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            }
                         }
                     }
 
