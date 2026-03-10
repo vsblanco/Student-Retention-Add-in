@@ -1011,8 +1011,9 @@ class ChromeExtensionService {
   /**
    * Send selected student data to the Chrome extension
    * @param {Array|Object} students - Single student object or array of students
+   * @param {string|null} directPhone - Phone number from a directly-selected cell (fast-path)
    */
-  sendSelectedStudents(students) {
+  sendSelectedStudents(students, directPhone = null) {
     // Normalize to array format
     const studentArray = Array.isArray(students) ? students : [students];
 
@@ -1029,7 +1030,8 @@ class ChromeExtensionService {
       data: {
         students: payload,
         count: payload.length,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        directPhone: directPhone || null  // Phone number from single cell selection
       }
     };
 

@@ -292,7 +292,9 @@ export async function onSelectionChanged(callback, COLUMN_ALIASES = null) {
                             values: payload.values || [],
                             rowCount: payload.rowCount || 1,
                             allRows: payload.allRows || [],
-                            hiddenRowCount: payload.hiddenRowCount || 0
+                            hiddenRowCount: payload.hiddenRowCount || 0,
+                            selectedCellValue: payload.selectedCellValue ?? null,
+                            selectedCellHeader: payload.selectedCellHeader ?? null
                         });
                     });
                 } catch (err) {
@@ -331,7 +333,7 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         selRange = rangeOrAddress;
     }
     
-    selRange.load(["address", "rowIndex", "rowCount"]);
+    selRange.load(["address", "rowIndex", "rowCount", "columnIndex", "columnCount", "values"]);
 
     // Load usedRange headers and position
     const usedRange = worksheet.getUsedRangeOrNullObject();
@@ -457,6 +459,33 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
     const firstRelativeRowIdx = (selectedRowIndex + firstVisibleRowIdx) - usedRangeStartRow;
     const formulasRow = (usedRange.formulas && usedRange.formulas[firstRelativeRowIdx]) ? usedRange.formulas[firstRelativeRowIdx] : [];
 
+    // Detect single-cell selection: expose the raw cell value and its column header
+    // so consumers can fast-path when the user selects a phone number cell directly.
+    let selectedCellValue = null;
+    let selectedCellHeader = null;
+    const selColCount = selRange.columnCount || 1;
+    if (selectedRowCount === 1 && selColCount === 1 && selRange.values && selRange.values[0]) {
+        selectedCellValue = selRange.values[0][0] !== undefined ? selRange.values[0][0] : null;
+        // Determine the column header for this cell
+        const cellColIndex = (typeof selRange.columnIndex === "number") ? selRange.columnIndex - usedColIndex : -1;
+        if (cellColIndex >= 0 && cellColIndex < rawHeaders.length) {
+            // Resolve through aliases if available
+            const rawH = rawHeaders[cellColIndex];
+            if (COLUMN_ALIASES && typeof COLUMN_ALIASES === "object") {
+                const normH = normalize(rawH);
+                const match = Object.keys(COLUMN_ALIASES).find((canonical) => {
+                    if (!canonical) return false;
+                    if (normalize(canonical) === normH) return true;
+                    const aliases = Array.isArray(COLUMN_ALIASES[canonical]) ? COLUMN_ALIASES[canonical] : [];
+                    return aliases.some(a => normalize(a) === normH);
+                });
+                selectedCellHeader = match || rawH;
+            } else {
+                selectedCellHeader = rawH;
+            }
+        }
+    }
+
     return {
         success: true,
         address: selRange.address,
@@ -470,7 +499,9 @@ export async function loadRange(context, worksheet, rangeOrAddress, COLUMN_ALIAS
         values: firstRowValues,
         formulas: formulasRow,
         data: firstRowData,
-        allRows: allRows  // All visible (non-hidden) rows only
+        allRows: allRows,  // All visible (non-hidden) rows only
+        selectedCellValue,   // Raw value of the single selected cell (null if multi-cell)
+        selectedCellHeader   // Resolved header name for that cell (null if multi-cell)
     };
 }
 
