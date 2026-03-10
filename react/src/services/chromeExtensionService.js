@@ -1012,8 +1012,9 @@ class ChromeExtensionService {
    * Send selected student data to the Chrome extension
    * @param {Array|Object} students - Single student object or array of students
    * @param {string|null} directPhone - Phone number from a directly-selected cell (fast-path)
+   * @param {boolean} autoCall - Whether the extension should automatically initiate the call
    */
-  sendSelectedStudents(students, directPhone = null) {
+  sendSelectedStudents(students, directPhone = null, autoCall = false) {
     // Normalize to array format
     const studentArray = Array.isArray(students) ? students : [students];
 
@@ -1031,7 +1032,8 @@ class ChromeExtensionService {
         students: payload,
         count: payload.length,
         timestamp: new Date().toISOString(),
-        directPhone: directPhone || null  // Phone number from single cell selection
+        directPhone: directPhone || null,  // Phone number from single cell selection
+        autoCall: autoCall  // Auto-initiate call (used by ribbon call button)
       }
     };
 

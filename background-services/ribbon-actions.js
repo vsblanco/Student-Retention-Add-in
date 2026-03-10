@@ -72,8 +72,8 @@ export function createSendToCallQueue(extensionService) {
           return;
         }
 
-        extensionService.sendSelectedStudents(students);
-        console.log(`sendToCallQueue: Sent ${students.length} student(s) to call queue.`);
+        extensionService.sendSelectedStudents(students, null, true);
+        console.log(`sendToCallQueue: Sent ${students.length} student(s) to call queue (autoCall).`);
       });
     } catch (error) {
       console.error("Error in sendToCallQueue: " + error);
