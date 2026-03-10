@@ -6,6 +6,88 @@
  */
 import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
 
+/**
+ * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.
+ * Reads the currently selected row(s), extracts student data, and sends it
+ * to the Chrome Extension call queue via SRK_SELECTED_STUDENTS.
+ *
+ * @param {Object} extensionService - The chromeExtensionService singleton
+ * @returns {Function} The ribbon action handler
+ */
+export function createSendToCallQueue(extensionService) {
+  return async function sendToCallQueue(event) {
+    try {
+      await Excel.run(async (context) => {
+        const sheet = context.workbook.worksheets.getActiveWorksheet();
+        const selectedRange = context.workbook.getSelectedRange();
+        selectedRange.load("rowIndex, rowCount");
+        const usedRange = sheet.getUsedRange();
+        usedRange.load(["values", "rowIndex"]);
+
+        await context.sync();
+
+        const allValues = usedRange.values;
+        const headers = allValues[0].map(h => String(h || '').toLowerCase());
+
+        // Find required columns
+        const nameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
+        const idColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS);
+        const phoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone);
+        const otherPhoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.otherPhone);
+
+        if (nameColIndex === -1 && idColIndex === -1) {
+          console.error("sendToCallQueue: Could not find student name or ID columns.");
+          return;
+        }
+
+        const selectionStartRow = selectedRange.rowIndex;
+        const selectionRowCount = selectedRange.rowCount;
+        const dataStartRow = usedRange.rowIndex;
+
+        const students = [];
+
+        for (let i = 0; i < selectionRowCount; i++) {
+          const absoluteRow = selectionStartRow + i;
+          const relativeRow = absoluteRow - dataStartRow;
+
+          // Skip header row and rows outside used range
+          if (relativeRow <= 0) continue;
+          if (relativeRow >= allValues.length) continue;
+
+          const rowData = allValues[relativeRow];
+
+          const name = nameColIndex !== -1 ? String(rowData[nameColIndex] || '') : '';
+          const syStudentId = idColIndex !== -1 ? String(rowData[idColIndex] || '') : '';
+          const phone = phoneColIndex !== -1 ? String(rowData[phoneColIndex] || '') : '';
+          const otherPhone = otherPhoneColIndex !== -1 ? String(rowData[otherPhoneColIndex] || '') : '';
+
+          // Skip rows with no meaningful data
+          if (!name && !syStudentId) continue;
+
+          students.push({ name, syStudentId, phone, otherPhone });
+        }
+
+        if (students.length === 0) {
+          console.log("sendToCallQueue: No valid student rows in selection.");
+          return;
+        }
+
+        extensionService.sendSelectedStudents(students);
+        console.log(`sendToCallQueue: Sent ${students.length} student(s) to call queue.`);
+      });
+    } catch (error) {
+      console.error("Error in sendToCallQueue: " + error);
+      if (error instanceof OfficeExtension.Error) {
+        console.error("Debug info: " + JSON.stringify(error.debugInfo));
+      }
+    } finally {
+      if (event) {
+        event.completed();
+      }
+    }
+  };
+}
+
 let transferDialog = null;
 
 /**
