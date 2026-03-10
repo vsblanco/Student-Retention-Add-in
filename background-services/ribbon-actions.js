@@ -29,30 +29,46 @@ export function createSendToCallQueue(extensionService) {
         const allValues = usedRange.values;
         const headers = allValues[0].map(h => String(h || '').toLowerCase());
 
-        // Find required columns
+        // Find columns (all optional now)
         const nameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
         const idColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_ID_COLS);
         const phoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone);
         const otherPhoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.otherPhone);
 
-        if (nameColIndex === -1 && idColIndex === -1) {
-          console.error("sendToCallQueue: Could not find student name or ID columns.");
-          return;
-        }
+        // Check if selection is a single cell with a raw phone number (no structured columns needed)
+        const selColCount = selectedRange.columnCount || 1;
+        const selRowCount = selectedRange.rowCount || 1;
 
         // Detect if user selected a single cell in a phone column → use as directPhone
         let directPhone = null;
-        const selColCount = selectedRange.columnCount || 1;
-        const selRowCount = selectedRange.rowCount || 1;
         if (selRowCount === 1 && selColCount === 1) {
+          const cellValue = String(selectedRange.values?.[0]?.[0] || '').trim();
           const cellColIndex = selectedRange.columnIndex - usedRange.columnIndex;
+
           if (cellColIndex === phoneColIndex || cellColIndex === otherPhoneColIndex) {
-            const cellValue = selectedRange.values?.[0]?.[0];
-            if (cellValue != null && String(cellValue).trim()) {
-              directPhone = String(cellValue).trim();
+            // Cell is in a recognized phone column
+            if (cellValue) {
+              directPhone = cellValue;
               console.log(`sendToCallQueue: Detected directPhone from selected cell: ${directPhone}`);
             }
+          } else if (nameColIndex === -1 && idColIndex === -1 && cellValue) {
+            // No structured columns found — treat the cell value as a raw phone number
+            const cleaned = cellValue.replace(/[\s\-\(\)\.]/g, '');
+            if (/^\+?\d{7,15}$/.test(cleaned)) {
+              directPhone = cellValue;
+              const rawStudents = [{ name: '', syStudentId: '', phone: cellValue, otherPhone: '' }];
+              console.log(`sendToCallQueue: Raw phone number from cell: ${cellValue}`);
+
+              extensionService.sendSelectedStudents(rawStudents, directPhone, true);
+              console.log(`sendToCallQueue: Sent 1 student to call queue (autoCall).`);
+              return;
+            }
           }
+        }
+
+        if (nameColIndex === -1 && idColIndex === -1) {
+          console.error("sendToCallQueue: Could not find student name or ID columns.");
+          return;
         }
 
         const selectionStartRow = selectedRange.rowIndex;
