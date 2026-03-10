@@ -84,11 +84,20 @@ export function createSendToCallQueue(extensionService) {
           return;
         }
 
+        // Detect if the selection falls within a specific phone column
+        const selColStart = selectedRange.columnIndex - usedRange.columnIndex;
+        const selColEnd = selColStart + (selectedRange.columnCount || 1) - 1;
+        const selectedInOtherPhone = otherPhoneColIndex !== -1
+          && selColStart <= otherPhoneColIndex && otherPhoneColIndex <= selColEnd;
+        const selectedInPrimaryPhone = phoneColIndex !== -1
+          && selColStart <= phoneColIndex && phoneColIndex <= selColEnd;
+
         const selectionStartRow = selectedRange.rowIndex;
         const selectionRowCount = selectedRange.rowCount;
         const dataStartRow = usedRange.rowIndex;
 
         const students = [];
+        const seenPhones = new Set(); // prevent duplicate entries for the same student
 
         for (let i = 0; i < selectionRowCount; i++) {
           const relativeRow = (selectionStartRow + i) - dataStartRow;
@@ -102,10 +111,48 @@ export function createSendToCallQueue(extensionService) {
           const phone = phoneColIndex !== -1 ? String(rowData[phoneColIndex] || '') : '';
           const otherPhone = otherPhoneColIndex !== -1 ? String(rowData[otherPhoneColIndex] || '') : '';
 
-          // Skip rows with no phone number
-          if (!phone && !otherPhone) continue;
+          // Determine which number to dial based on selected column
+          let directPhone = '';
+          let isOtherContact = false;
 
-          students.push({ name, syStudentId: '', phone, otherPhone });
+          if (selectedInOtherPhone && !selectedInPrimaryPhone && otherPhone) {
+            // Selection is only in the other phone column
+            directPhone = otherPhone;
+            isOtherContact = true;
+          } else if (selectedInPrimaryPhone && !selectedInOtherPhone && phone) {
+            directPhone = phone;
+          }
+          // If selection spans both columns or neither, no directPhone override
+
+          // Skip rows with no phone number to dial
+          const dialNumber = directPhone || phone || otherPhone;
+          if (!dialNumber) continue;
+
+          // Deduplicate: don't queue the same phone number twice
+          // (prevents primary + other phone of the same student both being queued)
+          const normalizedDial = dialNumber.replace(/\D/g, '');
+          if (seenPhones.has(normalizedDial)) {
+            console.log(`sendToCallQueue: Skipping duplicate phone ${dialNumber} for "${name}"`);
+            continue;
+          }
+          seenPhones.add(normalizedDial);
+
+          // Also skip if this student's OTHER number is already queued
+          // (prevents same student appearing twice with different numbers)
+          const counterpart = isOtherContact ? phone : otherPhone;
+          if (counterpart) {
+            const normalizedCounterpart = counterpart.replace(/\D/g, '');
+            if (seenPhones.has(normalizedCounterpart)) {
+              console.log(`sendToCallQueue: Skipping "${name}" — already queued with other number`);
+              continue;
+            }
+          }
+
+          students.push({
+            name, syStudentId: '', phone, otherPhone,
+            ...(directPhone ? { directPhone } : {}),
+            ...(isOtherContact ? { isOtherContact: true } : {})
+          });
         }
 
         if (students.length === 0) {
