@@ -1023,7 +1023,9 @@ class ChromeExtensionService {
       name: student.StudentName || student.name || "",
       syStudentId: student.ID || student.syStudentId || "",
       phone: student.Phone || student.phone || "",
-      otherPhone: student.OtherPhone || student.otherPhone || ""
+      otherPhone: student.OtherPhone || student.otherPhone || "",
+      ...(student.directPhone ? { directPhone: student.directPhone } : {}),
+      ...(student.isOtherContact ? { isOtherContact: true } : {})
     }));
 
     const message = {
