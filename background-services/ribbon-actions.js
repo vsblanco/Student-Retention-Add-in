@@ -38,20 +38,34 @@ export function createSendToCallQueue(extensionService) {
           const cleaned = cellValue.replace(/[\s\-\(\)\.]/g, '');
 
           if (cellValue && /^\+?\d{7,15}$/.test(cleaned)) {
-            // Cell is a phone number — send directly, no column lookup needed
-            const nameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
-            let name = '';
+            // Cell is a phone number — send directly
+            const relativeRow = selectedRange.rowIndex - usedRange.rowIndex;
+            const cellColIndex = selectedRange.columnIndex - usedRange.columnIndex;
+            const rowData = (relativeRow > 0 && relativeRow < allValues.length)
+              ? allValues[relativeRow] : null;
 
-            // Try to grab the name from the same row if a name column exists
-            if (nameColIndex !== -1) {
-              const relativeRow = selectedRange.rowIndex - usedRange.rowIndex;
-              if (relativeRow > 0 && relativeRow < allValues.length) {
-                name = String(allValues[relativeRow][nameColIndex] || '');
-              }
+            const nameColIndex = findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS);
+            const phoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone);
+            const otherPhoneColIndex = findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.otherPhone);
+
+            const name = (rowData && nameColIndex !== -1) ? String(rowData[nameColIndex] || '') : '';
+
+            // Determine which phone field this cell belongs to
+            let phone = '';
+            let otherPhone = '';
+
+            if (cellColIndex === otherPhoneColIndex) {
+              // Selected cell is in the "other phone" column
+              otherPhone = cellValue;
+              phone = (rowData && phoneColIndex !== -1) ? String(rowData[phoneColIndex] || '') : '';
+            } else {
+              // Selected cell is in the primary phone column (or unknown column)
+              phone = cellValue;
+              otherPhone = (rowData && otherPhoneColIndex !== -1) ? String(rowData[otherPhoneColIndex] || '') : '';
             }
 
             extensionService.sendSelectedStudents(
-              [{ name, syStudentId: '', phone: cellValue, otherPhone: '' }],
+              [{ name, syStudentId: '', phone, otherPhone }],
               cellValue,
               true
             );
