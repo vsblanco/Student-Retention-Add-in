@@ -20,9 +20,9 @@ export function createSendToCallQueue(extensionService) {
       await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const selectedRange = context.workbook.getSelectedRange();
-        selectedRange.load("rowIndex, rowCount");
+        selectedRange.load("rowIndex, rowCount, columnIndex, columnCount, values");
         const usedRange = sheet.getUsedRange();
-        usedRange.load(["values", "rowIndex"]);
+        usedRange.load(["values", "rowIndex", "columnIndex"]);
 
         await context.sync();
 
@@ -38,6 +38,21 @@ export function createSendToCallQueue(extensionService) {
         if (nameColIndex === -1 && idColIndex === -1) {
           console.error("sendToCallQueue: Could not find student name or ID columns.");
           return;
+        }
+
+        // Detect if user selected a single cell in a phone column → use as directPhone
+        let directPhone = null;
+        const selColCount = selectedRange.columnCount || 1;
+        const selRowCount = selectedRange.rowCount || 1;
+        if (selRowCount === 1 && selColCount === 1) {
+          const cellColIndex = selectedRange.columnIndex - usedRange.columnIndex;
+          if (cellColIndex === phoneColIndex || cellColIndex === otherPhoneColIndex) {
+            const cellValue = selectedRange.values?.[0]?.[0];
+            if (cellValue != null && String(cellValue).trim()) {
+              directPhone = String(cellValue).trim();
+              console.log(`sendToCallQueue: Detected directPhone from selected cell: ${directPhone}`);
+            }
+          }
         }
 
         const selectionStartRow = selectedRange.rowIndex;
@@ -72,7 +87,7 @@ export function createSendToCallQueue(extensionService) {
           return;
         }
 
-        extensionService.sendSelectedStudents(students, null, true);
+        extensionService.sendSelectedStudents(students, directPhone, true);
         console.log(`sendToCallQueue: Sent ${students.length} student(s) to call queue (autoCall).`);
       });
     } catch (error) {
