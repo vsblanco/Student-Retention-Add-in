@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import {
   IdCardLanyard,
-  Phone,
   Mail,
   CalendarDays,
   Briefcase,
@@ -14,6 +13,7 @@ import {
   Lock,
   Activity
 } from 'lucide-react';
+import callIcon from '../../../assets/icons/call-icon.png';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatExcelDate } from '../../utility/Conversion';
 
@@ -211,7 +211,7 @@ const style = `
 `;
 
 // Updated CopyField to accept 'displayValue' (React Node) separate from 'value' (Clipboard Text)
-function CopyField({ label, value, displayValue, id, Icon }) {
+function CopyField({ label, value, displayValue, id, Icon, iconSrc }) {
   const [copied, setCopied] = useState(false);
 
   // If there is no value, omit the component entirely from the view
@@ -252,7 +252,11 @@ function CopyField({ label, value, displayValue, id, Icon }) {
             transition: 'opacity 0.7s ease'
           }}
         />
-        {Icon && <Icon size={18} color="#6b7280" style={{ flexShrink: 0 }} />}
+        {iconSrc ? (
+          <img src={iconSrc} alt="" style={{ width: 18, height: 18, flexShrink: 0 }} />
+        ) : Icon ? (
+          <Icon size={18} color="#6b7280" style={{ flexShrink: 0 }} />
+        ) : null}
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: '0.75rem', color: '#6b7280' }}>{label}</label>
           <p style={{ fontWeight: 600, color: '#1f2937', margin: 0 }}>
@@ -350,13 +354,13 @@ function StudentDetails({ student }) {
                 label="Primary Phone"
                 value={filterPhone(student.Phone)}
                 id="copy-primary-phone"
-                Icon={Phone}
+                iconSrc={callIcon}
               />
               <CopyField
                 label="Other Phone"
                 value={filterPhone(student.OtherPhone)}
                 id="copy-other-phone"
-                Icon={Phone}
+                iconSrc={callIcon}
               />
               <CopyField
                 label="Student Email"
