@@ -370,6 +370,45 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             if (daysOutIdx === -1) throw new Error("Could not find 'Days Out' column in Master List. Check Settings.");
 
+            // Look for "Course Start" column
+            let courseStartIdx = getColIndex('Course Start');
+            if (courseStartIdx === -1) {
+                courseStartIdx = headers.findIndex(h => {
+                    const stripped = String(h || '').trim().toLowerCase().replace(/\s+/g, '');
+                    return stripped === 'coursestart' || stripped === 'coursestartdate' || stripped === 'coursebegindate';
+                });
+            }
+
+            // Compute Course Start mode (most frequent value = baseline)
+            let courseStartModeValue = null;
+            if (courseStartIdx !== -1) {
+                const freqMap = new Map();
+                for (let i = 1; i < masterValues.length; i++) {
+                    const val = masterValues[i][courseStartIdx];
+                    if (val !== null && val !== undefined && val !== '') {
+                        const key = String(val);
+                        freqMap.set(key, (freqMap.get(key) || 0) + 1);
+                    }
+                }
+                let maxCount = 0;
+                let modeKey = null;
+                for (const [key, count] of freqMap) {
+                    if (count > maxCount) {
+                        maxCount = count;
+                        modeKey = key;
+                    }
+                }
+                if (modeKey !== null) {
+                    for (let i = 1; i < masterValues.length; i++) {
+                        if (String(masterValues[i][courseStartIdx]) === modeKey) {
+                            courseStartModeValue = masterValues[i][courseStartIdx];
+                            break;
+                        }
+                    }
+                    console.log(`LDA: Course Start baseline (mode): ${typeof courseStartModeValue === 'number' ? formatExcelDate(courseStartModeValue) : courseStartModeValue} (${maxCount} occurrences)`);
+                }
+            }
+
             if (onProgress) onProgress('read', 'completed');
 
 
@@ -756,12 +795,34 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const formulas = [];
                     let rowColor = null;
                     let cellHighlights = [];
+                    let comments = [];
                     const sId = rowObj.values[studentIdIdx];
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
                     const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
                     const isRetentionActive = !!retentionMsg;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
+
+                    // --- Course Start Baseline Check ---
+                    let courseStartMsg = null;
+                    if (courseStartIdx !== -1 && courseStartModeValue !== null) {
+                        const csVal = rowObj.values[courseStartIdx];
+                        const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
+                        if (csIsEmpty) {
+                            courseStartMsg = 'Please check Grade Book. Missing current class';
+                        } else if (String(csVal) !== String(courseStartModeValue)) {
+                            // Compare numerically for dates; values less than mode = missing/wrong class
+                            const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
+                            const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
+                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                            } else {
+                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
+                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            }
+                        }
+                    }
+
                     let partialRowColor = "#FFEDD5";
                     if (retentionMsg && retentionMsg.includes("DNC")) {
                         partialRowColor = "#FFC7CE";
@@ -799,8 +860,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 cellHighlights.push({ colIndex: colOutIdx, color: advisorInfo.color });
                             }
                         }
-                        if (colConfig.name === 'Outreach' && retentionMsg) {
-                            val = retentionMsg;
+                        if (colConfig.name === 'Outreach') {
+                            if (retentionMsg) {
+                                val = retentionMsg;
+                            }
+                            if (courseStartMsg) {
+                                if (!retentionMsg || !retentionMsg.includes('Do not contact')) {
+                                    val = courseStartMsg;
+                                }
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFFFCC" });
+                                comments.push({ colIndex: colOutIdx, text: courseStartMsg });
+                            }
                         }
                         // --- DNC Highlight (Highest Priority - Phone Columns) ---
                         // Only strikethrough the specific phone column matching the DNC type.
@@ -821,7 +891,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         cells.push(val);
                         formulas.push(form);
                     });
-                    return { cells, formulas, rowColor, cellHighlights };
+                    return { cells, formulas, rowColor, cellHighlights, comments };
                 };
 
                 // --- Process each campus ---
@@ -1045,6 +1115,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const formulas = [];
                     let rowColor = null;
                     let cellHighlights = [];
+                    let comments = [];
 
                     const sId = rowObj.values[studentIdIdx];
 
@@ -1054,6 +1125,26 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // 2. Generate Retention Message using helper
                     const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
+
+                    // 2b. Course Start Baseline Check
+                    let courseStartMsg = null;
+                    if (courseStartIdx !== -1 && courseStartModeValue !== null) {
+                        const csVal = rowObj.values[courseStartIdx];
+                        const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
+                        if (csIsEmpty) {
+                            courseStartMsg = 'Please check Grade Book. Missing current class';
+                        } else if (String(csVal) !== String(courseStartModeValue)) {
+                            // Compare numerically for dates; values less than mode = missing/wrong class
+                            const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
+                            const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
+                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                            } else {
+                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
+                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                            }
+                        }
+                    }
 
                     // 3. Determine Highlighting Logic
                     const isLda = sId && ldaFollowUpMap.has(sId);
@@ -1115,8 +1206,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 cellHighlights.push({ colIndex: colOutIdx, color: advisorInfo.color });
                             }
                         }
-                        if (colConfig.name === 'Outreach' && retentionMsg) {
-                            val = retentionMsg;
+                        if (colConfig.name === 'Outreach') {
+                            if (retentionMsg) {
+                                val = retentionMsg;
+                            }
+                            if (courseStartMsg) {
+                                if (!retentionMsg || !retentionMsg.includes('Do not contact')) {
+                                    val = courseStartMsg;
+                                }
+                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFFFCC" });
+                                comments.push({ colIndex: colOutIdx, text: courseStartMsg });
+                            }
                         }
 
                         // --- DNC Highlight (Highest Priority - Phone Columns) ---
@@ -1140,7 +1240,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         formulas.push(form);
                     });
 
-                    return { cells, formulas, rowColor, cellHighlights };
+                    return { cells, formulas, rowColor, cellHighlights, comments };
                 };
 
                 // 7b. Write Main LDA Table
@@ -1438,6 +1538,35 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         formatBatch++;
         if (onBatchProgress) {
             onBatchProgress(formatBatch, totalFormatBatches, 'formatting');
+        }
+    }
+
+    // --- STEP 6: Apply Excel Comments for Course Start anomalies ---
+    const commentOps = [];
+    for (let idx = 0; idx < rowCount; idx++) {
+        const r = processedRows[idx];
+        if (r.comments && r.comments.length > 0) {
+            for (const c of r.comments) {
+                commentOps.push({
+                    row: startRow + 1 + idx,
+                    col: c.colIndex,
+                    text: c.text
+                });
+            }
+        }
+    }
+    if (commentOps.length > 0) {
+        try {
+            for (let i = 0; i < commentOps.length; i += FORMAT_BATCH_SIZE) {
+                const batch = commentOps.slice(i, i + FORMAT_BATCH_SIZE);
+                for (const op of batch) {
+                    const cellRange = sheet.getRangeByIndexes(op.row, op.col, 1, 1);
+                    context.workbook.comments.add(cellRange, op.text);
+                }
+                await context.sync();
+            }
+        } catch (e) {
+            console.warn('Excel comments API not supported or failed, skipping comments:', e.message);
         }
     }
 }
