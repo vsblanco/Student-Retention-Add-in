@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Master List Not Found</title>
+    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background: #fafafa;
+            color: #323130;
+        }
+        .container {
+            text-align: center;
+            padding: 32px;
+            max-width: 400px;
+        }
+        .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        p {
+            font-size: 14px;
+            color: #605e5c;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        button {
+            padding: 8px 20px;
+            font-size: 14px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            border: 1px solid transparent;
+        }
+        .btn-primary {
+            background: #0078d4;
+            color: #fff;
+            border-color: #0078d4;
+        }
+        .btn-primary:hover { background: #106ebe; }
+        .btn-secondary {
+            background: #fff;
+            color: #323130;
+            border-color: #8a8886;
+        }
+        .btn-secondary:hover { background: #f3f2f1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">&#128203;</div>
+        <h2>Master List Not Found</h2>
+        <p>
+            Data was received from the Chrome extension, but no
+            <strong>Master List</strong> sheet exists in this workbook.
+            Would you like to create one and import the data?
+        </p>
+        <div class="buttons">
+            <button class="btn-primary" id="btnCreate">Create Master List</button>
+            <button class="btn-secondary" id="btnCancel">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        Office.onReady(function () {
+            document.getElementById('btnCreate').addEventListener('click', function () {
+                Office.context.ui.messageParent(JSON.stringify({ type: 'createMasterList' }));
+            });
+            document.getElementById('btnCancel').addEventListener('click', function () {
+                Office.context.ui.messageParent(JSON.stringify({ type: 'cancel' }));
+            });
+        });
+    </script>
+</body>
+</html>
