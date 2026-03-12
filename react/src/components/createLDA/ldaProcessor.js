@@ -8,6 +8,9 @@
  *         API calls from thousands to hundreds per batch. This dramatically speeds up formatting.
  */
 
+import { getWorkbookSettings } from '../utility/getSettings';
+import { defaultColumns } from '../settings/DefaultSettings';
+
 // Hardcoded sheet names (unless these are also settings, usually they are static)
 const SHEET_NAMES = {
     MASTER_LIST: "Master List",
@@ -166,12 +169,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
         // --- STEP 1: Validate Settings & Environment ---
         if (onProgress) onProgress('validate', 'active');
         
-        let workbookSettings = {};
-        if (typeof Office !== 'undefined' && Office.context && Office.context.document) {
-             const settings = Office.context.document.settings.get('workbookSettings');
-             if (settings && typeof settings === 'object') {
-                 workbookSettings = settings;
-             }
+        const workbookSettings = getWorkbookSettings(defaultColumns);
+
+        // If columns were auto-initialized from defaults, persist them so Settings tab stays in sync
+        if (typeof Office !== 'undefined' && Office.context && Office.context.document && Office.context.document.settings) {
+            const existing = Office.context.document.settings.get('workbookSettings');
+            if (!existing || !Array.isArray(existing.columns) || existing.columns.length === 0) {
+                Office.context.document.settings.set('workbookSettings', workbookSettings);
+                Office.context.document.settings.saveAsync(() => {});
+            }
         }
 
         const settings = {
@@ -181,13 +187,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             includeLDATag: userOverrides.includeLDATag ?? true,
             includeDNCTag: userOverrides.includeDNCTag ?? true,
             sheetNameMode: userOverrides.sheetNameMode ?? 'date',
-            columns: workbookSettings.columns || [],
+            columns: workbookSettings.columns,
             advisorAssignment: userOverrides.advisorAssignment ?? { enabled: false, advisors: [] }
         };
-
-        if (settings.columns.length === 0) {
-            throw new Error("No column settings found. Please configure columns in the Settings tab first.");
-        }
 
         await Excel.run(async (context) => {
             const sheets = context.workbook.worksheets;
