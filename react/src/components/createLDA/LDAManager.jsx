@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X } from 'lucide-react';
-import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution } from './ldaProcessor';
+import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution, checkMissingLDAColumns, addColumnsToMasterList } from './ldaProcessor';
 
 // --- CONFIGURATION: Steps matching the processor logic ---
 const PROCESS_STEPS = [
@@ -57,6 +57,10 @@ export default function CreateLDAManager({ onReady } = {}) {
   // { campusName: 'pending' | 'active' | 'completed' }
   const [campusStatuses, setCampusStatuses] = useState({});
   const [isMultiCampus, setIsMultiCampus] = useState(false);
+
+  // State for Missing Columns Modal
+  // { show: boolean, outreach: boolean, assigned: boolean, pendingPayload: object|null }
+  const [missingColumnsModal, setMissingColumnsModal] = useState({ show: false, outreach: false, assigned: false });
 
   // Load workbook settings on mount
   useEffect(() => {
@@ -144,6 +148,38 @@ export default function CreateLDAManager({ onReady } = {}) {
     } catch (e) {
       console.error('Failed to save advisor assignment:', e);
     }
+  };
+
+  // --- Pre-check for missing Outreach/Assigned columns ---
+  const handlePreCheck = async () => {
+    try {
+      const missing = await checkMissingLDAColumns();
+      if (missing.outreach || missing.assigned) {
+        setMissingColumnsModal({ show: true, outreach: missing.outreach, assigned: missing.assigned });
+        return; // Wait for user decision via modal
+      }
+    } catch (e) {
+      console.warn('Column pre-check failed, proceeding anyway:', e);
+    }
+    handleCreateLDA();
+  };
+
+  const handleMissingColumnsConfirm = async () => {
+    const columnsToAdd = [];
+    if (missingColumnsModal.outreach) columnsToAdd.push('Outreach');
+    if (missingColumnsModal.assigned) columnsToAdd.push('Assigned');
+    setMissingColumnsModal({ show: false, outreach: false, assigned: false });
+    try {
+      await addColumnsToMasterList(columnsToAdd);
+    } catch (e) {
+      console.error('Failed to add columns:', e);
+    }
+    handleCreateLDA();
+  };
+
+  const handleMissingColumnsDismiss = () => {
+    setMissingColumnsModal({ show: false, outreach: false, assigned: false });
+    handleCreateLDA();
   };
 
   // --- REAL LOGIC: Trigger the Processor ---
@@ -265,7 +301,7 @@ export default function CreateLDAManager({ onReady } = {}) {
                 <button
                   type="button"
                   className="w-full sm:w-auto bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-6 py-2.5 rounded-full shadow-lg shadow-[#145F82]/20 transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2"
-                  onClick={handleCreateLDA}
+                  onClick={handlePreCheck}
                 >
                   Create LDA
                 </button>
@@ -919,6 +955,56 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
           onUpdate={(updates) => updateAdvisor(filterModalAdvisor.id, updates)}
           onClose={() => setFilterModalAdvisor(null)}
         />
+      )}
+
+      {/* Missing Columns Modal */}
+      {missingColumnsModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-800">Missing Columns</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">
+              The following columns were not found on the Master List:
+            </p>
+            <ul className="text-sm text-slate-700 mb-4 space-y-1 pl-4">
+              {missingColumnsModal.outreach && (
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  <span><strong>Outreach</strong> — used for retention comments</span>
+                </li>
+              )}
+              {missingColumnsModal.assigned && (
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  <span><strong>Assigned</strong> — used for advisor assignments</span>
+                </li>
+              )}
+            </ul>
+            <p className="text-sm text-slate-500 mb-5">
+              Would you like to add {missingColumnsModal.outreach && missingColumnsModal.assigned ? 'them' : 'it'} to the Master List?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                onClick={handleMissingColumnsDismiss}
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-white bg-[#145F82] hover:bg-[#0f4b66] rounded-lg transition-colors"
+                onClick={handleMissingColumnsConfirm}
+              >
+                Add & Continue
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

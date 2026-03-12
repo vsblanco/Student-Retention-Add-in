@@ -1574,6 +1574,80 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
 }
 
 /**
+ * Checks if key LDA columns (Outreach, Assigned) are missing from the Master List headers.
+ * Uses the same space-insensitive matching as the main LDA processor.
+ * @returns {Promise<{outreach: boolean, assigned: boolean}>} Object indicating which columns are missing.
+ */
+export async function checkMissingLDAColumns() {
+    const result = { outreach: false, assigned: false };
+    try {
+        const workbookSettings = getWorkbookSettings(defaultColumns);
+        const columns = workbookSettings.columns;
+
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const hasMasterList = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+            if (!hasMasterList) return;
+
+            const masterSheet = sheets.getItem(SHEET_NAMES.MASTER_LIST);
+            const headerRange = masterSheet.getRangeByIndexes(0, 0, 1, 100);
+            headerRange.load("values");
+            await context.sync();
+
+            const headers = headerRange.values[0].filter(h => h !== null && h !== "");
+            const stripStr = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+
+            const findCol = (settingName) => {
+                const targetStripped = stripStr(settingName);
+                const colConfig = columns.find(c => stripStr(c.name) === targetStripped);
+                let aliases = [];
+                if (colConfig && Array.isArray(colConfig.alias)) {
+                    aliases = colConfig.alias;
+                }
+                const candidates = [settingName, ...aliases];
+                return candidates.some(cand => headers.some(h => stripStr(h) === stripStr(cand)));
+            };
+
+            result.outreach = !findCol('Outreach');
+            result.assigned = !findCol('Assigned');
+        });
+    } catch (error) {
+        console.error("checkMissingLDAColumns: Error checking columns:", error);
+    }
+    return result;
+}
+
+/**
+ * Adds missing columns to the Master List by appending them after the last used column.
+ * @param {string[]} columnNames - Array of column header names to add (e.g., ['Outreach', 'Assigned']).
+ * @returns {Promise<void>}
+ */
+export async function addColumnsToMasterList(columnNames) {
+    if (!columnNames || columnNames.length === 0) return;
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.getItem(SHEET_NAMES.MASTER_LIST);
+            const usedRange = sheet.getUsedRange();
+            usedRange.load("columnCount");
+            await context.sync();
+
+            const startCol = usedRange.columnCount;
+            const headerRange = sheet.getRangeByIndexes(0, startCol, 1, columnNames.length);
+            headerRange.values = [columnNames];
+            await context.sync();
+
+            console.log(`addColumnsToMasterList: Added columns [${columnNames.join(', ')}] at index ${startCol}`);
+        });
+    } catch (error) {
+        console.error("addColumnsToMasterList: Error adding columns:", error);
+        throw error;
+    }
+}
+
+/**
  * Detect unique campus values from the Master List.
  * Reads only the Campus column in batches for efficiency.
  * @returns {Promise<string[]>} Array of unique campus names, sorted alphabetically
