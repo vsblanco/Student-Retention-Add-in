@@ -170,6 +170,65 @@ async function importMissingAssignments(studentsWithAssignments) {
 }
 
 /**
+ * Shows a dialog prompting the user to create a Master List sheet when one doesn't exist.
+ * If the user confirms, creates the sheet and retries the import.
+ * @param {object} payload - The original import payload to retry after sheet creation.
+ */
+function showMissingMasterListDialog(payload) {
+    const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/background-services/missing-masterlist-dialog.html';
+
+    Office.context.ui.displayDialogAsync(
+        dialogUrl,
+        { height: 40, width: 35, displayInIframe: true },
+        function (asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                console.error("MissingMasterList: Dialog failed to open:", asyncResult.error.message);
+                return;
+            }
+            const dialog = asyncResult.value;
+            dialog.addEventHandler(Office.EventType.DialogMessageReceived, async (arg) => {
+                const message = JSON.parse(arg.message);
+                dialog.close();
+                if (message.type === 'createMasterList') {
+                    console.log("MissingMasterList: User chose to create Master List sheet.");
+                    await createMasterListAndImport(payload);
+                } else {
+                    console.log("MissingMasterList: User cancelled. Import aborted.");
+                }
+            });
+        }
+    );
+}
+
+/**
+ * Creates a blank Master List sheet and then retries the import.
+ * @param {object} payload - The original import payload.
+ */
+async function createMasterListAndImport(payload) {
+    try {
+        await Excel.run(async (context) => {
+            const sheet = context.workbook.worksheets.add(CONSTANTS.MASTER_LIST_SHEET);
+            // Write the incoming headers as the first row so the import has something to work with
+            if (payload.headers && payload.headers.length > 0) {
+                const headerRange = sheet.getRangeByIndexes(0, 0, 1, payload.headers.length);
+                headerRange.values = [payload.headers];
+            }
+            sheet.activate();
+            await context.sync();
+            console.log("MissingMasterList: Master List sheet created successfully.");
+        });
+
+        // Retry the import now that the sheet exists
+        await importMasterListFromExtension(payload);
+    } catch (error) {
+        console.error("MissingMasterList: Error creating Master List sheet:", error);
+        if (error instanceof OfficeExtension.Error) {
+            console.error("MissingMasterList: Debug info:", JSON.stringify(error.debugInfo));
+        }
+    }
+}
+
+/**
  * Imports master list data received from the Chrome extension
  * @param {object} payload - The data payload from the extension
  * @param {string[]} payload.headers - Array of column headers
@@ -197,7 +256,8 @@ async function importMasterListFromExtension(payload) {
 
             const masterListSheet = sheets.items.find(s => s.name === CONSTANTS.MASTER_LIST_SHEET);
             if (!masterListSheet) {
-                console.error("ImportFromExtension: Master List sheet not found. Import aborted.");
+                console.log("ImportFromExtension: Master List sheet not found. Prompting user to create one.");
+                showMissingMasterListDialog(payload);
                 return;
             }
 
