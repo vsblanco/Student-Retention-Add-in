@@ -477,6 +477,56 @@ export default function CreateLDAManager({ onReady } = {}) {
            </section>
         )}
       </div>
+
+      {/* Missing Columns Modal */}
+      {missingColumnsModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-800">Missing Columns</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">
+              The following columns were not found on the Master List:
+            </p>
+            <ul className="text-sm text-slate-700 mb-4 space-y-1 pl-4">
+              {missingColumnsModal.outreach && (
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  <span><strong>Outreach</strong> — used for retention comments</span>
+                </li>
+              )}
+              {missingColumnsModal.assigned && (
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                  <span><strong>Assigned</strong> — used for advisor assignments</span>
+                </li>
+              )}
+            </ul>
+            <p className="text-sm text-slate-500 mb-5">
+              Would you like to add {missingColumnsModal.outreach && missingColumnsModal.assigned ? 'them' : 'it'} to the Master List?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                onClick={handleMissingColumnsDismiss}
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-white bg-[#145F82] hover:bg-[#0f4b66] rounded-lg transition-colors"
+                onClick={handleMissingColumnsConfirm}
+              >
+                Add & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -957,55 +1007,6 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
         />
       )}
 
-      {/* Missing Columns Modal */}
-      {missingColumnsModal.show && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-amber-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-slate-800">Missing Columns</h3>
-            </div>
-            <p className="text-sm text-slate-600 mb-3">
-              The following columns were not found on the Master List:
-            </p>
-            <ul className="text-sm text-slate-700 mb-4 space-y-1 pl-4">
-              {missingColumnsModal.outreach && (
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                  <span><strong>Outreach</strong> — used for retention comments</span>
-                </li>
-              )}
-              {missingColumnsModal.assigned && (
-                <li className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                  <span><strong>Assigned</strong> — used for advisor assignments</span>
-                </li>
-              )}
-            </ul>
-            <p className="text-sm text-slate-500 mb-5">
-              Would you like to add {missingColumnsModal.outreach && missingColumnsModal.assigned ? 'them' : 'it'} to the Master List?
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                onClick={handleMissingColumnsDismiss}
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-medium text-white bg-[#145F82] hover:bg-[#0f4b66] rounded-lg transition-colors"
-                onClick={handleMissingColumnsConfirm}
-              >
-                Add & Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
