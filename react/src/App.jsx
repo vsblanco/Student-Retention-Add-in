@@ -5,6 +5,7 @@ import About from './components/about/About.jsx';
 import Settings from './components/settings/Settings.jsx';
 import LDAManager from './components/createLDA/LDAManager.jsx';
 import PersonalizedEmail from './components/personalizedEmail/PersonalizedEmail.jsx';
+import ReportGeneration from './components/reportGeneration/ReportGeneration.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
 import chromeExtensionService from './services/chromeExtensionService.js'; // Chrome Extension Service
 import { ToastContainer, Slide } from 'react-toastify';
@@ -155,6 +156,8 @@ case 'about':
         return <LDAManager user={currentUser} onReady={handleFeatureReady} />;
       case 'personalized-email':
         return <PersonalizedEmail user={currentUser} accessToken={accessToken} onReady={handleFeatureReady} />;
+      case 'report-generation':
+        return <ReportGeneration user={currentUser} onReady={handleFeatureReady} />;
       case 'student-view':
       default:
         // Pass user and ready-handler to StudentView
