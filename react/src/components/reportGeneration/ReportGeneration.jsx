@@ -6,16 +6,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, BookOpen, AlertTriangle, MapPin, Award, Trophy, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import MasterListReport from './MasterListReport.jsx';
 
 const REPORTS = [
-  { id: 'master-list', label: 'Master List', icon: FileSpreadsheet, enabled: true },
-  { id: 'lda', label: 'LDA', icon: BookOpen, enabled: false },
-  { id: 'failing', label: 'Failing', icon: AlertTriangle, enabled: false },
-  { id: 'attendance', label: 'On-Ground Attendance', icon: MapPin, enabled: false },
-  { id: 'deans', label: "Dean's", icon: Award, enabled: false },
-  { id: 'presidents', label: "President's", icon: Trophy, enabled: false },
+  { id: 'master-list', label: 'Master List', enabled: true },
+  { id: 'lda', label: 'LDA', enabled: false },
+  { id: 'failing', label: 'Failing', enabled: false },
+  { id: 'attendance', label: 'On-Ground Attendance', enabled: false },
+  { id: 'deans-presidents', label: "Dean's & President's", enabled: false },
 ];
 
 export default function ReportGeneration({ user, onReady }) {
@@ -47,9 +46,7 @@ export default function ReportGeneration({ user, onReady }) {
 
       {/* Report List */}
       <section className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {REPORTS.map((report) => {
-          const Icon = report.icon;
-          return (
+        {REPORTS.map((report) => (
             <button
               key={report.id}
               type="button"
@@ -61,11 +58,6 @@ export default function ReportGeneration({ user, onReady }) {
                   : 'border-slate-50 bg-slate-50/50 cursor-not-allowed'
                 }`}
             >
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                report.enabled ? 'bg-[#145F82]/10 text-[#145F82]' : 'bg-slate-100 text-slate-300'
-              }`}>
-                <Icon className="w-[18px] h-[18px]" />
-              </div>
               <span className={`flex-1 text-sm font-medium ${
                 report.enabled ? 'text-slate-700' : 'text-slate-300'
               }`}>
@@ -75,8 +67,7 @@ export default function ReportGeneration({ user, onReady }) {
                 <ChevronRight className="w-4 h-4 text-slate-300" />
               )}
             </button>
-          );
-        })}
+        ))}
       </section>
     </div>
   );
