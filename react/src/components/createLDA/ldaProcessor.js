@@ -834,10 +834,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let courseStartMsg = null;
                     if (courseStartIdx !== -1 && courseStartModeValue !== null) {
                         const csVal = rowObj.values[courseStartIdx];
-                        const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
-                        if (csIsEmpty) {
-                            courseStartMsg = 'Course Start is not listed';
-                        } else if (String(csVal) !== String(courseStartModeValue)) {
+                        if (csVal !== null && csVal !== undefined && csVal !== '' && String(csVal) !== String(courseStartModeValue)) {
                             const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
                             const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
                             const formattedDate = formatLongDate(csVal);
@@ -1152,10 +1149,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let courseStartMsg = null;
                     if (courseStartIdx !== -1 && courseStartModeValue !== null) {
                         const csVal = rowObj.values[courseStartIdx];
-                        const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
-                        if (csIsEmpty) {
-                            courseStartMsg = 'Course Start is not listed';
-                        } else if (String(csVal) !== String(courseStartModeValue)) {
+                        if (csVal !== null && csVal !== undefined && csVal !== '' && String(csVal) !== String(courseStartModeValue)) {
                             const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
                             const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
                             const formattedDate = formatLongDate(csVal);
