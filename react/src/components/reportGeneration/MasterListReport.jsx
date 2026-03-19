@@ -45,15 +45,15 @@ export default function MasterListReport({ onBack }) {
       <section className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
         {/* Campus Selection */}
-        <div className="bg-slate-50/80 rounded-xl border border-slate-100/80 p-4">
-          <label className="block text-sm font-medium text-slate-700 mb-2">
+        <div className="bg-slate-50/80 rounded-xl border border-slate-100/80 p-4 flex items-center justify-between">
+          <label className="text-sm font-medium text-slate-700 shrink-0">
             Campus
           </label>
           <div className="relative">
             <select
               value={selectedCampus}
               onChange={(e) => setSelectedCampus(e.target.value)}
-              className="w-full appearance-none bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#145F82]/30 focus:border-[#145F82] transition-colors cursor-pointer"
+              className="appearance-none bg-white border border-slate-200 rounded-lg px-4 py-2.5 pr-9 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#145F82]/30 focus:border-[#145F82] transition-colors cursor-pointer"
             >
               <option value="all">All Campuses</option>
               {Object.entries(CAMPUS_MAP)
