@@ -14,6 +14,7 @@ const REPORTS = [
   { id: 'lda', label: 'LDA', enabled: false },
   { id: 'failing', label: 'Failing', enabled: false },
   { id: 'attendance', label: 'On-Ground Attendance', enabled: false },
+  { id: 'missing-assignments', label: 'Missing Assignments', enabled: false },
   { id: 'deans-presidents', label: "Dean's & President's", enabled: false },
 ];
 
