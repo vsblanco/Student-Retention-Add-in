@@ -41,6 +41,31 @@ function formatExcelDate(serial) {
 }
 
 /**
+ * Formats an Excel serial date (or string) into "Month Dayth, Year" format.
+ * e.g. "March 2nd, 2026"
+ */
+function formatLongDate(value) {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    let d = null;
+    if (typeof value === 'number') {
+        const date = new Date(Math.round((value - 25569) * 86400 * 1000));
+        d = new Date(date.valueOf() + date.getTimezoneOffset() * 60000);
+    } else if (typeof value === 'string') {
+        const match = value.trim().match(/^(\d{2})-(\d{2})-(\d{2})$/);
+        if (match) {
+            d = new Date(2000 + parseInt(match[3], 10), parseInt(match[1], 10) - 1, parseInt(match[2], 10));
+        }
+    }
+    if (!d || isNaN(d.getTime())) return String(value);
+    const day = d.getDate();
+    const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
+        : (day === 2 || day === 22) ? 'nd'
+        : (day === 3 || day === 23) ? 'rd' : 'th';
+    return `${monthNames[d.getMonth()]} ${day}${suffix}, ${d.getFullYear()}`;
+}
+
+/**
  * Helper to format a date value into a friendly relative day string.
  * - "today" / "tomorrow" for 0/1 days out
  * - "this [Day]" for 2-6 days out
@@ -112,7 +137,7 @@ function formatFriendlyDate(value) {
  * @param {Map} dncMap - Map of ID -> Tag Text
  * @returns {string|null} - The formatted message or null
  */
-function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal) {
+function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank) {
     // Priority 1: Explicit DNC (Highest Priority - Stop everything)
     if (sId && dncMap.has(sId)) {
         const dncTag = dncMap.get(sId);
@@ -152,6 +177,12 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
     if (typeof missingVal === 'number' && missingVal === 0 && nextAssignmentDueVal) {
         const formattedDate = formatFriendlyDate(nextAssignmentDueVal);
         return `Student's next assignment is due ${formattedDate}.`;
+    }
+
+    // Priority 5: Zero missing assignments but NO next assignment due date (abnormality flag)
+    // Only triggers if the column has data for other students (not entirely blank)
+    if (typeof missingVal === 'number' && missingVal === 0 && !nextAssignmentDueVal && !nextAssignmentDueColumnAllBlank) {
+        return "Student has 0 missing assignments but they have no next assignment due date. Please check their Grade Book.";
     }
 
     return null;
@@ -359,6 +390,18 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 nextAssignmentDueIdx = headers.findIndex(h =>
                     String(h).trim().toLowerCase().replace(/\s+/g, '') === 'nextassignmentdue'
                 );
+            }
+
+            // Check if the entire "Next Assignment Due" column is blank (skip abnormality check if so)
+            let nextAssignmentDueColumnAllBlank = true;
+            if (nextAssignmentDueIdx !== -1) {
+                for (let i = 1; i < masterValues.length; i++) {
+                    const val = masterValues[i][nextAssignmentDueIdx];
+                    if (val !== null && val !== undefined && val !== '') {
+                        nextAssignmentDueColumnAllBlank = false;
+                        break;
+                    }
+                }
             }
 
             // Look for "Attendance %" column
@@ -801,7 +844,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const sId = rowObj.values[studentIdIdx];
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank);
                     const isRetentionActive = !!retentionMsg;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
 
@@ -811,16 +854,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         const csVal = rowObj.values[courseStartIdx];
                         const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
                         if (csIsEmpty) {
-                            courseStartMsg = 'Please check Grade Book. Missing current class';
+                            courseStartMsg = 'Course Start is not listed';
                         } else if (String(csVal) !== String(courseStartModeValue)) {
-                            // Compare numerically for dates; values less than mode = missing/wrong class
                             const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
                             const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            const formattedDate = formatLongDate(csVal);
                             if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
-                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                                courseStartMsg = `Course Start is listed as ${formattedDate}`;
                             } else {
-                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
-                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                                courseStartMsg = `Course Start is listed as ${formattedDate}`;
                             }
                         }
                     }
@@ -867,10 +909,6 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 val = retentionMsg;
                             }
                             if (courseStartMsg) {
-                                if (!retentionMsg || !retentionMsg.includes('Do not contact')) {
-                                    val = courseStartMsg;
-                                }
-                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFFFCC" });
                                 comments.push({ colIndex: colOutIdx, text: courseStartMsg });
                             }
                         }
@@ -1126,7 +1164,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
 
                     // 2. Generate Retention Message using helper
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal);
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank);
 
                     // 2b. Course Start Baseline Check
                     let courseStartMsg = null;
@@ -1134,16 +1172,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         const csVal = rowObj.values[courseStartIdx];
                         const csIsEmpty = (csVal === null || csVal === undefined || csVal === '');
                         if (csIsEmpty) {
-                            courseStartMsg = 'Please check Grade Book. Missing current class';
+                            courseStartMsg = 'Course Start is not listed';
                         } else if (String(csVal) !== String(courseStartModeValue)) {
-                            // Compare numerically for dates; values less than mode = missing/wrong class
                             const csNum = typeof csVal === 'number' ? csVal : parseFloat(csVal);
                             const modeNum = typeof courseStartModeValue === 'number' ? courseStartModeValue : parseFloat(courseStartModeValue);
+                            const formattedDate = formatLongDate(csVal);
                             if (!isNaN(csNum) && !isNaN(modeNum) && csNum < modeNum) {
-                                courseStartMsg = 'Please check Grade Book. Missing current class';
+                                courseStartMsg = `Course Start is listed as ${formattedDate}`;
                             } else {
-                                const formattedDate = typeof csVal === 'number' ? formatExcelDate(csVal) : csVal;
-                                courseStartMsg = `Student's course starts ${formattedDate}. Please review`;
+                                courseStartMsg = `Course Start is listed as ${formattedDate}`;
                             }
                         }
                     }
