@@ -90,6 +90,16 @@ export default function MasterListReport({ onBack }) {
           </button>
         </div>
 
+        {/* Generate Report Button */}
+        <div className="pt-4 border-t border-slate-100 mt-2">
+          <button
+            type="button"
+            className="w-full sm:w-auto bg-[#145F82] hover:bg-[#0f4b66] text-white font-medium px-6 py-2.5 rounded-full shadow-lg shadow-[#145F82]/20 transition-all duration-200 hover:-translate-y-0.5 flex items-center justify-center gap-2"
+          >
+            Generate Report
+          </button>
+        </div>
+
       </section>
     </div>
   );
