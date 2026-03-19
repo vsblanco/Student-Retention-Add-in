@@ -855,7 +855,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
                     const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank);
-                    const isRetentionActive = !!retentionMsg;
+                    const isGradeBookFlag = retentionMsg && retentionMsg.includes("Please check their Grade Book");
+                    const isRetentionActive = !!retentionMsg && !isGradeBookFlag;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
 
                     // --- Course Start Baseline Check ---
@@ -915,8 +916,11 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             }
                         }
                         if (colConfig.name === 'Outreach') {
-                            if (retentionMsg) {
+                            if (retentionMsg && !isGradeBookFlag) {
                                 val = retentionMsg;
+                            }
+                            if (isGradeBookFlag) {
+                                comments.push({ colIndex: colOutIdx, text: retentionMsg });
                             }
                             if (courseStartMsg) {
                                 comments.push({ colIndex: colOutIdx, text: courseStartMsg });
@@ -1197,7 +1201,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // 3. Determine Highlighting Logic
                     const isLda = sId && ldaFollowUpMap.has(sId);
-                    const isRetentionActive = !!retentionMsg;
+                    const isGradeBookFlag = retentionMsg && retentionMsg.includes("Please check their Grade Book");
+                    const isRetentionActive = !!retentionMsg && !isGradeBookFlag;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
 
                     // Determine Row/Partial Color:
@@ -1256,8 +1261,11 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             }
                         }
                         if (colConfig.name === 'Outreach') {
-                            if (retentionMsg) {
+                            if (retentionMsg && !isGradeBookFlag) {
                                 val = retentionMsg;
+                            }
+                            if (isGradeBookFlag) {
+                                comments.push({ colIndex: colOutIdx, text: retentionMsg });
                             }
                             if (courseStartMsg) {
                                 comments.push({ colIndex: colOutIdx, text: courseStartMsg });
