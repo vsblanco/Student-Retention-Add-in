@@ -1260,10 +1260,6 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 val = retentionMsg;
                             }
                             if (courseStartMsg) {
-                                if (!retentionMsg || !retentionMsg.includes('Do not contact')) {
-                                    val = courseStartMsg;
-                                }
-                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFFFCC" });
                                 comments.push({ colIndex: colOutIdx, text: courseStartMsg });
                             }
                         }
