@@ -470,7 +470,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- EXCLUDED COLORS SET ---
             const EXCLUDED_COLORS = new Set([
                 '#ffffff', // White
-                '#add8e6'  // LightBlue (Standard Excel/HTML name)
+                '#add8e6', // LightBlue (Standard Excel/HTML name)
+                '#fc0019', // Bright Red
+                '#ff0000', // Red
+                '#ff0d0d', // Red variant
+                '#ff1a1a', // Red variant
+                '#fe0000', // Red variant
+                '#ff2400', // Scarlet
+                '#cc0000', // Dark Red
+                '#ee0000', // Red variant
+                '#dd0000', // Red variant
+                '#e60000'  // Red variant
             ]);
 
             // Only iterate over the sampled color rows (masterColors has limited rows)
@@ -1250,10 +1260,6 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 val = retentionMsg;
                             }
                             if (courseStartMsg) {
-                                if (!retentionMsg || !retentionMsg.includes('Do not contact')) {
-                                    val = courseStartMsg;
-                                }
-                                cellHighlights.push({ colIndex: colOutIdx, color: "#FFFFCC" });
                                 comments.push({ colIndex: colOutIdx, text: courseStartMsg });
                             }
                         }
