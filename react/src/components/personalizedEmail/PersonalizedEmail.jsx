@@ -1423,49 +1423,19 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         );
     }
 
-    // Show consent required screen if admin consent is needed
+    // Show work-in-progress screen if admin consent is needed
     if (consentStatus === 'required') {
-        const adminConsentUrl = 'https://login.microsoftonline.com/common/adminconsent?client_id=71f37f39-a330-413a-be61-0baa5ce03ea3';
-
         return (
             <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
                 <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg">
-                    <div className="text-center mb-6">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
-                            <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <div className="text-center">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
+                            <svg className="h-8 w-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             </svg>
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Approval Required</h2>
-                        <p className="text-gray-600 mb-6">
-                            This feature requires an IT Administrator to enable it before you can send personalized emails using Microsoft Graph API.
-                        </p>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-                        <p className="text-sm text-blue-800 mb-2">
-                            <strong>For IT Administrators:</strong>
-                        </p>
-                        <p className="text-sm text-blue-700 mb-3">
-                            Click the button below to grant consent for this application. This is a one-time setup that will enable all users in your organization to use this feature.
-                        </p>
-                        <a
-                            href={adminConsentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block w-full text-center px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors"
-                        >
-                            Grant Admin Consent
-                        </a>
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-4">
-                        <p className="text-xs text-gray-500 text-center mb-3">
-                            After consent is granted, refresh this page to start sending emails.
-                        </p>
-                        <p className="text-xs text-gray-500 text-center">
-                            <strong>Alternative:</strong> You can configure Power Automate in Settings to send emails without requiring admin approval.
-                        </p>
+                        <h2 className="text-xl font-semibold text-gray-700">This feature is still being worked on.</h2>
                     </div>
                 </div>
             </div>
