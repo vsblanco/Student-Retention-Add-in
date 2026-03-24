@@ -506,12 +506,11 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- STEP 3: Filtering by Days Out ---
             if (onProgress) onProgress('filter', 'active');
 
-            // When daysOut < 5, includeFailingList is on, and failingListPriority is true,
-            // students who are failing AND have days out < 5 should go to the failing table
-            // instead of the LDA table to avoid duplicates on both tables.
+            // When daysOut < 5 and includeFailingList is on, students who are failing
+            // AND have days out < 5 should go to the failing table instead of the
+            // LDA table to avoid duplicates on both tables.
             const shouldDeferToFailing = settings.daysOut < 5
                 && settings.includeFailingList
-                && settings.failingListPriority !== false
                 && gradeIdx !== -1;
 
             const dataRows = [];

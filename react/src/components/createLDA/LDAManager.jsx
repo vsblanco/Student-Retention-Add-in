@@ -647,20 +647,6 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         onToggle={() => handleToggle('includeFailingList')}
       />
 
-      {settings.includeFailingList && settings.daysOut < 5 && (
-        <div className="ml-4 border-l-2 border-amber-200 pl-3">
-          <ToggleRow
-            key="toggle-failing-priority"
-            label="Failing List Priority"
-            isOn={settings.failingListPriority !== false}
-            onToggle={() => onSettingChange('failingListPriority', settings.failingListPriority === false)}
-          />
-          <p className="text-xs text-slate-400 mt-1 px-3">
-            Students who are failing and below 5 days out will appear on the failing table instead of the LDA table.
-          </p>
-        </div>
-      )}
-
       <ToggleRow
         key="toggle-attendance-list"
         label="Include Attendance List"
