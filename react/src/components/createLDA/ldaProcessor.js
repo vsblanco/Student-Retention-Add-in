@@ -506,10 +506,27 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- STEP 3: Filtering by Days Out ---
             if (onProgress) onProgress('filter', 'active');
 
+            // When daysOut < 5 and includeFailingList is on, students who are failing
+            // AND have days out < 5 should go to the failing table instead of the
+            // LDA table to avoid duplicates on both tables.
+            const shouldDeferToFailing = settings.daysOut < 5
+                && settings.includeFailingList
+                && gradeIdx !== -1;
+
             const dataRows = [];
             for (let i = 1; i < masterValues.length; i++) {
                 const daysOutVal = masterValues[i][daysOutIdx];
                 if (typeof daysOutVal === 'number' && daysOutVal >= settings.daysOut) {
+                    // If failing list has priority, check whether this student is failing
+                    // and in the overlap zone (days out < 5) — if so, skip them here
+                    // so they land on the failing table instead.
+                    if (shouldDeferToFailing && daysOutVal < 5) {
+                        const gradeVal = masterValues[i][gradeIdx];
+                        const isFailing = (typeof gradeVal === 'number')
+                            && (gradeVal < 0.60 || (gradeVal >= 1 && gradeVal < 60));
+                        if (isFailing) continue;
+                    }
+
                     dataRows.push({
                         values: masterValues[i],
                         formulas: masterFormulas[i],
@@ -517,20 +534,20 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     });
                 }
             }
-            
+
             dataRows.sort((a, b) => (b.values[daysOutIdx] || 0) - (a.values[daysOutIdx] || 0));
-            
+
             if (onProgress) onProgress('filter', 'completed');
 
             // --- STEP 4: Filtering by Grades (Failing) ---
             if (onProgress) onProgress('failing', 'active');
-            
+
             let failingRows = [];
             if (settings.includeFailingList && gradeIdx !== -1) {
                 for (let i = 1; i < masterValues.length; i++) {
                     const gradeVal = masterValues[i][gradeIdx];
                     const daysOutVal = masterValues[i][daysOutIdx];
-                    
+
                     const isFailing = (typeof gradeVal === 'number') && (gradeVal < 0.60 || (gradeVal >= 1 && gradeVal < 60));
                     const isRecent = (typeof daysOutVal === 'number') && (daysOutVal <= 4);
 
