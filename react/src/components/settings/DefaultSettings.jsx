@@ -50,6 +50,14 @@ export const defaultWorkbookSettings = [
 		description: 'Whether to include the failing student list.'
 	},
 	{
+		id: 'failingListPriority',
+		label: 'Failing List Priority',
+		type: 'boolean',
+		defaultValue: true,
+		section: 'Create LDA',
+		description: 'When Days Out is below 5 and failing list is enabled, place students who are both failing and below 5 days out on the failing table instead of the LDA table to avoid duplicates.'
+	},
+	{
 		id: 'includeAttendanceList',
 		label: 'Include Attendance List',
 		type: 'boolean',
