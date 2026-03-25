@@ -749,26 +749,32 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             perAdvisor.get(assignedArr[i].id).push(i);
                         }
 
-                        const overAdvs = activeAdvisors.filter(a => inlineCounts.get(a.id) > targets.get(a.id));
-                        const underAdvs = activeAdvisors.filter(a => inlineCounts.get(a.id) < targets.get(a.id));
+                        // Helper: move student between advisors
+                        const inlineMoveStudent = (stuIdx, fromId, toId) => {
+                            const advObj = activeAdvisors.find(a => a.id === toId);
+                            assignedArr[stuIdx] = advObj;
+                            inlineCounts.set(fromId, inlineCounts.get(fromId) - 1);
+                            inlineCounts.set(toId, inlineCounts.get(toId) + 1);
+                            const fromList = perAdvisor.get(fromId);
+                            fromList.splice(fromList.indexOf(stuIdx), 1);
+                            perAdvisor.get(toId).push(stuIdx);
+                        };
 
-                        for (const overAdv of overAdvs) {
+                        // Pass 1: Move to under-allocated advisors that MATCH filters
+                        for (const overAdv of activeAdvisors.filter(a => inlineCounts.get(a.id) > targets.get(a.id))) {
                             const surplus = inlineCounts.get(overAdv.id) - targets.get(overAdv.id);
                             if (surplus <= 0) continue;
-                            const indices = perAdvisor.get(overAdv.id);
+                            const indices = [...perAdvisor.get(overAdv.id)];
                             indices.sort((a, b) => (taggedStudents[a].daysOut || 0) - (taggedStudents[b].daysOut || 0));
                             let moved = 0;
                             for (let si = 0; si < indices.length && moved < surplus; si++) {
                                 const stuIdx = indices[si];
-
-                                // Build list of eligible under-allocated advisors
-                                const eligible = underAdvs.filter(ua =>
+                                const eligible = activeAdvisors.filter(ua =>
+                                    ua.id !== overAdv.id &&
                                     inlineCounts.get(ua.id) < targets.get(ua.id) &&
                                     (!hasAnyFilter(ua) || advisorMatches(ua, taggedStudents[stuIdx]))
                                 );
                                 if (eligible.length === 0) continue;
-
-                                // Pick best fit: tightest daysOutMax first
                                 eligible.sort((a, b) => {
                                     const aMax = a.daysOutMax != null ? a.daysOutMax : Infinity;
                                     const bMax = b.daysOutMax != null ? b.daysOutMax : Infinity;
@@ -777,13 +783,32 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                     if (bMax !== Infinity) return 1;
                                     return 0;
                                 });
-
-                                const bestAdv = eligible[0];
-                                const advObj = activeAdvisors.find(a => a.id === bestAdv.id);
-                                assignedArr[stuIdx] = advObj;
-                                inlineCounts.set(overAdv.id, inlineCounts.get(overAdv.id) - 1);
-                                inlineCounts.set(bestAdv.id, inlineCounts.get(bestAdv.id) + 1);
+                                inlineMoveStudent(stuIdx, overAdv.id, eligible[0].id);
                                 moved++;
+                            }
+                        }
+
+                        // Pass 2: Force-balance remaining surplus ignoring filters
+                        for (const overAdv of activeAdvisors.filter(a => inlineCounts.get(a.id) > targets.get(a.id))) {
+                            let surplus = inlineCounts.get(overAdv.id) - targets.get(overAdv.id);
+                            if (surplus <= 0) continue;
+                            const indices = [...perAdvisor.get(overAdv.id)];
+                            indices.sort((a, b) => (taggedStudents[b].daysOut || 0) - (taggedStudents[a].daysOut || 0));
+                            for (let si = 0; si < indices.length && surplus > 0; si++) {
+                                const stuIdx = indices[si];
+                                let bestTarget = null;
+                                let bestDeficit = 0;
+                                for (const ua of activeAdvisors) {
+                                    if (ua.id === overAdv.id) continue;
+                                    const deficit = targets.get(ua.id) - inlineCounts.get(ua.id);
+                                    if (deficit > bestDeficit) {
+                                        bestDeficit = deficit;
+                                        bestTarget = ua;
+                                    }
+                                }
+                                if (!bestTarget) break;
+                                inlineMoveStudent(stuIdx, overAdv.id, bestTarget.id);
+                                surplus--;
                             }
                         }
                     }
@@ -2150,51 +2175,79 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
             advisorStudents.get(studentAdvisorMap[i]).push(i);
         }
 
-        // Identify over/under advisors
-        const overAdvisors = advisors.filter(a => counts.get(a.id) > targets.get(a.id));
-        const underAdvisors = advisors.filter(a => counts.get(a.id) < targets.get(a.id));
+        // Helper: move a student from one advisor to another
+        const moveStudent = (stuIdx, fromId, toId) => {
+            studentAdvisorMap[stuIdx] = toId;
+            counts.set(fromId, counts.get(fromId) - 1);
+            counts.set(toId, counts.get(toId) + 1);
+            const fromList = advisorStudents.get(fromId);
+            fromList.splice(fromList.indexOf(stuIdx), 1);
+            advisorStudents.get(toId).push(stuIdx);
+        };
 
-        for (const overAdv of overAdvisors) {
+        // Pass 1: Move students to under-allocated advisors that MATCH filters
+        //         (best-fit by tightest daysOutMax first)
+        for (const overAdv of advisors.filter(a => counts.get(a.id) > targets.get(a.id))) {
             const surplus = counts.get(overAdv.id) - targets.get(overAdv.id);
             if (surplus <= 0) continue;
 
-            // Sort this advisor's students by daysOut ascending (lowest first = easiest to move)
-            const indices = advisorStudents.get(overAdv.id);
+            const indices = [...advisorStudents.get(overAdv.id)];
             indices.sort((a, b) => (students[a].daysOut || 0) - (students[b].daysOut || 0));
 
             let moved = 0;
             for (let si = 0; si < indices.length && moved < surplus; si++) {
                 const stuIdx = indices[si];
-                const sDaysOut = students[stuIdx].daysOut || 0;
 
-                // Build list of eligible under-allocated advisors
-                const eligible = underAdvisors.filter(ua =>
+                const eligible = advisors.filter(ua =>
+                    ua.id !== overAdv.id &&
                     counts.get(ua.id) < targets.get(ua.id) &&
                     (!hasAnyFilter(ua) || advisorMatches(ua, students[stuIdx]))
                 );
                 if (eligible.length === 0) continue;
 
-                // Pick best fit: prefer the advisor whose daysOutMax is closest
-                // to the student's daysOut (tightest range first).  Advisors
-                // without a daysOutMax are ranked last (catch-all).
                 eligible.sort((a, b) => {
                     const aMax = a.daysOutMax != null ? a.daysOutMax : Infinity;
                     const bMax = b.daysOutMax != null ? b.daysOutMax : Infinity;
-                    // Both have a max: prefer the one closer to the student's daysOut
                     if (aMax !== Infinity && bMax !== Infinity) return aMax - bMax;
-                    // One is catch-all: prefer the one with an explicit max
                     if (aMax !== Infinity) return -1;
                     if (bMax !== Infinity) return 1;
                     return 0;
                 });
 
-                const bestAdv = eligible[0];
-                studentAdvisorMap[stuIdx] = bestAdv.id;
-                counts.set(overAdv.id, counts.get(overAdv.id) - 1);
-                counts.set(bestAdv.id, counts.get(bestAdv.id) + 1);
-                advisorStudents.get(overAdv.id).splice(advisorStudents.get(overAdv.id).indexOf(stuIdx), 1);
-                advisorStudents.get(bestAdv.id).push(stuIdx);
+                moveStudent(stuIdx, overAdv.id, eligible[0].id);
                 moved++;
+            }
+        }
+
+        // Pass 2: Force-balance remaining surplus by ignoring filters.
+        //         Pick the most under-allocated advisor for each student.
+        for (const overAdv of advisors.filter(a => counts.get(a.id) > targets.get(a.id))) {
+            let surplus = counts.get(overAdv.id) - targets.get(overAdv.id);
+            if (surplus <= 0) continue;
+
+            const indices = [...advisorStudents.get(overAdv.id)];
+            // Move students with the highest daysOut first (they're furthest
+            // from the over-allocated advisor's likely specialty)
+            indices.sort((a, b) => (students[b].daysOut || 0) - (students[a].daysOut || 0));
+
+            for (let si = 0; si < indices.length && surplus > 0; si++) {
+                const stuIdx = indices[si];
+
+                // Find the most under-allocated advisor (regardless of filters)
+                let bestTarget = null;
+                let bestDeficit = 0;
+                for (const ua of advisors) {
+                    if (ua.id === overAdv.id) continue;
+                    const deficit = targets.get(ua.id) - counts.get(ua.id);
+                    if (deficit > bestDeficit) {
+                        bestDeficit = deficit;
+                        bestTarget = ua;
+                    }
+                }
+                if (!bestTarget) break; // everyone is at or above target
+
+                moveStudent(stuIdx, overAdv.id, bestTarget.id);
+                surplus--;
             }
         }
     }
