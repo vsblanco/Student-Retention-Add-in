@@ -759,7 +759,24 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
     setDistLoading(true);
     const timer = setTimeout(() => {
       predictAdvisorDistribution(settings, activeAdvisors)
-        .then(d => { setDistribution(d); setDistLoading(false); })
+        .then(d => {
+          // Debug log: advisor settings and predicted distribution
+          console.group('%c[LDA Auto-Assign Debug]', 'color: #6366f1; font-weight: bold');
+          console.log('Even Split:', assignment.evenSplit ? 'ON' : 'OFF');
+          console.log('Days Out Threshold:', settings.daysOut ?? 5);
+          console.table(activeAdvisors.map(a => ({
+            Name: a.name,
+            'Days Out Min': a.daysOutMin ?? '(none)',
+            'Days Out Max': a.daysOutMax ?? '(none)',
+            'Program Versions': a.programVersions?.length ? a.programVersions.join(', ') : '(any)',
+            'List Preference': a.listPreference?.length ? a.listPreference.join(', ') : '(any)',
+            'Exclude Days': a.excludeDays?.length ? a.excludeDays.join(', ') : '(none)',
+          })));
+          console.log('Predicted Distribution:');
+          console.table(d.map(r => ({ Name: r.name, Count: r.count })));
+          console.groupEnd();
+          setDistribution(d); setDistLoading(false);
+        })
         .catch(() => { setDistribution([]); setDistLoading(false); });
     }, 300);
     return () => clearTimeout(timer);
