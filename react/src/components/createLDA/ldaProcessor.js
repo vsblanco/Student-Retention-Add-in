@@ -712,7 +712,6 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let rrIdx = 0;
                     for (let i = 0; i < taggedStudents.length; i++) {
                         if (!assignedArr[i]) {
-                            // Only assign to advisors whose filters the student matches
                             let placed = false;
                             for (let attempt = 0; attempt < activeAdvisors.length; attempt++) {
                                 const adv = activeAdvisors[(rrIdx + attempt) % activeAdvisors.length];
@@ -724,8 +723,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 }
                             }
                             if (!placed) {
-                                const fallback = activeAdvisors.find(a => !hasAnyFilter(a)) || activeAdvisors[rrIdx % activeAdvisors.length];
-                                assignedArr[i] = fallback;
+                                assignedArr[i] = activeAdvisors[rrIdx % activeAdvisors.length];
                                 rrIdx++;
                             }
                         }
@@ -2011,7 +2009,7 @@ export async function predictAdvisorDistribution(ldaSettings, advisors) {
  * @param {Array} advisors - Array of advisor config objects
  * @param {Object} [options] - Optional settings
  * @param {boolean} [options.evenSplit=false] - Redistribute to even out advisor counts
- * @returns {Array} Array of { id, name, color, count }
+ * @returns {Array} Array of { id, name, color, count, students? }
  */
 function assignStudentsToAdvisors(students, advisors, options = {}) {
     const counts = new Map();
@@ -2113,8 +2111,8 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
     let rrIndex = 0;
     for (let i = 0; i < students.length; i++) {
         if (!assigned[i]) {
-            // Try each advisor in round-robin order, but only assign if the
-            // student matches the advisor's filters (or the advisor has none).
+            // Try each advisor in round-robin order, preferring advisors whose
+            // filters the student matches (or who have no filters).
             let placed = false;
             for (let attempt = 0; attempt < advisors.length; attempt++) {
                 const advisor = advisors[(rrIndex + attempt) % advisors.length];
@@ -2126,14 +2124,11 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
                     break;
                 }
             }
+            // If no advisor's filters match, assign round-robin so no student is left out
             if (!placed) {
-                // No advisor matches — assign to the next advisor anyway as a
-                // last resort so no student is left completely unassigned, but
-                // only to advisors without filters (catch-all).  If every
-                // advisor has filters and none match, pick the round-robin one.
-                const fallback = advisors.find(a => !hasAnyFilter(a)) || advisors[rrIndex % advisors.length];
-                counts.set(fallback.id, counts.get(fallback.id) + 1);
-                studentAdvisorMap[i] = fallback.id;
+                const advisor = advisors[rrIndex % advisors.length];
+                counts.set(advisor.id, counts.get(advisor.id) + 1);
+                studentAdvisorMap[i] = advisor.id;
                 rrIndex++;
             }
         }
@@ -2204,10 +2199,20 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
         }
     }
 
+    // Build per-advisor student detail lists for debug/inspection
+    const advisorStudentDetails = new Map();
+    advisors.forEach(a => advisorStudentDetails.set(a.id, []));
+    for (let i = 0; i < students.length; i++) {
+        if (studentAdvisorMap[i] != null) {
+            advisorStudentDetails.get(studentAdvisorMap[i]).push(students[i]);
+        }
+    }
+
     return advisors.map(a => ({
         id: a.id,
         name: a.name,
         color: a.color,
-        count: counts.get(a.id)
+        count: counts.get(a.id),
+        students: advisorStudentDetails.get(a.id)
     }));
 }

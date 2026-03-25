@@ -760,10 +760,18 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
     const timer = setTimeout(() => {
       predictAdvisorDistribution(settings, activeAdvisors)
         .then(d => {
-          // Debug log: advisor settings and predicted distribution
+          // Debug log: full LDA settings, advisor settings, and per-advisor student lists
           console.group('%c[LDA Auto-Assign Debug]', 'color: #6366f1; font-weight: bold');
-          console.log('Even Split:', assignment.evenSplit ? 'ON' : 'OFF');
+
+          console.group('LDA Report Settings');
           console.log('Days Out Threshold:', settings.daysOut ?? 5);
+          console.log('Include Failing List:', settings.includeFailingList ? 'YES' : 'NO');
+          console.log('Include Attendance List:', settings.includeAttendanceList ? 'YES' : 'NO');
+          console.log('Even Split:', assignment.evenSplit ? 'ON' : 'OFF');
+          console.log('Total Advisors:', advisors.length, '| Active Today:', activeAdvisors.length);
+          console.groupEnd();
+
+          console.group('Advisor Filter Settings');
           console.table(activeAdvisors.map(a => ({
             Name: a.name,
             'Days Out Min': a.daysOutMin ?? '(none)',
@@ -772,8 +780,27 @@ function AssignedSettings({ settings, onSettingChange, onBack }) {
             'List Preference': a.listPreference?.length ? a.listPreference.join(', ') : '(any)',
             'Exclude Days': a.excludeDays?.length ? a.excludeDays.join(', ') : '(none)',
           })));
-          console.log('Predicted Distribution:');
+          console.groupEnd();
+
+          console.group('Predicted Distribution');
           console.table(d.map(r => ({ Name: r.name, Count: r.count })));
+          const totalStudents = d.reduce((sum, r) => sum + r.count, 0);
+          console.log('Total Students:', totalStudents);
+          console.groupEnd();
+
+          // Per-advisor student lists
+          for (const r of d) {
+            if (r.students && r.students.length > 0) {
+              console.group(`${r.name} (${r.count} students)`);
+              console.table(r.students.map(s => ({
+                'Program Version': s.programVersion || '(empty)',
+                'Days Out': s.daysOut,
+                'List Type': s.listType,
+              })));
+              console.groupEnd();
+            }
+          }
+
           console.groupEnd();
           setDistribution(d); setDistLoading(false);
         })
