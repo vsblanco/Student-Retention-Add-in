@@ -762,16 +762,30 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             let moved = 0;
                             for (let si = 0; si < indices.length && moved < surplus; si++) {
                                 const stuIdx = indices[si];
-                                for (const underAdv of underAdvs) {
-                                    if (inlineCounts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
-                                    if (hasAnyFilter(underAdv) && !advisorMatches(underAdv, taggedStudents[stuIdx])) continue;
-                                    const advObj = activeAdvisors.find(a => a.id === underAdv.id);
-                                    assignedArr[stuIdx] = advObj;
-                                    inlineCounts.set(overAdv.id, inlineCounts.get(overAdv.id) - 1);
-                                    inlineCounts.set(underAdv.id, inlineCounts.get(underAdv.id) + 1);
-                                    moved++;
-                                    break;
-                                }
+
+                                // Build list of eligible under-allocated advisors
+                                const eligible = underAdvs.filter(ua =>
+                                    inlineCounts.get(ua.id) < targets.get(ua.id) &&
+                                    (!hasAnyFilter(ua) || advisorMatches(ua, taggedStudents[stuIdx]))
+                                );
+                                if (eligible.length === 0) continue;
+
+                                // Pick best fit: tightest daysOutMax first
+                                eligible.sort((a, b) => {
+                                    const aMax = a.daysOutMax != null ? a.daysOutMax : Infinity;
+                                    const bMax = b.daysOutMax != null ? b.daysOutMax : Infinity;
+                                    if (aMax !== Infinity && bMax !== Infinity) return aMax - bMax;
+                                    if (aMax !== Infinity) return -1;
+                                    if (bMax !== Infinity) return 1;
+                                    return 0;
+                                });
+
+                                const bestAdv = eligible[0];
+                                const advObj = activeAdvisors.find(a => a.id === bestAdv.id);
+                                assignedArr[stuIdx] = advObj;
+                                inlineCounts.set(overAdv.id, inlineCounts.get(overAdv.id) - 1);
+                                inlineCounts.set(bestAdv.id, inlineCounts.get(bestAdv.id) + 1);
+                                moved++;
                             }
                         }
                     }
@@ -2156,19 +2170,36 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
             let moved = 0;
             for (let si = 0; si < indices.length && moved < surplus; si++) {
                 const stuIdx = indices[si];
-                // Find an under advisor that can take this student (and matches filters)
-                for (const underAdv of underAdvisors) {
-                    if (counts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
-                    if (hasAnyFilter(underAdv) && !advisorMatches(underAdv, students[stuIdx])) continue;
-                    // Move student
-                    studentAdvisorMap[stuIdx] = underAdv.id;
-                    counts.set(overAdv.id, counts.get(overAdv.id) - 1);
-                    counts.set(underAdv.id, counts.get(underAdv.id) + 1);
-                    advisorStudents.get(overAdv.id).splice(advisorStudents.get(overAdv.id).indexOf(stuIdx), 1);
-                    advisorStudents.get(underAdv.id).push(stuIdx);
-                    moved++;
-                    break;
-                }
+                const sDaysOut = students[stuIdx].daysOut || 0;
+
+                // Build list of eligible under-allocated advisors
+                const eligible = underAdvisors.filter(ua =>
+                    counts.get(ua.id) < targets.get(ua.id) &&
+                    (!hasAnyFilter(ua) || advisorMatches(ua, students[stuIdx]))
+                );
+                if (eligible.length === 0) continue;
+
+                // Pick best fit: prefer the advisor whose daysOutMax is closest
+                // to the student's daysOut (tightest range first).  Advisors
+                // without a daysOutMax are ranked last (catch-all).
+                eligible.sort((a, b) => {
+                    const aMax = a.daysOutMax != null ? a.daysOutMax : Infinity;
+                    const bMax = b.daysOutMax != null ? b.daysOutMax : Infinity;
+                    // Both have a max: prefer the one closer to the student's daysOut
+                    if (aMax !== Infinity && bMax !== Infinity) return aMax - bMax;
+                    // One is catch-all: prefer the one with an explicit max
+                    if (aMax !== Infinity) return -1;
+                    if (bMax !== Infinity) return 1;
+                    return 0;
+                });
+
+                const bestAdv = eligible[0];
+                studentAdvisorMap[stuIdx] = bestAdv.id;
+                counts.set(overAdv.id, counts.get(overAdv.id) - 1);
+                counts.set(bestAdv.id, counts.get(bestAdv.id) + 1);
+                advisorStudents.get(overAdv.id).splice(advisorStudents.get(overAdv.id).indexOf(stuIdx), 1);
+                advisorStudents.get(bestAdv.id).push(stuIdx);
+                moved++;
             }
         }
     }
