@@ -712,8 +712,22 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let rrIdx = 0;
                     for (let i = 0; i < taggedStudents.length; i++) {
                         if (!assignedArr[i]) {
-                            assignedArr[i] = activeAdvisors[rrIdx % activeAdvisors.length];
-                            rrIdx++;
+                            // Only assign to advisors whose filters the student matches
+                            let placed = false;
+                            for (let attempt = 0; attempt < activeAdvisors.length; attempt++) {
+                                const adv = activeAdvisors[(rrIdx + attempt) % activeAdvisors.length];
+                                if (!hasAnyFilter(adv) || advisorMatches(adv, taggedStudents[i])) {
+                                    assignedArr[i] = adv;
+                                    rrIdx = (rrIdx + attempt + 1);
+                                    placed = true;
+                                    break;
+                                }
+                            }
+                            if (!placed) {
+                                const fallback = activeAdvisors.find(a => !hasAnyFilter(a)) || activeAdvisors[rrIdx % activeAdvisors.length];
+                                assignedArr[i] = fallback;
+                                rrIdx++;
+                            }
                         }
                     }
 
@@ -750,6 +764,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                 const stuIdx = indices[si];
                                 for (const underAdv of underAdvs) {
                                     if (inlineCounts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
+                                    if (hasAnyFilter(underAdv) && !advisorMatches(underAdv, taggedStudents[stuIdx])) continue;
                                     const advObj = activeAdvisors.find(a => a.id === underAdv.id);
                                     assignedArr[stuIdx] = advObj;
                                     inlineCounts.set(overAdv.id, inlineCounts.get(overAdv.id) - 1);
@@ -2084,10 +2099,29 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
     let rrIndex = 0;
     for (let i = 0; i < students.length; i++) {
         if (!assigned[i]) {
-            const advisor = advisors[rrIndex % advisors.length];
-            counts.set(advisor.id, counts.get(advisor.id) + 1);
-            studentAdvisorMap[i] = advisor.id;
-            rrIndex++;
+            // Try each advisor in round-robin order, but only assign if the
+            // student matches the advisor's filters (or the advisor has none).
+            let placed = false;
+            for (let attempt = 0; attempt < advisors.length; attempt++) {
+                const advisor = advisors[(rrIndex + attempt) % advisors.length];
+                if (!hasAnyFilter(advisor) || advisorMatches(advisor, students[i])) {
+                    counts.set(advisor.id, counts.get(advisor.id) + 1);
+                    studentAdvisorMap[i] = advisor.id;
+                    rrIndex = (rrIndex + attempt + 1);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                // No advisor matches — assign to the next advisor anyway as a
+                // last resort so no student is left completely unassigned, but
+                // only to advisors without filters (catch-all).  If every
+                // advisor has filters and none match, pick the round-robin one.
+                const fallback = advisors.find(a => !hasAnyFilter(a)) || advisors[rrIndex % advisors.length];
+                counts.set(fallback.id, counts.get(fallback.id) + 1);
+                studentAdvisorMap[i] = fallback.id;
+                rrIndex++;
+            }
         }
     }
 
@@ -2122,9 +2156,10 @@ function assignStudentsToAdvisors(students, advisors, options = {}) {
             let moved = 0;
             for (let si = 0; si < indices.length && moved < surplus; si++) {
                 const stuIdx = indices[si];
-                // Find an under advisor that can take this student
+                // Find an under advisor that can take this student (and matches filters)
                 for (const underAdv of underAdvisors) {
                     if (counts.get(underAdv.id) >= targets.get(underAdv.id)) continue;
+                    if (hasAnyFilter(underAdv) && !advisorMatches(underAdv, students[stuIdx])) continue;
                     // Move student
                     studentAdvisorMap[stuIdx] = underAdv.id;
                     counts.set(overAdv.id, counts.get(overAdv.id) - 1);
