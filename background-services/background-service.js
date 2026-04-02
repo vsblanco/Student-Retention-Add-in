@@ -19,6 +19,30 @@ const BATCH_SIZE = 500;
 // Smaller batch size for formatting operations (cell colors).
 const FORMAT_BATCH_SIZE = 50;
 
+/**
+ * Sends an import status update back to the Chrome extension via window.postMessage.
+ * The extension's content script (excelConnector.js) picks this up and forwards it.
+ * @param {string} status - Status key (e.g., 'received', 'writing_data', 'complete', 'error')
+ * @param {string} message - Human-readable status message
+ * @param {number} [progress] - Optional progress percentage (0-100)
+ * @param {string} [error] - Optional error message (for error status)
+ */
+function sendImportStatus(status, message, progress, error) {
+    try {
+        window.postMessage({
+            type: "SRK_IMPORT_STATUS",
+            data: {
+                status: status,
+                message: message,
+                ...(progress != null && { progress }),
+                ...(error && { error })
+            }
+        }, "*");
+    } catch (e) {
+        console.warn("Failed to send import status:", e);
+    }
+}
+
 // This function is required for the Analytics button, even if it does nothing,
 // because the manifest uses a ShowTaskpane action.
 function openAnalyticsPane(event) {
@@ -248,6 +272,8 @@ async function importMasterListFromExtension(payload) {
         const { headers: incomingHeaders, data: incomingData } = payload;
         console.log(`ImportFromExtension: Received ${incomingData.length} rows with headers: [${incomingHeaders.join(', ')}]`);
 
+        sendImportStatus('received', `Received ${incomingData.length} students, validating data...`);
+
         await Excel.run(async (context) => {
             // Check if Master List sheet exists
             const sheets = context.workbook.worksheets;
@@ -262,6 +288,7 @@ async function importMasterListFromExtension(payload) {
             }
 
             console.log("ImportFromExtension: Master List sheet found, proceeding with import...");
+            sendImportStatus('reading_data', 'Reading existing spreadsheet data...');
 
             // Get the Master List sheet
             const sheet = context.workbook.worksheets.getItem(CONSTANTS.MASTER_LIST_SHEET);
@@ -391,6 +418,7 @@ async function importMasterListFromExtension(payload) {
             }
 
             console.log(`ImportFromExtension: Created map of ${masterDataMap.size} existing students`);
+            sendImportStatus('preserving_data', `Preserving data for ${masterDataMap.size} existing students...`);
 
             // Build preservation map for master columns not covered by the incoming data
             const preservationMap = new Map();
@@ -652,6 +680,7 @@ async function importMasterListFromExtension(payload) {
             // Write data and formulas in batches to avoid payload size limits
             const totalBatches = Math.ceil(dataToWrite.length / BATCH_SIZE);
             console.log(`ImportFromExtension: Writing ${dataToWrite.length} rows in ${totalBatches} batch(es) of up to ${BATCH_SIZE} rows...`);
+            sendImportStatus('writing_data', `Writing ${dataToWrite.length} students...`, 0);
 
             for (let batchStart = 0; batchStart < dataToWrite.length; batchStart += BATCH_SIZE) {
                 const batchEnd = Math.min(batchStart + BATCH_SIZE, dataToWrite.length);
@@ -668,8 +697,11 @@ async function importMasterListFromExtension(payload) {
 
                 const currentBatch = Math.floor(batchStart / BATCH_SIZE) + 1;
                 console.log(`ImportFromExtension: Data write batch ${currentBatch}/${totalBatches} completed (rows ${batchStart + 1}-${batchEnd})`);
+                sendImportStatus('writing_data', `Writing batch ${currentBatch} of ${totalBatches}...`, Math.round((currentBatch / totalBatches) * 100));
             }
             console.log("ImportFromExtension: All data writes completed");
+
+            sendImportStatus('highlighting', 'Highlighting new students and preserved data...');
 
             // Highlight preserved columns in light gray (applied first so cell-level colors can override)
             if (nonBlankUnmatchedCols.length > 0) {
@@ -728,6 +760,7 @@ async function importMasterListFromExtension(payload) {
             }
 
             // Apply conditional formatting to columns
+            sendImportStatus('formatting', 'Applying conditional formatting...');
             await applyGradeConditionalFormatting(context, sheet, masterHeaders);
             await applyLastCourseGradeConditionalFormatting(context, sheet, masterHeaders);
             await applyMissingAssignmentsConditionalFormatting(context, sheet, masterHeaders);
@@ -760,6 +793,7 @@ async function importMasterListFromExtension(payload) {
             }
 
             // Autofit columns
+            sendImportStatus('autofitting', 'Auto-fitting columns...');
             console.log("ImportFromExtension: Autofitting columns...");
             sheet.getUsedRange().format.autofitColumns();
 
@@ -775,15 +809,19 @@ async function importMasterListFromExtension(payload) {
 
             if (studentsWithAssignments.length > 0) {
                 console.log(`ImportFromExtension: Found ${studentsWithAssignments.length} students with missing assignments, importing...`);
+                sendImportStatus('missing_assignments', `Importing missing assignments for ${studentsWithAssignments.length} students...`);
                 await importMissingAssignments(studentsWithAssignments);
             }
         }
+
+        sendImportStatus('complete', 'Master list imported successfully!');
 
     } catch (error) {
         console.error("ImportFromExtension: Error importing Master List:", error);
         if (error instanceof OfficeExtension.Error) {
             console.error("ImportFromExtension: Debug info:", JSON.stringify(error.debugInfo));
         }
+        sendImportStatus('error', 'Import failed', 0, error.message || 'An unexpected error occurred');
     }
 }
 
