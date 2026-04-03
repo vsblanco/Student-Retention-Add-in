@@ -1731,6 +1731,123 @@ async function sendSheetListToExtension() {
 }
 
 /**
+ * Highlights a student's row directly via the Excel API.
+ * This is a standalone version that does NOT involve the Chrome extension —
+ * no confirmation messages, no postMessage, no listener notifications.
+ * Used by the command property poller for Power Automate-initiated highlights.
+ *
+ * @param {Object} payload - Same shape as SRK_HIGHLIGHT_STUDENT_ROW
+ * @param {string} payload.syStudentId - Student ID to find
+ * @param {string} payload.targetSheet - Sheet name
+ * @param {string|number} payload.startCol - Start column (name or index)
+ * @param {string|number} payload.endCol - End column (name or index)
+ * @param {string} [payload.color='#FFFF00'] - Highlight color
+ * @param {string|number} [payload.editColumn] - Column to write text into
+ * @param {string} [payload.editText] - Text to write
+ */
+async function highlightStudentRow(payload) {
+    if (!payload || !payload.syStudentId || !payload.targetSheet) {
+        console.error("highlightStudentRow: Missing required parameters (syStudentId, targetSheet)");
+        return;
+    }
+
+    const { syStudentId, targetSheet, startCol, endCol, color = '#FFFF00', editColumn, editText } = payload;
+
+    if (startCol === undefined || startCol === null || endCol === undefined || endCol === null) {
+        console.error("highlightStudentRow: startCol and endCol are required");
+        return;
+    }
+
+    await Excel.run(async (context) => {
+        // Find the sheet
+        const sheets = context.workbook.worksheets;
+        sheets.load("items/name");
+        await context.sync();
+
+        let worksheet = sheets.items.find(s => s.name === targetSheet);
+        if (!worksheet) {
+            console.error(`highlightStudentRow: Sheet "${targetSheet}" not found`);
+            return;
+        }
+        worksheet = context.workbook.worksheets.getItem(targetSheet);
+
+        // Load used range
+        const usedRange = worksheet.getUsedRange();
+        usedRange.load(["values", "rowCount", "columnCount", "rowIndex"]);
+        await context.sync();
+
+        const values = usedRange.values;
+        const headers = values[0];
+
+        // Resolve column name to index
+        const resolveCol = (col) => {
+            if (typeof col === 'number') return col >= 0 && col < headers.length ? col : -1;
+            const colName = String(col).trim().toLowerCase();
+            for (let c = 0; c < headers.length; c++) {
+                if (String(headers[c]).trim().toLowerCase() === colName) return c;
+            }
+            return -1;
+        };
+
+        const startColIndex = resolveCol(startCol);
+        const endColIndex = resolveCol(endCol);
+        if (startColIndex === -1 || endColIndex === -1) {
+            console.error(`highlightStudentRow: Could not resolve columns - startCol: ${startCol} (${startColIndex}), endCol: ${endCol} (${endColIndex})`);
+            return;
+        }
+
+        const colStart = Math.min(startColIndex, endColIndex);
+        const colEnd = Math.max(startColIndex, endColIndex);
+
+        // Find Student ID column
+        const idAliases = ['student id', 'systudentid', 'student identifier', 'id'];
+        let idColIndex = -1;
+        for (let c = 0; c < headers.length; c++) {
+            if (idAliases.includes(String(headers[c]).trim().toLowerCase())) {
+                idColIndex = c;
+                break;
+            }
+        }
+        if (idColIndex === -1) {
+            console.error(`highlightStudentRow: No Student ID column found in sheet "${targetSheet}"`);
+            return;
+        }
+
+        // Find the student's row
+        let targetRowIndex = -1;
+        for (let row = 1; row < values.length; row++) {
+            if (String(values[row][idColIndex]).trim() === String(syStudentId).trim()) {
+                targetRowIndex = row;
+                break;
+            }
+        }
+        if (targetRowIndex === -1) {
+            console.error(`highlightStudentRow: Student ID "${syStudentId}" not found in sheet "${targetSheet}"`);
+            return;
+        }
+
+        // Apply highlight
+        const actualRowIndex = usedRange.rowIndex + targetRowIndex;
+        const columnCount = colEnd - colStart + 1;
+        const highlightRange = worksheet.getRangeByIndexes(actualRowIndex, colStart, 1, columnCount);
+        highlightRange.format.fill.color = color;
+        await context.sync();
+
+        // Edit cell if requested
+        if (editColumn !== undefined && editText !== undefined) {
+            const editColIndex = resolveCol(editColumn);
+            if (editColIndex !== -1) {
+                const editCell = worksheet.getRangeByIndexes(actualRowIndex, editColIndex, 1, 1);
+                editCell.values = [[editText]];
+                await context.sync();
+            }
+        }
+
+        console.log(`highlightStudentRow: Highlighted student "${syStudentId}" on "${targetSheet}" (row ${targetRowIndex + 1}, columns ${colStart}-${colEnd})`);
+    });
+}
+
+/**
  * Polls the custom document property "SRK_Command" for highlight commands
  * written by Power Automate Office Scripts. Custom properties sync via
  * co-authoring much faster than cell values or formatting, enabling
@@ -1851,7 +1968,7 @@ function startCommandPropertyPoller() {
 
                 if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
                     try {
-                        await chromeExtensionService.handleHighlightStudentRow(command.data);
+                        await highlightStudentRow(command.data);
                         console.log(`CommandPropertyPoller: Highlighted student "${command.data.syStudentId}" successfully`);
                     } catch (highlightError) {
                         console.error("CommandPropertyPoller: Highlight failed:", highlightError.message);
