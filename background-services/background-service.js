@@ -1937,7 +1937,7 @@ function startCommandPropertyPoller() {
                     command = JSON.parse(rawValue);
                 } catch (e) {
                     console.warn("CommandPropertyPoller: Invalid JSON, clearing:", rawValue);
-                    context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
+                    context.workbook.properties.custom.add(SRK_COMMAND_PROPERTY, "CLEAR");
                     await context.sync();
                     return;
                 }
@@ -1951,7 +1951,7 @@ function startCommandPropertyPoller() {
 
                 // Try to claim the command
                 isProcessingCommand = true;
-                context.workbook.properties.addCustomProperty(SRK_CLAIM_PROPERTY, SRK_SESSION_ID);
+                context.workbook.properties.custom.add(SRK_CLAIM_PROPERTY, SRK_SESSION_ID);
                 await context.sync();
             });
 
@@ -2012,8 +2012,8 @@ function startCommandPropertyPoller() {
 
                 // Mark as processed and clear for next command
                 lastProcessedTimestamp = command.timestamp;
-                context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
-                context.workbook.properties.addCustomProperty(SRK_CLAIM_PROPERTY, "CLEAR");
+                context.workbook.properties.custom.add(SRK_COMMAND_PROPERTY, "CLEAR");
+                context.workbook.properties.custom.add(SRK_CLAIM_PROPERTY, "CLEAR");
                 await context.sync();
                 console.log("CommandPropertyPoller: Command completed, property cleared");
                 isProcessingCommand = false;
