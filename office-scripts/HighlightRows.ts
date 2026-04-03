@@ -30,7 +30,9 @@ function main(
   editText?: string
 ): string {
   // ── Defaults ─────────────────────────────────────────────────────────
-  const highlightColor = color && color.trim() !== "" ? color.trim() : "#FFFF00";
+  // No color provided = "remove mode"; with color = "apply mode"
+  const isRemoveMode = !color || color.trim() === "";
+  const highlightColor = isRemoveMode ? "" : color!.trim();
 
   // ── Validate required params ─────────────────────────────────────────
   if (!syStudentId || syStudentId.trim() === "") {
@@ -146,15 +148,23 @@ function main(
     return `ERROR: Student ID "${syStudentId}" not found in sheet "${targetSheet}".`;
   }
 
-  // ── 6. Apply the highlight ───────────────────────────────────────────
+  // ── 6. Apply or remove the highlight ──────────────────────────────────
   const columnCount = endColIndex - startColIndex + 1;
   const highlightRange = sheet.getRangeByIndexes(targetRowIndex, startColIndex, 1, columnCount);
-
-  // Toggle behavior: if already this color, clear it (same as ribbon-actions.js)
   const currentColor = highlightRange.getFormat().getFill().getColor();
-  if (currentColor && currentColor.toLowerCase() === highlightColor.toLowerCase()) {
+  const hasExistingHighlight = currentColor && currentColor !== "#FFFFFF" && currentColor !== "";
+
+  if (isRemoveMode) {
+    // No color provided → remove existing highlight (skip if nothing to remove)
+    if (!hasExistingHighlight) {
+      return `SKIPPED: Student "${targetId}" on "${sheet.getName()}" has no highlight to remove.`;
+    }
     highlightRange.getFormat().getFill().clear();
   } else {
+    // Color provided → apply highlight (skip if already the same color)
+    if (hasExistingHighlight && currentColor!.toLowerCase() === highlightColor.toLowerCase()) {
+      return `SKIPPED: Student "${targetId}" on "${sheet.getName()}" already highlighted with ${highlightColor}.`;
+    }
     highlightRange.getFormat().getFill().setColor(highlightColor);
   }
 
@@ -165,7 +175,8 @@ function main(
     editMsg = ` Wrote "${editText}" to column "${editColumn}".`;
   }
 
-  return `SUCCESS: Highlighted student "${targetId}" on "${sheet.getName()}" (row ${targetRowIndex + 1}, columns ${startColIndex}-${endColIndex}).${editMsg}`;
+  const action = isRemoveMode ? "Removed highlight from" : `Highlighted`;
+  return `SUCCESS: ${action} student "${targetId}" on "${sheet.getName()}" (row ${targetRowIndex + 1}, columns ${startColIndex}-${endColIndex}).${editMsg}`;
 }
 
 /**
