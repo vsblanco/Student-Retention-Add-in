@@ -1880,6 +1880,56 @@ async function processCommandQueue() {
     }
 }
 
+/**
+ * TEST: Polls the custom document property "SRK_Command" every 5 seconds
+ * to see if changes from Power Automate's Office Script are visible
+ * without a page refresh. Check the browser console for output.
+ *
+ * Remove this after testing.
+ */
+let lastSeenCommand = null;
+
+function startCustomPropertyPoller() {
+    console.log("CustomPropertyPoller: Starting poll every 5 seconds...");
+
+    setInterval(async () => {
+        try {
+            await Excel.run(async (context) => {
+                const props = context.workbook.properties.custom;
+                props.load("key, value");
+                await context.sync();
+
+                const srkProp = props.items.find(p => p.key === "SRK_Command");
+                if (srkProp) {
+                    const currentValue = srkProp.value;
+                    if (currentValue !== lastSeenCommand) {
+                        console.log("CustomPropertyPoller: NEW VALUE DETECTED!", currentValue);
+                        lastSeenCommand = currentValue;
+
+                        // Try to parse and execute the highlight command
+                        try {
+                            const command = JSON.parse(currentValue);
+                            if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
+                                console.log("CustomPropertyPoller: Executing highlight command...");
+                                await chromeExtensionService.handleHighlightStudentRow(command.data);
+                                console.log("CustomPropertyPoller: Highlight executed successfully!");
+                            }
+                        } catch (e) {
+                            console.log("CustomPropertyPoller: Value is not a valid command JSON:", currentValue);
+                        }
+                    } else {
+                        console.log("CustomPropertyPoller: No change (same value)");
+                    }
+                } else {
+                    console.log("CustomPropertyPoller: SRK_Command property not found yet");
+                }
+            });
+        } catch (error) {
+            console.error("CustomPropertyPoller: Error reading property:", error.message);
+        }
+    }, 5000);
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("transferData", transferData);
@@ -1905,6 +1955,9 @@ Office.onReady(() => {
 
   // Start listening for highlight commands from Power Automate
   setupCommandQueueListener();
+
+  // TEST: Poll custom document property every 5 seconds to test co-authoring sync
+  startCustomPropertyPoller();
 
   // Add a listener for extension events
   chromeExtensionService.addListener((event) => {
