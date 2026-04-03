@@ -1881,16 +1881,30 @@ async function processCommandQueue() {
 }
 
 /**
- * TEST: Polls the custom document property "SRK_Command" every 5 seconds
- * to see if changes from Power Automate's Office Script are visible
- * without a page refresh. Check the browser console for output.
+ * Polls the custom document property "SRK_Command" for highlight commands
+ * written by Power Automate Office Scripts. Custom properties sync via
+ * co-authoring much faster than cell values or formatting, enabling
+ * near real-time highlights without a page refresh.
  *
- * Remove this after testing.
+ * Flow:
+ *   1. Power Automate runs an Office Script that writes a command JSON
+ *      to the "SRK_Command" custom document property
+ *   2. Co-authoring syncs the property to all active sessions (~1-5 seconds)
+ *   3. This poller detects the new value, executes the highlight locally,
+ *      and clears the property so the next command can come through
  */
-let lastSeenCommand = null;
+const SRK_COMMAND_PROPERTY = "SRK_Command";
+const SRK_POLL_INTERVAL = 5000; // 5 seconds
+let lastProcessedTimestamp = null;
+let commandPollerActive = false;
 
-function startCustomPropertyPoller() {
-    console.log("CustomPropertyPoller: Starting poll every 5 seconds...");
+function startCommandPropertyPoller() {
+    if (commandPollerActive) {
+        console.log("CommandPropertyPoller: Already running, skipping duplicate start");
+        return;
+    }
+    commandPollerActive = true;
+    console.log(`CommandPropertyPoller: Polling "${SRK_COMMAND_PROPERTY}" every ${SRK_POLL_INTERVAL / 1000}s`);
 
     setInterval(async () => {
         try {
@@ -1899,35 +1913,57 @@ function startCustomPropertyPoller() {
                 props.load("key, value");
                 await context.sync();
 
-                const srkProp = props.items.find(p => p.key === "SRK_Command");
-                if (srkProp) {
-                    const currentValue = srkProp.value;
-                    if (currentValue !== lastSeenCommand) {
-                        console.log("CustomPropertyPoller: NEW VALUE DETECTED!", currentValue);
-                        lastSeenCommand = currentValue;
+                const srkProp = props.items.find(p => p.key === SRK_COMMAND_PROPERTY);
+                if (!srkProp) return; // No property yet — nothing to do
 
-                        // Try to parse and execute the highlight command
-                        try {
-                            const command = JSON.parse(currentValue);
-                            if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
-                                console.log("CustomPropertyPoller: Executing highlight command...");
-                                await chromeExtensionService.handleHighlightStudentRow(command.data);
-                                console.log("CustomPropertyPoller: Highlight executed successfully!");
-                            }
-                        } catch (e) {
-                            console.log("CustomPropertyPoller: Value is not a valid command JSON:", currentValue);
-                        }
-                    } else {
-                        console.log("CustomPropertyPoller: No change (same value)");
+                const rawValue = srkProp.value;
+                if (!rawValue || rawValue === "CLEAR") return; // Already cleared
+
+                let command;
+                try {
+                    command = JSON.parse(rawValue);
+                } catch (e) {
+                    console.warn("CommandPropertyPoller: Invalid JSON in property, clearing:", rawValue);
+                    context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
+                    await context.sync();
+                    return;
+                }
+
+                // Skip if we already processed this exact command (same timestamp)
+                if (command.timestamp && command.timestamp === lastProcessedTimestamp) {
+                    return;
+                }
+
+                console.log(`CommandPropertyPoller: New command received (timestamp: ${command.timestamp})`);
+
+                // Execute the highlight command
+                if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
+                    try {
+                        console.log(`CommandPropertyPoller: Highlighting student "${command.data.syStudentId}" on "${command.data.targetSheet}"`);
+                        await chromeExtensionService.handleHighlightStudentRow(command.data);
+                        console.log("CommandPropertyPoller: Highlight applied successfully");
+                    } catch (highlightError) {
+                        console.error("CommandPropertyPoller: Highlight failed:", highlightError.message);
                     }
                 } else {
-                    console.log("CustomPropertyPoller: SRK_Command property not found yet");
+                    console.warn("CommandPropertyPoller: Unknown command type:", command.type);
                 }
+
+                // Mark as processed
+                lastProcessedTimestamp = command.timestamp;
+
+                // Clear the property so the next command can be detected
+                context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
+                await context.sync();
+                console.log("CommandPropertyPoller: Property cleared, ready for next command");
             });
         } catch (error) {
-            console.error("CustomPropertyPoller: Error reading property:", error.message);
+            // Silently ignore transient errors (e.g., workbook busy)
+            if (error.code !== "GeneralException") {
+                console.error("CommandPropertyPoller: Error:", error.message);
+            }
         }
-    }, 5000);
+    }, SRK_POLL_INTERVAL);
 }
 
 // Register ribbon button commands
@@ -1956,8 +1992,8 @@ Office.onReady(() => {
   // Start listening for highlight commands from Power Automate
   setupCommandQueueListener();
 
-  // TEST: Poll custom document property every 5 seconds to test co-authoring sync
-  startCustomPropertyPoller();
+  // Poll custom document property for highlight commands from Power Automate
+  startCommandPropertyPoller();
 
   // Add a listener for extension events
   chromeExtensionService.addListener((event) => {
