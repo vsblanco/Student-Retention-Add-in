@@ -1731,153 +1731,120 @@ async function sendSheetListToExtension() {
 }
 
 /**
- * Sets up a listener on the "SRK_Commands" sheet to process highlight commands
- * published by Power Automate. When a command is written to the sheet via
- * co-authoring sync, the onChanged event fires and the add-in executes the
- * highlight locally in the user's session for instant visibility.
+ * Highlights a student's row directly via the Excel API.
+ * This is a standalone version that does NOT involve the Chrome extension —
+ * no confirmation messages, no postMessage, no listener notifications.
+ * Used by the command property poller for Power Automate-initiated highlights.
  *
- * If the SRK_Commands sheet doesn't exist yet, listens for new sheet creation
- * via the WorksheetCollection.onAdded event and attaches the listener when it appears.
+ * @param {Object} payload - Same shape as SRK_HIGHLIGHT_STUDENT_ROW
+ * @param {string} payload.syStudentId - Student ID to find
+ * @param {string} payload.targetSheet - Sheet name
+ * @param {string|number} payload.startCol - Start column (name or index)
+ * @param {string|number} payload.endCol - End column (name or index)
+ * @param {string} [payload.color='#FFFF00'] - Highlight color
+ * @param {string|number} [payload.editColumn] - Column to write text into
+ * @param {string} [payload.editText] - Text to write
  */
-let commandQueueListenerAttached = false;
-
-async function setupCommandQueueListener() {
-    const COMMANDS_SHEET = "SRK_Commands";
-
-    try {
-        await Excel.run(async (context) => {
-            const sheets = context.workbook.worksheets;
-            sheets.load("items/name");
-            await context.sync();
-
-            const cmdSheet = sheets.items.find(s => s.name === COMMANDS_SHEET);
-            if (cmdSheet) {
-                // Sheet exists — attach the onChanged listener
-                await attachCommandSheetListener(context, COMMANDS_SHEET);
-            } else {
-                console.log("CommandQueue: SRK_Commands sheet not found. Watching for sheet creation...");
-            }
-
-            // Always listen for new sheets so we can attach when SRK_Commands is created
-            if (!commandQueueListenerAttached) {
-                sheets.onAdded.add(async (event) => {
-                    try {
-                        console.log(`CommandQueue: New sheet added: ${event.worksheetId}`);
-                        // Check if the newly added sheet is our commands sheet
-                        await Excel.run(async (ctx) => {
-                            const newSheet = ctx.workbook.worksheets.getItem(event.worksheetId);
-                            newSheet.load("name");
-                            await ctx.sync();
-
-                            if (newSheet.name === COMMANDS_SHEET) {
-                                console.log("CommandQueue: SRK_Commands sheet detected! Attaching listener...");
-                                await attachCommandSheetListener(ctx, COMMANDS_SHEET);
-                            }
-                        });
-                    } catch (error) {
-                        console.error("CommandQueue: Error handling new sheet event:", error);
-                    }
-                });
-                commandQueueListenerAttached = true;
-                await context.sync();
-            }
-        });
-    } catch (error) {
-        console.error("CommandQueue: Error setting up listener:", error);
+async function highlightStudentRow(payload) {
+    if (!payload || !payload.syStudentId || !payload.targetSheet) {
+        console.error("highlightStudentRow: Missing required parameters (syStudentId, targetSheet)");
+        return;
     }
-}
 
-/**
- * Attaches the onChanged event handler to the SRK_Commands sheet.
- */
-async function attachCommandSheetListener(context, sheetName) {
-    const worksheet = context.workbook.worksheets.getItem(sheetName);
+    const { syStudentId, targetSheet, startCol, endCol, color = '#FFFF00', editColumn, editText } = payload;
 
-    worksheet.onChanged.add(async (event) => {
-        try {
-            console.log(`CommandQueue: Change detected on ${sheetName} (source: ${event.source})`);
-            await processCommandQueue();
-        } catch (error) {
-            console.error("CommandQueue: Error processing change event:", error);
+    if (startCol === undefined || startCol === null || endCol === undefined || endCol === null) {
+        console.error("highlightStudentRow: startCol and endCol are required");
+        return;
+    }
+
+    await Excel.run(async (context) => {
+        // Find the sheet
+        const sheets = context.workbook.worksheets;
+        sheets.load("items/name");
+        await context.sync();
+
+        let worksheet = sheets.items.find(s => s.name === targetSheet);
+        if (!worksheet) {
+            console.error(`highlightStudentRow: Sheet "${targetSheet}" not found`);
+            return;
         }
-    });
+        worksheet = context.workbook.worksheets.getItem(targetSheet);
 
-    await context.sync();
-    console.log("CommandQueue: Listening for highlight commands on SRK_Commands sheet");
+        // Load used range
+        const usedRange = worksheet.getUsedRange();
+        usedRange.load(["values", "rowCount", "columnCount", "rowIndex"]);
+        await context.sync();
 
-    // Process any pending commands already in the sheet
-    await processCommandQueue();
-}
+        const values = usedRange.values;
+        const headers = values[0];
 
-/**
- * Reads all pending commands from the SRK_Commands sheet, executes them,
- * and marks them as consumed by updating their status.
- */
-async function processCommandQueue() {
-    const COMMANDS_SHEET = "SRK_Commands";
-
-    try {
-        await Excel.run(async (context) => {
-            const sheets = context.workbook.worksheets;
-            sheets.load("items/name");
-            await context.sync();
-
-            const cmdSheetExists = sheets.items.find(s => s.name === COMMANDS_SHEET);
-            if (!cmdSheetExists) return;
-
-            const sheet = context.workbook.worksheets.getItem(COMMANDS_SHEET);
-            const usedRange = sheet.getUsedRangeOrNullObject();
-            usedRange.load("values, rowCount, columnCount");
-            await context.sync();
-
-            if (usedRange.isNullObject || usedRange.rowCount <= 1) {
-                return; // Only header row or empty
+        // Resolve column name to index
+        const resolveCol = (col) => {
+            if (typeof col === 'number') return col >= 0 && col < headers.length ? col : -1;
+            const colName = String(col).trim().toLowerCase();
+            for (let c = 0; c < headers.length; c++) {
+                if (String(headers[c]).trim().toLowerCase() === colName) return c;
             }
+            return -1;
+        };
 
-            const values = usedRange.values;
-            let processedCount = 0;
+        const startColIndex = resolveCol(startCol);
+        const endColIndex = resolveCol(endCol);
+        if (startColIndex === -1 || endColIndex === -1) {
+            console.error(`highlightStudentRow: Could not resolve columns - startCol: ${startCol} (${startColIndex}), endCol: ${endCol} (${endColIndex})`);
+            return;
+        }
 
-            for (let r = 1; r < values.length; r++) {
-                const commandJson = String(values[r][0] || "").trim();
-                const status = String(values[r][2] || "").trim();
+        const colStart = Math.min(startColIndex, endColIndex);
+        const colEnd = Math.max(startColIndex, endColIndex);
 
-                // Skip already processed or empty commands
-                if (!commandJson || status === "done" || status === "error") {
-                    continue;
-                }
-
-                try {
-                    const command = JSON.parse(commandJson);
-
-                    if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
-                        console.log(`CommandQueue: Executing highlight for student "${command.data.syStudentId}" on "${command.data.targetSheet}"`);
-
-                        // Reuse the existing highlight handler from chromeExtensionService
-                        // which runs in the user's local session for instant visibility
-                        await chromeExtensionService.handleHighlightStudentRow(command.data);
-
-                        // Mark as done
-                        sheet.getCell(r, 2).values = [["done"]];
-                        processedCount++;
-                        console.log(`CommandQueue: Command row ${r + 1} executed successfully`);
-                    } else {
-                        console.warn(`CommandQueue: Unknown command type at row ${r + 1}:`, command.type);
-                        sheet.getCell(r, 2).values = [["error"]];
-                    }
-                } catch (parseError) {
-                    console.error(`CommandQueue: Failed to parse/execute command at row ${r + 1}:`, parseError);
-                    sheet.getCell(r, 2).values = [["error"]];
-                }
+        // Find Student ID column
+        const idAliases = ['student id', 'systudentid', 'student identifier', 'id'];
+        let idColIndex = -1;
+        for (let c = 0; c < headers.length; c++) {
+            if (idAliases.includes(String(headers[c]).trim().toLowerCase())) {
+                idColIndex = c;
+                break;
             }
+        }
+        if (idColIndex === -1) {
+            console.error(`highlightStudentRow: No Student ID column found in sheet "${targetSheet}"`);
+            return;
+        }
 
-            if (processedCount > 0) {
+        // Find the student's row
+        let targetRowIndex = -1;
+        for (let row = 1; row < values.length; row++) {
+            if (String(values[row][idColIndex]).trim() === String(syStudentId).trim()) {
+                targetRowIndex = row;
+                break;
+            }
+        }
+        if (targetRowIndex === -1) {
+            console.error(`highlightStudentRow: Student ID "${syStudentId}" not found in sheet "${targetSheet}"`);
+            return;
+        }
+
+        // Apply highlight
+        const actualRowIndex = usedRange.rowIndex + targetRowIndex;
+        const columnCount = colEnd - colStart + 1;
+        const highlightRange = worksheet.getRangeByIndexes(actualRowIndex, colStart, 1, columnCount);
+        highlightRange.format.fill.color = color;
+        await context.sync();
+
+        // Edit cell if requested
+        if (editColumn !== undefined && editText !== undefined) {
+            const editColIndex = resolveCol(editColumn);
+            if (editColIndex !== -1) {
+                const editCell = worksheet.getRangeByIndexes(actualRowIndex, editColIndex, 1, 1);
+                editCell.values = [[editText]];
                 await context.sync();
-                console.log(`CommandQueue: Processed ${processedCount} command(s)`);
             }
-        });
-    } catch (error) {
-        console.error("CommandQueue: Error processing queue:", error);
-    }
+        }
+
+        console.log(`highlightStudentRow: Highlighted student "${syStudentId}" on "${targetSheet}" (row ${targetRowIndex + 1}, columns ${colStart}-${colEnd})`);
+    });
 }
 
 /**
@@ -2001,7 +1968,7 @@ function startCommandPropertyPoller() {
 
                 if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
                     try {
-                        await chromeExtensionService.handleHighlightStudentRow(command.data);
+                        await highlightStudentRow(command.data);
                         console.log(`CommandPropertyPoller: Highlighted student "${command.data.syStudentId}" successfully`);
                     } catch (highlightError) {
                         console.error("CommandPropertyPoller: Highlight failed:", highlightError.message);
@@ -2049,9 +2016,6 @@ Office.onReady(() => {
 
   // Start keep-alive heartbeat to prevent extension from going dormant
   chromeExtensionService.startKeepAlive();
-
-  // Start listening for highlight commands from Power Automate
-  setupCommandQueueListener();
 
   // Poll custom document property for highlight commands from Power Automate
   startCommandPropertyPoller();
