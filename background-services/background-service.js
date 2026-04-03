@@ -1730,6 +1730,120 @@ async function sendSheetListToExtension() {
     }
 }
 
+/**
+ * Sets up a listener on the "SRK_Commands" sheet to process highlight commands
+ * published by Power Automate. When a command is written to the sheet via
+ * co-authoring sync, the onChanged event fires and the add-in executes the
+ * highlight locally in the user's session for instant visibility.
+ */
+async function setupCommandQueueListener() {
+    const COMMANDS_SHEET = "SRK_Commands";
+
+    try {
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const cmdSheet = sheets.items.find(s => s.name === COMMANDS_SHEET);
+            if (!cmdSheet) {
+                console.log("CommandQueue: No SRK_Commands sheet found. Listener not started (will retry on next document open).");
+                return;
+            }
+
+            const worksheet = context.workbook.worksheets.getItem(COMMANDS_SHEET);
+
+            worksheet.onChanged.add(async (event) => {
+                try {
+                    console.log(`CommandQueue: Change detected on ${COMMANDS_SHEET} (source: ${event.source})`);
+                    await processCommandQueue();
+                } catch (error) {
+                    console.error("CommandQueue: Error processing change event:", error);
+                }
+            });
+
+            await context.sync();
+            console.log("CommandQueue: Listening for highlight commands on SRK_Commands sheet");
+
+            // Also process any pending commands that were written before the add-in loaded
+            await processCommandQueue();
+        });
+    } catch (error) {
+        console.error("CommandQueue: Error setting up listener:", error);
+    }
+}
+
+/**
+ * Reads all pending commands from the SRK_Commands sheet, executes them,
+ * and marks them as consumed by updating their status.
+ */
+async function processCommandQueue() {
+    const COMMANDS_SHEET = "SRK_Commands";
+
+    try {
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+
+            const cmdSheetExists = sheets.items.find(s => s.name === COMMANDS_SHEET);
+            if (!cmdSheetExists) return;
+
+            const sheet = context.workbook.worksheets.getItem(COMMANDS_SHEET);
+            const usedRange = sheet.getUsedRangeOrNullObject();
+            usedRange.load("values, rowCount, columnCount");
+            await context.sync();
+
+            if (usedRange.isNullObject || usedRange.rowCount <= 1) {
+                return; // Only header row or empty
+            }
+
+            const values = usedRange.values;
+            let processedCount = 0;
+
+            for (let r = 1; r < values.length; r++) {
+                const commandJson = String(values[r][0] || "").trim();
+                const status = String(values[r][2] || "").trim();
+
+                // Skip already processed or empty commands
+                if (!commandJson || status === "done" || status === "error") {
+                    continue;
+                }
+
+                try {
+                    const command = JSON.parse(commandJson);
+
+                    if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
+                        console.log(`CommandQueue: Executing highlight for student "${command.data.syStudentId}" on "${command.data.targetSheet}"`);
+
+                        // Reuse the existing highlight handler from chromeExtensionService
+                        // which runs in the user's local session for instant visibility
+                        await chromeExtensionService.handleHighlightStudentRow(command.data);
+
+                        // Mark as done
+                        sheet.getCell(r, 2).values = [["done"]];
+                        processedCount++;
+                        console.log(`CommandQueue: Command row ${r + 1} executed successfully`);
+                    } else {
+                        console.warn(`CommandQueue: Unknown command type at row ${r + 1}:`, command.type);
+                        sheet.getCell(r, 2).values = [["error"]];
+                    }
+                } catch (parseError) {
+                    console.error(`CommandQueue: Failed to parse/execute command at row ${r + 1}:`, parseError);
+                    sheet.getCell(r, 2).values = [["error"]];
+                }
+            }
+
+            if (processedCount > 0) {
+                await context.sync();
+                console.log(`CommandQueue: Processed ${processedCount} command(s)`);
+            }
+        });
+    } catch (error) {
+        console.error("CommandQueue: Error processing queue:", error);
+    }
+}
+
 // Register ribbon button commands
 Office.actions.associate("toggleHighlight", toggleHighlight);
 Office.actions.associate("transferData", transferData);
@@ -1752,6 +1866,9 @@ Office.onReady(() => {
 
   // Start keep-alive heartbeat to prevent extension from going dormant
   chromeExtensionService.startKeepAlive();
+
+  // Start listening for highlight commands from Power Automate
+  setupCommandQueueListener();
 
   // Add a listener for extension events
   chromeExtensionService.addListener((event) => {
