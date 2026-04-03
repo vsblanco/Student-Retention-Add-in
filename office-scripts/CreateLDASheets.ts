@@ -174,36 +174,37 @@ function main(
   });
 
   // ── 5. Build color map (value → color) from Master List ──────────────
+  // ── 5. Build color map (value → color) from Assigned column ───────────
+  // Only sample the Assigned column for advisor colors to avoid timeout.
+  // Cell-by-cell color reads are slow in Office Scripts, so we only read
+  // one cell per unique value in the Assigned column.
   const EXCLUDED_COLORS = new Set([
     "#ffffff", "#add8e6",
     "#fc0019", "#ff0000", "#ff0d0d", "#ff1a1a", "#fe0000",
     "#ff2400", "#cc0000", "#ee0000", "#dd0000", "#e60000",
   ]);
 
-  const outputColMasterIndices = outputColumns
-    .map((c) => getColIndex(c.name))
-    .filter((idx) => idx !== -1);
-
-  // Sample colors from first N rows
-  const colorSampleLimit = Math.min(masterValues.length, 200);
   const columnColorMaps = new Map<number, Map<string, string>>();
+  const assignedIdx = getColIndex("Assigned");
 
-  for (let r = 1; r < colorSampleLimit; r++) {
-    for (const cIdx of outputColMasterIndices) {
-      const val = masterValues[r][cIdx];
-      if (!val) continue;
-      const cell = masterSheet.getCell(r, cIdx);
+  if (assignedIdx !== -1) {
+    const assignedColorMap = new Map<string, string>();
+    const seen = new Set<string>();
+
+    for (let r = 1; r < masterValues.length; r++) {
+      const val = String(masterValues[r][assignedIdx] ?? "").trim();
+      if (!val || seen.has(val)) continue;
+      seen.add(val);
+
+      const cell = masterSheet.getCell(r, assignedIdx);
       const color = cell.getFormat().getFill().getColor();
-      if (!color) continue;
-      const normColor = color.toLowerCase();
-      if (EXCLUDED_COLORS.has(normColor)) continue;
-      if (!columnColorMaps.has(cIdx)) {
-        columnColorMaps.set(cIdx, new Map<string, string>());
+      if (color && !EXCLUDED_COLORS.has(color.toLowerCase())) {
+        assignedColorMap.set(val, color);
       }
-      const colMap = columnColorMaps.get(cIdx)!;
-      if (!colMap.has(String(val))) {
-        colMap.set(String(val), color);
-      }
+    }
+
+    if (assignedColorMap.size > 0) {
+      columnColorMaps.set(assignedIdx, assignedColorMap);
     }
   }
 
