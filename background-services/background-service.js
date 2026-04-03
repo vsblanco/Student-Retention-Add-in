@@ -1735,7 +1735,12 @@ async function sendSheetListToExtension() {
  * published by Power Automate. When a command is written to the sheet via
  * co-authoring sync, the onChanged event fires and the add-in executes the
  * highlight locally in the user's session for instant visibility.
+ *
+ * If the SRK_Commands sheet doesn't exist yet, listens for new sheet creation
+ * via the WorksheetCollection.onAdded event and attaches the listener when it appears.
  */
+let commandQueueListenerAttached = false;
+
 async function setupCommandQueueListener() {
     const COMMANDS_SHEET = "SRK_Commands";
 
@@ -1746,31 +1751,62 @@ async function setupCommandQueueListener() {
             await context.sync();
 
             const cmdSheet = sheets.items.find(s => s.name === COMMANDS_SHEET);
-            if (!cmdSheet) {
-                console.log("CommandQueue: No SRK_Commands sheet found. Listener not started (will retry on next document open).");
-                return;
+            if (cmdSheet) {
+                // Sheet exists — attach the onChanged listener
+                await attachCommandSheetListener(context, COMMANDS_SHEET);
+            } else {
+                console.log("CommandQueue: SRK_Commands sheet not found. Watching for sheet creation...");
             }
 
-            const worksheet = context.workbook.worksheets.getItem(COMMANDS_SHEET);
+            // Always listen for new sheets so we can attach when SRK_Commands is created
+            if (!commandQueueListenerAttached) {
+                sheets.onAdded.add(async (event) => {
+                    try {
+                        console.log(`CommandQueue: New sheet added: ${event.worksheetId}`);
+                        // Check if the newly added sheet is our commands sheet
+                        await Excel.run(async (ctx) => {
+                            const newSheet = ctx.workbook.worksheets.getItem(event.worksheetId);
+                            newSheet.load("name");
+                            await ctx.sync();
 
-            worksheet.onChanged.add(async (event) => {
-                try {
-                    console.log(`CommandQueue: Change detected on ${COMMANDS_SHEET} (source: ${event.source})`);
-                    await processCommandQueue();
-                } catch (error) {
-                    console.error("CommandQueue: Error processing change event:", error);
-                }
-            });
-
-            await context.sync();
-            console.log("CommandQueue: Listening for highlight commands on SRK_Commands sheet");
-
-            // Also process any pending commands that were written before the add-in loaded
-            await processCommandQueue();
+                            if (newSheet.name === COMMANDS_SHEET) {
+                                console.log("CommandQueue: SRK_Commands sheet detected! Attaching listener...");
+                                await attachCommandSheetListener(ctx, COMMANDS_SHEET);
+                            }
+                        });
+                    } catch (error) {
+                        console.error("CommandQueue: Error handling new sheet event:", error);
+                    }
+                });
+                commandQueueListenerAttached = true;
+                await context.sync();
+            }
         });
     } catch (error) {
         console.error("CommandQueue: Error setting up listener:", error);
     }
+}
+
+/**
+ * Attaches the onChanged event handler to the SRK_Commands sheet.
+ */
+async function attachCommandSheetListener(context, sheetName) {
+    const worksheet = context.workbook.worksheets.getItem(sheetName);
+
+    worksheet.onChanged.add(async (event) => {
+        try {
+            console.log(`CommandQueue: Change detected on ${sheetName} (source: ${event.source})`);
+            await processCommandQueue();
+        } catch (error) {
+            console.error("CommandQueue: Error processing change event:", error);
+        }
+    });
+
+    await context.sync();
+    console.log("CommandQueue: Listening for highlight commands on SRK_Commands sheet");
+
+    // Process any pending commands already in the sheet
+    await processCommandQueue();
 }
 
 /**
