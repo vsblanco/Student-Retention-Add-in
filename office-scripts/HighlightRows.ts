@@ -156,25 +156,37 @@ function main(
   const currentColor = highlightRange.getFormat().getFill().getColor();
   const hasExistingHighlight = currentColor && currentColor !== "#FFFFFF" && currentColor !== "";
 
-  if (isRemoveMode) {
-    // No color provided → remove existing highlight (skip if nothing to remove)
-    if (!hasExistingHighlight) {
-      return `SKIPPED: Student "${targetId}" on "${sheet.getName()}" has no highlight to remove.`;
+  // ── 7. Check editColumn text ─────────────────────────────────────────
+  let editMsg = "";
+  let textChanged = false;
+  if (editColIndex !== -1 && editText != null) {
+    const currentText = String(sheet.getCell(targetRowIndex, editColIndex).getValue() ?? "").trim();
+    const newText = String(editText).trim();
+    if (currentText !== newText) {
+      sheet.getCell(targetRowIndex, editColIndex).setValue(editText);
+      editMsg = ` Wrote "${editText}" to column "${editColumn}".`;
+      textChanged = true;
     }
-    highlightRange.getFormat().getFill().clear();
-  } else {
-    // Color provided → apply highlight (skip if already the same color)
-    if (hasExistingHighlight && currentColor!.toLowerCase() === highlightColor.toLowerCase()) {
-      return `SKIPPED: Student "${targetId}" on "${sheet.getName()}" already highlighted with ${highlightColor}.`;
-    }
-    highlightRange.getFormat().getFill().setColor(highlightColor);
   }
 
-  // ── 7. Optionally write text to editColumn ───────────────────────────
-  let editMsg = "";
-  if (editColIndex !== -1 && editText != null) {
-    sheet.getCell(targetRowIndex, editColIndex).setValue(editText);
-    editMsg = ` Wrote "${editText}" to column "${editColumn}".`;
+  // ── 8. Apply or remove highlight color ───────────────────────────────
+  let highlightChanged = false;
+
+  if (isRemoveMode) {
+    if (hasExistingHighlight) {
+      highlightRange.getFormat().getFill().clear();
+      highlightChanged = true;
+    }
+  } else {
+    if (!hasExistingHighlight || currentColor!.toLowerCase() !== highlightColor.toLowerCase()) {
+      highlightRange.getFormat().getFill().setColor(highlightColor);
+      highlightChanged = true;
+    }
+  }
+
+  // Skip custom property signal if nothing changed
+  if (!highlightChanged && !textChanged) {
+    return `SKIPPED: Student "${targetId}" on "${sheet.getName()}" — no changes needed.`;
   }
 
   // ── 8. Send real-time command via custom document property ─────────────
