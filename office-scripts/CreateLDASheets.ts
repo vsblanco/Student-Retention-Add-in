@@ -96,7 +96,7 @@ function main(
     existingSheets.push(sheetName);
 
     // Duplicate the Master List
-    const newSheet = masterSheet.copy(ExcelScript.WorksheetPosition.end);
+    const newSheet = masterSheet.copy(ExcelScript.WorksheetPositionType.after, masterSheet);
     newSheet.setName(sheetName);
     if (ci === 0) newSheet.activate();
 
