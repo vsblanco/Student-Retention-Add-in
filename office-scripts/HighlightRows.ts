@@ -1,21 +1,23 @@
 /**
  * HighlightRows – Office Script for Power Automate
  *
- * Replicates the add-in's SRK_HIGHLIGHT_STUDENT_ROW behavior.
- * Finds a student by their ID in the specified sheet and applies a color
- * highlight across a column range. Optionally writes text to a cell
- * (e.g., an outreach message into the Outreach column).
+ * Two-path approach for instant highlighting in shared workbooks:
  *
- * Mirrors the Chrome Extension → Add-in highlight payload:
- *   { syStudentId, targetSheet, startCol, endCol, color?, editColumn?, editText? }
+ *   1. DIRECT: Applies formatting to the file (persists even if nobody
+ *      has the workbook open — serves as the durable fallback)
+ *   2. REAL-TIME: Writes the command to the "SRK_Command" custom document
+ *      property, which syncs via co-authoring within seconds. The Office
+ *      Add-in (if active) polls this property and executes the highlight
+ *      locally in the user's session for instant visibility.
  *
- * Columns can be referenced by name (e.g., "Student Name") or 0-based index.
+ * Only one add-in instance will process the command — the first to claim
+ * it writes its session ID to "SRK_CommandClaim", and others skip.
  *
  * @param syStudentId - The student's ID to find in the sheet
  * @param targetSheet - Name of the worksheet to highlight in
  * @param startCol    - Start column (name or 0-based index) for the highlight range
  * @param endCol      - End column (name or 0-based index) for the highlight range
- * @param color       - Hex color for the highlight (default: "#FFFF00" yellow)
+ * @param color       - Hex color for the highlight (optional, omit to remove)
  * @param editColumn  - Optional column (name or index) to write text into
  * @param editText    - Optional text to write into editColumn
  */
@@ -174,6 +176,23 @@ function main(
     sheet.getCell(targetRowIndex, editColIndex).setValue(editText);
     editMsg = ` Wrote "${editText}" to column "${editColumn}".`;
   }
+
+  // ── 8. Send real-time command via custom document property ─────────────
+  // This syncs to active add-in sessions within seconds via co-authoring
+  const command: Record<string, unknown> = {
+    type: "SRK_HIGHLIGHT_STUDENT_ROW",
+    data: {
+      syStudentId: targetId,
+      targetSheet: sheet.getName(),
+      startCol: startCol.trim(),
+      endCol: endCol.trim(),
+      color: isRemoveMode ? undefined : highlightColor,
+      editColumn: editColumn && editColumn.trim() !== "" ? editColumn.trim() : undefined,
+      editText: editText != null && String(editText).trim() !== "" ? editText : undefined
+    },
+    timestamp: new Date().toISOString()
+  };
+  workbook.getProperties().addCustomProperty("SRK_Command", JSON.stringify(command));
 
   const action = isRemoveMode ? "Removed highlight from" : `Highlighted`;
   return `SUCCESS: ${action} student "${targetId}" on "${sheet.getName()}" (row ${targetRowIndex + 1}, columns ${startColIndex}-${endColIndex}).${editMsg}`;
