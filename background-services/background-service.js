@@ -1886,17 +1886,27 @@ async function processCommandQueue() {
  * co-authoring much faster than cell values or formatting, enabling
  * near real-time highlights without a page refresh.
  *
+ * Claim mechanism for multi-user:
+ *   Each add-in instance has a unique session ID. When a pending command
+ *   is detected, the instance writes its ID to "SRK_CommandClaim". After
+ *   a brief delay, it re-reads the claim — if its ID is still there, it
+ *   won the claim and executes. Otherwise, another instance handles it.
+ *
  * Flow:
- *   1. Power Automate runs an Office Script that writes a command JSON
- *      to the "SRK_Command" custom document property
+ *   1. Power Automate runs HighlightRows.ts which applies direct formatting
+ *      AND writes the command to "SRK_Command" custom property
  *   2. Co-authoring syncs the property to all active sessions (~1-5 seconds)
- *   3. This poller detects the new value, executes the highlight locally,
- *      and clears the property so the next command can come through
+ *   3. First add-in to claim the command executes the highlight locally
+ *      (instant visibility), then clears the property
  */
 const SRK_COMMAND_PROPERTY = "SRK_Command";
+const SRK_CLAIM_PROPERTY = "SRK_CommandClaim";
 const SRK_POLL_INTERVAL = 5000; // 5 seconds
+const SRK_CLAIM_WAIT = 2000; // 2 seconds to wait before checking claim
+const SRK_SESSION_ID = `session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 let lastProcessedTimestamp = null;
 let commandPollerActive = false;
+let isProcessingCommand = false;
 
 function startCommandPropertyPoller() {
     if (commandPollerActive) {
@@ -1904,9 +1914,12 @@ function startCommandPropertyPoller() {
         return;
     }
     commandPollerActive = true;
+    console.log(`CommandPropertyPoller: Session ID: ${SRK_SESSION_ID}`);
     console.log(`CommandPropertyPoller: Polling "${SRK_COMMAND_PROPERTY}" every ${SRK_POLL_INTERVAL / 1000}s`);
 
     setInterval(async () => {
+        if (isProcessingCommand) return; // Don't overlap with an in-progress claim
+
         try {
             await Excel.run(async (context) => {
                 const props = context.workbook.properties.custom;
@@ -1914,34 +1927,82 @@ function startCommandPropertyPoller() {
                 await context.sync();
 
                 const srkProp = props.items.find(p => p.key === SRK_COMMAND_PROPERTY);
-                if (!srkProp) return; // No property yet — nothing to do
+                if (!srkProp) return;
 
                 const rawValue = srkProp.value;
-                if (!rawValue || rawValue === "CLEAR") return; // Already cleared
+                if (!rawValue || rawValue === "CLEAR") return;
 
                 let command;
                 try {
                     command = JSON.parse(rawValue);
                 } catch (e) {
-                    console.warn("CommandPropertyPoller: Invalid JSON in property, clearing:", rawValue);
+                    console.warn("CommandPropertyPoller: Invalid JSON, clearing:", rawValue);
                     context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
                     await context.sync();
                     return;
                 }
 
-                // Skip if we already processed this exact command (same timestamp)
+                // Skip if already processed this command
                 if (command.timestamp && command.timestamp === lastProcessedTimestamp) {
                     return;
                 }
 
-                console.log(`CommandPropertyPoller: New command received (timestamp: ${command.timestamp})`);
+                console.log(`CommandPropertyPoller: New command detected (timestamp: ${command.timestamp})`);
 
-                // Execute the highlight command
+                // Try to claim the command
+                isProcessingCommand = true;
+                context.workbook.properties.addCustomProperty(SRK_CLAIM_PROPERTY, SRK_SESSION_ID);
+                await context.sync();
+            });
+
+            if (!isProcessingCommand) return;
+
+            // Wait briefly to let other sessions write their claim
+            await new Promise(resolve => setTimeout(resolve, SRK_CLAIM_WAIT));
+
+            // Re-read to see who won the claim
+            await Excel.run(async (context) => {
+                const props = context.workbook.properties.custom;
+                props.load("key, value");
+                await context.sync();
+
+                const claimProp = props.items.find(p => p.key === SRK_CLAIM_PROPERTY);
+                const claimValue = claimProp ? claimProp.value : null;
+
+                // Re-read the command (it might have been cleared by the winner)
+                const cmdProp = props.items.find(p => p.key === SRK_COMMAND_PROPERTY);
+                const rawValue = cmdProp ? cmdProp.value : null;
+
+                if (!rawValue || rawValue === "CLEAR") {
+                    // Another session already processed and cleared it
+                    console.log("CommandPropertyPoller: Command already handled by another session");
+                    isProcessingCommand = false;
+                    return;
+                }
+
+                let command;
+                try {
+                    command = JSON.parse(rawValue);
+                } catch (e) {
+                    isProcessingCommand = false;
+                    return;
+                }
+
+                if (claimValue !== SRK_SESSION_ID) {
+                    // Another session won the claim
+                    console.log(`CommandPropertyPoller: Claim lost to ${claimValue}, skipping`);
+                    lastProcessedTimestamp = command.timestamp;
+                    isProcessingCommand = false;
+                    return;
+                }
+
+                // We won the claim — execute the highlight
+                console.log("CommandPropertyPoller: Claim won! Executing highlight...");
+
                 if (command.type === "SRK_HIGHLIGHT_STUDENT_ROW" && command.data) {
                     try {
-                        console.log(`CommandPropertyPoller: Highlighting student "${command.data.syStudentId}" on "${command.data.targetSheet}"`);
                         await chromeExtensionService.handleHighlightStudentRow(command.data);
-                        console.log("CommandPropertyPoller: Highlight applied successfully");
+                        console.log(`CommandPropertyPoller: Highlighted student "${command.data.syStudentId}" successfully`);
                     } catch (highlightError) {
                         console.error("CommandPropertyPoller: Highlight failed:", highlightError.message);
                     }
@@ -1949,16 +2010,16 @@ function startCommandPropertyPoller() {
                     console.warn("CommandPropertyPoller: Unknown command type:", command.type);
                 }
 
-                // Mark as processed
+                // Mark as processed and clear for next command
                 lastProcessedTimestamp = command.timestamp;
-
-                // Clear the property so the next command can be detected
                 context.workbook.properties.addCustomProperty(SRK_COMMAND_PROPERTY, "CLEAR");
+                context.workbook.properties.addCustomProperty(SRK_CLAIM_PROPERTY, "CLEAR");
                 await context.sync();
-                console.log("CommandPropertyPoller: Property cleared, ready for next command");
+                console.log("CommandPropertyPoller: Command completed, property cleared");
+                isProcessingCommand = false;
             });
         } catch (error) {
-            // Silently ignore transient errors (e.g., workbook busy)
+            isProcessingCommand = false;
             if (error.code !== "GeneralException") {
                 console.error("CommandPropertyPoller: Error:", error.message);
             }
