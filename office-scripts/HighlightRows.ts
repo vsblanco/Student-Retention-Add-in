@@ -1,9 +1,9 @@
 /**
- * HighlightMasterList – Office Script for Power Automate
+ * HighlightRows – Office Script for Power Automate
  *
- * Replicates the Student Retention Add-in's auto-highlighting logic.
- * Reads the "Master List" and optionally the "Student History" sheet, then
- * applies all the same highlighting rules the add-in uses:
+ * Replicates the Student Retention Add-in's auto-highlighting logic on any
+ * specified sheet. Reads the target sheet and optionally "Student History",
+ * then applies all the same highlighting rules the add-in uses:
  *
  *   1. Retention status highlighting (partial row: Student Name → Outreach)
  *      - Orange (#FFEDD5): default retention message
@@ -17,13 +17,12 @@
  *      - Missing Assignments = 0: light green (#E2EFDA)
  *      - Hold = "Yes": light red (#FFB6C1)
  *      - AdSAPStatus contains "Financial": light red (#FFB6C1)
- *   6. Toggle-style yellow highlight (#FFFF00) on Outreach column when it
- *      already contains a retention message (mimics the "Contacted" ribbon button)
  *
- * Power Automate: call via "Run script" with no parameters needed.
- * The script reads everything it needs from the workbook itself.
+ * @param sheetName - Name of the sheet to highlight. Defaults to "Master List".
  */
-function main(workbook: ExcelScript.Workbook): string {
+function main(workbook: ExcelScript.Workbook, sheetName?: string): string {
+  // Default to "Master List" if no sheet name provided
+  const targetSheetName = sheetName && sheetName.trim() !== "" ? sheetName.trim() : "Master List";
   // ── Constants ────────────────────────────────────────────────────────
   const STUDENT_NAME_COLS = ["student name", "studentname", "student"];
   const STUDENT_ID_COLS  = ["student id", "systudentid", "id"];
@@ -112,15 +111,15 @@ function main(workbook: ExcelScript.Workbook): string {
     return `${monthNames[target.getMonth()]} ${day}${suf}`;
   }
 
-  // ── 1. Get Master List sheet ─────────────────────────────────────────
-  const sheet = workbook.getWorksheet("Master List");
-  if (!sheet) return "ERROR: No 'Master List' sheet found.";
+  // ── 1. Get target sheet ───────────────────────────────────────────────
+  const sheet = workbook.getWorksheet(targetSheetName);
+  if (!sheet) return `ERROR: No '${targetSheetName}' sheet found.`;
 
   const usedRange = sheet.getUsedRange();
-  if (!usedRange) return "ERROR: Master List sheet is empty.";
+  if (!usedRange) return `ERROR: '${targetSheetName}' sheet is empty.`;
 
   const values = usedRange.getValues() as (string | number | boolean)[][];
-  if (values.length < 2) return "ERROR: Master List has no data rows.";
+  if (values.length < 2) return `ERROR: '${targetSheetName}' has no data rows.`;
 
   const headers = values[0].map((h) => String(h ?? ""));
 
@@ -442,7 +441,7 @@ function main(workbook: ExcelScript.Workbook): string {
 
   // ── 12. Summary ──────────────────────────────────────────────────────
   const parts: string[] = [
-    `SUCCESS: Highlighted ${dataRowCount} student rows.`,
+    `SUCCESS: Highlighted ${dataRowCount} rows on '${targetSheetName}'.`,
   ];
   if (highlightedCount > 0)
     parts.push(`${highlightedCount} retention highlights applied.`);
