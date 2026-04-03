@@ -23,6 +23,28 @@ function main(
   const DAYS_OUT_THRESHOLD = daysOut ?? 5;
   const SHEET_MODE = sheetNameMode ?? "campus";
 
+  // ── Tab colors — one per campus, cycles through the palette ──────────
+  const TAB_COLORS = [
+    "#4472C4", // Blue
+    "#ED7D31", // Orange
+    "#70AD47", // Green
+    "#FFC000", // Gold
+    "#5B9BD5", // Light Blue
+    "#A5A5A5", // Gray
+    "#264478", // Dark Blue
+    "#9B57A0", // Purple
+    "#43682B", // Dark Green
+    "#BF8F00", // Dark Gold
+  ];
+
+  // ── Default columns to SHOW (everything else gets hidden) ────────────
+  const DEFAULT_VISIBLE_COLUMNS = [
+    "assigned", "studentname", "student name", "gradebook", "grade book",
+    "programversion", "program", "shift", "lda", "daysout", "days out",
+    "grade", "missingassignments", "missing assignments", "outreach",
+    "phone", "otherphone", "other phone",
+  ];
+
   // ── Helpers ──────────────────────────────────────────────────────────
   const stripStr = (s: string) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 
@@ -145,6 +167,18 @@ function main(
     // Auto-fit columns
     if (finalRange) {
       finalRange.getFormat().autofitColumns();
+    }
+
+    // Set tab color (cycles through palette)
+    newSheet.setTabColor(TAB_COLORS[ci % TAB_COLORS.length]);
+
+    // Hide columns not in the visible list
+    const visibleSet = new Set(DEFAULT_VISIBLE_COLUMNS);
+    for (let c = 0; c < headers.length; c++) {
+      const headerStripped = stripStr(String(headers[c]));
+      if (!visibleSet.has(headerStripped)) {
+        newSheet.getRangeByIndexes(0, c, 1, 1).getEntireColumn().setColumnHidden(true);
+      }
     }
 
     sheetsCreated++;
