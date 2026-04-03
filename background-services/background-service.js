@@ -1830,20 +1830,40 @@ async function highlightStudentRow(payload) {
         const actualRowIndex = usedRange.rowIndex + targetRowIndex;
         const columnCount = colEnd - colStart + 1;
         const highlightRange = worksheet.getRangeByIndexes(actualRowIndex, colStart, 1, columnCount);
-        highlightRange.format.fill.color = color;
-        await context.sync();
 
-        // Edit cell if requested
+        // Check if highlight color needs to change
+        highlightRange.format.fill.load("color");
+        await context.sync();
+        const currentColor = highlightRange.format.fill.color;
+        const needsHighlight = !currentColor || currentColor.toLowerCase() !== color.toLowerCase();
+
+        if (needsHighlight) {
+            highlightRange.format.fill.color = color;
+            await context.sync();
+        }
+
+        // Edit cell if requested and text is different
         if (editColumn !== undefined && editText !== undefined) {
             const editColIndex = resolveCol(editColumn);
             if (editColIndex !== -1) {
                 const editCell = worksheet.getRangeByIndexes(actualRowIndex, editColIndex, 1, 1);
-                editCell.values = [[editText]];
+                editCell.load("values");
                 await context.sync();
+                const currentText = String(editCell.values[0][0] ?? "").trim();
+                const newText = String(editText).trim();
+                if (currentText !== newText) {
+                    editCell.values = [[editText]];
+                    await context.sync();
+                    console.log(`highlightStudentRow: Updated text in "${editColumn}" to "${editText}"`);
+                }
             }
         }
 
-        console.log(`highlightStudentRow: Highlighted student "${syStudentId}" on "${targetSheet}" (row ${targetRowIndex + 1}, columns ${colStart}-${colEnd})`);
+        if (needsHighlight) {
+            console.log(`highlightStudentRow: Highlighted student "${syStudentId}" on "${targetSheet}" (row ${targetRowIndex + 1}, columns ${colStart}-${colEnd})`);
+        } else {
+            console.log(`highlightStudentRow: Student "${syStudentId}" already highlighted, no color change needed`);
+        }
     });
 }
 
