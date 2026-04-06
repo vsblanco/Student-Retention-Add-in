@@ -330,6 +330,12 @@ function StudentView({ onReady, user }) {
       try {
         changeHandlerRef = await onChanged(
           (changeEvent) => {
+            // Skip changes caused by the Chrome extension's submission highlight
+            // writing into the Outreach column — otherwise it would create an
+            // unintended history comment whenever the student view is open.
+            if (typeof window !== 'undefined' && window.__srkSuppressOutreachHandler) {
+              return false;
+            }
             const changes = (changeEvent && Array.isArray(changeEvent.changes)) ? changeEvent.changes : [];
             const matches = changes.map(ch => {
               const rawVal = ch && ch.value;

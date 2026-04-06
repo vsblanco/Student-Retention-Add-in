@@ -343,6 +343,159 @@ class ChromeExtensionService {
    * @param {number|string} [payload.editColumn] - Column to edit (0-based index OR column name, optional)
    * @param {string} [payload.editText] - Text to set in the edit column (optional)
    */
+  /**
+   * Handle a batched highlight request containing multiple students on the
+   * same target sheet. Performs the entire operation in a single Excel.run
+   * with one usedRange load and one final context.sync, instead of one
+   * round-trip per student.
+   */
+  async handleBulkHighlightStudentRows(payload) {
+    const { students, startCol, endCol, targetSheet, color = '#FFFF00', editColumn } = payload;
+
+    if (!targetSheet) {
+      const msg = "Bulk highlight missing targetSheet.";
+      console.error("ChromeExtensionService:", msg);
+      students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+      return;
+    }
+    if (startCol === undefined || endCol === undefined) {
+      const msg = "Bulk highlight missing startCol/endCol.";
+      console.error("ChromeExtensionService:", msg);
+      students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+      return;
+    }
+
+    try {
+      await this.excelRunWithTimeout(async (context) => {
+        // Resolve worksheet (simple lookup; date-normalization path is only
+        // used by the single-student handler today).
+        let worksheet = context.workbook.worksheets.getItemOrNullObject(targetSheet);
+        worksheet.load("isNullObject");
+        await context.sync();
+        if (worksheet.isNullObject) {
+          const msg = `Sheet "${targetSheet}" not found in the workbook.`;
+          console.error("ChromeExtensionService:", msg);
+          students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+          return;
+        }
+
+        const usedRange = worksheet.getUsedRange();
+        usedRange.load(["values", "rowCount", "columnCount", "rowIndex"]);
+        await context.sync();
+
+        const values = usedRange.values;
+        const headers = values[0];
+
+        const resolveColumnIndex = (column) => {
+          if (typeof column === 'number') {
+            return (column >= 0 && column < headers.length) ? column : -1;
+          }
+          const name = String(column).trim().toLowerCase();
+          for (let col = 0; col < headers.length; col++) {
+            if (String(headers[col]).trim().toLowerCase() === name) return col;
+          }
+          return -1;
+        };
+
+        const startColIndex = resolveColumnIndex(startCol);
+        const endColIndex = resolveColumnIndex(endCol);
+        const editColumnIndex = editColumn !== undefined ? resolveColumnIndex(editColumn) : -1;
+
+        if (startColIndex === -1 || endColIndex === -1 || startColIndex > endColIndex) {
+          const msg = `Invalid startCol/endCol in bulk highlight.`;
+          console.error("ChromeExtensionService:", msg, { startCol, endCol });
+          students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+          return;
+        }
+
+        // Find ID column once
+        const idAliases = ['Student ID', 'SyStudentID', 'Student identifier', 'ID'];
+        let idColumnIndex = -1;
+        for (let col = 0; col < headers.length; col++) {
+          if (idAliases.some(alias => String(headers[col]).trim().toLowerCase() === alias.toLowerCase())) {
+            idColumnIndex = col;
+            break;
+          }
+        }
+        if (idColumnIndex === -1) {
+          const msg = `Could not find a Student ID column in sheet "${targetSheet}".`;
+          console.error("ChromeExtensionService:", msg);
+          students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+          return;
+        }
+
+        // Build a single-pass index of syStudentId -> row (avoids N*rows scans)
+        const idToRow = new Map();
+        for (let row = 1; row < values.length; row++) {
+          const cellValue = String(values[row][idColumnIndex]).trim();
+          if (cellValue) idToRow.set(cellValue, row);
+        }
+
+        const columnCount = endColIndex - startColIndex + 1;
+        const successes = [];
+        const notFound = [];
+
+        // Suppress StudentView's Outreach change handler for the whole batch
+        // so these programmatic writes don't trigger spurious history comments.
+        try {
+          window.__srkSuppressOutreachHandler = true;
+          setTimeout(() => { window.__srkSuppressOutreachHandler = false; }, 2000);
+        } catch (e) { /* noop */ }
+
+        for (const student of students) {
+          const { studentName, syStudentId, editText } = student;
+          const targetRowIndex = idToRow.get(String(syStudentId).trim());
+          if (targetRowIndex === undefined) {
+            notFound.push(student);
+            continue;
+          }
+          const actualRowIndex = usedRange.rowIndex + targetRowIndex;
+
+          const highlightRange = worksheet.getRangeByIndexes(actualRowIndex, startColIndex, 1, columnCount);
+          highlightRange.format.fill.color = color;
+
+          if (editColumnIndex !== -1 && editText !== undefined) {
+            const editCell = worksheet.getRangeByIndexes(actualRowIndex, editColumnIndex, 1, 1);
+            editCell.values = [[editText]];
+          }
+
+          successes.push({ studentName, syStudentId });
+        }
+
+        // Single sync commits every highlight and edit in the batch.
+        await context.sync();
+
+        console.log(`ChromeExtensionService: Bulk highlight complete — ${successes.length} succeeded, ${notFound.length} not found, in sheet "${targetSheet}".`);
+
+        successes.forEach(s => this.sendHighlightConfirmation(s.syStudentId, "success", "Row highlighted successfully"));
+        notFound.forEach(s => this.sendHighlightConfirmation(
+          s.syStudentId,
+          "error",
+          `Student with ID "${s.syStudentId}" not found in sheet "${targetSheet}".`
+        ));
+
+        if (successes.length > 0) {
+          this.notifyListeners({
+            type: "highlight_complete",
+            data: {
+              bulk: true,
+              count: successes.length,
+              targetSheet,
+              students: successes,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+      });
+    } catch (error) {
+      console.error("ChromeExtensionService: Error in bulk highlight:", error);
+      const msg = error.message || "Unknown error during bulk highlight.";
+      students.forEach(s => this.sendHighlightConfirmation(s?.syStudentId, "error", msg));
+      // Rethrow so the retry wrapper can catch retryable errors.
+      throw error;
+    }
+  }
+
   async handleHighlightStudentRow(payload) {
     // Validate Excel is available
     if (typeof window.Excel === "undefined") {
@@ -350,6 +503,11 @@ class ChromeExtensionService {
       console.warn("ChromeExtensionService:", msg);
       this.sendHighlightConfirmation(payload?.syStudentId, "error", msg);
       return;
+    }
+
+    // Bulk highlight path — when extension sends debounced batch of submissions.
+    if (payload && Array.isArray(payload.students) && payload.students.length > 0) {
+      return this.handleBulkHighlightStudentRows(payload);
     }
 
     // Validate required parameters
@@ -640,6 +798,13 @@ class ChromeExtensionService {
             1, // One row
             1  // One column
           );
+          // Suppress StudentView's Outreach change handler so this programmatic
+          // write doesn't trigger an unintended history comment when the student
+          // view modal is open during a submission highlight.
+          try {
+            window.__srkSuppressOutreachHandler = true;
+            setTimeout(() => { window.__srkSuppressOutreachHandler = false; }, 2000);
+          } catch (e) { /* noop */ }
           editCell.values = [[editText]];
           await context.sync();
 
