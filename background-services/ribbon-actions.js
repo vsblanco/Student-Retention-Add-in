@@ -96,6 +96,16 @@ export function createSendToCallQueue(extensionService) {
         const selectionRowCount = selectedRange.rowCount;
         const dataStartRow = usedRange.rowIndex;
 
+        // Load per-row hidden state so we can skip rows filtered out of view.
+        const rowHiddenProxies = [];
+        for (let i = 0; i < selectionRowCount; i++) {
+          const rowRange = selectedRange.getRow(i).getEntireRow();
+          rowRange.load("rowHidden");
+          rowHiddenProxies.push(rowRange);
+        }
+        await context.sync();
+        const rowHiddenStates = rowHiddenProxies.map(r => r.rowHidden === true);
+
         const students = [];
         const seenPhones = new Set(); // prevent duplicate entries for the same student
 
@@ -104,6 +114,9 @@ export function createSendToCallQueue(extensionService) {
 
           // Skip header row and rows outside used range
           if (relativeRow <= 0 || relativeRow >= allValues.length) continue;
+
+          // Skip rows that are hidden (filtered out or manually hidden)
+          if (rowHiddenStates[i]) continue;
 
           const rowData = allValues[relativeRow];
 
