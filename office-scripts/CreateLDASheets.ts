@@ -213,9 +213,7 @@ function main(
       outreachColRange.getFormat().setColumnWidth(currentWidth * 3);
     }
 
-    // Halve the Program Version column width. Toggle wrap text on then off
-    // to trick Excel into clipping overflow instead of spilling it into
-    // adjacent empty cells.
+    // Halve the Program Version column width to save space.
     const programVersionIdx = updatedHeaders.findIndex((h) => {
       const s = stripStr(String(h));
       return s === "programversion" || s === "program" || s === "progversdescrip";
@@ -224,21 +222,6 @@ function main(
       const pvColRange = newSheet.getRangeByIndexes(0, programVersionIdx, 1, 1).getEntireColumn();
       const currentWidth = pvColRange.getFormat().getColumnWidth();
       pvColRange.getFormat().setColumnWidth(currentWidth / 2);
-
-      if (studentsKept > 0) {
-        const pvDataRange = newSheet.getRangeByIndexes(1, programVersionIdx, studentsKept, 1);
-
-        // Step 1: Enable wrap text
-        pvDataRange.getFormat().setWrapText(true);
-
-        // Step 2: Lock the data body row height to a standard single line
-        const dataBodyRange = newSheet.getRangeByIndexes(1, 0, studentsKept, headerColCount);
-        dataBodyRange.getFormat().setRowHeight(18);
-
-        // Step 3: Disable wrap text — Excel now renders the cell as clipped
-        // instead of spilling into the adjacent empty cell.
-        pvDataRange.getFormat().setWrapText(false);
-      }
     }
 
     // Conditional format on Campus column — match tab color when cell equals campus name
