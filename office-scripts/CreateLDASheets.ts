@@ -102,9 +102,12 @@ function main(
   }
 
   // ── 4. Create one sheet per campus ───────────────────────────────────
+  // We already have masterValues from step 1 — reuse it to decide which
+  // rows to delete in each campus copy (no re-reading the copied sheet).
   const existingSheets = workbook.getWorksheets().map((s) => s.getName());
   let sheetsCreated = 0;
   let totalStudents = 0;
+  const headerColCount = headers.length;
 
   for (let ci = 0; ci < campusList.length; ci++) {
     const campusName = campusList[ci];
@@ -122,51 +125,49 @@ function main(
     newSheet.setName(sheetName);
     if (ci === 0) newSheet.activate();
 
-    // Read the copied sheet's data
-    const usedRange = newSheet.getUsedRange()!;
-    const values = usedRange.getValues() as (string | number | boolean)[][];
-
-    // ── Delete rows that don't match criteria (bottom-up to preserve indices)
+    // ── Determine which rows to delete using the cached masterValues ──
     const rowsToDelete: number[] = [];
-
-    for (let r = 1; r < values.length; r++) {
-      const daysOutVal = values[r][daysOutIdx];
-      const campusVal = campusIdx !== -1 ? String(values[r][campusIdx] || "").trim() : "";
+    for (let r = 1; r < masterValues.length; r++) {
+      const daysOutVal = masterValues[r][daysOutIdx];
+      const campusVal = campusIdx !== -1 ? String(masterValues[r][campusIdx] || "").trim() : "";
 
       let shouldKeep = true;
-
-      // Filter by Days Out: keep students >= threshold
       if (typeof daysOutVal !== "number" || daysOutVal < DAYS_OUT_THRESHOLD) {
         shouldKeep = false;
       }
-
-      // Filter by campus (if multi-campus mode)
       if (shouldKeep && campusIdx !== -1 && campusList.length > 1) {
-        if (campusVal !== campusName) {
-          shouldKeep = false;
+        if (campusVal !== campusName) shouldKeep = false;
+      }
+      if (!shouldKeep) rowsToDelete.push(r);
+    }
+
+    // ── Batch delete: group consecutive rows into single range deletes ──
+    // Process bottom-up, merging runs of consecutive rows into one range.
+    const studentsKept = (masterValues.length - 1) - rowsToDelete.length;
+    totalStudents += studentsKept;
+
+    if (rowsToDelete.length > 0) {
+      // Build runs of consecutive rows (walking from highest to lowest)
+      const runs: { start: number; count: number }[] = [];
+      let runEnd = rowsToDelete[rowsToDelete.length - 1];
+      let runStart = runEnd;
+      for (let i = rowsToDelete.length - 2; i >= 0; i--) {
+        const r = rowsToDelete[i];
+        if (r === runStart - 1) {
+          runStart = r; // extend current run downward
+        } else {
+          runs.push({ start: runStart, count: runEnd - runStart + 1 });
+          runEnd = r;
+          runStart = r;
         }
       }
+      runs.push({ start: runStart, count: runEnd - runStart + 1 });
 
-      if (!shouldKeep) {
-        rowsToDelete.push(r);
+      // Delete runs (already ordered bottom-up, so indices stay valid)
+      for (const run of runs) {
+        const rowRange = newSheet.getRangeByIndexes(run.start, 0, run.count, headerColCount);
+        rowRange.delete(ExcelScript.DeleteShiftDirection.up);
       }
-    }
-
-    // Delete rows bottom-up to preserve row indices
-    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-      const rowIdx = rowsToDelete[i];
-      const rowRange = newSheet.getRangeByIndexes(rowIdx, 0, 1, headers.length);
-      rowRange.delete(ExcelScript.DeleteShiftDirection.up);
-    }
-
-    // Count remaining students (total rows minus header)
-    const finalRange = newSheet.getUsedRange();
-    const finalRowCount = finalRange ? finalRange.getRowCount() - 1 : 0;
-    totalStudents += finalRowCount;
-
-    // Auto-fit columns
-    if (finalRange) {
-      finalRange.getFormat().autofitColumns();
     }
 
     // Set tab color (cycles through palette)
@@ -174,11 +175,17 @@ function main(
 
     // Hide columns not in the visible list
     const visibleSet = new Set(DEFAULT_VISIBLE_COLUMNS);
-    for (let c = 0; c < headers.length; c++) {
+    for (let c = 0; c < headerColCount; c++) {
       const headerStripped = stripStr(String(headers[c]));
       if (!visibleSet.has(headerStripped)) {
         newSheet.getRangeByIndexes(0, c, 1, 1).getEntireColumn().setColumnHidden(true);
       }
+    }
+
+    // Auto-fit columns once at the end
+    const finalRange = newSheet.getUsedRange();
+    if (finalRange) {
+      finalRange.getFormat().autofitColumns();
     }
 
     sheetsCreated++;
