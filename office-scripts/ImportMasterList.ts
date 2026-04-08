@@ -328,11 +328,44 @@ function main(
       // Format name to "Last, First"
       if (mc === mNameCol) val = formatToLastFirst(String(val));
 
-      // Trim Program Version: remove prefix up to and including the first 4-digit year
-      // e.g., "B2-Q-2024 Allied Health Management" → "Allied Health Management"
+      // Clean up Program Version — remove prefix codes, degree prefixes,
+      // and trailing cohort/language suffixes.
+      // Examples:
+      //   "B2-Q-2024 Allied Health Management"          → "Allied Health Management"
+      //   "B-S-2024- Science in Psychology SF - English" → "Science in Psychology SF"
+      //   "M-S-2024-Business Administration..."         → "Business Administration..."
+      //   "Associate Degree in Business Administration 22 - Florida Spanish" → "Business Administration"
+      //   "Bachelor Degree in Science in Nursing RN to BSN 21" → "Science in Nursing RN to BSN"
+      //   "BBASF-Spa-Human Resources-25"                → "Human Resources"
       if (mc === mProgramVersionCol && val) {
-        const match = String(val).match(/^.*?\d{4}\s+(.*)$/);
-        if (match) val = match[1].trim();
+        let pv = String(val).trim();
+
+        // 1. Strip leading prefix code ending in a year (4 or 2 digit)
+        //    Matches: B2-Q-2024 / B-S-2024- / M-S-2024- / BBASF-Spa-25-
+        pv = pv.replace(/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+){1,4}-?\d{2,4}[-\s]+/, "");
+
+        // 2. Strip leading "Associate/Bachelor/Master/Doctoral Degree in "
+        pv = pv.replace(/^(Associate|Bachelor|Master|Doctoral?)\s+Degree\s+in\s+/i, "");
+
+        // 3. Strip leading short prefix code without year but ending in dash-Year pattern (BBASF-Spa-)
+        //    Matches: BBASF-Spa- / BBASF-Spa- (when followed by text then -Year)
+        //    Only if there's a trailing -\d{2,4} in the string
+        if (/[-\s]\d{2,4}\s*$/.test(pv)) {
+          pv = pv.replace(/^[A-Z][A-Za-z0-9]*(?:-[A-Za-z]+){1,3}-/, "");
+        }
+
+        // 4. Strip trailing cohort year + optional language suffix
+        //    Matches: " 22 - Florida Spanish" / " 21" / "-25" / " 22-Florida Spanish"
+        pv = pv.replace(/[\s-]+\d{2,4}(?:\s*[-]\s*[A-Za-z][A-Za-z ]*)?\s*$/, "");
+
+        // 5. Strip trailing language-only suffix (no year)
+        //    Matches: " - English" / "- Florida Spanish" / "-English"
+        pv = pv.replace(/\s*-\s*(?:Florida\s+)?(?:English|Spanish)\s*$/i, "");
+
+        // 6. Collapse multiple whitespace into single space, trim
+        pv = pv.replace(/\s+/g, " ").trim();
+
+        val = pv;
       }
 
       // Wrap Gradebook URLs in HYPERLINK
