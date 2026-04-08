@@ -42,7 +42,7 @@ function main(
     "assigned", "studentname", "student name", "gradebook", "grade book",
     "programversion", "program", "shift", "lda", "daysout", "days out",
     "grade", "missingassignments", "missing assignments", "outreach",
-    "phone", "otherphone", "other phone",
+    "phone", "otherphone", "other phone", "campus",
   ];
 
   // ── Helpers ──────────────────────────────────────────────────────────
@@ -171,12 +171,24 @@ function main(
     }
 
     // Set tab color (cycles through palette)
-    newSheet.setTabColor(TAB_COLORS[ci % TAB_COLORS.length]);
+    const tabColor = TAB_COLORS[ci % TAB_COLORS.length];
+    newSheet.setTabColor(tabColor);
 
     // Auto-fit columns BEFORE hiding, so hidden state is preserved
     const finalRange = newSheet.getUsedRange();
     if (finalRange) {
       finalRange.getFormat().autofitColumns();
+    }
+
+    // Conditional format on Campus column — match tab color when cell equals campus name
+    if (campusIdx !== -1 && studentsKept > 0) {
+      const campusColRange = newSheet.getRangeByIndexes(1, campusIdx, studentsKept, 1);
+      const cf = campusColRange.addConditionalFormat(ExcelScript.ConditionalFormatType.cellValue);
+      cf.getCellValue().getFormat().getFill().setColor(tabColor);
+      cf.getCellValue().setRule({
+        formula1: `"${campusName.replace(/"/g, '""')}"`,
+        operator: ExcelScript.ConditionalCellValueOperator.equalTo,
+      });
     }
 
     // ── FINAL STEP: Hide columns not in the visible list ──
