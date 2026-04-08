@@ -204,6 +204,17 @@ function main(
       finalRange.getFormat().autofitColumns();
     }
 
+    // Triple the Outreach column width so long retention messages are readable
+    const outreachIdx = updatedHeaders.findIndex((h) => {
+      const s = stripStr(String(h));
+      return s === "outreach" || s === "comments" || s === "comment";
+    });
+    if (outreachIdx !== -1) {
+      const outreachColRange = newSheet.getRangeByIndexes(0, outreachIdx, 1, 1).getEntireColumn();
+      const currentWidth = outreachColRange.getFormat().getColumnWidth();
+      outreachColRange.getFormat().setColumnWidth(currentWidth * 3);
+    }
+
     // Conditional format on Campus column — match tab color when cell equals campus name
     if (newCampusIdx !== -1 && studentsKept > 0) {
       const campusColRange = newSheet.getRangeByIndexes(1, newCampusIdx, studentsKept, 1);
