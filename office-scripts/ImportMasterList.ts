@@ -50,6 +50,7 @@ function main(
   const HOLD_COLS = ["hold"];
   const ATTENDANCE_COLS = ["attendance %", "attendance%", "attendancepercent", "attendance"];
   const EXPECTED_START_COLS = ["expected start date", "start date", "expstartdate"];
+  const PROGRAM_VERSION_COLS = ["programversion", "program version", "program", "progversdescrip"];
 
   // ── helpers ──────────────────────────────────────────────────────────
   const normalize = (h: string) => h.toLowerCase().replace(/\s+/g, "");
@@ -173,6 +174,7 @@ function main(
   const mLastGradeCol = findColIndex(masterHeaders, LAST_COURSE_GRADE_COLS);
   const mHoldCol = findColIndex(masterHeaders, HOLD_COLS);
   const mAttendanceCol = findColIndex(masterHeaders, ATTENDANCE_COLS);
+  const mProgramVersionCol = findColIndex(masterHeaders, PROGRAM_VERSION_COLS);
 
   if (inNameCol === -1) return "ERROR: Incoming data has no Student Name column.";
   if (mNameCol === -1) return "ERROR: Master List has no Student Name column.";
@@ -325,6 +327,13 @@ function main(
 
       // Format name to "Last, First"
       if (mc === mNameCol) val = formatToLastFirst(String(val));
+
+      // Trim Program Version: remove prefix up to and including the first 4-digit year
+      // e.g., "B2-Q-2024 Allied Health Management" → "Allied Health Management"
+      if (mc === mProgramVersionCol && val) {
+        const match = String(val).match(/^.*?\d{4}\s+(.*)$/);
+        if (match) val = match[1].trim();
+      }
 
       // Wrap Gradebook URLs in HYPERLINK
       if (mc === mGradebookCol && val) {
