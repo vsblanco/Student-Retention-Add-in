@@ -173,19 +173,34 @@ function main(
     // Set tab color (cycles through palette)
     newSheet.setTabColor(TAB_COLORS[ci % TAB_COLORS.length]);
 
-    // Hide columns not in the visible list
-    const visibleSet = new Set(DEFAULT_VISIBLE_COLUMNS);
-    for (let c = 0; c < headerColCount; c++) {
-      const headerStripped = stripStr(String(headers[c]));
-      if (!visibleSet.has(headerStripped)) {
-        newSheet.getRangeByIndexes(0, c, 1, 1).getEntireColumn().setColumnHidden(true);
-      }
-    }
-
-    // Auto-fit columns once at the end
+    // Auto-fit columns BEFORE hiding, so hidden state is preserved
     const finalRange = newSheet.getUsedRange();
     if (finalRange) {
       finalRange.getFormat().autofitColumns();
+    }
+
+    // ── FINAL STEP: Hide columns not in the visible list ──
+    // This must be the last step so nothing re-reveals the hidden columns.
+    // Batch consecutive hidden columns into single range calls to reduce
+    // API calls and avoid payload issues.
+    const visibleSet = new Set(DEFAULT_VISIBLE_COLUMNS);
+    const hiddenRuns: { start: number; count: number }[] = [];
+    let runStart = -1;
+    for (let c = 0; c < headerColCount; c++) {
+      const headerStripped = stripStr(String(headers[c]));
+      const shouldHide = !visibleSet.has(headerStripped);
+      if (shouldHide) {
+        if (runStart === -1) runStart = c;
+      } else if (runStart !== -1) {
+        hiddenRuns.push({ start: runStart, count: c - runStart });
+        runStart = -1;
+      }
+    }
+    if (runStart !== -1) {
+      hiddenRuns.push({ start: runStart, count: headerColCount - runStart });
+    }
+    for (const run of hiddenRuns) {
+      newSheet.getRangeByIndexes(0, run.start, 1, run.count).getEntireColumn().setColumnHidden(true);
     }
 
     sheetsCreated++;
