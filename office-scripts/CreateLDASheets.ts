@@ -104,7 +104,6 @@ function main(
   // ── 4. Create one sheet per campus ───────────────────────────────────
   // We already have masterValues from step 1 — reuse it to decide which
   // rows to delete in each campus copy (no re-reading the copied sheet).
-  const existingSheets = workbook.getWorksheets().map((s) => s.getName());
   let sheetsCreated = 0;
   let totalStudents = 0;
   const headerColCount = headers.length;
@@ -112,13 +111,12 @@ function main(
   for (let ci = 0; ci < campusList.length; ci++) {
     const campusName = campusList[ci];
 
-    // Generate unique sheet name
-    let sheetName = campusName;
-    let counter = 2;
-    while (existingSheets.includes(sheetName)) {
-      sheetName = `${campusName} (${counter++})`;
+    // If a sheet with this campus name already exists, delete it first
+    const sheetName = campusName;
+    const existingSheet = workbook.getWorksheet(sheetName);
+    if (existingSheet) {
+      existingSheet.delete();
     }
-    existingSheets.push(sheetName);
 
     // Duplicate the Master List
     const newSheet = masterSheet.copy(ExcelScript.WorksheetPositionType.after, masterSheet);
@@ -213,6 +211,17 @@ function main(
       const outreachColRange = newSheet.getRangeByIndexes(0, outreachIdx, 1, 1).getEntireColumn();
       const currentWidth = outreachColRange.getFormat().getColumnWidth();
       outreachColRange.getFormat().setColumnWidth(currentWidth * 3);
+    }
+
+    // Halve the Program Version column width to save space
+    const programVersionIdx = updatedHeaders.findIndex((h) => {
+      const s = stripStr(String(h));
+      return s === "programversion" || s === "program" || s === "progversdescrip";
+    });
+    if (programVersionIdx !== -1) {
+      const pvColRange = newSheet.getRangeByIndexes(0, programVersionIdx, 1, 1).getEntireColumn();
+      const currentWidth = pvColRange.getFormat().getColumnWidth();
+      pvColRange.getFormat().setColumnWidth(currentWidth / 2);
     }
 
     // Conditional format on Campus column — match tab color when cell equals campus name
