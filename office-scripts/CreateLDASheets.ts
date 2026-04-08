@@ -170,6 +170,19 @@ function main(
       }
     }
 
+    // Sort by Days Out descending (greatest to least)
+    if (studentsKept > 0) {
+      const sortRange = newSheet.getUsedRange();
+      if (sortRange) {
+        sortRange.getSort().apply(
+          [{ key: daysOutIdx, ascending: false, sortOn: ExcelScript.SortOn.value }],
+          false, // matchCase
+          true,  // hasHeaders
+          ExcelScript.SortOrientation.rows
+        );
+      }
+    }
+
     // Set tab color (cycles through palette)
     const tabColor = TAB_COLORS[ci % TAB_COLORS.length];
     newSheet.setTabColor(tabColor);
