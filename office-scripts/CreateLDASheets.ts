@@ -183,6 +183,17 @@ function main(
       }
     }
 
+    // ── Reorder columns: Assigned first, Outreach before Phone ────────
+    // After each move, indices shift — re-find positions from the sheet.
+    reorderColumns(newSheet, headerColCount);
+
+    // Read fresh headers after reordering (column positions have changed)
+    const updatedHeadersRange = newSheet.getRangeByIndexes(0, 0, 1, headerColCount);
+    const updatedHeaders = updatedHeadersRange.getValues()[0] as (string | number | boolean)[];
+
+    // Find new campus column index (after reorder)
+    const newCampusIdx = updatedHeaders.findIndex((h) => stripStr(String(h)) === "campus");
+
     // Set tab color (cycles through palette)
     const tabColor = TAB_COLORS[ci % TAB_COLORS.length];
     newSheet.setTabColor(tabColor);
@@ -194,8 +205,8 @@ function main(
     }
 
     // Conditional format on Campus column — match tab color when cell equals campus name
-    if (campusIdx !== -1 && studentsKept > 0) {
-      const campusColRange = newSheet.getRangeByIndexes(1, campusIdx, studentsKept, 1);
+    if (newCampusIdx !== -1 && studentsKept > 0) {
+      const campusColRange = newSheet.getRangeByIndexes(1, newCampusIdx, studentsKept, 1);
       const cf = campusColRange.addConditionalFormat(ExcelScript.ConditionalFormatType.cellValue);
       cf.getCellValue().getFormat().getFill().setColor(tabColor);
       cf.getCellValue().setRule({
@@ -212,7 +223,7 @@ function main(
     const hiddenRuns: { start: number; count: number }[] = [];
     let runStart = -1;
     for (let c = 0; c < headerColCount; c++) {
-      const headerStripped = stripStr(String(headers[c]));
+      const headerStripped = stripStr(String(updatedHeaders[c]));
       const shouldHide = !visibleSet.has(headerStripped);
       if (shouldHide) {
         if (runStart === -1) runStart = c;
@@ -232,4 +243,73 @@ function main(
   }
 
   return `SUCCESS: Created ${sheetsCreated} LDA sheet(s) with ${totalStudents} total students across ${campusList.join(", ")}.`;
+}
+
+/**
+ * Reorders columns on the sheet so:
+ *   - Assigned is the very first column (index 0)
+ *   - Outreach is immediately before Phone
+ *
+ * Re-reads the header row between moves since indices shift after each one.
+ */
+function reorderColumns(sheet: ExcelScript.Worksheet, colCount: number): void {
+  const stripStr = (s: string) => String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+
+  const readHeaders = (): string[] => {
+    const headerRange = sheet.getRangeByIndexes(0, 0, 1, colCount);
+    const row = headerRange.getValues()[0] as (string | number | boolean)[];
+    return row.map((h) => stripStr(String(h)));
+  };
+
+  const findIdx = (headerList: string[], candidates: string[]): number => {
+    for (const cand of candidates) {
+      const idx = headerList.indexOf(stripStr(cand));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  // ── Step 1: Move Assigned to column 0 ──
+  let headers = readHeaders();
+  const assignedIdx = findIdx(headers, ["assigned", "advisor"]);
+  if (assignedIdx > 0) {
+    moveColumn(sheet, assignedIdx, 0);
+  }
+
+  // ── Step 2: Move Outreach to just before Phone ──
+  headers = readHeaders();
+  const outreachIdx = findIdx(headers, ["outreach", "comments", "comment"]);
+  const phoneIdx = findIdx(headers, ["phone", "phone number", "phonenumber", "contact number"]);
+  if (outreachIdx !== -1 && phoneIdx !== -1 && outreachIdx !== phoneIdx - 1) {
+    // Target index: position of Phone. Inserting here pushes Phone (and Outreach if after) right.
+    moveColumn(sheet, outreachIdx, phoneIdx);
+  }
+}
+
+/**
+ * Moves a column from sourceIdx to targetIdx by:
+ *   1. Inserting an empty column at targetIdx (shifts right)
+ *   2. Copying source column content (with all formatting) to the new empty column
+ *   3. Deleting the original source column (shifts left)
+ */
+function moveColumn(sheet: ExcelScript.Worksheet, sourceIdx: number, targetIdx: number): void {
+  if (sourceIdx === targetIdx) return;
+
+  const usedRange = sheet.getUsedRange();
+  if (!usedRange) return;
+  const rowCount = usedRange.getRowCount();
+
+  // Insert empty column at target
+  sheet.getRangeByIndexes(0, targetIdx, 1, 1).getEntireColumn().insert(ExcelScript.InsertShiftDirection.right);
+
+  // Source index shifts right by 1 if target was at or before it
+  const adjustedSource = sourceIdx >= targetIdx ? sourceIdx + 1 : sourceIdx;
+
+  // Copy source column to target (with all formatting)
+  const srcRange = sheet.getRangeByIndexes(0, adjustedSource, rowCount, 1);
+  const dstRange = sheet.getRangeByIndexes(0, targetIdx, rowCount, 1);
+  dstRange.copyFrom(srcRange, ExcelScript.RangeCopyType.all);
+
+  // Delete the now-duplicate source column (shifts left)
+  srcRange.getEntireColumn().delete(ExcelScript.DeleteShiftDirection.left);
 }
