@@ -213,7 +213,9 @@ function main(
       outreachColRange.getFormat().setColumnWidth(currentWidth * 3);
     }
 
-    // Halve the Program Version column width to save space
+    // Halve the Program Version column width, enable wrap text on its data
+    // cells, and lock the row height so overflow is clipped instead of
+    // spilling into adjacent empty cells.
     const programVersionIdx = updatedHeaders.findIndex((h) => {
       const s = stripStr(String(h));
       return s === "programversion" || s === "program" || s === "progversdescrip";
@@ -222,6 +224,19 @@ function main(
       const pvColRange = newSheet.getRangeByIndexes(0, programVersionIdx, 1, 1).getEntireColumn();
       const currentWidth = pvColRange.getFormat().getColumnWidth();
       pvColRange.getFormat().setColumnWidth(currentWidth / 2);
+
+      // Enable wrap text on the Program Version data cells (not the header)
+      // combined with a fixed row height → Excel clips overflow.
+      if (studentsKept > 0) {
+        const pvDataRange = newSheet.getRangeByIndexes(1, programVersionIdx, studentsKept, 1);
+        pvDataRange.getFormat().setWrapText(true);
+
+        // Lock each data row to a standard single-line height.
+        // getRowHeight/setRowHeight is per-row, so we set it on the whole
+        // data body range at once via the format object.
+        const dataBodyRange = newSheet.getRangeByIndexes(1, 0, studentsKept, headerColCount);
+        dataBodyRange.getFormat().setRowHeight(18);
+      }
     }
 
     // Conditional format on Campus column — match tab color when cell equals campus name
