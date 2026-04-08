@@ -329,14 +329,14 @@ function main(
       if (mc === mNameCol) val = formatToLastFirst(String(val));
 
       // Trim Program Version: remove prefix up to and including the first
-      // year (2 or 4 digit), followed by any separator (space or dash).
+      // 4-digit year instance, followed by any separator (space or dash).
       // Examples:
       //   "B2-Q-2024 Allied Health Management"          → "Allied Health Management"
       //   "B-S-2024-Science in Nursing RN to BSN SF"    → "Science in Nursing RN to BSN SF"
-      //   "Associate Degree in Business Administration 22 - Florida Spanish" → "- Florida Spanish"
-      //   "BBASF-Spa-Human Resources-25"                → "" (nothing after)
+      //   "M-S-2024-Business Administration..."         → "Business Administration..."
+      // Strings without a 4-digit year are left unchanged.
       if (mc === mProgramVersionCol && val) {
-        const match = String(val).match(/^.*?\d{2,4}[\s-]+(.*)$/);
+        const match = String(val).match(/^.*?\d{4}[\s-]+(.*)$/);
         if (match) val = match[1].trim();
       }
 
