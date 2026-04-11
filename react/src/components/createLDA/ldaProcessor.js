@@ -196,6 +196,17 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
  * @param {Function} onCampusProgress - Optional callback for multi-campus progress: (campusName, campusIndex, totalCampuses, status) => void
  */
 export async function createLDA(userOverrides, onProgress, onBatchProgress = null, onCampusProgress = null) {
+    // Suppress StudentView's Outreach change handler for the entire LDA run.
+    // Without this, when a StudentView is open at the same time, activating
+    // the newly-created LDA sheet causes StudentView to rebind its onChanged
+    // listener to it, and the programmatic Outreach writes below get
+    // interpreted as user edits — causing addComment to fire for every row
+    // and crashing the add-in. Cleared in finally so it's always reset.
+    const hadWindow = (typeof window !== 'undefined');
+    const previousSuppress = hadWindow ? window.__srkSuppressOutreachHandler : undefined;
+    if (hadWindow) {
+        window.__srkSuppressOutreachHandler = true;
+    }
     try {
         // --- STEP 1: Validate Settings & Environment ---
         if (onProgress) onProgress('validate', 'active');
@@ -1470,6 +1481,12 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
     } catch (error) {
         console.error("LDA Generation Error:", error);
         throw error;
+    } finally {
+        // Always restore the Outreach handler suppression flag, even on error,
+        // so that subsequent user edits to Outreach columns are handled normally.
+        if (hadWindow) {
+            window.__srkSuppressOutreachHandler = previousSuppress || false;
+        }
     }
 }
 
