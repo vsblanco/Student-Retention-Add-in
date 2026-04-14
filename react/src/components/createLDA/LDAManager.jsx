@@ -30,6 +30,7 @@ export default function CreateLDAManager({ onReady } = {}) {
     includeAttendanceList: false,
     includeLDATag: true,
     includeDNCTag: true,
+    includeNextAssignmentDue: true,
     sheetNameMode: 'date',
     advisorAssignment: {
       enabled: false,
@@ -78,6 +79,7 @@ export default function CreateLDAManager({ onReady } = {}) {
                 includeAttendanceList: (wb.includeAttendanceList !== undefined) ? !!wb.includeAttendanceList : prev.includeAttendanceList,
                 includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
                 includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
+                includeNextAssignmentDue: (wb.includeNextAssignmentDue !== undefined) ? !!wb.includeNextAssignmentDue : prev.includeNextAssignmentDue,
                 sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
                 advisorAssignment: wb.advisorAssignment || prev.advisorAssignment,
               }));
@@ -652,6 +654,13 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         label="Include Attendance List"
         isOn={settings.includeAttendanceList}
         onToggle={() => handleToggle('includeAttendanceList')}
+      />
+
+      <ToggleRow
+        key="toggle-next-assignment-due"
+        label="Include Next Assignment Due"
+        isOn={settings.includeNextAssignmentDue}
+        onToggle={() => handleToggle('includeNextAssignmentDue')}
       />
 
       <button
