@@ -58,6 +58,14 @@ export const defaultWorkbookSettings = [
 		description: 'Whether to include the low attendance student list.'
 	},
 	{
+		id: 'includeNextAssignmentDue',
+		label: 'Include Next Assignment Due',
+		type: 'boolean',
+		defaultValue: true,
+		section: 'Create LDA',
+		description: "Whether to include the student's next assignment due date message in the Outreach column."
+	},
+	{
 		id: 'includeLdatTag',
 		label: 'Include LDA Tag',
 		type: 'boolean',

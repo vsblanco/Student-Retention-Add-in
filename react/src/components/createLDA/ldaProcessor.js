@@ -137,7 +137,7 @@ function formatFriendlyDate(value) {
  * @param {Map} dncMap - Map of ID -> Tag Text
  * @returns {string|null} - The formatted message or null
  */
-function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank) {
+function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, includeNextAssignmentDue = true) {
     // Priority 1: Explicit DNC (Highest Priority - Stop everything)
     if (sId && dncMap.has(sId)) {
         const dncTag = dncMap.get(sId);
@@ -174,14 +174,17 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
     }
 
     // Priority 4: Zero missing assignments with a next assignment due date
-    if (typeof missingVal === 'number' && missingVal === 0 && nextAssignmentDueVal) {
+    // Skipped entirely when the user disables "Include Next Assignment Due".
+    if (includeNextAssignmentDue && typeof missingVal === 'number' && missingVal === 0 && nextAssignmentDueVal) {
         const formattedDate = formatFriendlyDate(nextAssignmentDueVal);
         return `Student's next assignment is due ${formattedDate}.`;
     }
 
     // Priority 5: Zero missing assignments but NO next assignment due date (abnormality flag)
-    // Only triggers if the column has data for other students (not entirely blank)
-    if (typeof missingVal === 'number' && missingVal === 0 && !nextAssignmentDueVal && !nextAssignmentDueColumnAllBlank) {
+    // Only triggers if the column has data for other students (not entirely blank).
+    // Also skipped when the user disables "Include Next Assignment Due" since the
+    // flag is specifically tied to the next-assignment-due information.
+    if (includeNextAssignmentDue && typeof missingVal === 'number' && missingVal === 0 && !nextAssignmentDueVal && !nextAssignmentDueColumnAllBlank) {
         return "Student has 0 missing assignments but they have no next assignment due date. Please check their Grade Book.";
     }
 
@@ -228,6 +231,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             includeAttendanceList: userOverrides.includeAttendanceList ?? false,
             includeLDATag: userOverrides.includeLDATag ?? true,
             includeDNCTag: userOverrides.includeDNCTag ?? true,
+            includeNextAssignmentDue: userOverrides.includeNextAssignmentDue ?? true,
             sheetNameMode: userOverrides.sheetNameMode ?? 'date',
             columns: workbookSettings.columns,
             advisorAssignment: userOverrides.advisorAssignment ?? { enabled: false, advisors: [] }
@@ -934,7 +938,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const sId = rowObj.values[studentIdIdx];
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank);
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
                     const isGradeBookFlag = retentionMsg && retentionMsg.includes("Please check their Grade Book");
                     const isRetentionActive = !!retentionMsg && !isGradeBookFlag;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
@@ -1258,7 +1262,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
 
                     // 2. Generate Retention Message using helper
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank);
+                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
 
                     // 2b. Course Start Baseline Check
                     let courseStartMsg = null;
