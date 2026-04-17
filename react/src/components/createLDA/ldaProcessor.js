@@ -1541,7 +1541,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
     // --- STEP 3: Create table after all data is written ---
     const fullRange = sheet.getRangeByIndexes(startRow, 0, rowCount + 1, colCount);
     const table = sheet.tables.add(fullRange, true);
-    table.name = tableName + "_" + Math.floor(Math.random() * 1000);
+    // Excel table names must be unique across the whole workbook and may only
+    // contain letters, numbers, periods, and underscores. Use today's date plus
+    // time to keep names readable while guaranteeing uniqueness across runs.
+    const now = new Date();
+    const datePart = `${now.getMonth() + 1}_${now.getDate()}_${now.getFullYear()}`;
+    const timePart = `${now.getHours()}_${now.getMinutes()}_${now.getSeconds()}_${now.getMilliseconds()}`;
+    table.name = `${tableName}_${datePart}_${timePart}`;
     table.style = "TableStyleLight9";
     try {
         await context.sync();
