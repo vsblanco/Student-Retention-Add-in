@@ -21,11 +21,11 @@ const SHEET_NAMES = {
 // Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size for data
 const BATCH_SIZE = 500;
 
-// Smaller batch size for formatting operations (colors, fonts, formulas per cell)
-// These are more expensive as each cell operation adds to the request queue
-// Kept small (50) to stay well under Excel's per-sync operation limits,
-// especially with partial-row cell highlights generating multiple range calls per row.
-const FORMAT_BATCH_SIZE = 50;
+// Batch size for formatting operations (colors, fonts, formulas per cell).
+// Raised from 50 -> 250 since within-row cell highlights and consecutive-row
+// row colors are now merged into single range calls, keeping payload low while
+// cutting the number of context.sync() round-trips by ~5x.
+const FORMAT_BATCH_SIZE = 250;
 
 /**
  * Helper to convert Excel serial date to MM-DD-YY string
@@ -1652,9 +1652,30 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             });
         }
 
-        // Apply row colors (these are rare, so individual calls are OK)
-        for (const op of rowColorOps) {
-            bodyRange.getRow(op.rowIdx).format.fill.color = op.color;
+        // Apply row colors — merge consecutive rows with the same color into
+        // a single range call to minimize API ops per sync.
+        if (rowColorOps.length > 0) {
+            rowColorOps.sort((a, b) => a.rowIdx - b.rowIdx);
+            let runStart = rowColorOps[0].rowIdx;
+            let runEnd = runStart;
+            let runColor = rowColorOps[0].color;
+            const flushRun = () => {
+                const absoluteRow = startRow + 1 + runStart;
+                sheet.getRangeByIndexes(absoluteRow, 0, runEnd - runStart + 1, colCount)
+                    .format.fill.color = runColor;
+            };
+            for (let i = 1; i < rowColorOps.length; i++) {
+                const op = rowColorOps[i];
+                if (op.color === runColor && op.rowIdx === runEnd + 1) {
+                    runEnd = op.rowIdx;
+                } else {
+                    flushRun();
+                    runStart = op.rowIdx;
+                    runEnd = op.rowIdx;
+                    runColor = op.color;
+                }
+            }
+            flushRun();
         }
 
         // Apply cell color ranges (merged ranges = fewer API calls)
