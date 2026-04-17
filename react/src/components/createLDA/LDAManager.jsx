@@ -63,52 +63,69 @@ export default function CreateLDAManager({ onReady } = {}) {
   // { show: boolean, outreach: boolean, assigned: boolean, pendingPayload: object|null }
   const [missingColumnsModal, setMissingColumnsModal] = useState({ show: false, outreach: false, assigned: false });
 
+  // Track whether the initial settings load has resolved so we can hold the
+  // app-level loading state until the toggles reflect saved values.
+  const [initialSettingsLoaded, setInitialSettingsLoaded] = useState(false);
+
   // Load workbook settings on mount
   useEffect(() => {
     let isMounted = true;
 
-    const loadSettings = () => {
-      if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
-        Office.context.document.settings.refreshAsync((result) => {
-          if (result.status === Office.AsyncResultStatus.Succeeded && isMounted) {
-            const wb = Office.context.document.settings.get('workbookSettings');
-            if (wb && typeof wb === 'object') {
-              setLdaSettings(prev => ({
-                daysOut: (wb.daysOut !== undefined && wb.daysOut !== null) ? Number(wb.daysOut) : prev.daysOut,
-                includeFailingList: (wb.includeFailingList !== undefined) ? !!wb.includeFailingList : prev.includeFailingList,
-                includeAttendanceList: (wb.includeAttendanceList !== undefined) ? !!wb.includeAttendanceList : prev.includeAttendanceList,
-                includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
-                includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
-                includeNextAssignmentDue: (wb.includeNextAssignmentDue !== undefined) ? !!wb.includeNextAssignmentDue : prev.includeNextAssignmentDue,
-                sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
-                advisorAssignment: wb.advisorAssignment || prev.advisorAssignment,
-              }));
-            }
-          }
-        });
+    const applyWorkbookSettings = (wb) => {
+      if (!isMounted) return;
+      if (wb && typeof wb === 'object') {
+        setLdaSettings(prev => ({
+          daysOut: (wb.daysOut !== undefined && wb.daysOut !== null) ? Number(wb.daysOut) : prev.daysOut,
+          includeFailingList: (wb.includeFailingList !== undefined) ? !!wb.includeFailingList : prev.includeFailingList,
+          includeAttendanceList: (wb.includeAttendanceList !== undefined) ? !!wb.includeAttendanceList : prev.includeAttendanceList,
+          includeLDATag: (wb.includeLDATag !== undefined) ? !!wb.includeLDATag : ((wb.includeLdatTag !== undefined) ? !!wb.includeLdatTag : prev.includeLDATag),
+          includeDNCTag: (wb.includeDNCTag !== undefined) ? !!wb.includeDNCTag : ((wb.includeDncTag !== undefined) ? !!wb.includeDncTag : prev.includeDNCTag),
+          includeNextAssignmentDue: (wb.includeNextAssignmentDue !== undefined) ? !!wb.includeNextAssignmentDue : prev.includeNextAssignmentDue,
+          sheetNameMode: wb.sheetNameMode || prev.sheetNameMode,
+          advisorAssignment: wb.advisorAssignment || prev.advisorAssignment,
+        }));
       }
     };
 
-    loadSettings();
+    const loadSettings = (onDone) => {
+      if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
+        Office.context.document.settings.refreshAsync((result) => {
+          if (result.status === Office.AsyncResultStatus.Succeeded) {
+            applyWorkbookSettings(Office.context.document.settings.get('workbookSettings'));
+          }
+          if (onDone) onDone();
+        });
+      } else if (onDone) {
+        onDone();
+      }
+    };
 
+    // Initial load — mark ready only after refreshAsync resolves so the first
+    // render the user sees already has saved values applied.
+    loadSettings(() => {
+      if (isMounted) setInitialSettingsLoaded(true);
+    });
+
+    const settingsChangedHandler = () => loadSettings();
     if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
-      Office.context.document.settings.addHandlerAsync(Office.EventType.SettingsChanged, loadSettings);
+      Office.context.document.settings.addHandlerAsync(Office.EventType.SettingsChanged, settingsChangedHandler);
     }
 
     return () => {
       isMounted = false;
       if (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && Office.context.document.settings) {
-        Office.context.document.settings.removeHandlerAsync(Office.EventType.SettingsChanged, loadSettings);
+        Office.context.document.settings.removeHandlerAsync(Office.EventType.SettingsChanged, settingsChangedHandler);
       }
     };
   }, []);
 
-  // Signal that LDAManager is ready
+  // Signal ready only after the initial settings load completes so the parent
+  // loading screen stays up until toggles/badges reflect saved values.
   useEffect(() => {
-    if (onReady) {
+    if (initialSettingsLoaded && onReady) {
       onReady();
     }
-  }, [onReady]);
+  }, [initialSettingsLoaded, onReady]);
 
   // Detect campuses when campus mode is toggled on
   useEffect(() => {
