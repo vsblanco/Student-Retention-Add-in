@@ -610,6 +610,28 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
           isOn={settings.includeDNCTag}
           onToggle={() => handleToggle('includeDNCTag')}
         />
+
+        <div className="mt-2">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Preview
+          </span>
+          <div className="mt-2 space-y-2">
+            <CommentPreview
+              tagLabel="LDA"
+              tagClass="bg-orange-200 text-orange-800"
+              bgClass="bg-orange-100"
+              borderClass="border-orange-400"
+              text="Student plans to submit their LDA before Friday."
+            />
+            <CommentPreview
+              tagLabel="DNC"
+              tagClass="bg-red-200 text-black"
+              bgClass="bg-red-100"
+              borderClass="border-red-600"
+              text="Student requested not to be contacted by phone."
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -780,6 +802,23 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
+    </div>
+  );
+}
+
+function CommentPreview({ tagLabel, tagClass, bgClass, borderClass, text }) {
+  return (
+    <div className={`${bgClass} ${borderClass} p-3 rounded-lg shadow-sm border-l-4`}>
+      <div className="flex items-center gap-1 mb-1.5">
+        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${tagClass}`}>
+          {tagLabel}
+        </span>
+      </div>
+      <p className="text-sm text-gray-800">{text}</p>
+      <div className="text-[10px] text-gray-500 mt-2 pt-2 border-t border-gray-200/70 flex justify-between">
+        <span>Advisor</span>
+        <span>Today</span>
+      </div>
     </div>
   );
 }
