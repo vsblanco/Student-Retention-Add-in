@@ -636,7 +636,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
               tagClass="bg-orange-200 text-orange-800"
               bgClass="bg-orange-100"
               borderClass="border-orange-400"
-              text="Student plans to submit their LDA by Friday."
+              text="Student plans to submit by Friday."
             />
             <CommentPreview
               tagLabel="DNC"
