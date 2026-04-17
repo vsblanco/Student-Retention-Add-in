@@ -586,6 +586,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <ToggleRow
           key="toggle-lda-tag"
           label="Include LDA Tag"
+          tooltip="Mark students who already have an LDA follow-up logged in Student History."
           isOn={settings.includeLDATag}
           onToggle={() => handleToggle('includeLDATag')}
         />
@@ -593,6 +594,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <ToggleRow
           key="toggle-dnc-tag"
           label="Include DNC Tag"
+          tooltip="Mark students flagged as Do Not Contact in Student History."
           isOn={settings.includeDNCTag}
           onToggle={() => handleToggle('includeDNCTag')}
         />
@@ -625,6 +627,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <ToggleRow
           key="toggle-failing-list"
           label="Include Failing List"
+          tooltip="Add a second table below the LDA table listing students with failing grades."
           isOn={settings.includeFailingList}
           onToggle={() => handleToggle('includeFailingList')}
         />
@@ -632,6 +635,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <ToggleRow
           key="toggle-attendance-list"
           label="Include Attendance List"
+          tooltip="Add a third table listing students with attendance below 60%."
           isOn={settings.includeAttendanceList}
           onToggle={() => handleToggle('includeAttendanceList')}
         />
@@ -639,6 +643,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <ToggleRow
           key="toggle-next-assignment-due"
           label="Include Next Assignment Due"
+          tooltip="Use each student's next assignment due date in retention messaging."
           isOn={settings.includeNextAssignmentDue}
           onToggle={() => handleToggle('includeNextAssignmentDue')}
         />
@@ -651,7 +656,10 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
       <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Sheet Name</span>
-          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+          <Info
+            title="Name the new sheet by today's date or by the student's campus."
+            className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+          />
         </div>
         <div className="relative flex bg-slate-200 rounded-full p-0.5" style={{ width: 130 }}>
           <button
@@ -692,7 +700,10 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             Days Out
           </label>
           <div className="group relative">
-             <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+             <Info
+                title="Minimum days since last attendance before a student appears on the LDA table."
+                className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+             />
           </div>
         </div>
         <input
@@ -719,7 +730,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             <div className="flex items-center gap-2">
               <span className="text-slate-700 font-medium text-sm">Inclusions</span>
               {inclusionsOn > 0 && (
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">
                   {inclusionsOn} ON
                 </span>
               )}
@@ -736,7 +747,10 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
       >
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Tags</span>
-          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+          <Info
+            title="Configure LDA and Do Not Contact (DNC) tag columns."
+            className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+          />
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
@@ -749,7 +763,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Assigned</span>
           {settings.advisorAssignment?.enabled && (
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">ON</span>
+            <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">ON</span>
           )}
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -758,12 +772,12 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
   );
 }
 
-function ToggleRow({ label, isOn, onToggle }) {
+function ToggleRow({ label, isOn, onToggle, tooltip }) {
   return (
     <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
       <div className="flex items-center gap-2">
         <span className="text-slate-700 font-medium text-sm">{label}</span>
-        <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+        {tooltip && <Info title={tooltip} className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />}
       </div>
 
       <button
