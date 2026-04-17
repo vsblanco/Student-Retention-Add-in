@@ -606,7 +606,6 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             <span className="inline-flex items-center gap-2">
               Include
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-200 text-orange-800">LDA</span>
-              Tag
             </span>
           }
           tooltip="Mark students who already have an LDA follow-up logged in Student History."
@@ -620,7 +619,6 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             <span className="inline-flex items-center gap-2">
               Include
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-black">DNC</span>
-              Tag
             </span>
           }
           tooltip="Mark students flagged as Do Not Contact in Student History."
@@ -638,14 +636,14 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
               tagClass="bg-orange-200 text-orange-800"
               bgClass="bg-orange-100"
               borderClass="border-orange-400"
-              text="Student plans to submit their LDA before Friday."
+              text="Student plans to submit their LDA by Friday."
             />
             <CommentPreview
               tagLabel="DNC"
               tagClass="bg-red-200 text-black"
               bgClass="bg-red-100"
               borderClass="border-red-600"
-              text="Student requested not to be contacted by phone."
+              text="Student requested not to be contacted."
             />
           </div>
         </div>
@@ -782,7 +780,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
               <span className="text-slate-700 font-medium text-sm">Inclusions</span>
               {inclusionsOn > 0 && (
                 <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">
-                  {inclusionsOn} ON
+                  {inclusionsOn}
                 </span>
               )}
             </div>
