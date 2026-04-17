@@ -606,7 +606,6 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             <span className="inline-flex items-center gap-2">
               Include
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-200 text-orange-800">LDA</span>
-              Tag
             </span>
           }
           tooltip="Mark students who already have an LDA follow-up logged in Student History."
@@ -620,7 +619,6 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             <span className="inline-flex items-center gap-2">
               Include
               <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-black">DNC</span>
-              Tag
             </span>
           }
           tooltip="Mark students flagged as Do Not Contact in Student History."
