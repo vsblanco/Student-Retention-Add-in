@@ -13,12 +13,12 @@ import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistrib
 const PROCESS_STEPS = [
   { id: 'validate', label: 'Validating Workbook Settings' },
   { id: 'read', label: 'Reading Master List' },
-  { id: 'filter', label: 'Filtering by Days Out' },
-  { id: 'failing', label: 'Filtering by Grades' },
-  { id: 'attendance', label: 'Filtering by Attendance' },
+  { id: 'filter', label: 'Filtering Students' },
   { id: 'createSheet', label: 'Creating Sheet' },
   { id: 'tags', label: 'Applying LDA & DNC Tags' },
-  { id: 'format', label: 'Formatting LDA Table' },
+  { id: 'writing', label: 'Writing Tables' },
+  { id: 'highlights', label: 'Applying Highlights' },
+  { id: 'hyperlinks', label: 'Inserting Hyperlinks' },
   { id: 'finalize', label: 'Finalizing Report' },
 ];
 
@@ -364,12 +364,16 @@ export default function CreateLDAManager({ onReady } = {}) {
               <div className="bg-slate-50 rounded-xl border border-slate-100 p-4 space-y-3">
                   {/* Render steps - for multi-campus, show global steps then campus list */}
                   {(isMultiCampus
-                    ? PROCESS_STEPS.filter(s => ['validate', 'read', 'filter', 'failing', 'attendance', 'tags'].includes(s.id))
+                    ? PROCESS_STEPS.filter(s => ['validate', 'read', 'filter', 'tags'].includes(s.id))
                     : PROCESS_STEPS
                   ).map((step) => {
                       const status = stepStatus[step.id] || 'pending';
-                      const showBatchProgress = (step.id === 'format' || step.id === 'read') &&
-                          status === 'active' && batchProgress && batchProgress.total > 1;
+                      const showBatchProgress = (
+                          (step.id === 'writing' && batchProgress && batchProgress.phase === 'writing') ||
+                          (step.id === 'highlights' && batchProgress && batchProgress.phase === 'highlights') ||
+                          (step.id === 'hyperlinks' && batchProgress && batchProgress.phase === 'hyperlinks') ||
+                          (step.id === 'read' && batchProgress && batchProgress.phase === 'reading')
+                      ) && status === 'active' && batchProgress.total > 1;
 
                       return (
                           <div key={step.id}>
@@ -392,7 +396,9 @@ export default function CreateLDAManager({ onReady } = {}) {
                                       <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
                                           <span>
                                               {batchProgress.phase === 'reading' ? 'Reading' :
-                                               batchProgress.phase === 'writing' ? 'Writing' : 'Formatting'}{' '}
+                                               batchProgress.phase === 'writing' ? 'Writing' :
+                                               batchProgress.phase === 'highlights' ? 'Highlighting' :
+                                               batchProgress.phase === 'hyperlinks' ? 'Hyperlinking' : 'Formatting'}{' '}
                                               {batchProgress.tableName === 'Master_List' ? 'Master List' :
                                                batchProgress.tableName === 'LDA_Table' ? 'LDA' :
                                                batchProgress.tableName === 'Attendance_Table' ? 'Attendance' : 'Failing'} data
