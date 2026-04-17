@@ -40,7 +40,7 @@ export default function CreateLDAManager({ onReady } = {}) {
 
   // State for View Management: 'settings' | 'processing' | 'done' | 'error'
   const [view, setView] = useState('settings');
-  const [settingsView, setSettingsView] = useState('main'); // 'main' | 'tags' | 'assigned'
+  const [settingsView, setSettingsView] = useState('main'); // 'main' | 'tags' | 'assigned' | 'inclusions'
   const [errorMessage, setErrorMessage] = useState('');
 
   // State for Progress Tracking: { [stepId]: 'pending' | 'active' | 'completed' }
@@ -375,15 +375,23 @@ export default function CreateLDAManager({ onReady } = {}) {
                           (step.id === 'read' && batchProgress && batchProgress.phase === 'reading')
                       ) && status === 'active' && batchProgress.total > 1;
 
+                      const isErrored = view === 'error';
                       return (
                           <div key={step.id}>
                               <div className="flex items-center gap-3">
                                   <div className="w-6 flex justify-center shrink-0">
                                       {status === 'pending' && <Circle className="w-4 h-4 text-slate-300" />}
-                                      {status === 'active' && <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />}
-                                      {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500 animate-in zoom-in duration-300" />}
+                                      {status === 'active' && (
+                                          isErrored
+                                              ? <Circle className="w-4 h-4 text-slate-300" />
+                                              : <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />
+                                      )}
+                                      {status === 'completed' && (
+                                          <CheckCircle2 className={`w-5 h-5 animate-in zoom-in duration-300 ${isErrored ? 'text-slate-300' : 'text-emerald-500'}`} />
+                                      )}
                                   </div>
                                   <div className={`flex-1 text-sm font-medium transition-colors duration-300 ${
+                                      isErrored ? 'text-slate-400' :
                                       status === 'pending' ? 'text-slate-400' :
                                       status === 'active' ? 'text-slate-800' : 'text-emerald-700'
                                   }`}>
@@ -431,21 +439,31 @@ export default function CreateLDAManager({ onReady } = {}) {
                               </span>
                           </div>
                           <div className="space-y-2">
-                              {Object.entries(campusStatuses).map(([campusName, status]) => (
+                              {Object.entries(campusStatuses).map(([campusName, status]) => {
+                                  const isErrored = view === 'error';
+                                  return (
                                   <div key={campusName} className="flex items-center gap-3 animate-in fade-in duration-300">
                                       <div className="w-6 flex justify-center shrink-0">
                                           {status === 'pending' && <Circle className="w-3.5 h-3.5 text-slate-300" />}
-                                          {status === 'active' && <Loader2 className="w-4 h-4 text-[#145F82] animate-spin" />}
-                                          {status === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-500 animate-in zoom-in duration-300" />}
+                                          {status === 'active' && (
+                                              isErrored
+                                                  ? <Circle className="w-3.5 h-3.5 text-slate-300" />
+                                                  : <Loader2 className="w-4 h-4 text-[#145F82] animate-spin" />
+                                          )}
+                                          {status === 'completed' && (
+                                              <CheckCircle2 className={`w-4 h-4 animate-in zoom-in duration-300 ${isErrored ? 'text-slate-300' : 'text-emerald-500'}`} />
+                                          )}
                                       </div>
                                       <div className={`flex-1 text-sm transition-colors duration-300 ${
+                                          isErrored ? 'text-slate-400' :
                                           status === 'pending' ? 'text-slate-400' :
                                           status === 'active' ? 'text-slate-700 font-medium' : 'text-emerald-600'
                                       }`}>
                                           {campusName}
                                       </div>
                                   </div>
-                              ))}
+                                  );
+                              })}
                           </div>
                       </div>
                   )}
@@ -453,9 +471,11 @@ export default function CreateLDAManager({ onReady } = {}) {
 
               {view === 'error' && (
                   <div className="pt-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-3 border border-red-100">
-                          <AlertCircle className="w-5 h-5 shrink-0" />
-                          <span>{errorMessage}</span>
+                      <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-3 border border-red-100">
+                          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                          <span className="flex-1 min-w-0 break-words whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              {errorMessage}
+                          </span>
                       </div>
                       <button
                         onClick={handleReset}
@@ -565,17 +585,53 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
 
         <ToggleRow
           key="toggle-lda-tag"
-          label="Include LDA Tag"
+          label={
+            <span className="inline-flex items-center gap-2">
+              Include
+              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-orange-200 text-orange-800">LDA</span>
+              Tag
+            </span>
+          }
+          tooltip="Mark students who already have an LDA follow-up logged in Student History."
           isOn={settings.includeLDATag}
           onToggle={() => handleToggle('includeLDATag')}
         />
 
         <ToggleRow
           key="toggle-dnc-tag"
-          label="Include DNC Tag"
+          label={
+            <span className="inline-flex items-center gap-2">
+              Include
+              <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-red-200 text-black">DNC</span>
+              Tag
+            </span>
+          }
+          tooltip="Mark students flagged as Do Not Contact in Student History."
           isOn={settings.includeDNCTag}
           onToggle={() => handleToggle('includeDNCTag')}
         />
+
+        <div className="mt-2">
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Preview
+          </span>
+          <div className="mt-2 space-y-2">
+            <CommentPreview
+              tagLabel="LDA"
+              tagClass="bg-orange-200 text-orange-800"
+              bgClass="bg-orange-100"
+              borderClass="border-orange-400"
+              text="Student plans to submit their LDA before Friday."
+            />
+            <CommentPreview
+              tagLabel="DNC"
+              tagClass="bg-red-200 text-black"
+              bgClass="bg-red-100"
+              borderClass="border-red-600"
+              text="Student requested not to be contacted by phone."
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -590,12 +646,54 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
     );
   }
 
+  if (settingsView === 'inclusions') {
+    return (
+      <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+        <button
+          type="button"
+          onClick={() => setSettingsView('main')}
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <ToggleRow
+          key="toggle-failing-list"
+          label="Include Failing List"
+          tooltip="Add a second table below the LDA table listing students with failing grades."
+          isOn={settings.includeFailingList}
+          onToggle={() => handleToggle('includeFailingList')}
+        />
+
+        <ToggleRow
+          key="toggle-attendance-list"
+          label="Include Attendance List"
+          tooltip="Add a third table listing students with attendance below 60%."
+          isOn={settings.includeAttendanceList}
+          onToggle={() => handleToggle('includeAttendanceList')}
+        />
+
+        <ToggleRow
+          key="toggle-next-assignment-due"
+          label="Include Next Assignment Due"
+          tooltip="Use each student's next assignment due date in retention messaging."
+          isOn={settings.includeNextAssignmentDue}
+          onToggle={() => handleToggle('includeNextAssignmentDue')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Sheet Name</span>
-          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+          <Info
+            title="Name the new sheet by today's date or by the student's campus."
+            className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+          />
         </div>
         <div className="relative flex bg-slate-200 rounded-full p-0.5" style={{ width: 130 }}>
           <button
@@ -636,7 +734,10 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
             Days Out
           </label>
           <div className="group relative">
-             <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+             <Info
+                title="Minimum days since last attendance before a student appears on the LDA table."
+                className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+             />
           </div>
         </div>
         <input
@@ -648,26 +749,30 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         />
       </div>
 
-      <ToggleRow
-        key="toggle-failing-list"
-        label="Include Failing List"
-        isOn={settings.includeFailingList}
-        onToggle={() => handleToggle('includeFailingList')}
-      />
-
-      <ToggleRow
-        key="toggle-attendance-list"
-        label="Include Attendance List"
-        isOn={settings.includeAttendanceList}
-        onToggle={() => handleToggle('includeAttendanceList')}
-      />
-
-      <ToggleRow
-        key="toggle-next-assignment-due"
-        label="Include Next Assignment Due"
-        isOn={settings.includeNextAssignmentDue}
-        onToggle={() => handleToggle('includeNextAssignmentDue')}
-      />
+      {(() => {
+        const inclusionsOn = [
+          settings.includeFailingList,
+          settings.includeAttendanceList,
+          settings.includeNextAssignmentDue,
+        ].filter(Boolean).length;
+        return (
+          <button
+            type="button"
+            onClick={() => setSettingsView('inclusions')}
+            className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-slate-700 font-medium text-sm">Inclusions</span>
+              {inclusionsOn > 0 && (
+                <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">
+                  {inclusionsOn} ON
+                </span>
+              )}
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </button>
+        );
+      })()}
 
       <button
         type="button"
@@ -676,7 +781,10 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
       >
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Tags</span>
-          <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+          <Info
+            title="Configure LDA and Do Not Contact (DNC) tag columns."
+            className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600"
+          />
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
       </button>
@@ -689,7 +797,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         <div className="flex items-center gap-2">
           <span className="text-slate-700 font-medium text-sm">Assigned</span>
           {settings.advisorAssignment?.enabled && (
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">ON</span>
+            <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">ON</span>
           )}
         </div>
         <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -698,12 +806,29 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
   );
 }
 
-function ToggleRow({ label, isOn, onToggle }) {
+function CommentPreview({ tagLabel, tagClass, bgClass, borderClass, text }) {
+  return (
+    <div className={`${bgClass} ${borderClass} p-3 rounded-lg shadow-sm border-l-4`}>
+      <div className="flex items-center gap-1 mb-1.5">
+        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${tagClass}`}>
+          {tagLabel}
+        </span>
+      </div>
+      <p className="text-sm text-gray-800">{text}</p>
+      <div className="text-[10px] text-gray-500 mt-2 pt-2 border-t border-gray-200/70 flex justify-between">
+        <span>Advisor</span>
+        <span>Today</span>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, isOn, onToggle, tooltip }) {
   return (
     <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
       <div className="flex items-center gap-2">
         <span className="text-slate-700 font-medium text-sm">{label}</span>
-        <Info className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />
+        {tooltip && <Info title={tooltip} className="w-4 h-4 text-slate-400 cursor-help hover:text-slate-600" />}
       </div>
 
       <button
