@@ -782,7 +782,7 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
               <span className="text-slate-700 font-medium text-sm">Inclusions</span>
               {inclusionsOn > 0 && (
                 <span className="text-[10px] font-semibold text-white bg-[#145F82] px-1.5 py-0.5 rounded-full">
-                  {inclusionsOn} ON
+                  {inclusionsOn}
                 </span>
               )}
             </div>
