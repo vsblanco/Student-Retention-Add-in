@@ -21,11 +21,16 @@ const SHEET_NAMES = {
 // Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size for data
 const BATCH_SIZE = 500;
 
-// Batch size for formatting operations (colors, fonts, formulas per cell).
-// Raised from 50 -> 250 since within-row cell highlights and consecutive-row
-// row colors are now merged into single range calls, keeping payload low while
-// cutting the number of context.sync() round-trips by ~5x.
-const FORMAT_BATCH_SIZE = 250;
+// Row-count ceiling for formatting batches. Set modestly so typical data
+// stays under the ~5MB per-sync payload cap. For high-density rows (lots of
+// highlights/formulas), MAX_OPS_PER_SYNC triggers an earlier flush.
+const FORMAT_BATCH_SIZE = 100;
+
+// Hard cap on queued API ops between syncs. Excel Web rejects syncs whose
+// payload exceeds its internal limit with "The request payload size has
+// exceeded the limit." Keeping ops bounded avoids that, independent of batch
+// size.
+const MAX_OPS_PER_SYNC = 400;
 
 /**
  * Helper to convert Excel serial date to MM-DD-YY string
@@ -1652,6 +1657,16 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             });
         }
 
+        // Track queued ops so we can flush early before hitting Excel's
+        // per-sync payload cap on highlight/formula-heavy batches.
+        let queuedOps = 0;
+        const flushIfFull = async () => {
+            if (queuedOps >= MAX_OPS_PER_SYNC) {
+                await context.sync();
+                queuedOps = 0;
+            }
+        };
+
         // Apply row colors — merge consecutive rows with the same color into
         // a single range call to minimize API ops per sync.
         if (rowColorOps.length > 0) {
@@ -1659,23 +1674,25 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             let runStart = rowColorOps[0].rowIdx;
             let runEnd = runStart;
             let runColor = rowColorOps[0].color;
-            const flushRun = () => {
+            const flushRun = async () => {
                 const absoluteRow = startRow + 1 + runStart;
                 sheet.getRangeByIndexes(absoluteRow, 0, runEnd - runStart + 1, colCount)
                     .format.fill.color = runColor;
+                queuedOps++;
+                await flushIfFull();
             };
             for (let i = 1; i < rowColorOps.length; i++) {
                 const op = rowColorOps[i];
                 if (op.color === runColor && op.rowIdx === runEnd + 1) {
                     runEnd = op.rowIdx;
                 } else {
-                    flushRun();
+                    await flushRun();
                     runStart = op.rowIdx;
                     runEnd = op.rowIdx;
                     runColor = op.color;
                 }
             }
-            flushRun();
+            await flushRun();
         }
 
         // Apply cell color ranges (merged ranges = fewer API calls)
@@ -1685,18 +1702,23 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             const absoluteRow = startRow + 1 + op.rowIdx;
             const range = sheet.getRangeByIndexes(absoluteRow, op.startCol, 1, op.endCol - op.startCol + 1);
             range.format.fill.color = op.color;
+            queuedOps++;
             if (op.strikethrough) {
                 range.format.font.strikethrough = true;
                 range.format.font.color = "#9C0006";
+                queuedOps += 2;
             }
+            await flushIfFull();
         }
 
         // Apply formulas (typically few per batch)
         for (const op of formulaOps) {
             bodyRange.getCell(op.rowIdx, op.colIdx).formulas = [[op.formula]];
+            queuedOps++;
+            await flushIfFull();
         }
 
-        // Sync after each batch
+        // Final sync for any remaining queued ops in this row batch
         try {
             await context.sync();
         } catch (e) {
