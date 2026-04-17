@@ -40,7 +40,7 @@ export default function CreateLDAManager({ onReady } = {}) {
 
   // State for View Management: 'settings' | 'processing' | 'done' | 'error'
   const [view, setView] = useState('settings');
-  const [settingsView, setSettingsView] = useState('main'); // 'main' | 'tags' | 'assigned'
+  const [settingsView, setSettingsView] = useState('main'); // 'main' | 'tags' | 'assigned' | 'inclusions'
   const [errorMessage, setErrorMessage] = useState('');
 
   // State for Progress Tracking: { [stepId]: 'pending' | 'active' | 'completed' }
@@ -610,6 +610,42 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
     );
   }
 
+  if (settingsView === 'inclusions') {
+    return (
+      <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-right-4 duration-300">
+        <button
+          type="button"
+          onClick={() => setSettingsView('main')}
+          className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-sm font-medium transition-colors w-fit"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <ToggleRow
+          key="toggle-failing-list"
+          label="Include Failing List"
+          isOn={settings.includeFailingList}
+          onToggle={() => handleToggle('includeFailingList')}
+        />
+
+        <ToggleRow
+          key="toggle-attendance-list"
+          label="Include Attendance List"
+          isOn={settings.includeAttendanceList}
+          onToggle={() => handleToggle('includeAttendanceList')}
+        />
+
+        <ToggleRow
+          key="toggle-next-assignment-due"
+          label="Include Next Assignment Due"
+          isOn={settings.includeNextAssignmentDue}
+          onToggle={() => handleToggle('includeNextAssignmentDue')}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors">
@@ -668,26 +704,30 @@ function LDASettings({ settings, onSettingChange, settingsView, setSettingsView 
         />
       </div>
 
-      <ToggleRow
-        key="toggle-failing-list"
-        label="Include Failing List"
-        isOn={settings.includeFailingList}
-        onToggle={() => handleToggle('includeFailingList')}
-      />
-
-      <ToggleRow
-        key="toggle-attendance-list"
-        label="Include Attendance List"
-        isOn={settings.includeAttendanceList}
-        onToggle={() => handleToggle('includeAttendanceList')}
-      />
-
-      <ToggleRow
-        key="toggle-next-assignment-due"
-        label="Include Next Assignment Due"
-        isOn={settings.includeNextAssignmentDue}
-        onToggle={() => handleToggle('includeNextAssignmentDue')}
-      />
+      {(() => {
+        const inclusionsOn = [
+          settings.includeFailingList,
+          settings.includeAttendanceList,
+          settings.includeNextAssignmentDue,
+        ].filter(Boolean).length;
+        return (
+          <button
+            type="button"
+            onClick={() => setSettingsView('inclusions')}
+            className="flex items-center justify-between p-3 bg-slate-50/50 rounded-xl border border-slate-100/50 hover:border-slate-200 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-slate-700 font-medium text-sm">Inclusions</span>
+              {inclusionsOn > 0 && (
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                  {inclusionsOn} ON
+                </span>
+              )}
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </button>
+        );
+      })()}
 
       <button
         type="button"
