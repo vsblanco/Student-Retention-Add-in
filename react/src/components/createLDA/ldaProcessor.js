@@ -523,7 +523,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 }
             }
 
-            // --- STEP 3: Filtering by Days Out ---
+            // --- STEP 3: Filtering (days out + failing + attendance) ---
             if (onProgress) onProgress('filter', 'active');
 
             // When daysOut < 5 and includeFailingList is on, students who are failing
@@ -557,11 +557,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
             dataRows.sort((a, b) => (b.values[daysOutIdx] || 0) - (a.values[daysOutIdx] || 0));
 
-            if (onProgress) onProgress('filter', 'completed');
-
             // --- STEP 4: Filtering by Grades (Failing) ---
-            if (onProgress) onProgress('failing', 'active');
-
             let failingRows = [];
             if (settings.includeFailingList && gradeIdx !== -1) {
                 for (let i = 1; i < masterValues.length; i++) {
@@ -581,11 +577,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 }
                 failingRows.sort((a, b) => (a.values[gradeIdx] || 0) - (b.values[gradeIdx] || 0));
             }
-            if (onProgress) onProgress('failing', 'completed');
 
             // --- STEP 4b: Filtering by Attendance ---
-            if (onProgress) onProgress('attendance', 'active');
-
             let attendanceRows = [];
             if (settings.includeAttendanceList && attendanceIdx !== -1) {
                 // Build set of LDA student IDs (students on the days-out table)
@@ -637,7 +630,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 }
             }
 
-            if (onProgress) onProgress('attendance', 'completed');
+            if (onProgress) onProgress('filter', 'completed');
 
             // --- Advisor Auto-Assignment Map ---
             // When enabled, pre-compute which advisor each student row maps to
@@ -1132,7 +1125,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 }
 
                 if (onProgress) onProgress('createSheet', 'completed');
-                if (onProgress) onProgress('format', 'completed');
+                if (onProgress) onProgress('writing', 'completed');
+                if (onProgress) onProgress('highlights', 'completed');
+                if (onProgress) onProgress('hyperlinks', 'completed');
                 if (onProgress) onProgress('finalize', 'completed');
 
             } else {
@@ -1219,8 +1214,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                 if (onProgress) onProgress('tags', 'completed');
 
 
-                // --- STEP 7: Formatting LDA Table ---
-                if (onProgress) onProgress('format', 'active');
+                // --- STEP 7: Writing Tables (data only; highlights & hyperlinks run after) ---
 
                 // --- 7a. Data-Driven Date Column Detection ---
                 const dateColumnIndices = new Set();
@@ -1385,86 +1379,90 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     return { cells, formulas, rowColor, cellHighlights, comments };
                 };
 
-                // 7b. Write Main LDA Table
-                if (dataRows.length > 0) {
-                    // Create a batch progress wrapper that includes table name
-                    const ldaBatchProgress = onBatchProgress
-                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'LDA_Table')
-                        : null;
+                // Build processed-row arrays up front so all phases can share them.
+                const tablePlan = [];
 
-                    await writeTable(
-                        context,
-                        newSheet,
-                        0,
-                        "LDA_Table",
-                        outputColumns,
-                        dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
-                        masterSheet,
-                        getColIndex,
-                        dateColumnIndices,
-                        ldaBatchProgress
-                    );
+                if (dataRows.length > 0) {
+                    tablePlan.push({
+                        tableName: 'LDA_Table',
+                        startRow: 0,
+                        rows: dataRows.map(r => buildOutputRow(r, 'LDA_Table')),
+                        title: null,
+                    });
                 } else {
-                    const headerRange = newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length);
-                    headerRange.values = [outputColumns.map(c => c.name)];
+                    // No data rows — still write headers so the sheet isn't empty.
+                    newSheet.getRangeByIndexes(0, 0, 1, outputColumns.length).values = [outputColumns.map(c => c.name)];
                 }
 
-                // 7c. Write Failing Table (if applicable)
                 let nextRow = dataRows.length + 4;
                 if (settings.includeFailingList && failingRows.length > 0) {
-                    const title = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
-                    title.values = [["Failing Students (Active)"]];
-                    title.format.font.bold = true;
-
-                    // Create a batch progress wrapper that includes table name
-                    const failingBatchProgress = onBatchProgress
-                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'Failing_Table')
-                        : null;
-
-                    await writeTable(
-                        context,
-                        newSheet,
-                        nextRow,
-                        "Failing_Table",
-                        outputColumns,
-                        failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
-                        masterSheet,
-                        getColIndex,
-                        dateColumnIndices,
-                        failingBatchProgress
-                    );
+                    tablePlan.push({
+                        tableName: 'Failing_Table',
+                        startRow: nextRow,
+                        rows: failingRows.map(r => buildOutputRow(r, 'Failing_Table')),
+                        title: { row: nextRow - 1, text: 'Failing Students (Active)' },
+                    });
                     nextRow += failingRows.length + 4;
                 }
 
-                // 7d. Write Attendance Table (if applicable)
                 if (settings.includeAttendanceList && attendanceRows.length > 0) {
-                    const attTitle = newSheet.getRangeByIndexes(nextRow - 1, 0, 1, 1);
-                    attTitle.values = [["Low Attendance Students"]];
-                    attTitle.format.font.bold = true;
+                    tablePlan.push({
+                        tableName: 'Attendance_Table',
+                        startRow: nextRow,
+                        rows: attendanceRows.map(r => buildOutputRow(r, 'Attendance_Table')),
+                        title: { row: nextRow - 1, text: 'Low Attendance Students' },
+                    });
+                }
 
-                    const attendanceBatchProgress = onBatchProgress
-                        ? (current, total, phase) => onBatchProgress(current, total, phase, 'Attendance_Table')
+                // Write any titles + table data (phase: writing). Titles need to exist
+                // before the tables below them are created.
+                if (onProgress) onProgress('writing', 'active');
+                for (const plan of tablePlan) {
+                    if (plan.title) {
+                        const titleRange = newSheet.getRangeByIndexes(plan.title.row, 0, 1, 1);
+                        titleRange.values = [[plan.title.text]];
+                        titleRange.format.font.bold = true;
+                    }
+                    const wrapProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, plan.tableName)
                         : null;
-
-                    await writeTable(
-                        context,
-                        newSheet,
-                        nextRow,
-                        "Attendance_Table",
-                        outputColumns,
-                        attendanceRows.map(r => buildOutputRow(r, 'Attendance_Table')),
-                        masterSheet,
-                        getColIndex,
-                        dateColumnIndices,
-                        attendanceBatchProgress
+                    plan.ctx = await writeTableData(
+                        context, newSheet, plan.startRow, plan.tableName,
+                        outputColumns, plan.rows, masterSheet, getColIndex,
+                        dateColumnIndices, wrapProgress
                     );
+                }
+                if (onProgress) onProgress('writing', 'completed');
+
+                // Highlights phase across all tables.
+                if (onProgress) onProgress('highlights', 'active');
+                for (const plan of tablePlan) {
+                    const wrapProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, plan.tableName)
+                        : null;
+                    await applyTableHighlights(context, newSheet, plan.ctx, plan.rows, wrapProgress);
+                }
+                if (onProgress) onProgress('highlights', 'completed');
+
+                // Hyperlinks phase across all tables (2D-array batched per column-run).
+                if (onProgress) onProgress('hyperlinks', 'active');
+                for (const plan of tablePlan) {
+                    const wrapProgress = onBatchProgress
+                        ? (current, total, phase) => onBatchProgress(current, total, phase, plan.tableName)
+                        : null;
+                    await applyTableFormulas(context, newSheet, plan.ctx, plan.rows, wrapProgress);
+                }
+                if (onProgress) onProgress('hyperlinks', 'completed');
+
+                // Comments (silent; rare & fast).
+                for (const plan of tablePlan) {
+                    await applyTableComments(context, newSheet, plan.ctx, plan.rows);
                 }
 
                 // Autofit
                 newSheet.getUsedRange().getEntireColumn().format.autofitColumns();
 
-                // --- STEP 7d: Apply Hidden Columns (Must be done LAST after autofit) ---
-                // Batch hidden column operations to avoid queue overflow with many columns
+                // --- Apply hidden columns (must be LAST after autofit) ---
                 const HIDE_BATCH = 50;
                 const hiddenIndices = outputColumns
                     .map((colConfig, idx) => colConfig.hidden ? idx : -1)
@@ -1476,8 +1474,6 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     });
                     await context.sync();
                 }
-
-                if (onProgress) onProgress('format', 'completed');
 
                 // --- STEP 8: Finalize ---
                 if (onProgress) onProgress('finalize', 'active');
@@ -1500,55 +1496,44 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 }
 
 /**
- * Helper to write a table, COPY Conditional Formatting, and apply custom styles.
- * Uses chunked batch operations to avoid payload size limits with large datasets.
- * @param {Function} onBatchProgress - Optional callback (currentBatch, totalBatches, phase) for progress updates
+ * Writes the table's headers + data + creates the table + copies CF from the
+ * Master List. Returns a context object the later phases can reuse.
  */
-async function writeTable(context, sheet, startRow, tableName, outputColumns, processedRows, masterSheet, getColIndex, dateColumnNames, onBatchProgress = null) {
-    if (processedRows.length === 0) return;
+async function writeTableData(context, sheet, startRow, tableName, outputColumns, processedRows, masterSheet, getColIndex, dateColumnNames, onBatchProgress = null) {
+    if (processedRows.length === 0) return null;
 
     const rowCount = processedRows.length;
     const colCount = outputColumns.length;
     const headers = outputColumns.map(c => c.name);
 
-    // --- STEP 1: Write headers first ---
-    const headerRange = sheet.getRangeByIndexes(startRow, 0, 1, colCount);
-    headerRange.values = [headers];
+    // --- STEP 1: Headers ---
+    sheet.getRangeByIndexes(startRow, 0, 1, colCount).values = [headers];
     await context.sync();
 
-    // --- STEP 2: Write data rows in batches to avoid payload size limits ---
+    // --- STEP 2: Data rows (chunked) ---
     const totalDataBatches = Math.ceil(rowCount / BATCH_SIZE);
     let currentBatch = 0;
 
     for (let batchStart = 0; batchStart < rowCount; batchStart += BATCH_SIZE) {
         const batchEnd = Math.min(batchStart + BATCH_SIZE, rowCount);
-        const batchRows = processedRows.slice(batchStart, batchEnd);
-        const batchValues = batchRows.map(r => r.cells);
+        const batchValues = processedRows.slice(batchStart, batchEnd).map(r => r.cells);
 
-        // Calculate the actual row position in the sheet (startRow + 1 for header + batchStart)
-        const batchRange = sheet.getRangeByIndexes(
-            startRow + 1 + batchStart,
-            0,
-            batchValues.length,
-            colCount
-        );
-        batchRange.values = batchValues;
+        sheet.getRangeByIndexes(
+            startRow + 1 + batchStart, 0, batchValues.length, colCount
+        ).values = batchValues;
 
-        // Sync after each batch to flush the request and avoid payload limits
         await context.sync();
 
         currentBatch++;
-        if (onBatchProgress) {
-            onBatchProgress(currentBatch, totalDataBatches, 'writing');
-        }
+        if (onBatchProgress) onBatchProgress(currentBatch, totalDataBatches, 'writing');
     }
 
-    // --- STEP 3: Create table after all data is written ---
+    // --- STEP 3: Create table ---
     const fullRange = sheet.getRangeByIndexes(startRow, 0, rowCount + 1, colCount);
     const table = sheet.tables.add(fullRange, true);
     // Excel table names must be unique across the whole workbook and may only
-    // contain letters, numbers, periods, and underscores. Use today's date plus
-    // time to keep names readable while guaranteeing uniqueness across runs.
+    // contain letters, numbers, periods, and underscores. Date + time keeps
+    // names readable while guaranteeing uniqueness across runs.
     const now = new Date();
     const datePart = `${now.getMonth() + 1}_${now.getDate()}_${now.getFullYear()}`;
     const timePart = `${now.getHours()}_${now.getMinutes()}_${now.getSeconds()}_${now.getMilliseconds()}`;
@@ -1561,29 +1546,25 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         throw e;
     }
 
-    // --- STEP 4: Copy Conditional Formatting from Master List (in batches) ---
+    // --- STEP 4: Copy CF from Master List ---
     const cfChecks = [];
-
     outputColumns.forEach((colConfig, idx) => {
         const masterIdx = getColIndex(colConfig.name);
         if (masterIdx !== -1) {
-            const sourceCell = masterSheet.getCell(1, masterIdx);
             cfChecks.push({
-                sourceCell,
+                sourceCell: masterSheet.getCell(1, masterIdx),
                 targetIndex: idx,
-                colName: colConfig.name
+                colName: colConfig.name,
             });
         }
     });
 
-    // Process CF in batches to avoid payload limits
     for (let i = 0; i < cfChecks.length; i += BATCH_SIZE) {
         const batch = cfChecks.slice(i, i + BATCH_SIZE);
         batch.forEach(check => {
             const targetColRange = table.columns.getItemAt(check.targetIndex).getDataBodyRange();
             targetColRange.copyFrom(check.sourceCell, Excel.RangeCopyType.formats);
             targetColRange.format.fill.clear();
-
             if (dateColumnNames.has(check.colName)) {
                 targetColRange.numberFormat = [["mm-dd-yy;@"]];
             }
@@ -1597,68 +1578,49 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
         }
     }
 
-    // --- STEP 5: Apply Custom Row Colors & Cell Highlights (optimized) ---
-    // Use range-based operations instead of cell-by-cell for much better performance
-    const bodyRange = table.getDataBodyRange();
+    return { table, startRow, rowCount, colCount, tableName };
+}
+
+/**
+ * Applies row colors and cell highlights. Uses merged range calls and
+ * MAX_OPS_PER_SYNC-aware early flushing.
+ */
+async function applyTableHighlights(context, sheet, tableCtx, processedRows, onBatchProgress = null) {
+    if (!tableCtx) return;
+    const { startRow, rowCount, colCount } = tableCtx;
     const totalFormatBatches = Math.ceil(rowCount / FORMAT_BATCH_SIZE);
     let formatBatch = 0;
 
     for (let batchStart = 0; batchStart < rowCount; batchStart += FORMAT_BATCH_SIZE) {
         const batchEnd = Math.min(batchStart + FORMAT_BATCH_SIZE, rowCount);
 
-        // Collect all formatting operations for this batch first
-        // Then apply them efficiently using range operations
-
-        // 1. Collect row-level colors (apply to full rows)
-        const rowColorOps = []; // {rowIdx, color}
-
-        // 2. Collect cell highlights - group consecutive cells with same color per row
-        const cellColorOps = []; // {rowIdx, startCol, endCol, color, strikethrough}
-
-        // 3. Collect formulas
-        const formulaOps = []; // {rowIdx, colIdx, formula}
+        const rowColorOps = [];
+        const cellColorOps = [];
 
         for (let idx = batchStart; idx < batchEnd; idx++) {
             const r = processedRows[idx];
-
-            // Collect row colors
-            if (r.rowColor) {
-                rowColorOps.push({ rowIdx: idx, color: r.rowColor });
-            }
-
-            // Collect and merge consecutive cell highlights with same color
+            if (r.rowColor) rowColorOps.push({ rowIdx: idx, color: r.rowColor });
             if (r.cellHighlights.length > 0) {
-                // Sort highlights by column index
                 const sorted = [...r.cellHighlights].sort((a, b) => a.colIndex - b.colIndex);
-
                 let current = null;
                 for (const h of sorted) {
                     if (current && current.color === h.color && current.endCol === h.colIndex - 1 && !h.strikethrough && !current.strikethrough) {
-                        // Extend current range
                         current.endCol = h.colIndex;
                     } else {
-                        // Start new range
                         if (current) cellColorOps.push(current);
                         current = {
                             rowIdx: idx,
                             startCol: h.colIndex,
                             endCol: h.colIndex,
                             color: h.color,
-                            strikethrough: h.strikethrough || false
+                            strikethrough: h.strikethrough || false,
                         };
                     }
                 }
                 if (current) cellColorOps.push(current);
             }
-
-            // Collect formulas
-            r.formulas.forEach((f, cIdx) => {
-                if (f) formulaOps.push({ rowIdx: idx, colIdx: cIdx, formula: f });
-            });
         }
 
-        // Track queued ops so we can flush early before hitting Excel's
-        // per-sync payload cap on highlight/formula-heavy batches.
         let queuedOps = 0;
         const flushIfFull = async () => {
             if (queuedOps >= MAX_OPS_PER_SYNC) {
@@ -1667,16 +1629,13 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             }
         };
 
-        // Apply row colors — merge consecutive rows with the same color into
-        // a single range call to minimize API ops per sync.
         if (rowColorOps.length > 0) {
             rowColorOps.sort((a, b) => a.rowIdx - b.rowIdx);
             let runStart = rowColorOps[0].rowIdx;
             let runEnd = runStart;
             let runColor = rowColorOps[0].color;
             const flushRun = async () => {
-                const absoluteRow = startRow + 1 + runStart;
-                sheet.getRangeByIndexes(absoluteRow, 0, runEnd - runStart + 1, colCount)
+                sheet.getRangeByIndexes(startRow + 1 + runStart, 0, runEnd - runStart + 1, colCount)
                     .format.fill.color = runColor;
                 queuedOps++;
                 await flushIfFull();
@@ -1695,12 +1654,10 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             await flushRun();
         }
 
-        // Apply cell color ranges (merged ranges = fewer API calls)
-        // Use sheet.getRangeByIndexes with absolute positions (bodyRange doesn't have this method)
-        // Body starts at startRow + 1 (after header)
         for (const op of cellColorOps) {
-            const absoluteRow = startRow + 1 + op.rowIdx;
-            const range = sheet.getRangeByIndexes(absoluteRow, op.startCol, 1, op.endCol - op.startCol + 1);
+            const range = sheet.getRangeByIndexes(
+                startRow + 1 + op.rowIdx, op.startCol, 1, op.endCol - op.startCol + 1
+            );
             range.format.fill.color = op.color;
             queuedOps++;
             if (op.strikethrough) {
@@ -1711,56 +1668,150 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
             await flushIfFull();
         }
 
-        // Apply formulas (typically few per batch)
-        for (const op of formulaOps) {
-            bodyRange.getCell(op.rowIdx, op.colIdx).formulas = [[op.formula]];
-            queuedOps++;
-            await flushIfFull();
-        }
-
-        // Final sync for any remaining queued ops in this row batch
         try {
             await context.sync();
         } catch (e) {
-            console.error(`Formatting sync failed on batch ${formatBatch + 1}/${totalFormatBatches} (rows ${batchStart}-${batchEnd - 1}). ` +
-                `Ops: ${rowColorOps.length} rowColor, ${cellColorOps.length} cellColor, ${formulaOps.length} formula.`, e);
+            console.error(`Highlights sync failed on batch ${formatBatch + 1}/${totalFormatBatches} (rows ${batchStart}-${batchEnd - 1}). ` +
+                `Ops: ${rowColorOps.length} rowColor, ${cellColorOps.length} cellColor.`, e);
             throw e;
         }
 
         formatBatch++;
-        if (onBatchProgress) {
-            onBatchProgress(formatBatch, totalFormatBatches, 'formatting');
+        if (onBatchProgress) onBatchProgress(formatBatch, totalFormatBatches, 'highlights');
+    }
+}
+
+/**
+ * Applies cell formulas (usually =HYPERLINK). Groups by column and writes
+ * contiguous runs with a single 2D-array assignment per run, collapsing
+ * per-cell API ops into per-run ops.
+ */
+async function applyTableFormulas(context, sheet, tableCtx, processedRows, onBatchProgress = null) {
+    if (!tableCtx) return;
+    const { startRow, rowCount } = tableCtx;
+
+    // Group formula entries by column.
+    const byCol = new Map();
+    for (let idx = 0; idx < rowCount; idx++) {
+        const formulas = processedRows[idx].formulas;
+        for (let cIdx = 0; cIdx < formulas.length; cIdx++) {
+            const f = formulas[cIdx];
+            if (!f) continue;
+            if (!byCol.has(cIdx)) byCol.set(cIdx, []);
+            byCol.get(cIdx).push({ rowIdx: idx, formula: f });
         }
     }
 
-    // --- STEP 6: Apply Excel Comments for Course Start anomalies ---
+    if (byCol.size === 0) return;
+
+    // Build the list of contiguous runs across all columns.
+    const runs = []; // {colIdx, startRowIdx, formulas: string[][]}
+    for (const [colIdx, entries] of byCol) {
+        entries.sort((a, b) => a.rowIdx - b.rowIdx);
+        let runStart = entries[0].rowIdx;
+        let runFormulas = [[entries[0].formula]];
+        for (let i = 1; i < entries.length; i++) {
+            const e = entries[i];
+            if (e.rowIdx === runStart + runFormulas.length) {
+                runFormulas.push([e.formula]);
+            } else {
+                runs.push({ colIdx, startRowIdx: runStart, formulas: runFormulas });
+                runStart = e.rowIdx;
+                runFormulas = [[e.formula]];
+            }
+        }
+        runs.push({ colIdx, startRowIdx: runStart, formulas: runFormulas });
+    }
+
+    const totalRuns = runs.length;
+    let queuedOps = 0;
+    let flushedRuns = 0;
+    let lastReportedRun = 0;
+
+    const flushIfFull = async (forceProgress = false) => {
+        if (queuedOps >= MAX_OPS_PER_SYNC || forceProgress) {
+            try {
+                await context.sync();
+            } catch (e) {
+                console.error(`Hyperlinks sync failed (runs flushed=${flushedRuns}/${totalRuns}, queuedOps=${queuedOps})`, e);
+                throw e;
+            }
+            queuedOps = 0;
+            if (onBatchProgress && flushedRuns > lastReportedRun) {
+                onBatchProgress(flushedRuns, totalRuns, 'hyperlinks');
+                lastReportedRun = flushedRuns;
+            }
+        }
+    };
+
+    for (const run of runs) {
+        const range = sheet.getRangeByIndexes(
+            startRow + 1 + run.startRowIdx, run.colIdx, run.formulas.length, 1
+        );
+        range.formulas = run.formulas;
+        queuedOps++;
+        flushedRuns++;
+        await flushIfFull();
+    }
+
+    // Final flush for remainder.
+    if (queuedOps > 0) {
+        try {
+            await context.sync();
+        } catch (e) {
+            console.error(`Hyperlinks final sync failed (runs=${totalRuns}, queuedOps=${queuedOps})`, e);
+            throw e;
+        }
+    }
+    if (onBatchProgress) onBatchProgress(totalRuns, totalRuns, 'hyperlinks');
+}
+
+/**
+ * Applies Excel comments (review threads) for course-start anomalies.
+ */
+async function applyTableComments(context, sheet, tableCtx, processedRows) {
+    if (!tableCtx) return;
+    const { startRow, rowCount } = tableCtx;
+
     const commentOps = [];
     for (let idx = 0; idx < rowCount; idx++) {
         const r = processedRows[idx];
         if (r.comments && r.comments.length > 0) {
             for (const c of r.comments) {
-                commentOps.push({
-                    row: startRow + 1 + idx,
-                    col: c.colIndex,
-                    text: c.text
-                });
+                commentOps.push({ row: startRow + 1 + idx, col: c.colIndex, text: c.text });
             }
         }
     }
-    if (commentOps.length > 0) {
-        try {
-            for (let i = 0; i < commentOps.length; i += FORMAT_BATCH_SIZE) {
-                const batch = commentOps.slice(i, i + FORMAT_BATCH_SIZE);
-                for (const op of batch) {
-                    const cellRange = sheet.getRangeByIndexes(op.row, op.col, 1, 1);
-                    context.workbook.comments.add(cellRange, op.text);
-                }
-                await context.sync();
+    if (commentOps.length === 0) return;
+
+    try {
+        for (let i = 0; i < commentOps.length; i += FORMAT_BATCH_SIZE) {
+            const batch = commentOps.slice(i, i + FORMAT_BATCH_SIZE);
+            for (const op of batch) {
+                const cellRange = sheet.getRangeByIndexes(op.row, op.col, 1, 1);
+                context.workbook.comments.add(cellRange, op.text);
             }
-        } catch (e) {
-            console.warn('Excel comments API not supported or failed, skipping comments:', e.message);
+            await context.sync();
         }
+    } catch (e) {
+        console.warn('Excel comments API not supported or failed, skipping comments:', e.message);
     }
+}
+
+/**
+ * Convenience wrapper: writes a single table end-to-end (data, highlights,
+ * hyperlinks, comments). Used by the multi-campus flow where each campus
+ * owns its sheet and interleaved phases are fine.
+ */
+async function writeTable(context, sheet, startRow, tableName, outputColumns, processedRows, masterSheet, getColIndex, dateColumnNames, onBatchProgress = null) {
+    const tableCtx = await writeTableData(
+        context, sheet, startRow, tableName, outputColumns, processedRows,
+        masterSheet, getColIndex, dateColumnNames, onBatchProgress
+    );
+    if (!tableCtx) return;
+    await applyTableHighlights(context, sheet, tableCtx, processedRows, onBatchProgress);
+    await applyTableFormulas(context, sheet, tableCtx, processedRows, onBatchProgress);
+    await applyTableComments(context, sheet, tableCtx, processedRows);
 }
 
 /**
