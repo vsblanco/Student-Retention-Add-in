@@ -375,15 +375,23 @@ export default function CreateLDAManager({ onReady } = {}) {
                           (step.id === 'read' && batchProgress && batchProgress.phase === 'reading')
                       ) && status === 'active' && batchProgress.total > 1;
 
+                      const isErrored = view === 'error';
                       return (
                           <div key={step.id}>
                               <div className="flex items-center gap-3">
                                   <div className="w-6 flex justify-center shrink-0">
                                       {status === 'pending' && <Circle className="w-4 h-4 text-slate-300" />}
-                                      {status === 'active' && <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />}
-                                      {status === 'completed' && <CheckCircle2 className="w-5 h-5 text-emerald-500 animate-in zoom-in duration-300" />}
+                                      {status === 'active' && (
+                                          isErrored
+                                              ? <Circle className="w-4 h-4 text-slate-300" />
+                                              : <Loader2 className="w-5 h-5 text-[#145F82] animate-spin" />
+                                      )}
+                                      {status === 'completed' && (
+                                          <CheckCircle2 className={`w-5 h-5 animate-in zoom-in duration-300 ${isErrored ? 'text-slate-300' : 'text-emerald-500'}`} />
+                                      )}
                                   </div>
                                   <div className={`flex-1 text-sm font-medium transition-colors duration-300 ${
+                                      isErrored ? 'text-slate-400' :
                                       status === 'pending' ? 'text-slate-400' :
                                       status === 'active' ? 'text-slate-800' : 'text-emerald-700'
                                   }`}>
@@ -431,21 +439,31 @@ export default function CreateLDAManager({ onReady } = {}) {
                               </span>
                           </div>
                           <div className="space-y-2">
-                              {Object.entries(campusStatuses).map(([campusName, status]) => (
+                              {Object.entries(campusStatuses).map(([campusName, status]) => {
+                                  const isErrored = view === 'error';
+                                  return (
                                   <div key={campusName} className="flex items-center gap-3 animate-in fade-in duration-300">
                                       <div className="w-6 flex justify-center shrink-0">
                                           {status === 'pending' && <Circle className="w-3.5 h-3.5 text-slate-300" />}
-                                          {status === 'active' && <Loader2 className="w-4 h-4 text-[#145F82] animate-spin" />}
-                                          {status === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-500 animate-in zoom-in duration-300" />}
+                                          {status === 'active' && (
+                                              isErrored
+                                                  ? <Circle className="w-3.5 h-3.5 text-slate-300" />
+                                                  : <Loader2 className="w-4 h-4 text-[#145F82] animate-spin" />
+                                          )}
+                                          {status === 'completed' && (
+                                              <CheckCircle2 className={`w-4 h-4 animate-in zoom-in duration-300 ${isErrored ? 'text-slate-300' : 'text-emerald-500'}`} />
+                                          )}
                                       </div>
                                       <div className={`flex-1 text-sm transition-colors duration-300 ${
+                                          isErrored ? 'text-slate-400' :
                                           status === 'pending' ? 'text-slate-400' :
                                           status === 'active' ? 'text-slate-700 font-medium' : 'text-emerald-600'
                                       }`}>
                                           {campusName}
                                       </div>
                                   </div>
-                              ))}
+                                  );
+                              })}
                           </div>
                       </div>
                   )}
@@ -453,9 +471,11 @@ export default function CreateLDAManager({ onReady } = {}) {
 
               {view === 'error' && (
                   <div className="pt-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-3 border border-red-100">
-                          <AlertCircle className="w-5 h-5 shrink-0" />
-                          <span>{errorMessage}</span>
+                      <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm font-medium flex items-start gap-3 border border-red-100">
+                          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                          <span className="flex-1 min-w-0 break-words whitespace-pre-wrap max-h-40 overflow-y-auto">
+                              {errorMessage}
+                          </span>
                       </div>
                       <button
                         onClick={handleReset}
