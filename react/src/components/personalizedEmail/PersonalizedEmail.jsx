@@ -32,6 +32,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
     // Student data state
     const [studentDataCache, setStudentDataCache] = useState([]);
+    const [cachedSpecialParams, setCachedSpecialParams] = useState([]);
     const [customParameters, setCustomParameters] = useState([]);
     const [recipientSelection, setRecipientSelection] = useState({
         type: 'lda',
@@ -727,6 +728,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
             const result = await getStudentDataCore(recipientSelection, false, specialParamsToProcess);
             setStudentDataCache(result.included);
+            setCachedSpecialParams(specialParamsToProcess);
             setStatus(`Found ${result.included.length} students.`);
             setTimeout(() => setStatus(''), 3000);
             return result.included;
@@ -757,6 +759,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         setLowerSectionDimmed(false);
         // Clear cache to ensure fresh data is fetched when needed
         setStudentDataCache([]);
+        setCachedSpecialParams([]);
     };
 
     const isParameterUsedInTemplate = (paramName) => {
@@ -766,8 +769,12 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     };
 
     const ensureStudentDataLoaded = async () => {
-        // Only fetch if we don't have data cached
-        if (studentDataCache.length === 0 && recipientSelection.hasBeenSet) {
+        if (!recipientSelection.hasBeenSet) return;
+        // Re-fetch when cache is empty, or when the template now references a
+        // special parameter that wasn't resolved the last time we fetched.
+        const needed = specialParameters.filter(p => isParameterUsedInTemplate(p));
+        const missingSpecial = needed.some(p => !cachedSpecialParams.includes(p));
+        if (studentDataCache.length === 0 || missingSpecial) {
             await getStudentDataWithUI();
         }
     };
