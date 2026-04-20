@@ -700,8 +700,8 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 									<button
 										type="button"
 										onClick={() => setWorkbookModalOpen(true)}
-										title="Open workbook inspector"
-										aria-label="Open workbook inspector"
+										title="Open workbook debug view"
+										aria-label="Open workbook debug view"
 										style={{
 											display: 'flex', alignItems: 'center', justifyContent: 'space-between',
 											margin: '8px 0 0 0', padding: '6px 8px',
@@ -715,7 +715,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
 												<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
 											</svg>
-											<span>Workbook Settings</span>
+											<span>Workbook Debug</span>
 										</span>
 										<ChevronRight size={16} style={{ color: '#94a3b8' }} />
 									</button>
