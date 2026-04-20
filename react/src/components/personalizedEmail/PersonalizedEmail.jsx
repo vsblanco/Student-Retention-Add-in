@@ -38,6 +38,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         customSheetName: '',
         excludeDNC: true,
         excludeFillColor: true,
+        excludeNoMissingAssignments: true,
         hasBeenSet: false
     });
     const [recipientCount, setRecipientCount] = useState(0);
@@ -405,7 +406,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     };
 
     const getStudentDataCore = async (selection, skipSpecialParams = false, specialParamsToProcess = [], onProgress = null) => {
-        const { type, customSheetName, excludeDNC, excludeFillColor } = selection;
+        const { type, customSheetName, excludeDNC, excludeFillColor, excludeNoMissingAssignments } = selection;
         let sheetName;
         let selectedRowSet = null;
 
@@ -577,6 +578,15 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                         }
                     }
 
+                    if (excludeNoMissingAssignments && colIndices.MissingAssignments !== -1) {
+                        const rawMissing = row[colIndices.MissingAssignments];
+                        // Only exclude on an explicit 0; blank/empty cells are ignored.
+                        if (rawMissing !== null && rawMissing !== undefined && String(rawMissing).trim() !== '' && Number(rawMissing) === 0) {
+                            excludedStudents.push({ name: studentNameForRow, reason: '0 Missing' });
+                            continue;
+                        }
+                    }
+
                     const nameParts = getNameParts(studentName || '');
                     const student = {
                         StudentName: studentName || '',
@@ -729,11 +739,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
     const preCacheRecipientData = async () => {
         try {
-            const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+            const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true, excludeNoMissingAssignments: true };
             const ldaResult = await getStudentDataCore(ldaSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('lda', ldaResult));
 
-            const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true };
+            const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true, excludeNoMissingAssignments: true };
             const masterResult = await getStudentDataCore(masterSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('master', masterResult));
         } catch (error) {
