@@ -563,10 +563,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
  			);
  		};
 
-		// Count how many boolean toggles in a section are currently enabled — shown as an "on" badge.
-		const countEnabledBooleans = (sectionSettings) =>
-			sectionSettings.filter(s => s.type === 'boolean' && state[s.id] === true).length;
-
 		// Sub-page: render Back button + rows for the active section.
 		if (workbookSectionView !== 'main' && sections[workbookSectionView]) {
 			const name = workbookSectionView;
@@ -607,38 +603,30 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		return (
 			<div style={{ display: 'grid', gap: 8 }}>
 				{unsectioned.map(renderRow)}
-				{Object.keys(sections).map(name => {
-					const onCount = countEnabledBooleans(sections[name]);
-					return (
-						<button
-							key={name}
-							type="button"
-							onClick={() => setWorkbookSectionView(name)}
-							style={{
-								display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-								margin: 0, padding: '6px 8px',
-								backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
-								cursor: 'pointer', width: '100%', textAlign: 'left',
-								fontSize: 15, fontWeight: 700, color: 'inherit'
-							}}
-						>
-							<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-								{sectionIcons[name] && (
-									<span aria-hidden="true" style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center' }}>
-										{sectionIcons[name]}
-									</span>
-								)}
-								<span>{name}</span>
-								{onCount > 0 && (
-									<span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#145F82', padding: '2px 6px', borderRadius: 999 }}>
-										{onCount} on
-									</span>
-								)}
-							</span>
-							<ChevronRight size={16} style={{ color: '#94a3b8' }} />
-						</button>
-					);
-				})}
+				{Object.keys(sections).map(name => (
+					<button
+						key={name}
+						type="button"
+						onClick={() => setWorkbookSectionView(name)}
+						style={{
+							display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+							margin: 0, padding: '6px 8px',
+							backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
+							cursor: 'pointer', width: '100%', textAlign: 'left',
+							fontSize: 15, fontWeight: 700, color: 'inherit'
+						}}
+					>
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+							{sectionIcons[name] && (
+								<span aria-hidden="true" style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center' }}>
+									{sectionIcons[name]}
+								</span>
+							)}
+							<span>{name}</span>
+						</span>
+						<ChevronRight size={16} style={{ color: '#94a3b8' }} />
+					</button>
+				))}
 			</div>
 		);
 	};
@@ -677,7 +665,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			>
 				<div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
 					<h2 className="text-2xl text-slate-800 font-bold tracking-tight" style={{ margin: 0, paddingLeft: 12 }}>Settings</h2>
-					<p className="text-slate-400 text-sm mt-1">Manage your workbook and user preferences</p>
+					<p className="text-slate-400 text-sm mt-1" style={{ paddingLeft: 12 }}>Manage your workbook and user preferences</p>
 
 					{/* Tabs - use same classes as StudentView for identical styling */}
 					<div className="studentview-tabs" role="tablist" aria-label="Settings tabs" style={{ marginBottom: 8 }}>
@@ -706,34 +694,32 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 						style={{ marginTop: 12, padding: 12, border: '1px solid #e5e7eb', borderRadius: 8, background: '#fff' }}
 					>
 						{activeTab === 'workbook' ? (
-							<div>
-								<button
-									type="button"
-									onClick={() => setWorkbookModalOpen(true)}
-									title="Open workbook inspector"
-									aria-label="Open workbook inspector"
-									style={{
-										margin: '0 0 8px 0',
-										padding: '4px 8px',
-										borderRadius: 6,
-										background: '#f3f4f6',
-										border: '1px solid #e6e7eb',
-										cursor: 'pointer',
-										display: 'inline-flex',
-										alignItems: 'center',
-										gap: 6,
-										fontSize: 15,
-										fontWeight: 700
-									}}
-								>
-									<span>Workbook Settings</span>
-									{/* small file icon */}
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-										<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-										<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-									</svg>
-								</button>
+							<div style={{ display: 'grid', gap: 8 }}>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
+								{workbookSectionView === 'main' && (
+									<button
+										type="button"
+										onClick={() => setWorkbookModalOpen(true)}
+										title="Open workbook debug view"
+										aria-label="Open workbook debug view"
+										style={{
+											display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+											margin: '8px 0 0 0', padding: '6px 8px',
+											backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
+											cursor: 'pointer', width: '100%', textAlign: 'left',
+											fontSize: 15, fontWeight: 700, color: 'inherit'
+										}}
+									>
+										<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+												<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+											<span>Workbook Debug</span>
+										</span>
+										<ChevronRight size={16} style={{ color: '#94a3b8' }} />
+									</button>
+								)}
 							</div>
 						) : activeTab === 'user' ? (
 							<div>
