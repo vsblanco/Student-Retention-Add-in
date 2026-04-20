@@ -3,21 +3,24 @@ import DeleteConfirmModal from './DeleteConfirmModal'; // <-- added
 
 // fresh header button styles for modal
 const modalBtnBase = {
-	padding: '8px 10px',
-	borderRadius: 10,
+	height: 32,
+	padding: '0 12px',
+	borderRadius: 8,
 	border: 'none',
 	cursor: 'pointer',
 	boxShadow: '0 10px 30px rgba(79,70,229,0.08)',
 	transition: 'transform 120ms ease, box-shadow 120ms ease',
 	fontSize: 13,
 	fontWeight: 600,
-	marginRight: 8,
+	display: 'inline-flex',
+	alignItems: 'center',
+	justifyContent: 'center',
 };
 const modalBtnPrimary = { ...modalBtnBase, background: 'linear-gradient(90deg,#6366f1,#8b5cf6)', color: '#fff' };
 const modalBtnGhost = { ...modalBtnBase, background: '#f8fafc', color: '#0f172a', boxShadow: 'none' };
 
 // add a compact icon button variant for header icons
-const modalIconBtn = { ...modalBtnGhost, padding: 6, width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
+const modalIconBtn = { ...modalBtnGhost, padding: 0, width: 32 };
 
 // Accept docKey so the modal can explicitly read a named document-setting mapping
 export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workbookSettings' }) {
@@ -380,10 +383,10 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 				fontFamily: "Segoe UI, system-ui, sans-serif",
 				fontSize: 13,
 			}}>
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-					<h3 style={{ margin: 0 }}>Workbook Explorer</h3>
-					<div>
-						{/* toggle between tree view and json view (moved left) */}
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 8 }}>
+					<h3 style={{ margin: 0, fontSize: 16, lineHeight: '32px' }}>Workbook Explorer</h3>
+					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+						{/* toggle between tree view and json view */}
 						<button
 							onClick={() => setViewMode(m => (m === 'tree' ? 'json' : 'tree'))}
 							style={modalBtnGhost}
@@ -392,6 +395,8 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 						>
 							{viewMode === 'tree' ? 'JSON View' : 'Tree View'}
 						</button>
+						{/* Copy JSON only visible in JSON view */}
+						{viewMode === 'json' && <button onClick={copyJson} style={modalBtnPrimary}>Copy JSON</button>}
 						{/* refresh icon button */}
 						<button onClick={loadSettings} style={modalIconBtn} title="Refresh" aria-label="Refresh workbook settings">
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -399,9 +404,6 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 								<path d="M21 3v6h-6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
 							</svg>
 						</button>
-
-						{/* Copy JSON only visible in JSON view */}
-						{viewMode === 'json' && <button onClick={copyJson} style={modalBtnPrimary}>Copy JSON</button>}
 						{/* close as X icon */}
 						<button onClick={close} style={modalIconBtn} title="Close" aria-label="Close workbook explorer">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
