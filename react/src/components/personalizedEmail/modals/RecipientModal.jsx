@@ -73,10 +73,10 @@ export default function RecipientModal({
         setIsLoading(true);
         setExcludedStudents([]);
 
-        const { type, excludeDNC, excludeFillColor } = sel;
+        const { type, excludeDNC, excludeFillColor, excludeNoMissingAssignments } = sel;
 
         // Check cache first
-        if (type !== 'custom' && excludeDNC && excludeFillColor && recipientDataCache.has(type)) {
+        if (type !== 'custom' && excludeDNC && excludeFillColor && excludeNoMissingAssignments && recipientDataCache.has(type)) {
             const cachedResult = recipientDataCache.get(type);
             setStudentCount(cachedResult.included.length);
             setExcludedStudents(cachedResult.excluded);
@@ -218,6 +218,24 @@ export default function RecipientModal({
                                     </div>
                                 </label>
                             </div>
+
+                            <div className="bg-gray-50 p-2.5 rounded-md">
+                                <label htmlFor="exclude-no-missing-toggle" className="flex items-center justify-between cursor-pointer">
+                                    <span className="text-sm text-gray-700 flex-grow pr-4">
+                                        No Missing Assignments
+                                    </span>
+                                    <div className="relative inline-flex items-center flex-shrink-0">
+                                        <input
+                                            type="checkbox"
+                                            id="exclude-no-missing-toggle"
+                                            checked={selection.excludeNoMissingAssignments}
+                                            onChange={(e) => handleSelectionChange('excludeNoMissingAssignments', e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
 
                         {excludedStudents.length > 0 && (
@@ -239,9 +257,11 @@ export default function RecipientModal({
                                                             ? { backgroundColor: '#FEE2E2', color: '#991B1B' }
                                                             : student.reason === 'Duplicate'
                                                                 ? { backgroundColor: '#FEF3C7', color: '#92400E' }
-                                                                : student.reason === 'Fill Color' && student.color
-                                                                    ? { backgroundColor: student.color, color: '#374151' }
-                                                                    : { backgroundColor: '#E5E7EB', color: '#4B5563' }
+                                                                : student.reason === '0 Missing'
+                                                                    ? { backgroundColor: '#D1FAE5', color: '#065F46' }
+                                                                    : student.reason === 'Fill Color' && student.color
+                                                                        ? { backgroundColor: student.color, color: '#374151' }
+                                                                        : { backgroundColor: '#E5E7EB', color: '#4B5563' }
                                                     }
                                                 >
                                                     {student.reason}
@@ -253,7 +273,7 @@ export default function RecipientModal({
                             </div>
                         )}
 
-                        {excludedStudents.length === 0 && (selection.excludeDNC || selection.excludeFillColor) && (
+                        {excludedStudents.length === 0 && (selection.excludeDNC || selection.excludeFillColor || selection.excludeNoMissingAssignments) && (
                             <div className="mt-3 border-t pt-2">
                                 <p className="text-xs text-gray-400 text-center">No students excluded</p>
                             </div>

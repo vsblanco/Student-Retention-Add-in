@@ -43,7 +43,8 @@ export const COLUMN_MAPPINGS = {
     StudentIdentifier: ['student identifier', 'student id', 'studentnumber', 'studentid', 'systudentid', 'id', "Student Identifier", "Student ID", "SyStudentID", "Student Number", "StudentID"],
     Outreach: ['outreach', "Outreach"],
     GradeBook: ['grade book', 'gradebook', 'Grade Book', 'GradeBook'],
-    Assignment: ['assignment', 'Assignment']
+    Assignment: ['assignment', 'Assignment'],
+    MissingAssignments: ['missing assignments', 'missingassignments', 'Missing Assignments', 'MissingAssignments', 'missing']
 };
 
 // Defines the operators available for creating custom parameter mapping rules
