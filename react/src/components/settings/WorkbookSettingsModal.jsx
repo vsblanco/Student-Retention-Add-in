@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { TreeNode, IconFolder, IconFile, renderValueAsTree } from './workbookDebug/Tree';
+import { isAuthorMatch } from './workbookDebug/allowlist';
 
 const BRAND = '#145F82';
 
@@ -32,8 +33,16 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const [currentUserName, setCurrentUserName] = useState('');
 	const copiedTimerRef = useRef(null);
 	const closeBtnRef = useRef(null);
+
+	useEffect(() => {
+		try {
+			const raw = localStorage.getItem('SSO_USER_INFO');
+			if (raw) setCurrentUserName(JSON.parse(raw).name || '');
+		} catch { /* ignore */ }
+	}, []);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -207,7 +216,8 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 	if (!isOpen) return null;
 
 	const hasDocumentMapping = data && data.documentSettings && typeof data.documentSettings === 'object' && Object.keys(data.documentSettings).length > 0;
-	const showFooter = (viewMode === 'json') || hasDocumentMapping;
+	const canReset = isAuthorMatch(data?.workbookProperties?.author, currentUserName);
+	const showFooter = (viewMode === 'json') || (hasDocumentMapping && canReset);
 
 	// Segmented view toggle
 	const SegmentedToggle = () => (
@@ -336,7 +346,7 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 						borderRadius: '0 0 10px 10px', flex: '0 0 auto',
 					}}>
 						<div>
-							{viewMode === 'tree' && hasDocumentMapping && (
+							{viewMode === 'tree' && hasDocumentMapping && canReset && (
 								<button
 									onClick={() => setDeleteConfirmOpen(true)}
 									style={modalBtnDanger}
