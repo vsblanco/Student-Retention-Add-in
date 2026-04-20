@@ -90,6 +90,30 @@ export const defaultWorkbookSettings = [
 		description: 'Configure Power Automate flow URL for sending personalized emails.'
 	},
 	{
+		id: 'excludeDNCDefault',
+		label: 'Exclude DNC by default',
+		type: 'boolean',
+		defaultValue: true,
+		section: 'Send Emails',
+		description: 'Default state for the "DNC-tagged students" exclusion toggle when composing personalized emails.'
+	},
+	{
+		id: 'excludeFillColorDefault',
+		label: 'Exclude Outreach Color by default',
+		type: 'boolean',
+		defaultValue: true,
+		section: 'Send Emails',
+		description: 'Default state for the "Outreach Color Filled students" exclusion toggle.'
+	},
+	{
+		id: 'excludeNoMissingAssignmentsDefault',
+		label: 'Exclude 0 Missing Assignments by default',
+		type: 'boolean',
+		defaultValue: true,
+		section: 'Send Emails',
+		description: 'Default state for the "No Missing Assignments" exclusion toggle (only excludes rows with an explicit 0).'
+	},
+	{
 		id: 'downloadHistoryCsv',
 		label: 'Download Copy',
 		type: 'action',

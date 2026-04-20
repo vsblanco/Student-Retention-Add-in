@@ -11,6 +11,7 @@ import CustomParamModal from './modals/CustomParamModal';
 import RecipientModal from './modals/RecipientModal';
 import ConfirmSendModal from './modals/ConfirmSendModal';
 import SuccessModal from './modals/SuccessModal';
+import { getWorkbookSettings } from '../utility/getSettings';
 
 export default function PersonalizedEmail({ user, accessToken, onReady }) {
     // Connection state
@@ -270,6 +271,18 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
             };
         }
     }, [customParameters]); // Re-run when custom parameters change
+
+    // Load exclusion defaults from workbook settings once on mount. Any value that hasn't
+    // been explicitly set to `false` falls back to `true`, matching the old hardcoded behavior.
+    useEffect(() => {
+        const wb = getWorkbookSettings() || {};
+        const excludeDNC = wb.excludeDNCDefault !== false;
+        const excludeFillColor = wb.excludeFillColorDefault !== false;
+        const excludeNoMissingAssignments = wb.excludeNoMissingAssignmentsDefault !== false;
+        setRecipientSelection(prev => prev.hasBeenSet
+            ? prev
+            : { ...prev, excludeDNC, excludeFillColor, excludeNoMissingAssignments });
+    }, []);
 
     // Pre-cache recipient data after connection is established
     useEffect(() => {
@@ -741,11 +754,16 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
 
     const preCacheRecipientData = async () => {
         try {
-            const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC: true, excludeFillColor: true, excludeNoMissingAssignments: true };
+            const wb = getWorkbookSettings() || {};
+            const excludeDNC = wb.excludeDNCDefault !== false;
+            const excludeFillColor = wb.excludeFillColorDefault !== false;
+            const excludeNoMissingAssignments = wb.excludeNoMissingAssignmentsDefault !== false;
+
+            const ldaSelection = { type: 'lda', customSheetName: '', excludeDNC, excludeFillColor, excludeNoMissingAssignments };
             const ldaResult = await getStudentDataCore(ldaSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('lda', ldaResult));
 
-            const masterSelection = { type: 'master', customSheetName: '', excludeDNC: true, excludeFillColor: true, excludeNoMissingAssignments: true };
+            const masterSelection = { type: 'master', customSheetName: '', excludeDNC, excludeFillColor, excludeNoMissingAssignments };
             const masterResult = await getStudentDataCore(masterSelection, true); // Skip special params for faster caching
             setRecipientDataCache(prev => new Map(prev).set('master', masterResult));
         } catch (error) {

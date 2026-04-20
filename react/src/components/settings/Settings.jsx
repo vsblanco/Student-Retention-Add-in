@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Info } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
+import { Info, ChevronRight, ArrowLeft } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
 import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
@@ -11,6 +11,8 @@ import About from '../about/About'; // <-- ADDED: Import About component for Hel
 
 const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken and onReady props
 	const [activeTab, setActiveTab] = useState('workbook');
+	// 'main' | '<section name>' — controls sub-page navigation for workbook settings
+	const [workbookSectionView, setWorkbookSectionView] = useState('main');
 
 	// initialize user settings state from defaults
 	const [userSettingsState, setUserSettingsState] = useState(() =>
@@ -561,11 +563,65 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
  			);
  		};
 
+		// Count how many boolean toggles in a section are currently enabled — shown as an "on" badge.
+		const countEnabledBooleans = (sectionSettings) =>
+			sectionSettings.filter(s => s.type === 'boolean' && state[s.id] === true).length;
+
+		// Sub-page: render Back button + rows for the active section.
+		if (workbookSectionView !== 'main' && sections[workbookSectionView]) {
+			const name = workbookSectionView;
+			return (
+				<div style={{ display: 'grid', gap: 8 }}>
+					<button
+						type="button"
+						onClick={() => setWorkbookSectionView('main')}
+						style={{
+							display: 'inline-flex', alignItems: 'center', gap: 4,
+							background: 'transparent', border: 'none', padding: '2px 4px',
+							color: '#94a3b8', cursor: 'pointer', fontSize: 13, fontWeight: 500,
+							width: 'fit-content'
+						}}
+						aria-label="Back to Settings"
+					>
+						<ArrowLeft size={16} />
+						Back
+					</button>
+					<h3 style={{ margin: '2px 0', fontSize: 15, fontWeight: 700, backgroundColor: '#eaeaea', padding: '2px 6px', borderRadius: 6 }}>
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+							{sectionIcons[name] && (
+								<span aria-hidden="true" style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center' }}>
+									{sectionIcons[name]}
+								</span>
+							)}
+							<span>{name}</span>
+						</span>
+					</h3>
+					<div style={{ padding: 8, border: '1px solid #f3f4f6', borderRadius: 6, background: '#fafafa', display: 'grid', gap: 8 }}>
+						{sections[name].map(renderRow)}
+					</div>
+				</div>
+			);
+		}
+
+		// Main: unsectioned rows first, then one clickable header button per section.
 		return (
 			<div style={{ display: 'grid', gap: 8 }}>
-				{Object.keys(sections).map(name => (
-					<div key={name}>
-						<h3 style={{ margin: '2px 0', fontSize: 15, fontWeight: 700, backgroundColor: '#eaeaea', padding: '2px 6px', borderRadius: 6 }}>
+				{unsectioned.map(renderRow)}
+				{Object.keys(sections).map(name => {
+					const onCount = countEnabledBooleans(sections[name]);
+					return (
+						<button
+							key={name}
+							type="button"
+							onClick={() => setWorkbookSectionView(name)}
+							style={{
+								display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+								margin: 0, padding: '6px 8px',
+								backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
+								cursor: 'pointer', width: '100%', textAlign: 'left',
+								fontSize: 15, fontWeight: 700, color: 'inherit'
+							}}
+						>
 							<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
 								{sectionIcons[name] && (
 									<span aria-hidden="true" style={{ display: 'inline-flex', width: 16, height: 16, alignItems: 'center' }}>
@@ -573,14 +629,16 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 									</span>
 								)}
 								<span>{name}</span>
+								{onCount > 0 && (
+									<span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#145F82', padding: '2px 6px', borderRadius: 999 }}>
+										{onCount} on
+									</span>
+								)}
 							</span>
-						</h3>
-						<div style={{ padding: 8, border: '1px solid #f3f4f6', borderRadius: 6, background: '#fafafa', display: 'grid', gap: 8 }}>
-							{sections[name].map(renderRow)}
-						</div>
-					</div>
-				))}
-				{unsectioned.map(renderRow)}
+							<ChevronRight size={16} style={{ color: '#94a3b8' }} />
+						</button>
+					);
+				})}
 			</div>
 		);
 	};
