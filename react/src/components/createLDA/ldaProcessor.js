@@ -875,7 +875,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
                             for (let i = hValues.length - 1; i > 0; i--) {
-                                const hid = hValues[i][hIdIdx];
+                                // Normalize to string so Map lookups match regardless of
+                                // whether Excel returned the ID as a Number or a String.
+                                const hid = String(hValues[i][hIdIdx] ?? '').trim();
                                 const htagRaw = String(hValues[i][hTagIdx] || '');
                                 const htagLower = htagRaw.toLowerCase().trim();
 
@@ -933,7 +935,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let rowColor = null;
                     let cellHighlights = [];
                     let comments = [];
-                    const sId = rowObj.values[studentIdIdx];
+                    // Normalize to string to match the normalized Student History keys.
+                    const rawSId = rowObj.values[studentIdIdx];
+                    const sId = (rawSId === null || rawSId === undefined || rawSId === '') ? rawSId : String(rawSId).trim();
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
                     const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
@@ -961,7 +965,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     }
 
                     let partialRowColor = "#FFEDD5";
-                    if (retentionMsg && retentionMsg.includes("DNC")) {
+                    if (retentionMsg === "Do not contact") {
                         partialRowColor = "#FFC7CE";
                     } else if (isNextAssignmentDue) {
                         partialRowColor = "#e2efda";
@@ -1185,7 +1189,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                             const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
                             for (let i = hValues.length - 1; i > 0; i--) {
-                                const hid = hValues[i][hIdIdx];
+                                // Normalize to string so Map lookups match regardless of
+                                // whether Excel returned the ID as a Number or a String.
+                                const hid = String(hValues[i][hIdIdx] ?? '').trim();
                                 const htagRaw = String(hValues[i][hTagIdx] || '');
                                 const htagLower = htagRaw.toLowerCase().trim();
 
@@ -1254,7 +1260,9 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     let cellHighlights = [];
                     let comments = [];
 
-                    const sId = rowObj.values[studentIdIdx];
+                    // Normalize to string to match the normalized Student History keys.
+                    const rawSId = rowObj.values[studentIdIdx];
+                    const sId = (rawSId === null || rawSId === undefined || rawSId === '') ? rawSId : String(rawSId).trim();
 
                     // 1. Get critical values
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
@@ -1290,7 +1298,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
 
                     // Determine Row/Partial Color:
                     let partialRowColor = "#FFEDD5"; // Orange Default
-                    if (retentionMsg && retentionMsg.includes("DNC")) {
+                    if (retentionMsg === "Do not contact") {
                         partialRowColor = "#FFC7CE"; // Red for DNC
                     } else if (isNextAssignmentDue) {
                         partialRowColor = "#e2efda"; // Light green for zero missing + next assignment due
