@@ -867,33 +867,52 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const hValues = historyData.values;
                     if (hValues.length > 0) {
                         const hHeaders = hValues[0].map(h => String(h).toLowerCase().trim());
-                        const hIdIdx = hHeaders.findIndex(h => h.includes('student') && h.includes('id') || h.includes('number'));
+                        // Collect every ID-like column (SyStudentId, Student Number, Student ID, etc.).
+                        // Student History rows written by newer code land in SyStudentId while older
+                        // rows landed in Student Number; the Master List only exposes one of these,
+                        // so we index the map under every non-empty variant from each history row.
+                        const hIdIndices = [];
+                        hHeaders.forEach((h, idx) => {
+                            if ((h.includes('student') && h.includes('id')) || h.includes('number')) {
+                                hIdIndices.push(idx);
+                            }
+                        });
                         const hTagIdx = hHeaders.indexOf('tag');
 
-                        if (hIdIdx !== -1 && hTagIdx !== -1) {
+                        if (hIdIndices.length > 0 && hTagIdx !== -1) {
                             const todayTime = new Date().setHours(0,0,0,0);
                             const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
                             for (let i = hValues.length - 1; i > 0; i--) {
-                                // Normalize to string so Map lookups match regardless of
-                                // whether Excel returned the ID as a Number or a String.
-                                const hid = String(hValues[i][hIdIdx] ?? '').trim();
+                                // Normalize to strings so Map lookups match regardless of whether
+                                // Excel returned the ID as a Number or a String.
+                                const hids = hIdIndices
+                                    .map(idx => hValues[i][idx])
+                                    .filter(v => v !== null && v !== undefined && v !== '')
+                                    .map(v => String(v).trim())
+                                    .filter(v => v.length > 0);
                                 const htagRaw = String(hValues[i][hTagIdx] || '');
                                 const htagLower = htagRaw.toLowerCase().trim();
 
-                                if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
+                                if (settings.includeDNCTag && hids.length > 0 && htagLower.includes('dnc')) {
                                     // Accumulate DNC tags so multiple entries (e.g. "DNC - Phone" and "DNC - Other Phone") are preserved
-                                    dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
+                                    for (const hid of hids) {
+                                        dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
+                                    }
                                 }
 
-                                if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
+                                if (settings.includeLDATag && hids.length > 0) {
                                     const match = htagRaw.match(ldaRegex);
                                     if (match) {
                                         const ldaDate = new Date(match[1]);
                                         if (!isNaN(ldaDate.getTime())) {
                                             ldaDate.setHours(0,0,0,0);
                                             if (ldaDate >= todayTime) {
-                                                ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                                for (const hid of hids) {
+                                                    if (!ldaFollowUpMap.has(hid)) {
+                                                        ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1181,26 +1200,41 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     const hValues = historyData.values;
                     if (hValues.length > 0) {
                         const hHeaders = hValues[0].map(h => String(h).toLowerCase().trim());
-                        const hIdIdx = hHeaders.findIndex(h => h.includes('student') && h.includes('id') || h.includes('number'));
+                        // Collect every ID-like column (SyStudentId, Student Number, Student ID, etc.).
+                        // Student History rows written by newer code land in SyStudentId while older
+                        // rows landed in Student Number; the Master List only exposes one of these,
+                        // so we index the map under every non-empty variant from each history row.
+                        const hIdIndices = [];
+                        hHeaders.forEach((h, idx) => {
+                            if ((h.includes('student') && h.includes('id')) || h.includes('number')) {
+                                hIdIndices.push(idx);
+                            }
+                        });
                         const hTagIdx = hHeaders.indexOf('tag');
 
-                        if (hIdIdx !== -1 && hTagIdx !== -1) {
+                        if (hIdIndices.length > 0 && hTagIdx !== -1) {
                             const todayTime = new Date().setHours(0,0,0,0);
                             const ldaRegex = /\blda\b.*?(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i;
 
                             for (let i = hValues.length - 1; i > 0; i--) {
-                                // Normalize to string so Map lookups match regardless of
-                                // whether Excel returned the ID as a Number or a String.
-                                const hid = String(hValues[i][hIdIdx] ?? '').trim();
+                                // Normalize to strings so Map lookups match regardless of whether
+                                // Excel returned the ID as a Number or a String.
+                                const hids = hIdIndices
+                                    .map(idx => hValues[i][idx])
+                                    .filter(v => v !== null && v !== undefined && v !== '')
+                                    .map(v => String(v).trim())
+                                    .filter(v => v.length > 0);
                                 const htagRaw = String(hValues[i][hTagIdx] || '');
                                 const htagLower = htagRaw.toLowerCase().trim();
 
-                                if (settings.includeDNCTag && hid && htagLower.includes('dnc')) {
+                                if (settings.includeDNCTag && hids.length > 0 && htagLower.includes('dnc')) {
                                     // Accumulate DNC tags so multiple entries (e.g. "DNC - Phone" and "DNC - Other Phone") are preserved
-                                    dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
+                                    for (const hid of hids) {
+                                        dncMap.set(hid, dncMap.has(hid) ? dncMap.get(hid) + ', ' + htagLower : htagLower);
+                                    }
                                 }
 
-                                if (settings.includeLDATag && hid && !ldaFollowUpMap.has(hid)) {
+                                if (settings.includeLDATag && hids.length > 0) {
                                     const match = htagRaw.match(ldaRegex);
                                     if (match) {
                                         const dateString = match[1];
@@ -1208,7 +1242,11 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                                         if (!isNaN(ldaDate.getTime())) {
                                             ldaDate.setHours(0,0,0,0);
                                             if (ldaDate >= todayTime) {
-                                                ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                                for (const hid of hids) {
+                                                    if (!ldaFollowUpMap.has(hid)) {
+                                                        ldaFollowUpMap.set(hid, { date: ldaDate, text: htagRaw });
+                                                    }
+                                                }
                                             }
                                         }
                                     }
