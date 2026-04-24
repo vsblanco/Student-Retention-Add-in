@@ -164,13 +164,17 @@ export async function deleteComment(commentID, createdBy = null) {
     // attempt to delete the row — forward the commentID to ExcelAPI.deleteRow
     const result = await deleteRow(Sheets.HISTORY, "commentID", commentID);
 
-    // Log who performed the deletion (no insertRow audit)
-    try {
-      console.log(`${userName} deleted comment ${String(commentID)} : 'Unknown Student'}`);
-    } catch (_) {}
-
-    // trigger a UI refresh (non-blocking)
-    callRefresh().catch(() => {});
+    if (result && result.success) {
+      try {
+        console.log(`${userName} deleted comment ${String(commentID)}${result.filtersCleared ? ' (sheet filters were cleared to perform the delete)' : ''}`);
+      } catch (_) {}
+      // trigger a UI refresh (non-blocking)
+      callRefresh().catch(() => {});
+    } else {
+      try {
+        console.error(`Comment delete failed for ${String(commentID)}:`, result && result.message);
+      } catch (_) {}
+    }
     return result;
   } catch (err) {
     // deletion failed — log and rethrow
