@@ -178,8 +178,29 @@ export async function deleteRow(sheet, columnId, rowId) {
      try {
         let changeVerified = false;
         let errorMsg = "";
+        let filtersCleared = false;
         await Excel.run(async (context) => {
              const worksheet = context.workbook.worksheets.getItem(sheet);
+             // Excel rejects range.delete(ShiftDirection.up) when the target row sits
+             // inside an active filter range ("The operation failed because it conflicts
+             // with a filtered range."). Clear any filter criteria on the sheet and on
+             // any tables it contains before attempting the delete. We don't restore the
+             // criteria afterwards because Office.js doesn't expose a cheap way to do so;
+             // the user can re-apply filters from the UI.
+             worksheet.load("autoFilter/enabled");
+             const tables = worksheet.tables;
+             tables.load("items/name");
+             await context.sync();
+
+             if (worksheet.autoFilter && worksheet.autoFilter.enabled) {
+                 worksheet.autoFilter.clearCriteria();
+                 filtersCleared = true;
+             }
+             for (const t of tables.items) {
+                 t.clearFilters();
+             }
+             if (tables.items.length > 0) filtersCleared = true;
+
              const usedRange = worksheet.getUsedRange();
              usedRange.load(["values", "columnCount", "rowCount"]);
              await context.sync();
@@ -218,8 +239,8 @@ export async function deleteRow(sheet, columnId, rowId) {
           if (!changeVerified) {
               return { success: false, message: errorMsg };
           }
-         console.log("ExcelAPI.deleteRow: finished - success");
-         return { success: true, message: "Row deleted successfully." };
+         console.log("ExcelAPI.deleteRow: finished - success", filtersCleared ? "(filters were cleared)" : "");
+         return { success: true, message: "Row deleted successfully.", filtersCleared };
      } catch (error) {
          console.log("ExcelAPI.deleteRow: finished - error", error?.message);
          return { success: false, message: error.message };
