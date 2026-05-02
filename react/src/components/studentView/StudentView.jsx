@@ -9,7 +9,7 @@ import MultiStudentView from './MultiStudentView.jsx';
 import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
-import { addComment } from '../utility/EditStudentHistory.jsx';
+import { addComment, resolveStudentIdentity } from '../utility/EditStudentHistory.jsx';
 import chromeExtensionService from '../../services/chromeExtensionService.js';
 
 /* global Excel */
@@ -349,13 +349,15 @@ function StudentView({ onReady, user }) {
             });
             matches.forEach(({ change, text, match, tag }) => {
               try {
+                const { studentId, studentName } = resolveStudentIdentity(change.otherValues);
+                const tagString = match && tag ? `${tag}, Outreach` : 'Outreach';
                 if (match) {
                   highlightRow(change.rowIndex, change.colIndex, 9);
-                  const tagString = tag ? `${tag}, Outreach` : 'Outreach';
-                  addComment(String(text), tagString, undefined, change.otherValues?.ID, change.otherValues?.StudentName);
-                } else {
-                  addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
                 }
+                // Auto Outreach handler opts into dedupe: a single advisor edit can
+                // produce repeated change events, and co-editing advisors update the
+                // same cell during the day. Manual comments do NOT pass this flag.
+                addComment(String(text), tagString, undefined, studentId, studentName, { dedupeOutreach: true });
               } catch (e) {
                 console.warn('highlightRow/addComment failed', e);
               }
