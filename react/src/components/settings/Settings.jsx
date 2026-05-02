@@ -224,9 +224,14 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	useEffect(() => {
 		if (activeTab !== 'workbook' || workbookSectionView !== 'main') return;
 		loadWorkbookSummary();
-		loadFileSize();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeTab, workbookSectionView]);
+
+	// file size is expensive (Office.getFileAsync streams the workbook), so load it once when Settings mounts
+	useEffect(() => {
+		loadFileSize();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	// Download "Student History" sheet as CSV
 	const downloadHistoryCsv = async () => {
@@ -863,7 +868,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 											<SummaryCard
 												icon={<Layers size={14} />}
 												title="Sheets in Workbook"
-												value={summaryLoading && sheetCount == null ? '…' : (sheetCount ?? '—')}
+												value={summaryLoading && sheetCount == null ? '…' : (sheetCount == null ? '—' : sheetCount.toLocaleString())}
 												hint={sheetCount === 1 ? 'sheet' : 'sheets'}
 											/>
 											<SummaryCard
@@ -875,7 +880,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 											<SummaryCard
 												icon={<MessageSquare size={14} />}
 												title="Student History Comments"
-												value={summaryLoading && historyCommentCount == null ? '…' : (historyCommentCount == null ? '—' : historyCommentCount)}
+												value={summaryLoading && historyCommentCount == null ? '…' : (historyCommentCount == null ? '—' : historyCommentCount.toLocaleString())}
 												hint={historyCommentCount == null ? `No "${HISTORY_SHEET}" sheet` : 'Rows excluding header'}
 											/>
 										</div>
