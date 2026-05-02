@@ -16,7 +16,6 @@ import {
 	verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import DeleteConfirmModal from './DeleteConfirmModal';
 
 const SettingsModal = ({
 	// array modal props
@@ -84,6 +83,7 @@ const SortableRow = ({
 	label,
 	isMissing,
 	isBlank,
+	isAdded,
 	onRequestDelete,
 }) => {
 	const {
@@ -117,6 +117,8 @@ const SortableRow = ({
 		opacity: isDragging ? 0.6 : (isMissing ? 0.5 : 1),
 		boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.12)' : 'none',
 		zIndex: isDragging ? 1 : 'auto',
+		userSelect: 'none',
+		WebkitUserSelect: 'none',
 	};
 
 	const num = idx + 1;
@@ -235,6 +237,25 @@ const SortableRow = ({
 				</span>
 			)}
 
+			{/* added badge (this session) */}
+			{!isMissing && isAdded && (
+				<span
+					title="You added this column in this session"
+					style={{
+						padding: '2px 6px',
+						borderRadius: 4,
+						background: '#d1fae5',
+						color: '#047857',
+						fontSize: 11,
+						fontWeight: 600,
+						flexShrink: 0,
+						lineHeight: '16px',
+					}}
+				>
+					Added
+				</span>
+			)}
+
 			{/* trash icon delete button */}
 			<button
 				type="button"
@@ -272,10 +293,13 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// dirty tracking: initial snapshot + current dirty flag
 	const initialSnapshotRef = React.useRef(null);
 	const [isDirty, setIsDirty] = React.useState(false);
-	// state to control delete confirmation modal
-	const [deleteConfirmKey, setDeleteConfirmKey] = React.useState(null);
 	// preview state
 	const [previewBusy, setPreviewBusy] = React.useState(false);
+	// columns the user removed during this modal session (cleared on reopen)
+	// Map<columnName, originalIndex> so re-adding restores the original position
+	const [recentlyRemoved, setRecentlyRemoved] = React.useState(() => new Map());
+	// columns the user added during this modal session (cleared on reopen)
+	const [recentlyAdded, setRecentlyAdded] = React.useState(() => new Set());
 
 	// build quick lookup of workbookColumns by key (name/label)
 	const workbookLookup = React.useMemo(() => {
@@ -379,6 +403,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		setEditableMap(map);
 		setOrderList(order);
 		setViewMode('choices');
+		setRecentlyRemoved(new Map());
+		setRecentlyAdded(new Set());
 
 		// capture initial snapshot for dirty tracking whenever modal/setting opens or array changes
 		try {
@@ -471,7 +497,18 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// add a column from the master list (or blank)
 	const addColumn = (name) => {
 		if (orderList.includes(name)) return;
-		setOrderList(prev => [...prev, name]);
+		const isRestore = recentlyRemoved.has(name);
+		const restoreIdx = isRestore ? recentlyRemoved.get(name) : -1;
+		setOrderList(prev => {
+			if (isRestore) {
+				const insertAt = Math.max(0, Math.min(prev.length, restoreIdx));
+				const next = [...prev];
+				next.splice(insertAt, 0, name);
+				return next;
+			}
+			// brand-new addition: drop in at the top so it's easy to find
+			return [name, ...prev];
+		});
 		const wbEntry = workbookLookup[name];
 		const seed = {};
 		if (wbEntry && typeof wbEntry === 'object') {
@@ -481,27 +518,49 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		}
 		delete seed.hidden;
 		setEditableMap(prev => ({ ...(prev || {}), [name]: seed }));
-	};
-
-	// request deletion (opens confirm modal)
-	const requestDelete = (key) => {
-		setDeleteConfirmKey(key);
-	};
-
-	// perform actual deletion locally (Save persists)
-	const performDelete = () => {
-		const keyToDelete = deleteConfirmKey;
-		if (!keyToDelete) {
-			setDeleteConfirmKey(null);
-			return;
+		// re-adding a recently-removed column clears its pill
+		setRecentlyRemoved(prev => {
+			if (!prev.has(name)) return prev;
+			const next = new Map(prev);
+			next.delete(name);
+			return next;
+		});
+		// brand-new additions get the "Added" pill until the modal closes
+		if (!isRestore) {
+			setRecentlyAdded(prev => {
+				if (prev.has(name)) return prev;
+				const next = new Set(prev);
+				next.add(name);
+				return next;
+			});
 		}
+	};
+
+	// delete a column locally (Save persists)
+	const deleteColumn = (key) => {
+		if (!key) return;
+		const originalIdx = orderList.indexOf(key);
+		const wasJustAdded = recentlyAdded.has(key);
 		setEditableMap(prev => {
 			const copy = { ...(prev || {}) };
-			delete copy[keyToDelete];
+			delete copy[key];
 			return copy;
 		});
-		setOrderList(prev => prev.filter(k => k !== keyToDelete));
-		setDeleteConfirmKey(null);
+		setOrderList(prev => prev.filter(k => k !== key));
+		// only track as "recently removed" if it wasn't something the user just added in this session
+		if (!wasJustAdded) {
+			setRecentlyRemoved(prev => {
+				const next = new Map(prev);
+				if (!next.has(key)) next.set(key, originalIdx);
+				return next;
+			});
+		}
+		setRecentlyAdded(prev => {
+			if (!prev.has(key)) return prev;
+			const next = new Set(prev);
+			next.delete(key);
+			return next;
+		});
 	};
 
 	const onSave = () => {
@@ -523,9 +582,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		}
 	};
 
-	// compute master list columns not already configured (for the add picker)
+	// compute columns not already configured (for the add picker)
+	// includes master-list columns plus any column the user removed during this session
 	const availableToAdd = React.useMemo(() => {
-		if (!Array.isArray(masterListHeaders)) return [];
 		const existing = new Set(orderList.map(k => k.toLowerCase()));
 		orderList.forEach(k => {
 			const wbEntry = workbookLookup[k];
@@ -533,8 +592,19 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 				wbEntry.alias.forEach(a => existing.add(String(a).trim().toLowerCase()));
 			}
 		});
-		return masterListHeaders.filter(h => h && !existing.has(h.toLowerCase()));
-	}, [masterListHeaders, orderList, workbookLookup]);
+		const seen = new Set();
+		const result = [];
+		const push = (h) => {
+			if (!h) return;
+			const lower = String(h).toLowerCase();
+			if (existing.has(lower) || seen.has(lower)) return;
+			seen.add(lower);
+			result.push(h);
+		};
+		recentlyRemoved.forEach((_, key) => push(key));
+		if (Array.isArray(masterListHeaders)) masterListHeaders.forEach(push);
+		return result;
+	}, [masterListHeaders, orderList, workbookLookup, recentlyRemoved]);
 
 	// preview: create a headers-only LDA sheet
 	const createPreview = async () => {
@@ -547,13 +617,11 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					sheets.load('items/name');
 					await context.sync();
 
-					const today = new Date();
-					const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-					let sheetName = `LDA Preview ${dateStr}`;
+					let sheetName = 'LDA Preview';
 					let counter = 2;
 					const existingNames = sheets.items.map(s => s.name);
 					while (existingNames.includes(sheetName)) {
-						sheetName = `LDA Preview ${dateStr} (${counter++})`;
+						sheetName = `LDA Preview (${counter++})`;
 					}
 
 					const newSheet = sheets.add(sheetName);
@@ -587,14 +655,14 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 
 	// Render: add view (pick from master list)
 	if (viewMode === 'add') {
-		const sortedAvailable = [...availableToAdd].sort((a, b) => {
-			const aNew = newMasterListHeaders && newMasterListHeaders.has(a);
-			const bNew = newMasterListHeaders && newMasterListHeaders.has(b);
-			if (aNew && !bNew) return -1;
-			if (!aNew && bNew) return 1;
-			return 0;
-		});
-		const newCount = newMasterListHeaders ? sortedAvailable.filter(h => newMasterListHeaders.has(h)).length : 0;
+		const rank = (h) => {
+			if (recentlyRemoved.has(h)) return 0;
+			if (newMasterListHeaders && newMasterListHeaders.has(h)) return 1;
+			return 2;
+		};
+		const sortedAvailable = [...availableToAdd].sort((a, b) => rank(a) - rank(b));
+		const newCount = newMasterListHeaders ? sortedAvailable.filter(h => newMasterListHeaders.has(h) && !recentlyRemoved.has(h)).length : 0;
+		const removedCount = sortedAvailable.filter(h => recentlyRemoved.has(h)).length;
 
 		return (
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto' }}>
@@ -606,6 +674,19 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 						Back
 					</button>
 					<div style={{ fontWeight: 600, fontSize: 14 }}>Add columns from Master List</div>
+					{removedCount > 0 && (
+						<span style={{
+							padding: '2px 8px',
+							borderRadius: 10,
+							background: '#fee2e2',
+							color: '#b91c1c',
+							fontSize: 11,
+							fontWeight: 600,
+							lineHeight: '16px'
+						}}>
+							{removedCount} recently removed
+						</span>
+					)}
 					{newCount > 0 && (
 						<span style={{
 							padding: '2px 8px',
@@ -624,7 +705,10 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					<div style={{ color: '#6b7280', fontSize: 13 }}>All Master List columns are already configured.</div>
 				) : (
 					sortedAvailable.map(header => {
-						const isNew = newMasterListHeaders && newMasterListHeaders.has(header);
+						const isRemoved = recentlyRemoved.has(header);
+						const isNew = !isRemoved && newMasterListHeaders && newMasterListHeaders.has(header);
+						const restColor = isRemoved ? '#fef2f2' : (isNew ? '#eff6ff' : '#fff');
+						const borderColor = isRemoved ? '1px solid rgba(239,68,68,0.25)' : (isNew ? '1px solid rgba(29,78,216,0.2)' : '1px solid #e6e7eb');
 						return (
 							<button
 								key={header}
@@ -637,21 +721,38 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 									padding: '8px 10px',
 									marginBottom: 4,
 									borderRadius: 6,
-									border: isNew ? '1px solid rgba(29,78,216,0.2)' : '1px solid #e6e7eb',
-									background: isNew ? '#eff6ff' : '#fff',
+									border: borderColor,
+									background: restColor,
 									cursor: 'pointer',
 									textAlign: 'left',
 									gap: 8,
 									fontSize: 14,
 									transition: 'background-color 120ms ease'
 								}}
-								onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; }}
-								onMouseLeave={e => { e.currentTarget.style.background = isNew ? '#eff6ff' : '#fff'; }}
+								onMouseEnter={e => { e.currentTarget.style.background = isRemoved ? '#fee2e2' : '#eef2ff'; }}
+								onMouseLeave={e => { e.currentTarget.style.background = restColor; }}
 							>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: '#4f46e5' }}>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: isRemoved ? '#ef4444' : '#4f46e5' }}>
 									<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
 								</svg>
 								<span style={{ flex: 1 }}>{header}</span>
+								{isRemoved && (
+									<span
+										title="You removed this column in this session — click to add it back to its original position"
+										style={{
+											padding: '2px 6px',
+											borderRadius: 4,
+											background: '#fee2e2',
+											color: '#b91c1c',
+											fontSize: 11,
+											fontWeight: 600,
+											flexShrink: 0,
+											lineHeight: '16px'
+										}}
+									>
+										Recently Removed
+									</span>
+								)}
 								{isNew && (
 									<span
 										title="This column was recently added to the Master List"
@@ -678,8 +779,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	}
 
 	// Render: choices view (visible columns with drag-and-drop reordering)
-	const deleteConfirmLabel = deleteConfirmKey || '';
-
 	return (
 		<div>
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}>
@@ -763,7 +862,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 									label={label}
 									isMissing={missingColumns.has(key)}
 									isBlank={blankVisibleColumns.has(key)}
-									onRequestDelete={requestDelete}
+									isAdded={recentlyAdded.has(key)}
+									onRequestDelete={deleteColumn}
 								/>
 							);
 						})}
@@ -792,16 +892,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					Save
 				</button>
 			</div>
-
-			{/* Delete confirmation modal */}
-			<DeleteConfirmModal
-				isOpen={!!deleteConfirmKey}
-				title="Delete column"
-				message={`Delete column "${deleteConfirmLabel}"? This cannot be undone.`}
-				confirmLabel="Delete"
-				onConfirm={performDelete}
-				onCancel={() => setDeleteConfirmKey(null)}
-			/>
 		</div>
 	);
 };
