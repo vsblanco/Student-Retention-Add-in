@@ -4,8 +4,8 @@
  * Handles ribbon button actions for the Student Retention Add-in.
  * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
-import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
-import { parseHyperlinkFormula } from '../shared/excel-helpers.js';
+import { CONSTANTS } from './constants.js';
+import { findColumnIndex, parseHyperlinkFormula } from '../../shared/excel-helpers.js';
 
 /**
  * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.

@@ -15,7 +15,7 @@
  *   - conditional-formatting      (color scales, highlights for Master List)
  *   - chrome-extension-messaging  (ping/sheet/highlight bridge + PA poller)
  */
-import { toggleHighlight, transferData, createSendToCallQueue } from './ribbon-actions.js';
+import { toggleHighlight, transferData, createSendToCallQueue } from './src/ribbon-actions.js';
 import chromeExtensionService from '../shared/chromeExtensionService.js';
 import { importMasterListFromExtension } from './src/master-list-import.js';
 import { transferMasterList } from './src/master-list-transfer.js';

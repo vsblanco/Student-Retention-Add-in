@@ -1,12 +1,11 @@
 /*
- * shared-utilities.js
+ * constants.js
  *
- * Constants and utilities used across the commands runtime.
- * Cross-runtime values (sheet names, batch size, hyperlink helpers,
- * findColumnIndex, column aliases) live in /shared/ and are re-exported
- * from here so existing `from './shared-utilities.js'` imports keep working.
+ * Commands-runtime constants (CONSTANTS object — column mappings,
+ * sheet names, settings keys) plus the name/date helpers used across
+ * commands modules. Cross-runtime values live in /shared/.
  */
-import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../shared/constants.js';
+import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../../shared/constants.js';
 import {
     STUDENT_NAME_ALIASES,
     OUTREACH_ALIASES,
@@ -15,8 +14,7 @@ import {
     GRADE_BOOK_ALIASES,
     STUDENT_EMAIL_ALIASES,
     PERSONAL_EMAIL_ALIASES,
-} from '../shared/columnAliases.js';
-export { findColumnIndex } from '../shared/excel-helpers.js';
+} from '../../shared/columnAliases.js';
 
 export const CONSTANTS = {
     // NOTE: "Student ID" and "Student Number" are treated as distinct values.

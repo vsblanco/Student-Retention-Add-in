@@ -7,7 +7,8 @@
  * isn't present. Errors are logged but never thrown — formatting is
  * non-critical and must not fail the import.
  */
-import { CONSTANTS, findColumnIndex } from '../shared-utilities.js';
+import { CONSTANTS } from './constants.js';
+import { findColumnIndex } from '../../shared/excel-helpers.js';
 
 /**
  * Applies a 3-color scale conditional formatting to the grade column

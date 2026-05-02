@@ -15,11 +15,11 @@
  */
 import {
     CONSTANTS,
-    findColumnIndex,
     normalizeName,
     formatToLastFirst,
     parseDate,
-} from '../shared-utilities.js';
+} from './constants.js';
+import { findColumnIndex } from '../../shared/excel-helpers.js';
 import { BATCH_SIZE } from '../../shared/constants.js';
 import {
     applyGradeConditionalFormatting,

@@ -17,12 +17,26 @@ describe('findColumnIndex (shared)', () => {
         expect(findColumnIndex(headers, ['phone'])).toBe(1);
     });
 
-    it('returns -1 when no alias matches', () => {
-        expect(findColumnIndex(headers, ['ssn'])).toBe(-1);
+    it('tries aliases in order, returning the first hit', () => {
+        // 'phonenumber' is not in headers; 'phone' is — should hit on 'phone'
+        expect(findColumnIndex(headers, ['phonenumber', 'phone'])).toBe(1);
     });
 
-    it('guards against non-array input', () => {
+    it('returns -1 when no alias matches', () => {
+        expect(findColumnIndex(headers, ['ssn', 'birthday'])).toBe(-1);
+    });
+
+    it('returns -1 when headers list is empty', () => {
+        expect(findColumnIndex([], ['phone'])).toBe(-1);
+    });
+
+    it('returns -1 when possibleNames is empty', () => {
+        expect(findColumnIndex(headers, [])).toBe(-1);
+    });
+
+    it('guards against non-array possibleNames input', () => {
         expect(findColumnIndex(headers, null)).toBe(-1);
+        expect(findColumnIndex(headers, undefined)).toBe(-1);
         expect(findColumnIndex(headers, 'phone')).toBe(-1);
     });
 });

@@ -6,10 +6,10 @@
  * via the chromeExtensionService bridge. Triggered when the extension
  * announces it wants the data.
  */
-import { CONSTANTS, findColumnIndex } from '../shared-utilities.js';
-import chromeExtensionService from '../../shared/chromeExtensionService.js';
+import { CONSTANTS } from './constants.js';
+import { findColumnIndex, parseHyperlinkFormula } from '../../shared/excel-helpers.js';
 import { BATCH_SIZE } from '../../shared/constants.js';
-import { parseHyperlinkFormula } from '../../shared/excel-helpers.js';
+import chromeExtensionService from '../../shared/chromeExtensionService.js';
 
 /**
  * Reads the Master List sheet and sends the data to the Chrome extension
