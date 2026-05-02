@@ -3,10 +3,19 @@
  *
  * Constants and utilities used across the commands runtime.
  * Cross-runtime values (sheet names, batch size, hyperlink helpers,
- * findColumnIndex) live in /shared/ and are re-exported from here so
- * existing `from './shared-utilities.js'` imports keep working.
+ * findColumnIndex, column aliases) live in /shared/ and are re-exported
+ * from here so existing `from './shared-utilities.js'` imports keep working.
  */
 import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../shared/constants.js';
+import {
+    STUDENT_NAME_ALIASES,
+    OUTREACH_ALIASES,
+    GRADE_ALIASES,
+    DAYS_OUT_ALIASES,
+    GRADE_BOOK_ALIASES,
+    STUDENT_EMAIL_ALIASES,
+    PERSONAL_EMAIL_ALIASES,
+} from '../shared/columnAliases.js';
 export { findColumnIndex } from '../shared/excel-helpers.js';
 
 export const CONSTANTS = {
@@ -14,8 +23,8 @@ export const CONSTANTS = {
     // "Student ID" refers to SyStudentId - the school's SIS (Student Information System) ID.
     // "Student Number" (and "Student Identifier") refers to another school-based student identifier.
     // Note: SyStudentId is different from Canvas's internal Canvas ID.
-    STUDENT_NAME_COLS: ["studentname", "student name","student"],
-    OUTREACH_COLS: ["outreach"],
+    STUDENT_NAME_COLS: STUDENT_NAME_ALIASES,
+    OUTREACH_COLS: OUTREACH_ALIASES,
     STUDENT_ID_COLS: ["student id", "systudentid", "id"],
     STUDENT_NUMBER_COLS: ["studentnumber", "student identifier", "student number"],
     MASTER_LIST_SHEET,
@@ -26,9 +35,9 @@ export const CONSTANTS = {
         courseId: ["course id"],
         courseLastAccess: ["course last access"],
         currentScore: ["current score", "grade", "course grade"],
-        grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
-        gradeBook: ["grade book", "gradebook", "Grade Book", "Gradebook", "GradeBook", "gradebooklink", "GradebookLink", "Gradelink"],
-        daysOut: ["days out", "Days Out"],
+        grade: GRADE_ALIASES,
+        gradeBook: GRADE_BOOK_ALIASES,
+        daysOut: DAYS_OUT_ALIASES,
         lastLda: ["lda", "last lda", "LDA", "Last LDA"],
         assigned: ["assigned", "Assigned"],
         programVersion: ["programversion", "program version"],
@@ -37,8 +46,8 @@ export const CONSTANTS = {
         hold: ["hold", "Hold"],
         primaryPhone: ["primary phone", "phone", "phonenumber", "contact number", "Phone", "Phone Number", "Contact Number"],
         otherPhone: ["other phone", "otherphone", "Other Phone", "OtherPhone"],
-        PersonalEmail: ["personal email", "otheremail", "Personal Email"],
-        StudentEmail: ["student email", "school email", "email", "Email","Student Email"],
+        PersonalEmail: PERSONAL_EMAIL_ALIASES,
+        StudentEmail: STUDENT_EMAIL_ALIASES,
         nextAssignmentDue: ["next assignment due", "Next Assignment Due", "nextassignmentdue"],
         lastCourseGrade: ["last course grade", "Last Course Grade", "lastcoursegrade"],
         expectedStartDate: ["expected start date", "start date", "expstartdate"],
