@@ -5,7 +5,7 @@
  * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
 import { CONSTANTS } from './constants.js';
-import { findColumnIndex, parseHyperlinkFormula } from '../../shared/excel-helpers.js';
+import { findColumnIndex, parseHyperlinkFormula, normalizeHeader } from '../../shared/excel-helpers.js';
 
 /**
  * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.
@@ -28,7 +28,7 @@ export function createSendToCallQueue(extensionService) {
         await context.sync();
 
         const allValues = usedRange.values;
-        const headers = allValues[0].map(h => String(h || '').toLowerCase());
+        const headers = allValues[0].map(normalizeHeader);
 
         // Check if the selected cell value is already a phone number
         const selRowCount = selectedRange.rowCount || 1;
@@ -208,9 +208,9 @@ export async function toggleHighlight(event) {
       await context.sync();
 
       const headers = usedRange.values[0];
-      const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
-      const studentNameColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.STUDENT_NAME_COLS);
-      const outreachColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.OUTREACH_COLS);
+      const normalizedHeaders = headers.map(normalizeHeader);
+      const studentNameColIndex = findColumnIndex(normalizedHeaders, CONSTANTS.STUDENT_NAME_COLS);
+      const outreachColIndex = findColumnIndex(normalizedHeaders, CONSTANTS.OUTREACH_COLS);
 
       if (studentNameColIndex === -1 || outreachColIndex === -1) {
         console.error("Could not find 'StudentName' and/or 'Outreach' columns.");
@@ -262,7 +262,7 @@ export async function transferData(event) {
             usedRange.load("values, formulas");
             await context.sync();
 
-            const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
+            const headers = usedRange.values[0].map(normalizeHeader);
             const colIndices = {
                 studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
                 gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),

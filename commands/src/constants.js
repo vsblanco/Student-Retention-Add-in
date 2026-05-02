@@ -8,53 +8,79 @@
 import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../../shared/constants.js';
 import {
     STUDENT_NAME_ALIASES,
+    STUDENT_ID_ALIASES,
+    STUDENT_NUMBER_ALIASES,
     OUTREACH_ALIASES,
+    HOLD_ALIASES,
+    ASSIGNED_ALIASES,
     GRADE_ALIASES,
-    DAYS_OUT_ALIASES,
-    GRADE_BOOK_ALIASES,
+    CURRENT_SCORE_ALIASES,
+    LAST_COURSE_GRADE_ALIASES,
+    LETTER_GRADE_ALIASES,
+    LAST_COURSE_LETTER_GRADE_ALIASES,
+    ENROLL_GPA_ALIASES,
     STUDENT_EMAIL_ALIASES,
     PERSONAL_EMAIL_ALIASES,
+    PRIMARY_PHONE_ALIASES,
+    OTHER_PHONE_ALIASES,
+    COURSE_ALIASES,
+    COURSE_ID_ALIASES,
+    COURSE_LAST_ACCESS_ALIASES,
+    COURSE_START_ALIASES,
+    COURSE_END_ALIASES,
+    PROGRAM_VERSION_ALIASES,
+    DAYS_OUT_ALIASES,
+    LAST_LDA_ALIASES,
+    ATTENDANCE_ALIASES,
+    EXPECTED_START_DATE_ALIASES,
+    NEXT_ASSIGNMENT_DUE_ALIASES,
+    GRADE_BOOK_ALIASES,
+    MISSING_ASSIGNMENTS_ALIASES,
+    COURSE_ZERO_ASSIGNMENTS_ALIASES,
 } from '../../shared/columnAliases.js';
 
+// All alias arrays come from /shared/columnAliases.js — see that file to add
+// or change a column alias. Matching is case- and whitespace-insensitive
+// (handled by normalizeHeader in /shared/excel-helpers.js).
+//
+// SyStudentId vs Student Number are intentionally separate concepts:
+//   STUDENT_ID_COLS    → SyStudentId  (school SIS id; preferred identifier)
+//   STUDENT_NUMBER_COLS → Student Number (a different school-issued id)
 export const CONSTANTS = {
-    // NOTE: "Student ID" and "Student Number" are treated as distinct values.
-    // "Student ID" refers to SyStudentId - the school's SIS (Student Information System) ID.
-    // "Student Number" (and "Student Identifier") refers to another school-based student identifier.
-    // Note: SyStudentId is different from Canvas's internal Canvas ID.
     STUDENT_NAME_COLS: STUDENT_NAME_ALIASES,
     OUTREACH_COLS: OUTREACH_ALIASES,
-    STUDENT_ID_COLS: ["student id", "systudentid", "id"],
-    STUDENT_NUMBER_COLS: ["studentnumber", "student identifier", "student number"],
+    STUDENT_ID_COLS: STUDENT_ID_ALIASES,
+    STUDENT_NUMBER_COLS: STUDENT_NUMBER_ALIASES,
     MASTER_LIST_SHEET,
     HISTORY_SHEET,
-    SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
+    SETTINGS_KEY: "studentRetentionSettings",
     COLUMN_MAPPINGS: {
-        course: ["course"],
-        courseId: ["course id"],
-        courseLastAccess: ["course last access"],
-        currentScore: ["current score", "grade", "course grade"],
+        course: COURSE_ALIASES,
+        courseId: COURSE_ID_ALIASES,
+        courseLastAccess: COURSE_LAST_ACCESS_ALIASES,
+        currentScore: CURRENT_SCORE_ALIASES,
         grade: GRADE_ALIASES,
         gradeBook: GRADE_BOOK_ALIASES,
         daysOut: DAYS_OUT_ALIASES,
-        lastLda: ["lda", "last lda", "LDA", "Last LDA"],
-        assigned: ["assigned", "Assigned"],
-        programVersion: ["programversion", "program version"],
-        courseMissingAssignments: ["course missing assignments", "missing assignments", "missingassignments"],
-        courseZeroAssignments: ["course zero assignments", "zero assignments", "zeroassignments"],
-        hold: ["hold", "Hold"],
-        primaryPhone: ["primary phone", "phone", "phonenumber", "contact number", "Phone", "Phone Number", "Contact Number"],
-        otherPhone: ["other phone", "otherphone", "Other Phone", "OtherPhone"],
+        lastLda: LAST_LDA_ALIASES,
+        assigned: ASSIGNED_ALIASES,
+        programVersion: PROGRAM_VERSION_ALIASES,
+        courseMissingAssignments: MISSING_ASSIGNMENTS_ALIASES,
+        courseZeroAssignments: COURSE_ZERO_ASSIGNMENTS_ALIASES,
+        hold: HOLD_ALIASES,
+        primaryPhone: PRIMARY_PHONE_ALIASES,
+        otherPhone: OTHER_PHONE_ALIASES,
         PersonalEmail: PERSONAL_EMAIL_ALIASES,
         StudentEmail: STUDENT_EMAIL_ALIASES,
-        nextAssignmentDue: ["next assignment due", "Next Assignment Due", "nextassignmentdue"],
-        lastCourseGrade: ["last course grade", "Last Course Grade", "lastcoursegrade"],
-        expectedStartDate: ["expected start date", "start date", "expstartdate"],
-        attendance: ["attendance %", "attendance%", "attendancepercent", "attendance"],
-        letterGrade: ["letter grade", "lettergrade", "Letter Grade", "LetterGrade"],
-        lastCourseLetterGrade: ["last course letter grade", "lastcourselettergrade", "Last Course Letter Grade", "LastCourseLetterGrade"],
-        enrollGpa: ["enroll gpa", "enrollgpa", "Enroll GPA", "EnrollGPA", "Enroll Gpa"],
-        courseStart: ["course start", "coursestart", "Course Start", "CourseStart"],
-        courseEnd: ["course end", "courseend", "Course End", "CourseEnd"]
+        nextAssignmentDue: NEXT_ASSIGNMENT_DUE_ALIASES,
+        lastCourseGrade: LAST_COURSE_GRADE_ALIASES,
+        expectedStartDate: EXPECTED_START_DATE_ALIASES,
+        attendance: ATTENDANCE_ALIASES,
+        letterGrade: LETTER_GRADE_ALIASES,
+        lastCourseLetterGrade: LAST_COURSE_LETTER_GRADE_ALIASES,
+        enrollGpa: ENROLL_GPA_ALIASES,
+        courseStart: COURSE_START_ALIASES,
+        courseEnd: COURSE_END_ALIASES,
     }
 };
 

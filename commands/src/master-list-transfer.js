@@ -7,7 +7,7 @@
  * announces it wants the data.
  */
 import { CONSTANTS } from './constants.js';
-import { findColumnIndex, parseHyperlinkFormula } from '../../shared/excel-helpers.js';
+import { findColumnIndex, parseHyperlinkFormula, normalizeHeader } from '../../shared/excel-helpers.js';
 import { BATCH_SIZE } from '../../shared/constants.js';
 import chromeExtensionService from '../../shared/chromeExtensionService.js';
 
@@ -57,11 +57,11 @@ export async function transferMasterList() {
             // Parse headers - keep original case for headers array
             const rawHeaders = mlValues[0];
             const headers = rawHeaders.map(header => String(header || ''));
-            const lowerCaseHeaders = headers.map(h => h.toLowerCase());
+            const normalizedHeaders = headers.map(normalizeHeader);
 
             // Find key column indices for reference
-            const studentNameColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.STUDENT_NAME_COLS);
-            const gradeBookColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const studentNameColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const gradeBookColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
 
             // Create column mapping with actual header names
             const columnMapping = {};
@@ -141,10 +141,10 @@ export async function transferMasterList() {
                     if (maValues.length > 0) {
                         // Parse headers from Missing Assignments sheet
                         const maHeaders = maValues[0].map(h => String(h || ''));
-                        const maLowerHeaders = maHeaders.map(h => h.toLowerCase());
+                        const maNormalizedHeaders = maHeaders.map(normalizeHeader);
 
                         // Find the Gradebook column in Missing Assignments sheet
-                        const maGradebookColIdx = findColumnIndex(maLowerHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+                        const maGradebookColIdx = findColumnIndex(maNormalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
 
                         console.log(`TransferMasterList: Missing Assignments headers: [${maHeaders.join(', ')}]`);
                         console.log(`TransferMasterList: Gradebook column index in Missing Assignments: ${maGradebookColIdx}`);

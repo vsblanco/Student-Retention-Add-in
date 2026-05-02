@@ -19,7 +19,7 @@ import {
     formatToLastFirst,
     parseDate,
 } from './constants.js';
-import { findColumnIndex } from '../../shared/excel-helpers.js';
+import { findColumnIndex, normalizeHeader } from '../../shared/excel-helpers.js';
 import { BATCH_SIZE } from '../../shared/constants.js';
 import {
     applyGradeConditionalFormatting,
@@ -327,33 +327,20 @@ export async function importMasterListFromExtension(payload) {
 
             console.log(`ImportFromExtension: Read ${allValues.length} rows in ${Math.ceil(totalRows / BATCH_SIZE)} batch(es)`);
 
-            // Get Master List headers
+            // Get Master List headers (raw for display) and normalized forms for matching.
+            // normalizeHeader trims, lowercases, and strips all whitespace, so
+            // "Grade Book", "GradeBook", and "  grade book  " all collapse to the
+            // same key — case and whitespace differences match automatically.
             const masterHeaders = allValues[0].map(h => String(h || ''));
-            const lowerCaseMasterHeaders = masterHeaders.map(h => h.toLowerCase());
-            const lowerCaseIncomingHeaders = incomingHeaders.map(h => String(h || '').toLowerCase());
+            const normalizedMasterHeaders = masterHeaders.map(normalizeHeader);
+            const normalizedIncomingHeaders = incomingHeaders.map(normalizeHeader);
 
             console.log(`ImportFromExtension: Master List headers: [${masterHeaders.join(', ')}]`);
 
-            // Helper function to normalize headers (remove all whitespace)
-            const normalizeHeader = (header) => String(header).toLowerCase().replace(/\s+/g, '');
-
-            // Create normalized versions for matching
-            const normalizedMasterHeaders = masterHeaders.map(h => normalizeHeader(h));
-            const normalizedIncomingHeaders = incomingHeaders.map(h => normalizeHeader(h));
-
             // Create column mapping (incoming column index -> master column index)
-            // First try exact case-insensitive match, then try normalized match
-            const colMapping = lowerCaseIncomingHeaders.map((incomingHeader, idx) => {
-                // Try exact match first
-                let masterIdx = lowerCaseMasterHeaders.indexOf(incomingHeader);
-
-                // If no exact match, try normalized match (removes whitespace differences)
-                if (masterIdx === -1) {
-                    masterIdx = normalizedMasterHeaders.indexOf(normalizedIncomingHeaders[idx]);
-                }
-
-                return masterIdx;
-            });
+            const colMapping = normalizedIncomingHeaders.map(
+                (incomingHeader) => normalizedMasterHeaders.indexOf(incomingHeader)
+            );
 
             // Detect new columns from incoming data not yet on Master List
             const newColumns = [];
@@ -361,7 +348,6 @@ export async function importMasterListFromExtension(payload) {
                 if (colMapping[i] === -1) {
                     const newColIdx = masterHeaders.length;
                     masterHeaders.push(String(incomingHeaders[i] || ''));
-                    lowerCaseMasterHeaders.push(lowerCaseIncomingHeaders[i]);
                     normalizedMasterHeaders.push(normalizedIncomingHeaders[i]);
                     colMapping[i] = newColIdx;
                     newColumns.push(String(incomingHeaders[i] || ''));
@@ -384,14 +370,14 @@ export async function importMasterListFromExtension(payload) {
             }
 
             // Find the student name column in both incoming data and master list
-            const incomingStudentNameCol = findColumnIndex(lowerCaseIncomingHeaders, CONSTANTS.STUDENT_NAME_COLS);
-            const masterStudentNameCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
-            const masterGradebookCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
-            const masterAssignedCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
-            const masterMissingAssignmentsCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
-            const incomingMissingAssignmentsCol = findColumnIndex(lowerCaseIncomingHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
-            const masterIdCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.STUDENT_ID_COLS);
-            const incomingIdCol = findColumnIndex(lowerCaseIncomingHeaders, CONSTANTS.STUDENT_ID_COLS);
+            const incomingStudentNameCol = findColumnIndex(normalizedIncomingHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const masterStudentNameCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.STUDENT_NAME_COLS);
+            const masterGradebookCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.gradeBook);
+            const masterAssignedCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.assigned);
+            const masterMissingAssignmentsCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+            const incomingMissingAssignmentsCol = findColumnIndex(normalizedIncomingHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+            const masterIdCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.STUDENT_ID_COLS);
+            const incomingIdCol = findColumnIndex(normalizedIncomingHeaders, CONSTANTS.STUDENT_ID_COLS);
 
             if (incomingStudentNameCol === -1) {
                 console.error("ImportFromExtension: Incoming data is missing a 'Student Name' column");
@@ -718,7 +704,7 @@ export async function importMasterListFromExtension(payload) {
             }
 
             // Highlight new students based on the latest ExpStartDate
-            const masterExpStartDateCol = findColumnIndex(lowerCaseMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.expectedStartDate);
+            const masterExpStartDateCol = findColumnIndex(normalizedMasterHeaders, CONSTANTS.COLUMN_MAPPINGS.expectedStartDate);
             if (masterExpStartDateCol !== -1) {
                 // Find the latest ExpStartDate across all students
                 let latestDate = null;

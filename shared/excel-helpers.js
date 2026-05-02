@@ -5,11 +5,21 @@
  */
 
 /**
+ * Canonicalizes a column header / alias for matching. Trims, lowercases,
+ * and strips ALL whitespace, so "Grade Book", "  GRADEBOOK  ", and
+ * "grade book" all collapse to "gradebook". This means alias lists do
+ * NOT need to enumerate case or whitespace variants.
+ */
+export function normalizeHeader(s) {
+    return String(s ?? '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+/**
  * Finds the index of a column by checking the headers array against a list
- * of possible alias names. Aliases are lowercased before matching, so
- * callers only need to pre-lowercase the headers.
+ * of possible alias names. Aliases are normalized via normalizeHeader before
+ * matching; callers must pre-normalize headers the same way.
  *
- * @param {string[]} headers - Lowercased header row values.
+ * @param {string[]} headers - Headers normalized via normalizeHeader.
  * @param {string[]} possibleNames - Aliases to try, in order.
  * @returns {number} Matching column index, or -1 if no alias matches.
  */
@@ -19,7 +29,7 @@ export function findColumnIndex(headers, possibleNames) {
         return -1;
     }
     for (const name of possibleNames) {
-        const index = headers.indexOf(String(name).toLowerCase());
+        const index = headers.indexOf(normalizeHeader(name));
         if (index !== -1) {
             return index;
         }

@@ -3,7 +3,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
-import { findColumnIndex, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
+import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
@@ -313,7 +313,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
                 const values = range.values;
                 const data = (values.length > 1)
-                    ? { headers: values[0].map(h => String(h ?? '').toLowerCase()), values: values.slice(1) }
+                    ? { headers: values[0].map(normalizeHeader), values: values.slice(1) }
                     : { headers: [], values: [] };
 
                 setWorksheetDataCache(prev => ({ ...prev, [sheetNameToFetch]: data }));
@@ -379,7 +379,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
                         const historyValues = historyRange.values;
                         if (historyValues.length > 1) {
-                            const historyHeaders = historyValues[0].map(h => String(h ?? '').toLowerCase());
+                            const historyHeaders = historyValues[0].map(normalizeHeader);
                             const identifierIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.StudentIdentifier);
                             const tagsIndex = findColumnIndex(historyHeaders, COLUMN_MAPPINGS.Tags);
 
@@ -430,7 +430,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
                 const values = usedRange.values;
                 const formulas = skipSpecialParams ? null : usedRange.formulas;
-                const headers = values[0].map(h => String(h ?? '').toLowerCase());
+                const headers = values[0].map(normalizeHeader);
 
                 // Load fill colors for ONLY the Outreach column (not entire sheet)
                 // to avoid exceeding the response payload size limit
@@ -453,7 +453,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
                 const customParamIndices = {};
                 customParameters.forEach(param => {
-                    const headerIndex = headers.indexOf(param.sourceColumn.toLowerCase());
+                    const headerIndex = headers.indexOf(normalizeHeader(param.sourceColumn));
                     if (headerIndex !== -1) customParamIndices[param.name] = headerIndex;
                 });
 

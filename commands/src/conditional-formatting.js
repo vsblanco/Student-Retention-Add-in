@@ -8,7 +8,7 @@
  * non-critical and must not fail the import.
  */
 import { CONSTANTS } from './constants.js';
-import { findColumnIndex } from '../../shared/excel-helpers.js';
+import { findColumnIndex, normalizeHeader } from '../../shared/excel-helpers.js';
 
 /**
  * Applies a 3-color scale conditional formatting to the grade column
@@ -20,8 +20,8 @@ export async function applyGradeConditionalFormatting(context, sheet, headers) {
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Grade column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const gradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const gradeColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.grade);
 
         if (gradeColIdx === -1) {
             console.log("ImportFromExtension: Grade column not found, skipping conditional formatting");
@@ -81,8 +81,8 @@ export async function applyLastCourseGradeConditionalFormatting(context, sheet, 
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Last Course Grade column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const colIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.lastCourseGrade);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const colIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.lastCourseGrade);
 
         if (colIdx === -1) {
             console.log("ImportFromExtension: Last Course Grade column not found, skipping conditional formatting");
@@ -141,8 +141,8 @@ export async function applyMissingAssignmentsConditionalFormatting(context, shee
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Missing Assignments column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const missingAssignmentsColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const missingAssignmentsColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.courseMissingAssignments);
 
         if (missingAssignmentsColIdx === -1) {
             console.log("ImportFromExtension: Missing Assignments column not found, skipping conditional formatting");
@@ -186,8 +186,8 @@ export async function applyHoldConditionalFormatting(context, sheet, headers) {
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Hold column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const holdColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.hold);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const holdColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.hold);
 
         if (holdColIdx === -1) {
             console.log("ImportFromExtension: Hold column not found, skipping conditional formatting");
@@ -231,8 +231,8 @@ export async function applyAdSAPStatusConditionalFormatting(context, sheet, head
     try {
         console.log("ImportFromExtension: Applying conditional formatting to AdSAPStatus column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const adsapStatusColIdx = lowerCaseHeaders.indexOf('adsapstatus');
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const adsapStatusColIdx = normalizedHeaders.indexOf('adsapstatus');
 
         if (adsapStatusColIdx === -1) {
             console.log("ImportFromExtension: AdSAPStatus column not found, skipping conditional formatting");
@@ -276,8 +276,8 @@ export async function applyNextAssignmentDueFormatting(context, sheet, headers) 
     try {
         console.log("ImportFromExtension: Applying left alignment to Next Assignment Due column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const nextAssignmentDueColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.nextAssignmentDue);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const nextAssignmentDueColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.nextAssignmentDue);
 
         if (nextAssignmentDueColIdx === -1) {
             console.log("ImportFromExtension: Next Assignment Due column not found, skipping formatting");
@@ -316,8 +316,8 @@ export async function applyAttendanceConditionalFormatting(context, sheet, heade
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Attendance % column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const attendanceColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.attendance);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const attendanceColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.attendance);
 
         if (attendanceColIdx === -1) {
             console.log("ImportFromExtension: Attendance % column not found, skipping conditional formatting");
@@ -369,9 +369,9 @@ export async function applyLetterGradeConditionalFormatting(context, sheet, head
     try {
         console.log("ImportFromExtension: Applying conditional formatting to letter grade columns...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const letterGradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.letterGrade);
-        const lastCourseLetterGradeColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.lastCourseLetterGrade);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const letterGradeColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.letterGrade);
+        const lastCourseLetterGradeColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.lastCourseLetterGrade);
 
         const colIndices = [];
         if (letterGradeColIdx !== -1) colIndices.push({ idx: letterGradeColIdx, name: "Letter Grade" });
@@ -428,8 +428,8 @@ export async function applyEnrollGpaConditionalFormatting(context, sheet, header
     try {
         console.log("ImportFromExtension: Applying conditional formatting to Enroll GPA column...");
 
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const enrollGpaColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.enrollGpa);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const enrollGpaColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.enrollGpa);
 
         if (enrollGpaColIdx === -1) {
             console.log("ImportFromExtension: Enroll GPA column not found, skipping conditional formatting");
@@ -477,9 +477,9 @@ export async function applyEnrollGpaConditionalFormatting(context, sheet, header
  */
 export async function applyCourseDateFormatting(context, sheet, headers, dataToWrite) {
     try {
-        const lowerCaseHeaders = headers.map(h => String(h || '').toLowerCase());
-        const courseStartColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseStart);
-        const courseEndColIdx = findColumnIndex(lowerCaseHeaders, CONSTANTS.COLUMN_MAPPINGS.courseEnd);
+        const normalizedHeaders = headers.map(normalizeHeader);
+        const courseStartColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.courseStart);
+        const courseEndColIdx = findColumnIndex(normalizedHeaders, CONSTANTS.COLUMN_MAPPINGS.courseEnd);
 
         const colIndices = [];
         if (courseStartColIdx !== -1) colIndices.push({ idx: courseStartColIdx, name: "Course Start" });

@@ -1,6 +1,6 @@
 // Utility functions for personalized email feature
 import { parseHyperlinkFormula } from '../../../../../shared/excel-helpers.js';
-export { findColumnIndex, parseHyperlinkFormula } from '../../../../../shared/excel-helpers.js';
+export { findColumnIndex, parseHyperlinkFormula, normalizeHeader } from '../../../../../shared/excel-helpers.js';
 
 export function getTodaysLdaSheetName() {
     const now = new Date();
