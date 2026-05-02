@@ -1,9 +1,65 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Layers, HardDrive, MessageSquare } from 'lucide-react';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import { TreeNode, IconFolder, IconFile, renderValueAsTree } from './workbookDebug/Tree';
 import { isAuthorMatch } from './workbookDebug/allowlist';
 
 const BRAND = '#145F82';
+const HISTORY_SHEET = 'Student History';
+
+function formatBytes(bytes) {
+	if (bytes == null || Number.isNaN(bytes)) return '—';
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function SummaryCard({ icon, title, value, hint, accent = BRAND }) {
+	return (
+		<div style={{
+			background: '#fff',
+			border: '1px solid #e5e7eb',
+			borderRadius: 10,
+			padding: '14px 16px',
+			display: 'flex',
+			flexDirection: 'column',
+			gap: 6,
+			minWidth: 0,
+			boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+		}}>
+			<div style={{
+				display: 'flex',
+				alignItems: 'center',
+				gap: 8,
+				fontSize: 11,
+				fontWeight: 600,
+				textTransform: 'uppercase',
+				letterSpacing: '0.04em',
+				color: '#6b7280',
+			}}>
+				<span style={{
+					width: 24,
+					height: 24,
+					borderRadius: 6,
+					background: `${accent}14`,
+					color: accent,
+					display: 'inline-flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					flexShrink: 0,
+				}}>
+					{icon}
+				</span>
+				<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+			</div>
+			<div style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+				{value}
+			</div>
+			{hint && <div style={{ fontSize: 12, color: '#6b7280' }}>{hint}</div>}
+		</div>
+	);
+}
 
 const modalBtnBase = {
 	height: 32,
@@ -34,6 +90,8 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 	const [deleting, setDeleting] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [currentUserName, setCurrentUserName] = useState('');
+	const [fileSize, setFileSize] = useState(null);
+	const [fileSizeLoading, setFileSizeLoading] = useState(false);
 	const copiedTimerRef = useRef(null);
 	const closeBtnRef = useRef(null);
 
@@ -83,6 +141,7 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 				addinSettings: {},
 				documentSettingsKey: docKey,
 				documentSettings: null,
+				historyCommentCount: null,
 			};
 
 			if (window.Excel && Excel.run) {
@@ -109,6 +168,19 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 					};
 					result.worksheets = sheets.items.map((s) => s.name);
 					result.namedItems = names.items.map((n) => ({ name: n.name, formula: n.formula }));
+
+					// Count comment rows in the Student History sheet (excluding the header row)
+					if (result.worksheets.includes(HISTORY_SHEET)) {
+						const histSheet = context.workbook.worksheets.getItem(HISTORY_SHEET);
+						const histRange = histSheet.getUsedRangeOrNullObject();
+						histRange.load("rowCount, isNullObject");
+						await context.sync();
+						if (histRange.isNullObject) {
+							result.historyCommentCount = 0;
+						} else {
+							result.historyCommentCount = Math.max(0, (histRange.rowCount || 0) - 1);
+						}
+					}
 				});
 			} else {
 				result._warning = "Excel JavaScript API not available in this environment.";
@@ -152,11 +224,38 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 			}
 
 			setData(result);
+			loadFileSize();
 		} catch (err) {
 			setError(String(err));
 			setData(null);
 		} finally {
 			setLoading(false);
+		}
+	}
+
+	function loadFileSize() {
+		if (!(window.Office && Office.context && Office.context.document && typeof Office.context.document.getFileAsync === 'function')) {
+			setFileSize(null);
+			return;
+		}
+		setFileSizeLoading(true);
+		try {
+			Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize: 65536 }, (asyncResult) => {
+				try {
+					if (asyncResult && asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+						const file = asyncResult.value;
+						setFileSize(typeof file?.size === 'number' ? file.size : null);
+						try { file && typeof file.closeAsync === 'function' && file.closeAsync(() => {}); } catch { /* ignore */ }
+					} else {
+						setFileSize(null);
+					}
+				} finally {
+					setFileSizeLoading(false);
+				}
+			});
+		} catch {
+			setFileSizeLoading(false);
+			setFileSize(null);
 		}
 	}
 
@@ -307,31 +406,60 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 					{error && <div style={{ color: "red" }}>Error: {error}</div>}
 
 					{!loading && data && (
-						viewMode === 'tree' ? (
-							<div style={{ display: 'grid', gap: 8 }}>
-								<TreeNode label="Workbook Properties" icon={<IconFolder />} defaultOpen={false}>
-									{data.workbookProperties && Object.keys(data.workbookProperties).length > 0
-										? Object.entries(data.workbookProperties).map(([k, v]) => renderValueAsTree(k, v, `workbookProps.${k}`))
-										: <div style={{ padding: 6, color: '#6b7280' }}>No properties available</div>}
-								</TreeNode>
+						<>
+							{viewMode === 'tree' ? (
+								<div style={{ display: 'grid', gap: 8 }}>
+									<TreeNode label="Workbook Properties" icon={<IconFolder />} defaultOpen={false}>
+										{data.workbookProperties && Object.keys(data.workbookProperties).length > 0
+											? Object.entries(data.workbookProperties).map(([k, v]) => renderValueAsTree(k, v, `workbookProps.${k}`))
+											: <div style={{ padding: 6, color: '#6b7280' }}>No properties available</div>}
+									</TreeNode>
 
-								<TreeNode label={`Worksheets (${(data.worksheets && data.worksheets.length) || 0})`} icon={<IconFolder />}>
-									{Array.isArray(data.worksheets) && data.worksheets.length > 0
-										? data.worksheets.map((name, idx) => <TreeNode key={idx} label={name} icon={<IconFile />} />)
-										: <div style={{ padding: 6, color: '#6b7280' }}>No worksheets found</div>}
-								</TreeNode>
+									<TreeNode label={`Worksheets (${(data.worksheets && data.worksheets.length) || 0})`} icon={<IconFolder />}>
+										{Array.isArray(data.worksheets) && data.worksheets.length > 0
+											? data.worksheets.map((name, idx) => <TreeNode key={idx} label={name} icon={<IconFile />} />)
+											: <div style={{ padding: 6, color: '#6b7280' }}>No worksheets found</div>}
+									</TreeNode>
 
-								<TreeNode label={`${data.documentSettingsKey || docKey}`} icon={<IconFolder />}>
-									{hasDocumentMapping
-										? Object.entries(data.documentSettings).map(([k, v]) => renderValueAsTree(k, v, `doc.${k}`))
-										: <div style={{ padding: 6, color: '#6b7280' }}>{data.documentSettings === null ? 'No mapping found for this key' : String(data.documentSettings ?? '')}</div>}
-								</TreeNode>
+									<TreeNode label={`${data.documentSettingsKey || docKey}`} icon={<IconFolder />}>
+										{hasDocumentMapping
+											? Object.entries(data.documentSettings).map(([k, v]) => renderValueAsTree(k, v, `doc.${k}`))
+											: <div style={{ padding: 6, color: '#6b7280' }}>{data.documentSettings === null ? 'No mapping found for this key' : String(data.documentSettings ?? '')}</div>}
+									</TreeNode>
+								</div>
+							) : (
+								<pre style={{ margin: 0, padding: 8, background: '#f9fafb', borderRadius: 6, overflow: 'auto', fontSize: 12 }}>
+									{JSON.stringify(data, null, 2)}
+								</pre>
+							)}
+
+							{/* Summary cards: Sheets, File Size, Student History Comments */}
+							<div style={{
+								display: 'grid',
+								gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+								gap: 12,
+								marginTop: 16,
+							}}>
+								<SummaryCard
+									icon={<Layers size={14} />}
+									title="Sheets in Workbook"
+									value={Array.isArray(data.worksheets) ? data.worksheets.length : '—'}
+									hint={Array.isArray(data.worksheets) && data.worksheets.length === 1 ? 'sheet' : 'sheets'}
+								/>
+								<SummaryCard
+									icon={<HardDrive size={14} />}
+									title="File Size"
+									value={fileSizeLoading ? '…' : formatBytes(fileSize)}
+									hint={fileSizeLoading ? 'Loading…' : (fileSize == null ? 'Unavailable' : 'Compressed (.xlsx)')}
+								/>
+								<SummaryCard
+									icon={<MessageSquare size={14} />}
+									title="Student History Comments"
+									value={data.historyCommentCount == null ? '—' : data.historyCommentCount}
+									hint={data.historyCommentCount == null ? `No "${HISTORY_SHEET}" sheet` : 'Rows excluding header'}
+								/>
 							</div>
-						) : (
-							<pre style={{ margin: 0, padding: 8, background: '#f9fafb', borderRadius: 6, overflow: 'auto', fontSize: 12 }}>
-								{JSON.stringify(data, null, 2)}
-							</pre>
-						)
+						</>
 					)}
 
 					{!loading && !data && !error && <div>No data available. Click Refresh.</div>}

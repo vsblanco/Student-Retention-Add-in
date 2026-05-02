@@ -2,6 +2,7 @@ import React from 'react';
 import { X, GripVertical, Trash2 } from 'lucide-react';
 import {
 	DndContext,
+	DragOverlay,
 	closestCenter,
 	KeyboardSensor,
 	PointerSensor,
@@ -76,65 +77,54 @@ const SettingsModal = ({
 
 export default SettingsModal;
 
-// Sortable row used inside the visible-columns list
-const SortableRow = ({
-	id,
+// Pure column-row visual; used both inside the sortable list and in the DragOverlay
+const ColumnRow = React.forwardRef(({
 	idx,
 	label,
 	isMissing,
 	isBlank,
 	isAdded,
-	onRequestDelete,
-}) => {
-	const {
-		attributes,
-		listeners,
-		setNodeRef,
-		transform,
-		transition,
-		isDragging,
-	} = useSortable({ id, disabled: isMissing });
-
+	overlay = false,
+	dragSource = false,
+	dragAttributes,
+	dragListeners,
+	onDelete,
+	style: extraStyle,
+}, ref) => {
 	const [trashHover, setTrashHover] = React.useState(false);
 	const [rowHover, setRowHover] = React.useState(false);
-
-	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-		display: 'flex',
-		alignItems: 'center',
-		width: '100%',
-		padding: '6px 8px',
-		marginBottom: 4,
-		borderRadius: 6,
-		background: isMissing
-			? '#f9fafb'
-			: (rowHover || isDragging) ? '#eef2ff' : 'transparent',
-		border: isMissing
-			? '1px solid #e5e7eb'
-			: (rowHover || isDragging) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
-		gap: 4,
-		opacity: isDragging ? 0.6 : (isMissing ? 0.5 : 1),
-		boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.12)' : 'none',
-		zIndex: isDragging ? 1 : 'auto',
-		userSelect: 'none',
-		WebkitUserSelect: 'none',
-	};
-
 	const num = idx + 1;
+	const showHover = rowHover || overlay;
 
 	return (
 		<div
-			ref={setNodeRef}
-			style={style}
-			onMouseEnter={() => setRowHover(true)}
-			onMouseLeave={() => setRowHover(false)}
+			ref={ref}
+			onMouseEnter={() => { if (!overlay) setRowHover(true); }}
+			onMouseLeave={() => { if (!overlay) setRowHover(false); }}
+			style={{
+				display: 'flex',
+				alignItems: 'center',
+				width: '100%',
+				padding: '6px 8px',
+				marginBottom: overlay ? 0 : 4,
+				borderRadius: 6,
+				background: isMissing ? '#f9fafb' : showHover ? '#eef2ff' : 'transparent',
+				border: isMissing ? '1px solid #e5e7eb' : showHover ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+				gap: 4,
+				opacity: isMissing ? 0.5 : 1,
+				boxShadow: overlay ? '0 12px 24px rgba(0,0,0,0.20)' : 'none',
+				userSelect: 'none',
+				WebkitUserSelect: 'none',
+				cursor: overlay ? 'grabbing' : 'default',
+				boxSizing: 'border-box',
+				...extraStyle,
+			}}
 		>
 			{/* drag handle */}
 			<button
 				type="button"
-				{...attributes}
-				{...listeners}
+				{...(dragAttributes || {})}
+				{...(dragListeners || {})}
 				disabled={isMissing}
 				aria-label={isMissing ? `${label} (missing, cannot reorder)` : `Drag to reorder ${label}`}
 				title={isMissing ? 'Missing column cannot be reordered' : 'Drag to reorder'}
@@ -147,7 +137,7 @@ const SortableRow = ({
 					justifyContent: 'center',
 					border: 'none',
 					background: 'transparent',
-					cursor: isMissing ? 'not-allowed' : (isDragging ? 'grabbing' : 'grab'),
+					cursor: isMissing ? 'not-allowed' : (overlay || dragSource ? 'grabbing' : 'grab'),
 					color: isMissing ? '#d1d5db' : '#9ca3af',
 					flexShrink: 0,
 					touchAction: 'none',
@@ -166,7 +156,7 @@ const SortableRow = ({
 					alignItems: 'center',
 					justifyContent: 'center',
 					borderRadius: 6,
-					background: isMissing ? '#f3f4f6' : (rowHover ? '#eef2ff' : '#f3f4f6'),
+					background: '#f3f4f6',
 					color: isMissing ? '#9ca3af' : '#374151',
 					fontWeight: 700,
 					flexShrink: 0,
@@ -259,9 +249,10 @@ const SortableRow = ({
 			{/* trash icon delete button */}
 			<button
 				type="button"
-				onClick={(e) => { e.stopPropagation(); onRequestDelete(id); }}
+				onClick={(e) => { e.stopPropagation(); if (!overlay && onDelete) onDelete(); }}
 				onMouseEnter={() => setTrashHover(true)}
 				onMouseLeave={() => setTrashHover(false)}
+				disabled={overlay}
 				aria-label={`Delete ${label}`}
 				title={`Delete ${label}`}
 				style={{
@@ -272,10 +263,10 @@ const SortableRow = ({
 					alignItems: 'center',
 					justifyContent: 'center',
 					border: 'none',
-					background: trashHover ? '#fee2e2' : 'transparent',
+					background: trashHover && !overlay ? '#fee2e2' : 'transparent',
 					borderRadius: 6,
-					cursor: 'pointer',
-					color: trashHover ? '#ef4444' : '#9ca3af',
+					cursor: overlay ? 'grabbing' : 'pointer',
+					color: trashHover && !overlay ? '#ef4444' : '#9ca3af',
 					transition: 'background-color 120ms ease, color 120ms ease',
 					flexShrink: 0,
 				}}
@@ -283,6 +274,38 @@ const SortableRow = ({
 				<Trash2 size={15} />
 			</button>
 		</div>
+	);
+});
+
+// Sortable wrapper used inside the visible-columns list
+const SortableRow = ({ id, idx, label, isMissing, isBlank, isAdded, onRequestDelete }) => {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id, disabled: isMissing });
+
+	return (
+		<ColumnRow
+			ref={setNodeRef}
+			idx={idx}
+			label={label}
+			isMissing={isMissing}
+			isBlank={isBlank}
+			isAdded={isAdded}
+			dragSource={isDragging}
+			dragAttributes={attributes}
+			dragListeners={listeners}
+			onDelete={() => onRequestDelete && onRequestDelete(id)}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.35 : 1,
+			}}
+		/>
 	);
 };
 
@@ -482,8 +505,20 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		return blank;
 	}, [orderList, blankColumns, masterListHeaders, missingColumns, workbookLookup, editableMap]);
 
+	// drag tracking: keep the actively dragged id so DragOverlay can render a portal preview
+	const [activeId, setActiveId] = React.useState(null);
+
+	const handleDragStart = (event) => {
+		setActiveId(event?.active?.id ?? null);
+	};
+
+	const handleDragCancel = () => {
+		setActiveId(null);
+	};
+
 	// drag-end handler: reorder the list
 	const handleDragEnd = (event) => {
+		setActiveId(null);
 		const { active, over } = event;
 		if (!over || active.id === over.id) return;
 		setOrderList((items) => {
@@ -781,7 +816,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// Render: choices view (visible columns with drag-and-drop reordering)
 	return (
 		<div>
-			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}>
+			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
 				{/* header: Visible on LDA + add/preview buttons */}
 				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
 					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>Visible on LDA</div>
@@ -849,7 +884,13 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					<div style={{ color: '#6b7280', fontSize: 13, marginBottom: 8 }}>No visible columns. Click Add to include columns from the Master List.</div>
 				)}
 
-				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+				<DndContext
+					sensors={sensors}
+					collisionDetection={closestCenter}
+					onDragStart={handleDragStart}
+					onDragEnd={handleDragEnd}
+					onDragCancel={handleDragCancel}
+				>
 					<SortableContext items={orderList} strategy={verticalListSortingStrategy}>
 						{orderList.map((key, idx) => {
 							const choiceObj = getChoiceByKey(key);
@@ -868,6 +909,23 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 							);
 						})}
 					</SortableContext>
+					<DragOverlay dropAnimation={null}>
+						{activeId ? (() => {
+							const activeIdx = orderList.indexOf(activeId);
+							const choiceObj = getChoiceByKey(activeId);
+							const label = String(choiceObj?.name ?? choiceObj?.label ?? activeId).trim();
+							return (
+								<ColumnRow
+									idx={activeIdx >= 0 ? activeIdx : 0}
+									label={label}
+									isMissing={missingColumns.has(activeId)}
+									isBlank={blankVisibleColumns.has(activeId)}
+									isAdded={recentlyAdded.has(activeId)}
+									overlay
+								/>
+							);
+						})() : null}
+					</DragOverlay>
 				</DndContext>
 			</div>
 
