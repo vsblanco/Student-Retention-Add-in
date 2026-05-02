@@ -117,6 +117,8 @@ const SortableRow = ({
 		opacity: isDragging ? 0.6 : (isMissing ? 0.5 : 1),
 		boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.12)' : 'none',
 		zIndex: isDragging ? 1 : 'auto',
+		userSelect: 'none',
+		WebkitUserSelect: 'none',
 	};
 
 	const num = idx + 1;
