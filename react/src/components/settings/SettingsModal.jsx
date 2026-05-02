@@ -16,7 +16,6 @@ import {
 	verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import DeleteConfirmModal from './DeleteConfirmModal';
 
 const SettingsModal = ({
 	// array modal props
@@ -274,8 +273,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// dirty tracking: initial snapshot + current dirty flag
 	const initialSnapshotRef = React.useRef(null);
 	const [isDirty, setIsDirty] = React.useState(false);
-	// state to control delete confirmation modal
-	const [deleteConfirmKey, setDeleteConfirmKey] = React.useState(null);
 	// preview state
 	const [previewBusy, setPreviewBusy] = React.useState(false);
 
@@ -485,25 +482,15 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		setEditableMap(prev => ({ ...(prev || {}), [name]: seed }));
 	};
 
-	// request deletion (opens confirm modal)
-	const requestDelete = (key) => {
-		setDeleteConfirmKey(key);
-	};
-
-	// perform actual deletion locally (Save persists)
-	const performDelete = () => {
-		const keyToDelete = deleteConfirmKey;
-		if (!keyToDelete) {
-			setDeleteConfirmKey(null);
-			return;
-		}
+	// delete a column locally (Save persists)
+	const deleteColumn = (key) => {
+		if (!key) return;
 		setEditableMap(prev => {
 			const copy = { ...(prev || {}) };
-			delete copy[keyToDelete];
+			delete copy[key];
 			return copy;
 		});
-		setOrderList(prev => prev.filter(k => k !== keyToDelete));
-		setDeleteConfirmKey(null);
+		setOrderList(prev => prev.filter(k => k !== key));
 	};
 
 	const onSave = () => {
@@ -549,13 +536,11 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					sheets.load('items/name');
 					await context.sync();
 
-					const today = new Date();
-					const dateStr = `${today.getMonth() + 1}-${today.getDate()}-${today.getFullYear()}`;
-					let sheetName = `LDA Preview ${dateStr}`;
+					let sheetName = 'LDA Preview';
 					let counter = 2;
 					const existingNames = sheets.items.map(s => s.name);
 					while (existingNames.includes(sheetName)) {
-						sheetName = `LDA Preview ${dateStr} (${counter++})`;
+						sheetName = `LDA Preview (${counter++})`;
 					}
 
 					const newSheet = sheets.add(sheetName);
@@ -680,8 +665,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	}
 
 	// Render: choices view (visible columns with drag-and-drop reordering)
-	const deleteConfirmLabel = deleteConfirmKey || '';
-
 	return (
 		<div>
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}>
@@ -765,7 +748,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 									label={label}
 									isMissing={missingColumns.has(key)}
 									isBlank={blankVisibleColumns.has(key)}
-									onRequestDelete={requestDelete}
+									onRequestDelete={deleteColumn}
 								/>
 							);
 						})}
@@ -794,16 +777,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					Save
 				</button>
 			</div>
-
-			{/* Delete confirmation modal */}
-			<DeleteConfirmModal
-				isOpen={!!deleteConfirmKey}
-				title="Delete column"
-				message={`Delete column "${deleteConfirmLabel}"? This cannot be undone.`}
-				confirmLabel="Delete"
-				onConfirm={performDelete}
-				onCancel={() => setDeleteConfirmKey(null)}
-			/>
 		</div>
 	);
 };
