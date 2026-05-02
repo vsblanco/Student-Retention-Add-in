@@ -13,7 +13,7 @@ import ConfirmSendModal from './modals/ConfirmSendModal';
 import SuccessModal from './modals/SuccessModal';
 import { getWorkbookSettings } from '../utility/getSettings';
 
-export default function PersonalizedEmail({ user, accessToken, onReady }) {
+export default function PersonalizedEmail({ user, onReady }) {
     // Connection state
     const [powerAutomateConnection, setPowerAutomateConnection] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
@@ -21,8 +21,6 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     const [setupStatus, setSetupStatus] = useState('');
     const [mode, setMode] = useState(null); // null (loading), 'individual', or 'powerautomate'
     const [userEmail, setUserEmail] = useState('');
-    const [localAccessToken, setLocalAccessToken] = useState(accessToken);
-    const [consentStatus, setConsentStatus] = useState(null); // null, 'checking', 'granted', 'required'
 
     // Email composer state
     const [fromPills, setFromPills] = useState([]);
@@ -102,96 +100,6 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         };
         initializeComponent();
     }, [onReady]);
-
-    // Fetch fresh authentication token on component mount
-    useEffect(() => {
-        const fetchFreshToken = async () => {
-            try {
-                if (typeof Office !== 'undefined' && Office.auth) {
-                    console.log('Fetching fresh authentication token...');
-                    const token = await Office.auth.getAccessToken({
-                        allowSignInPrompt: false,
-                        forMSGraphAccess: true
-                    });
-                    setLocalAccessToken(token);
-                    console.log('Fresh authentication token obtained');
-                } else {
-                    console.log('Office.auth not available, using prop token');
-                    setLocalAccessToken(accessToken);
-                }
-            } catch (error) {
-                console.error('Failed to get fresh token:', error);
-                // Fall back to prop token
-                setLocalAccessToken(accessToken);
-            }
-        };
-
-        fetchFreshToken();
-    }, []);
-
-    // Check consent status in individual mode
-    useEffect(() => {
-        const checkConsentStatus = async () => {
-            // Skip if mode hasn't been determined yet
-            if (mode === null) {
-                return;
-            }
-
-            // Only check consent in individual mode
-            if (mode !== 'individual') {
-                setConsentStatus('granted');
-                return;
-            }
-
-            // Wait for localAccessToken to be available
-            if (!localAccessToken) {
-                return;
-            }
-
-            setConsentStatus('checking');
-
-            try {
-                // Try to exchange token to check if consent is granted
-                const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: localAccessToken })
-                });
-
-                const responseData = await tokenExchangeResponse.json();
-
-                // Check if the error is consent-related
-                if (!tokenExchangeResponse.ok) {
-                    const errorDetails = responseData.error || responseData.details || '';
-
-                    // Check for consent-required errors (AADSTS65001, AADSTS70011, etc.)
-                    if (errorDetails.includes('AADSTS65001') ||
-                        errorDetails.includes('AADSTS70011') ||
-                        errorDetails.includes('consent')) {
-                        console.log('Consent required for Graph API access');
-                        setConsentStatus('required');
-                    } else {
-                        // Other errors - assume consent might still be needed
-                        console.warn('Token exchange check failed:', errorDetails);
-                        setConsentStatus('required');
-                    }
-                } else {
-                    // Token exchange succeeded - consent is granted
-                    console.log('Consent already granted');
-                    setConsentStatus('granted');
-                }
-            } catch (error) {
-                console.error('Failed to check consent status:', error);
-                // On network error, assume we need consent
-                setConsentStatus('required');
-            }
-        };
-
-        // Run check when mode changes or when localAccessToken becomes available
-        if (localAccessToken) {
-            checkConsentStatus();
-        }
-    }, [mode, localAccessToken]);
 
     // Close send context menu when clicking outside
     useEffect(() => {
@@ -991,167 +899,6 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         };
     };
 
-    const showConsentDialog = () => {
-        return new Promise((resolve, reject) => {
-            const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/consent-dialog.html';
-
-            Office.context.ui.displayDialogAsync(
-                dialogUrl,
-                { height: 60, width: 30, promptBeforeOpen: false },
-                (result) => {
-                    if (result.status === Office.AsyncResultStatus.Failed) {
-                        reject(new Error('Failed to open consent dialog'));
-                        return;
-                    }
-
-                    const dialog = result.value;
-
-                    dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
-                        dialog.close();
-
-                        try {
-                            const response = JSON.parse(arg.message);
-
-                            if (response.status === 'success') {
-                                // User consented successfully
-                                resolve({ success: true });
-                            } else {
-                                reject(new Error(response.description || response.error || 'Consent failed'));
-                            }
-                        } catch (e) {
-                            reject(new Error('Invalid response from consent dialog'));
-                        }
-                    });
-
-                    dialog.addEventHandler(Office.EventType.DialogEventReceived, (arg) => {
-                        dialog.close();
-                        reject(new Error('Dialog was closed'));
-                    });
-                }
-            );
-        });
-    };
-
-    const sendEmailsViaGraphAPI = async () => {
-        setShowConfirmModal(false);
-
-        const payload = generatePayload();
-        setLastSentPayload(payload);
-
-        if (payload.emails.length === 0) {
-            setStatus('No students with valid "To" and "From" email addresses found.');
-            return;
-        }
-
-        if (!localAccessToken) {
-            setStatus('Authentication token not available. Please log in again.');
-            return;
-        }
-
-        let successCount = 0;
-        let failureCount = 0;
-        const errors = [];
-
-        try {
-            // Step 1: Get a fresh SSO token
-            setStatus('Getting authentication token...');
-            const newToken = await Office.auth.getAccessToken({
-                allowSignInPrompt: false,
-                forMSGraphAccess: true
-            });
-
-            // Step 2: Exchange Office SSO token for Graph API token
-            setStatus('Exchanging authentication token...');
-            const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: newToken })
-            });
-
-            const responseData = await tokenExchangeResponse.json();
-
-            if (!tokenExchangeResponse.ok) {
-                throw new Error(`Token exchange failed: ${responseData.error || responseData.details || 'Unknown error'}`);
-            }
-
-            const { accessToken: graphToken } = responseData;
-
-            // Step 3: Send emails using Graph API token
-            await sendEmailsWithGraphToken(graphToken, payload.emails, setStatus, successCount, failureCount, errors);
-
-        } catch (error) {
-            setStatus(`Failed to send emails: ${error.message}`);
-            console.error("Error sending emails:", error);
-        }
-    };
-
-    const sendEmailsWithGraphToken = async (graphToken, emails, setStatus, successCount, failureCount, errors) => {
-        setStatus(`Sending ${emails.length} emails...`);
-
-        for (const email of emails) {
-            try {
-                // Parse CC recipients
-                const ccRecipients = email.cc
-                    ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
-                        emailAddress: { address: addr }
-                    }))
-                    : [];
-
-                // Construct Microsoft Graph API sendMail payload
-                const graphPayload = {
-                    message: {
-                        subject: email.subject,
-                        body: {
-                            contentType: 'HTML',
-                            content: email.body
-                        },
-                        toRecipients: [
-                            {
-                                emailAddress: {
-                                    address: email.to
-                                }
-                            }
-                        ],
-                        ccRecipients: ccRecipients
-                    },
-                    saveToSentItems: true
-                };
-
-                const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${graphToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(graphPayload)
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-
-                successCount++;
-                setStatus(`Sent ${successCount} of ${emails.length} emails...`);
-            } catch (error) {
-                failureCount++;
-                errors.push({ to: email.to, error: error.message });
-                console.error(`Failed to send email to ${email.to}:`, error);
-            }
-        }
-
-        if (failureCount === 0) {
-            const info = { count: successCount, timestamp: new Date().toISOString() };
-            setLastSentInfo(info);
-            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
-            setStatus(`Successfully sent ${successCount} emails!`);
-            setShowSuccessModal(true);
-        } else {
-            setStatus(`Sent ${successCount} emails. Failed: ${failureCount}. Check console for details.`);
-            console.error('Email sending errors:', errors);
-        }
-    };
-
     const sendEmailsViaPowerAutomate = async () => {
         setShowConfirmModal(false);
         setStatus(`Sending ${studentDataCache.length} emails...`);
@@ -1199,9 +946,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
     };
 
     const executeSend = async () => {
-        if (mode === 'individual') {
-            await sendEmailsViaGraphAPI();
-        } else if (mode === 'powerautomate') {
+        if (mode === 'powerautomate') {
             await sendEmailsViaPowerAutomate();
         } else {
             setStatus('Invalid sending mode. Please refresh and try again.');
@@ -1264,61 +1009,7 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         setStatus('Sending test email to yourself...');
 
         try {
-            if (mode === 'individual') {
-                // Get fresh token and send via Graph API
-                const newToken = await Office.auth.getAccessToken({
-                    allowSignInPrompt: false,
-                    forMSGraphAccess: true
-                });
-
-                const tokenExchangeResponse = await fetch('https://student-retention-token-exchange-dnfdg0hxhsa3gjb4.canadacentral-01.azurewebsites.net/api/exchange-token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: newToken })
-                });
-
-                const responseData = await tokenExchangeResponse.json();
-                if (!tokenExchangeResponse.ok) {
-                    throw new Error(`Token exchange failed: ${responseData.error || responseData.details || 'Unknown error'}`);
-                }
-
-                const { accessToken: graphToken } = responseData;
-
-                // Send single test email
-                const email = testPayload.emails[0];
-                const ccRecipients = email.cc
-                    ? email.cc.split(',').map(addr => addr.trim()).filter(addr => addr).map(addr => ({
-                        emailAddress: { address: addr }
-                    }))
-                    : [];
-
-                const graphPayload = {
-                    message: {
-                        subject: email.subject,
-                        body: { contentType: 'HTML', content: email.body },
-                        toRecipients: [{ emailAddress: { address: email.to } }],
-                        ccRecipients: ccRecipients
-                    },
-                    saveToSentItems: true
-                };
-
-                const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${graphToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(graphPayload)
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText}`);
-                }
-
-                setStatus(`Test email sent to ${userEmail}!`);
-            } else if (mode === 'powerautomate') {
-                // Generate base64 PDF receipt for test email
+            if (mode === 'powerautomate') {
                 const initiator = { name: user, email: userEmail };
                 const receiptBase64 = generatePdfReceipt(
                     testPayload.emails,
@@ -1327,13 +1018,11 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
                     true // returnBase64
                 );
 
-                // Add receipt to payload
                 const testPayloadWithReceipt = {
                     ...testPayload,
                     receipt: receiptBase64 || ''
                 };
 
-                // Send via Power Automate
                 const response = await fetch(powerAutomateConnection.url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1446,20 +1135,9 @@ export default function PersonalizedEmail({ user, accessToken, onReady }) {
         );
     }
 
-    // Show loading screen while checking consent
-    if (consentStatus === 'checking') {
-        return (
-            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Checking permissions...</p>
-                </div>
-            </div>
-        );
-    }
-
-    // Show work-in-progress screen if admin consent is needed
-    if (consentStatus === 'required') {
+    // Show work-in-progress screen when no Power Automate connection is configured.
+    // Direct Outlook/Graph sending is not yet implemented; configure a Power Automate URL to unlock.
+    if (mode === 'individual') {
         return (
             <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
                 <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg">
