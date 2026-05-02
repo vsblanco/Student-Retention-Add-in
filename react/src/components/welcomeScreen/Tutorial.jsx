@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Media from "./Media";
-import chromeExtensionService from "../../services/chromeExtensionService.js";
+import chromeExtensionService from "../../../../shared/chromeExtensionService.js";
 import importdatataskpane from "../../assets/tutorial/importdatataskpane.png";
 import createlda from "../../assets/tutorial/createlda.gif";
 

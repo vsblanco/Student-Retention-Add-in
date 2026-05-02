@@ -11,7 +11,7 @@
  *
  * The Power Automate document-property poller lives in ./power-automate-poller.js.
  */
-import chromeExtensionService from '../../react/src/services/chromeExtensionService.js';
+import chromeExtensionService from '../../shared/chromeExtensionService.js';
 
 /**
  * Sets up listener to respond to ping checks from the Chrome extension

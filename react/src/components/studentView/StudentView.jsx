@@ -10,7 +10,7 @@ import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChange
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 import { addComment, resolveStudentIdentity } from '../utility/EditStudentHistory.jsx';
-import chromeExtensionService from '../../services/chromeExtensionService.js';
+import chromeExtensionService from '../../../../shared/chromeExtensionService.js';
 
 /* global Excel */
 

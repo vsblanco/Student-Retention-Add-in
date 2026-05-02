@@ -7,7 +7,7 @@
  * announces it wants the data.
  */
 import { CONSTANTS, findColumnIndex } from '../shared-utilities.js';
-import chromeExtensionService from '../../react/src/services/chromeExtensionService.js';
+import chromeExtensionService from '../../shared/chromeExtensionService.js';
 
 // Batch size for chunked read operations to avoid Excel's ~5MB payload limit.
 const BATCH_SIZE = 500;
