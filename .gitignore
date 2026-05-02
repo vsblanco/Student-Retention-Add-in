@@ -1,1 +1,11 @@
-azure-function-deploy.zip
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
