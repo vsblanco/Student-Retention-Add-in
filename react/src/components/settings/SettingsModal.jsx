@@ -275,6 +275,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	const [isDirty, setIsDirty] = React.useState(false);
 	// preview state
 	const [previewBusy, setPreviewBusy] = React.useState(false);
+	// columns the user removed during this modal session (cleared on reopen)
+	// Map<columnName, originalIndex> so re-adding restores the original position
+	const [recentlyRemoved, setRecentlyRemoved] = React.useState(() => new Map());
 
 	// build quick lookup of workbookColumns by key (name/label)
 	const workbookLookup = React.useMemo(() => {
@@ -378,6 +381,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		setEditableMap(map);
 		setOrderList(order);
 		setViewMode('choices');
+		setRecentlyRemoved(new Map());
 
 		// capture initial snapshot for dirty tracking whenever modal/setting opens or array changes
 		try {
@@ -470,7 +474,14 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// add a column from the master list (or blank)
 	const addColumn = (name) => {
 		if (orderList.includes(name)) return;
-		setOrderList(prev => [...prev, name]);
+		const restoreIdx = recentlyRemoved.has(name) ? recentlyRemoved.get(name) : -1;
+		setOrderList(prev => {
+			if (restoreIdx < 0) return [...prev, name];
+			const insertAt = Math.max(0, Math.min(prev.length, restoreIdx));
+			const next = [...prev];
+			next.splice(insertAt, 0, name);
+			return next;
+		});
 		const wbEntry = workbookLookup[name];
 		const seed = {};
 		if (wbEntry && typeof wbEntry === 'object') {
@@ -480,17 +491,31 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		}
 		delete seed.hidden;
 		setEditableMap(prev => ({ ...(prev || {}), [name]: seed }));
+		// re-adding a recently-removed column clears its pill
+		setRecentlyRemoved(prev => {
+			if (!prev.has(name)) return prev;
+			const next = new Map(prev);
+			next.delete(name);
+			return next;
+		});
 	};
 
 	// delete a column locally (Save persists)
 	const deleteColumn = (key) => {
 		if (!key) return;
+		const originalIdx = orderList.indexOf(key);
 		setEditableMap(prev => {
 			const copy = { ...(prev || {}) };
 			delete copy[key];
 			return copy;
 		});
 		setOrderList(prev => prev.filter(k => k !== key));
+		setRecentlyRemoved(prev => {
+			const next = new Map(prev);
+			// keep the first-recorded original index so multiple delete/re-add cycles still snap back
+			if (!next.has(key)) next.set(key, originalIdx);
+			return next;
+		});
 	};
 
 	const onSave = () => {
@@ -512,9 +537,9 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		}
 	};
 
-	// compute master list columns not already configured (for the add picker)
+	// compute columns not already configured (for the add picker)
+	// includes master-list columns plus any column the user removed during this session
 	const availableToAdd = React.useMemo(() => {
-		if (!Array.isArray(masterListHeaders)) return [];
 		const existing = new Set(orderList.map(k => k.toLowerCase()));
 		orderList.forEach(k => {
 			const wbEntry = workbookLookup[k];
@@ -522,8 +547,19 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 				wbEntry.alias.forEach(a => existing.add(String(a).trim().toLowerCase()));
 			}
 		});
-		return masterListHeaders.filter(h => h && !existing.has(h.toLowerCase()));
-	}, [masterListHeaders, orderList, workbookLookup]);
+		const seen = new Set();
+		const result = [];
+		const push = (h) => {
+			if (!h) return;
+			const lower = String(h).toLowerCase();
+			if (existing.has(lower) || seen.has(lower)) return;
+			seen.add(lower);
+			result.push(h);
+		};
+		recentlyRemoved.forEach((_, key) => push(key));
+		if (Array.isArray(masterListHeaders)) masterListHeaders.forEach(push);
+		return result;
+	}, [masterListHeaders, orderList, workbookLookup, recentlyRemoved]);
 
 	// preview: create a headers-only LDA sheet
 	const createPreview = async () => {
@@ -574,14 +610,14 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 
 	// Render: add view (pick from master list)
 	if (viewMode === 'add') {
-		const sortedAvailable = [...availableToAdd].sort((a, b) => {
-			const aNew = newMasterListHeaders && newMasterListHeaders.has(a);
-			const bNew = newMasterListHeaders && newMasterListHeaders.has(b);
-			if (aNew && !bNew) return -1;
-			if (!aNew && bNew) return 1;
-			return 0;
-		});
-		const newCount = newMasterListHeaders ? sortedAvailable.filter(h => newMasterListHeaders.has(h)).length : 0;
+		const rank = (h) => {
+			if (recentlyRemoved.has(h)) return 0;
+			if (newMasterListHeaders && newMasterListHeaders.has(h)) return 1;
+			return 2;
+		};
+		const sortedAvailable = [...availableToAdd].sort((a, b) => rank(a) - rank(b));
+		const newCount = newMasterListHeaders ? sortedAvailable.filter(h => newMasterListHeaders.has(h) && !recentlyRemoved.has(h)).length : 0;
+		const removedCount = sortedAvailable.filter(h => recentlyRemoved.has(h)).length;
 
 		return (
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto' }}>
@@ -593,6 +629,19 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 						Back
 					</button>
 					<div style={{ fontWeight: 600, fontSize: 14 }}>Add columns from Master List</div>
+					{removedCount > 0 && (
+						<span style={{
+							padding: '2px 8px',
+							borderRadius: 10,
+							background: '#fee2e2',
+							color: '#b91c1c',
+							fontSize: 11,
+							fontWeight: 600,
+							lineHeight: '16px'
+						}}>
+							{removedCount} recently removed
+						</span>
+					)}
 					{newCount > 0 && (
 						<span style={{
 							padding: '2px 8px',
@@ -611,7 +660,10 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 					<div style={{ color: '#6b7280', fontSize: 13 }}>All Master List columns are already configured.</div>
 				) : (
 					sortedAvailable.map(header => {
-						const isNew = newMasterListHeaders && newMasterListHeaders.has(header);
+						const isRemoved = recentlyRemoved.has(header);
+						const isNew = !isRemoved && newMasterListHeaders && newMasterListHeaders.has(header);
+						const restColor = isRemoved ? '#fef2f2' : (isNew ? '#eff6ff' : '#fff');
+						const borderColor = isRemoved ? '1px solid rgba(239,68,68,0.25)' : (isNew ? '1px solid rgba(29,78,216,0.2)' : '1px solid #e6e7eb');
 						return (
 							<button
 								key={header}
@@ -624,21 +676,38 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 									padding: '8px 10px',
 									marginBottom: 4,
 									borderRadius: 6,
-									border: isNew ? '1px solid rgba(29,78,216,0.2)' : '1px solid #e6e7eb',
-									background: isNew ? '#eff6ff' : '#fff',
+									border: borderColor,
+									background: restColor,
 									cursor: 'pointer',
 									textAlign: 'left',
 									gap: 8,
 									fontSize: 14,
 									transition: 'background-color 120ms ease'
 								}}
-								onMouseEnter={e => { e.currentTarget.style.background = '#eef2ff'; }}
-								onMouseLeave={e => { e.currentTarget.style.background = isNew ? '#eff6ff' : '#fff'; }}
+								onMouseEnter={e => { e.currentTarget.style.background = isRemoved ? '#fee2e2' : '#eef2ff'; }}
+								onMouseLeave={e => { e.currentTarget.style.background = restColor; }}
 							>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: '#4f46e5' }}>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, color: isRemoved ? '#ef4444' : '#4f46e5' }}>
 									<path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
 								</svg>
 								<span style={{ flex: 1 }}>{header}</span>
+								{isRemoved && (
+									<span
+										title="You removed this column in this session — click to add it back to its original position"
+										style={{
+											padding: '2px 6px',
+											borderRadius: 4,
+											background: '#fee2e2',
+											color: '#b91c1c',
+											fontSize: 11,
+											fontWeight: 600,
+											flexShrink: 0,
+											lineHeight: '16px'
+										}}
+									>
+										Recently Removed
+									</span>
+								)}
 								{isNew && (
 									<span
 										title="This column was recently added to the Master List"
