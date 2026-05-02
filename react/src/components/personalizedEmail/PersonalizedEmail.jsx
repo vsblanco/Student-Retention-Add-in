@@ -12,6 +12,7 @@ import RecipientModal from './modals/RecipientModal';
 import ConfirmSendModal from './modals/ConfirmSendModal';
 import SuccessModal from './modals/SuccessModal';
 import { getWorkbookSettings } from '../utility/getSettings';
+import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../../../../shared/constants.js';
 
 export default function PersonalizedEmail({ user, onReady }) {
     // Connection state
@@ -348,7 +349,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                 throw err;
             }
         } else {
-            sheetName = type === 'lda' ? getTodaysLdaSheetName() : 'Master List';
+            sheetName = type === 'lda' ? getTodaysLdaSheetName() : MASTER_LIST_SHEET;
         }
 
         const includedStudents = [];
@@ -371,7 +372,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
                 if (excludeDNC) {
                     try {
-                        const historySheet = context.workbook.worksheets.getItem("Student History");
+                        const historySheet = context.workbook.worksheets.getItem(HISTORY_SHEET);
                         const historyRange = historySheet.getUsedRange();
                         historyRange.load("values");
                         await context.sync();

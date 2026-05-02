@@ -5,6 +5,7 @@
  * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
 import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
+import { parseHyperlinkFormula } from '../shared/excel-helpers.js';
 
 /**
  * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.
@@ -272,7 +273,6 @@ export async function transferData(event) {
             };
 
             const dataToCopy = [];
-            const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
 
             for (let i = 1; i < usedRange.values.length; i++) {
                 const rowValues = usedRange.values[i];
@@ -286,13 +286,8 @@ export async function transferData(event) {
                 }
 
                 if (colIndices.gradeBook !== -1 && rowValues[colIndices.gradeBook]) {
-                    const formula = rowFormulas[colIndices.gradeBook];
-                    const match = String(formula).match(hyperlinkRegex);
-                    if (match && match[1]) {
-                        rowData.GradeBook = match[1]; // Extract URL from formula
-                    } else {
-                        rowData.GradeBook = rowValues[colIndices.gradeBook]; // Fallback to value
-                    }
+                    const parsed = parseHyperlinkFormula(rowFormulas[colIndices.gradeBook]);
+                    rowData.GradeBook = parsed ? parsed.url : rowValues[colIndices.gradeBook];
                     hasData = true;
                 }
 

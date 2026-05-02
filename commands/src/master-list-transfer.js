@@ -8,9 +8,8 @@
  */
 import { CONSTANTS, findColumnIndex } from '../shared-utilities.js';
 import chromeExtensionService from '../../shared/chromeExtensionService.js';
-
-// Batch size for chunked read operations to avoid Excel's ~5MB payload limit.
-const BATCH_SIZE = 500;
+import { BATCH_SIZE } from '../../shared/constants.js';
+import { parseHyperlinkFormula } from '../../shared/excel-helpers.js';
 
 /**
  * Reads the Master List sheet and sends the data to the Chrome extension
@@ -73,7 +72,6 @@ export async function transferMasterList() {
             });
 
             const students = [];
-            const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
 
             // Process each row (skip header row)
             for (let i = 1; i < mlValues.length; i++) {
@@ -93,10 +91,9 @@ export async function transferMasterList() {
 
                         // Special handling for Gradebook column - extract URL from HYPERLINK
                         if (colIdx === gradeBookColIdx) {
-                            const formula = rowFormulas[colIdx];
-                            const match = String(formula).match(hyperlinkRegex);
-                            if (match && match[1]) {
-                                value = match[1]; // Extract URL from HYPERLINK formula
+                            const parsed = parseHyperlinkFormula(rowFormulas[colIdx]);
+                            if (parsed) {
+                                value = parsed.url;
                             }
                         }
 
@@ -162,13 +159,8 @@ export async function transferMasterList() {
                             // Get the gradebook URL (extract from HYPERLINK if needed)
                             let gradebookUrl = null;
                             if (maGradebookColIdx !== -1) {
-                                const formula = rowFormulas[maGradebookColIdx];
-                                const match = String(formula).match(hyperlinkRegex);
-                                if (match && match[1]) {
-                                    gradebookUrl = match[1]; // Extract URL from HYPERLINK formula
-                                } else {
-                                    gradebookUrl = rowValues[maGradebookColIdx];
-                                }
+                                const parsed = parseHyperlinkFormula(rowFormulas[maGradebookColIdx]);
+                                gradebookUrl = parsed ? parsed.url : rowValues[maGradebookColIdx];
                             }
 
                             if (gradebookUrl) {
@@ -183,10 +175,9 @@ export async function transferMasterList() {
                                     const formula = rowFormulas[colIdx];
 
                                     // Special handling for HYPERLINK formulas - extract URL and text separately
-                                    const hyperlinkMatch = String(formula).match(/=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)/i);
+                                    const hyperlinkMatch = parseHyperlinkFormula(formula);
                                     if (hyperlinkMatch) {
-                                        const url = hyperlinkMatch[1];
-                                        const text = hyperlinkMatch[2];
+                                        const { url, text } = hyperlinkMatch;
 
                                         // Map to flattened properties based on column header
                                         if (headerName === "Assignment") {

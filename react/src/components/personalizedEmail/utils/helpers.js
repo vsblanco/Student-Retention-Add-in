@@ -1,14 +1,6 @@
 // Utility functions for personalized email feature
-
-export function findColumnIndex(headers, possibleNames) {
-    for (const name of possibleNames) {
-        const index = headers.indexOf(name.toLowerCase());
-        if (index !== -1) {
-            return index;
-        }
-    }
-    return -1;
-}
+import { parseHyperlinkFormula } from '../../../../../shared/excel-helpers.js';
+export { findColumnIndex, parseHyperlinkFormula } from '../../../../../shared/excel-helpers.js';
 
 export function getTodaysLdaSheetName() {
     const now = new Date();
@@ -102,27 +94,6 @@ export const renderCCTemplate = (recipients, data) => {
     if (!recipients || recipients.length === 0) return '';
     return recipients.map(recipient => renderTemplate(recipient, data)).join(';');
 };
-
-/**
- * Extracts the URL and display text from an Excel HYPERLINK formula
- * Example: =HYPERLINK("https://example.com", "Click Here") => { url: "https://example.com", text: "Click Here" }
- */
-export function parseHyperlinkFormula(formula) {
-    if (!formula || typeof formula !== 'string') return null;
-
-    // Match HYPERLINK formula pattern: =HYPERLINK("url", "display text")
-    const hyperlinkRegex = /=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)/i;
-    const match = formula.match(hyperlinkRegex);
-
-    if (match) {
-        return {
-            url: match[1],
-            text: match[2]
-        };
-    }
-
-    return null;
-}
 
 /**
  * Pre-loads the "Missing Assignments" sheet and builds a lookup map

@@ -3,6 +3,7 @@ import Media from "./Media";
 import chromeExtensionService from "../../../../shared/chromeExtensionService.js";
 import importdatataskpane from "../../assets/tutorial/importdatataskpane.png";
 import createlda from "../../assets/tutorial/createlda.gif";
+import { MASTER_LIST_SHEET, HISTORY_SHEET } from "../../../../shared/constants.js";
 
 export default function Tutorial({ pages = null, onBack = () => {}, onClose = () => {}, onFinish = null }) {
     
@@ -30,8 +31,8 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
             title: "Initial Setup",
             content: <p>Before we continue further, let's make sure your workbook is set up correctly. You can skip this however, your features may be limitted.</p>,
             checklist: [
-                { label: "Master List Sheet", status: false, createSheet: "Master List" },
-                { label: "Student History Sheet", status: false, createSheet: "Student History" },
+                { label: "Master List Sheet", status: false, createSheet: MASTER_LIST_SHEET },
+                { label: "Student History Sheet", status: false, createSheet: HISTORY_SHEET },
                 { label: "Missing Assignments Sheet", status: false, createSheet: "Missing Assignments" },
                 { label: "Student Retention Kit - Chrome Extension", status: false, id: "extension-check" },
             ],
@@ -86,7 +87,7 @@ export default function Tutorial({ pages = null, onBack = () => {}, onClose = ()
             try {
                 await Excel.run(async (context) => {
                     const sheets = context.workbook.worksheets;
-                    const sheetsToCheck = ["Master List", "Student History", "Missing Assignments"];
+                    const sheetsToCheck = [MASTER_LIST_SHEET, HISTORY_SHEET, "Missing Assignments"];
 
                     const sheetProxies = sheetsToCheck.map(name => ({
                         name: name,

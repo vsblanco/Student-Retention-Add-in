@@ -20,6 +20,7 @@ import {
     formatToLastFirst,
     parseDate,
 } from '../shared-utilities.js';
+import { BATCH_SIZE } from '../../shared/constants.js';
 import {
     applyGradeConditionalFormatting,
     applyLastCourseGradeConditionalFormatting,
@@ -33,9 +34,6 @@ import {
     applyCourseDateFormatting,
 } from './conditional-formatting.js';
 
-// Batch size for chunked read/write operations to avoid Excel's ~5MB payload limit.
-// 500 rows is consistent with ldaProcessor.js and safely under the limit for ~37 columns.
-const BATCH_SIZE = 500;
 // Smaller batch size for formatting operations (cell colors).
 const FORMAT_BATCH_SIZE = 50;
 

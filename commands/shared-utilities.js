@@ -1,14 +1,13 @@
 /*
  * shared-utilities.js
  *
- * Shared constants and utility functions used across the commands runtime.
- *
- * Includes:
- * - CONSTANTS for column mappings, sheet names, and settings keys
- * - Date parsing utility
- * - Name normalization and formatting functions
- * - Column index lookup
+ * Constants and utilities used across the commands runtime.
+ * Cross-runtime values (sheet names, batch size, hyperlink helpers,
+ * findColumnIndex) live in /shared/ and are re-exported from here so
+ * existing `from './shared-utilities.js'` imports keep working.
  */
+import { MASTER_LIST_SHEET, HISTORY_SHEET } from '../shared/constants.js';
+export { findColumnIndex } from '../shared/excel-helpers.js';
 
 export const CONSTANTS = {
     // NOTE: "Student ID" and "Student Number" are treated as distinct values.
@@ -19,8 +18,8 @@ export const CONSTANTS = {
     OUTREACH_COLS: ["outreach"],
     STUDENT_ID_COLS: ["student id", "systudentid", "id"],
     STUDENT_NUMBER_COLS: ["studentnumber", "student identifier", "student number"],
-    MASTER_LIST_SHEET: "Master List",
-    HISTORY_SHEET: "Student History",
+    MASTER_LIST_SHEET,
+    HISTORY_SHEET,
     SETTINGS_KEY: "studentRetentionSettings", // Key for document settings
     COLUMN_MAPPINGS: {
         course: ["course"],
@@ -119,20 +118,3 @@ export const formatToLastFirst = (name) => {
     return name;
 };
 
-/**
- * Finds the index of a column by checking against a list of possible names.
- * Includes a check to ensure possibleNames is an array.
- */
-export function findColumnIndex(headers, possibleNames) {
-    if (!Array.isArray(possibleNames)) {
-        console.error("[DEBUG] findColumnIndex received non-array for possibleNames:", possibleNames);
-        return -1;
-    }
-    for (const name of possibleNames) {
-        const index = headers.indexOf(name);
-        if (index !== -1) {
-            return index;
-        }
-    }
-    return -1;
-}
