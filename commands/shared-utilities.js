@@ -1,14 +1,13 @@
 /*
  * shared-utilities.js
  *
- * Shared constants and utility functions used across the add-in.
+ * Shared constants and utility functions used across the commands runtime.
  *
  * Includes:
  * - CONSTANTS for column mappings, sheet names, and settings keys
- * - Date parsing and formatting utilities
+ * - Date parsing utility
  * - Name normalization and formatting functions
- * - File parsing utilities (CSV, data URLs)
- * - Settings management functions
+ * - Column index lookup
  */
 
 export const CONSTANTS = {
@@ -54,60 +53,6 @@ export const CONSTANTS = {
 };
 
 /**
- * Generic error handler for Excel.run calls.
- * @param {any} error The error object.
- */
-export function errorHandler(error) {
-    console.log("Error: " + error);
-    if (error instanceof OfficeExtension.Error) {
-        console.log("Debug info: " + JSON.stringify(error.debugInfo));
-    }
-}
-
-/**
- * Gets the settings object from document settings, ensuring it's the latest version.
- * @returns {Promise<object>} A promise that resolves with the parsed settings object.
- */
-export async function getSettings() {
-    // First, refresh the settings from the document to ensure we have the latest version.
-    await new Promise((resolve) => {
-        Office.context.document.settings.refreshAsync(asyncResult => {
-            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                console.error("Error refreshing settings: " + asyncResult.error.message);
-                // Even if refresh fails, we proceed with the cached version.
-            } else {
-                console.log("Settings refreshed successfully.");
-            }
-            resolve();
-        });
-    });
-
-    // Now, get the settings value.
-    const settingsString = Office.context.document.settings.get(CONSTANTS.SETTINGS_KEY);
-    const defaults = {
-        createlda: {
-            daysOutFilter: 6,
-            includeFailingList: true,
-            hideLeftoverColumns: true,
-            ldaColumns: ['Assigned', 'StudentName', 'StudentNumber', 'LDA', 'Days Out', 'grade', 'Phone', 'Outreach']
-        }
-    };
-
-    if (settingsString) {
-        try {
-            const settings = JSON.parse(settingsString);
-            settings.createlda = { ...defaults.createlda, ...(settings.createlda || {}) };
-            return settings;
-        } catch (e) {
-            console.error("Error parsing settings, returning defaults:", e);
-            return defaults;
-        }
-    }
-    return defaults;
-}
-
-
-/**
  * Parses a date value from various possible formats (Date object, string, Excel serial number).
  * @param {*} dateValue The value to parse.
  * @returns {Date|null} A valid Date object or null.
@@ -134,16 +79,6 @@ export function parseDate(dateValue) {
     }
     return null;
 }
-
-/**
- * Converts a JavaScript Date object to an Excel serial date number.
- * @param {Date} date The JavaScript Date object.
- * @returns {number} The Excel serial date number.
- */
-export function jsDateToExcelDate(date) {
-    return (date.getTime() / 86400000) + 25569;
-}
-
 
 /**
  * Helper to normalize names from "Last, First" or "First Last" to "first last"
@@ -183,50 +118,6 @@ export const formatToLastFirst = (name) => {
     }
     return name;
 };
-
-
-/**
- * Converts a data URL to an ArrayBuffer.
- * @param {string} dataUrl The data URL.
- * @returns {ArrayBuffer}
- */
-export function dataUrlToArrayBuffer(dataUrl) {
-    const base64String = dataUrl.substring(dataUrl.indexOf(',') + 1);
-    const binaryString = window.atob(base64String);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-/**
- * A robust CSV row parser that handles quoted fields.
- */
-export function parseCsvRow(row) {
-    const cells = [];
-    let inQuotes = false;
-    let cell = '';
-    for (let i = 0; i < row.length; i++) {
-        const char = row[i];
-        if (char === '"') {
-            if (inQuotes && row[i+1] === '"') {
-                cell += '"';
-                i++;
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (char === ',' && !inQuotes) {
-            cells.push(cell);
-            cell = '';
-        } else {
-            cell += char;
-        }
-    }
-    cells.push(cell);
-    return cells;
-}
 
 /**
  * Finds the index of a column by checking against a list of possible names.
