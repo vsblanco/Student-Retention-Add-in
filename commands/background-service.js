@@ -23,8 +23,8 @@ import {
     setupPingResponseListener,
     createSheetFromExtension,
     sendSheetListToExtension,
-    startCommandPropertyPoller,
 } from './src/chrome-extension-messaging.js';
+import { startCommandPropertyPoller } from './src/power-automate-poller.js';
 
 // Required for the Analytics ribbon button — manifest uses ShowTaskpane,
 // but Office still expects an associated function.
