@@ -3,6 +3,26 @@ import { insertRow, editRow, deleteRow, checkRow } from './ExcelAPI';
 import { formatTimestamp } from './Conversion';
 import { Sheets } from './ColumnMapping';
 
+// Resolve a student's id and display name from any object that may carry them
+// (a row's `otherValues` map from onChanged, a normalized student object from
+// StudentView, or the raw active-student state). Both the auto Outreach handler
+// and the manual NewComment flow must use this so comments end up keyed against
+// the same identity regardless of which path created them.
+export function resolveStudentIdentity(obj) {
+  if (!obj || typeof obj !== 'object') {
+    return { studentId: null, studentName: null };
+  }
+  const studentId =
+    obj.ID ?? obj.Id ?? obj.id ??
+    obj.StudentID ?? obj.studentID ?? obj.studentId ??
+    null;
+  const studentName =
+    obj.Student ?? obj.StudentName ?? obj.studentName ??
+    obj.Name ?? obj.name ??
+    null;
+  return { studentId, studentName };
+}
+
 // New: small helper to resolve SSO/localStorage username with safe fallbacks
 function checkSSO(provided) {
   let user = provided;
@@ -74,52 +94,74 @@ export function generateCommentID(StudentID = null, Timestamp = null, Tag = null
 	return `${studentLast4}${datePart}${tagLast4}`;
 }
 
+// Per-student serialization for Outreach dedupe. Without this, two near-simultaneous
+// Outreach writes can both observe "no row exists" and each insert, producing duplicates.
+const _outreachLocks = new Map();
+function _withOutreachLock(studentId, fn) {
+  const key = `s:${studentId ?? '_'}`;
+  const prev = _outreachLocks.get(key) || Promise.resolve();
+  const next = prev.then(fn, fn);
+  // store a swallowed version so a rejection doesn't poison the chain
+  _outreachLocks.set(key, next.catch(() => {}));
+  return next;
+}
+
 // Lightweight, safe implementation that logs the outreach by inserting a row
 // into the History sheet (uses Sheets.HISTORY).
 // Non-blocking from callers — callers may call without awaiting.
-export async function addComment(commentText, tag='', createdBy = null, studentId = null, studentName = null) {
+//
+// options.dedupeOutreach: when true and tag includes "Outreach", an existing Outreach
+// row for this student today will be edited instead of inserting a new row. Only the
+// automated Outreach-column handler should opt into this; user-initiated comments
+// must always insert so we never silently overwrite another comment's text.
+export async function addComment(commentText, tag='', createdBy = null, studentId = null, studentName = null, options = {}) {
   if (!commentText) return;
-  
+
   const userName = checkSSO(createdBy);
+  const { dedupeOutreach = false } = options || {};
+
+  const isOutreachTag = String(tag || '').toLowerCase().includes('outreach');
+  const shouldDedupe = isOutreachTag && dedupeOutreach;
+
+  const performInsert = async () => {
+    const result = await insertRow(Sheets.HISTORY, {
+      ID: studentId !== null && studentId !== undefined ? studentId : 0,
+      Student: studentName ? String(studentName) : 'Unknown Student',
+      Comment: String(commentText),
+      Timestamp: formatTimestamp(new Date()),
+      CreatedBy: String(userName),
+      Tag: tag,
+      commentID: generateCommentID(studentId, new Date(), tag)
+    });
+    try { console.log(`${userName} inserted a new comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+    callRefresh().catch(() => {});
+    return result;
+  };
+
+  const performEdit = async () => {
+    const outreachCommentID = generateCommentID(studentId, new Date(), 'Outreach');
+    const updates = {
+      Comment: String(commentText),
+      Timestamp: formatTimestamp(new Date()),
+      CreatedBy: String(userName),
+      Tag: tag
+    };
+    const result = await editComment(outreachCommentID, updates);
+    try { console.log(`${userName} edited today's Outreach comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
+    callRefresh().catch(() => {});
+    return result;
+  };
 
   try {
-    // Only check for today's Outreach when the provided tag contains 'Outreach'
-    const isOutreachTag = String(tag || '').toLowerCase().includes('outreach');
-    let todaysOutreach = false;
-    if (isOutreachTag) {
-      todaysOutreach = await checkTodaysOutreach(studentId);
+    if (!shouldDedupe) {
+      return await performInsert();
     }
-
-    if (!todaysOutreach) {
-      // No outreach today (or tag is not Outreach) -> insert a new row
-      const result = await insertRow(Sheets.HISTORY, {
-        ID: studentId !== null && studentId !== undefined ? studentId : 0,
-        Student: studentName ? String(studentName) : 'Unknown Student',
-        Comment: String(commentText),
-        Timestamp: formatTimestamp(new Date()),
-        CreatedBy: String(userName),
-        Tag: tag,
-        commentID: generateCommentID(studentId, new Date(), tag)
-      });
-      try { console.log(`${userName} inserted a new comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
-      // trigger a UI refresh (non-blocking)
-      callRefresh().catch(() => {});
-      return result;
-    } else {
-      // Outreach exists today -> edit the existing Outreach row (use helper editComment)
-      const outreachCommentID = generateCommentID(studentId, new Date(), 'Outreach');
-      const updates = {
-        Comment: String(commentText),
-        Timestamp: formatTimestamp(new Date()),
-        CreatedBy: String(userName),
-        Tag: tag
-      };
-      const result = await editComment(outreachCommentID, updates);
-      try { console.log(`${userName} edited today's Outreach comment for ${studentName ? String(studentName) : 'Unknown Student'}`); } catch (_) {}
-      // trigger a UI refresh (non-blocking)
-      callRefresh().catch(() => {});
-      return result;
-    }
+    // Serialize check-then-write per student so concurrent Outreach edits don't
+    // both miss the existing row and insert duplicates.
+    return await _withOutreachLock(studentId, async () => {
+      const todaysOutreach = await checkTodaysOutreach(studentId);
+      return todaysOutreach ? performEdit() : performInsert();
+    });
   } catch (err) {
     try { console.error('Comment insert/edit failed:', err); } catch (_) {}
   }

@@ -3,7 +3,7 @@ import Comment, { COMMENT_TAGS, CommentSkeleton } from '../Parts/Comment';
 import NewComment from '../Modal/NewCommentModal';
 import { formatExcelDate, normalizeKeys, formatTimestamp } from '../../utility/Conversion';
 import { /* insertRow, editRow, */ } from '../../utility/ExcelAPI'; // removed direct insert/edit usage
-import { addComment, deleteComment, generateCommentID } from '../../utility/EditStudentHistory';
+import { addComment, deleteComment, generateCommentID, resolveStudentIdentity } from '../../utility/EditStudentHistory';
 import { Folder, FolderOpen } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -390,23 +390,18 @@ useEffect(() => {
      }));
    }
 
-   // Wrapper that delegates to the shared addComment (from StudentView)
-   // Keeps UI responsive by updating localHistory immediately; addComment handles the actual sheet insert.
+   // Wrapper that delegates to the shared addComment. Manual comments always
+   // insert a new row — they never opt into Outreach dedupe, since silently
+   // overwriting another advisor's text would be a data-loss bug.
    async function addCommentToHistory(comment, tag = '') {
      if (!comment) return false;
      try {
-       // Try to provide student id/name to addComment if available
-       const studentId = (student && (student.ID ?? student.Id ?? student.id)) ?? null;
-       const studentName = (student && (student.Student ?? student.StudentName ?? student.Name)) ?? null;
-
-       // Persist via shared addComment (actual sheet insert)
+       const { studentId, studentName } = resolveStudentIdentity(student);
        await addComment(String(comment), tag, undefined, studentId, studentName);
-       await reload(); // reload history from parent to ensure sync
+       await reload();
        toast.success('Comment saved');
        return true;
      } catch (err) {
-       // Roll back commentPreview update on error
-       setLocalHistory(prev => (Array.isArray(prev) ? prev.filter(e => e !== commentPreviewEntry) : []));
        toast.error('Failed to save comment');
        return false;
      }
