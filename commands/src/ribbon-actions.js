@@ -4,7 +4,8 @@
  * Handles ribbon button actions for the Student Retention Add-in.
  * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
-import { CONSTANTS, findColumnIndex } from './shared-utilities.js';
+import { CONSTANTS } from './constants.js';
+import { findColumnIndex, parseHyperlinkFormula, normalizeHeader } from '../../shared/excel-helpers.js';
 
 /**
  * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.
@@ -27,7 +28,7 @@ export function createSendToCallQueue(extensionService) {
         await context.sync();
 
         const allValues = usedRange.values;
-        const headers = allValues[0].map(h => String(h || '').toLowerCase());
+        const headers = allValues[0].map(normalizeHeader);
 
         // Check if the selected cell value is already a phone number
         const selRowCount = selectedRange.rowCount || 1;
@@ -207,9 +208,9 @@ export async function toggleHighlight(event) {
       await context.sync();
 
       const headers = usedRange.values[0];
-      const lowerCaseHeaders = headers.map(header => String(header || '').toLowerCase());
-      const studentNameColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.STUDENT_NAME_COLS);
-      const outreachColIndex = findColumnIndex(lowerCaseHeaders, CONSTANTS.OUTREACH_COLS);
+      const normalizedHeaders = headers.map(normalizeHeader);
+      const studentNameColIndex = findColumnIndex(normalizedHeaders, CONSTANTS.STUDENT_NAME_COLS);
+      const outreachColIndex = findColumnIndex(normalizedHeaders, CONSTANTS.OUTREACH_COLS);
 
       if (studentNameColIndex === -1 || outreachColIndex === -1) {
         console.error("Could not find 'StudentName' and/or 'Outreach' columns.");
@@ -261,7 +262,7 @@ export async function transferData(event) {
             usedRange.load("values, formulas");
             await context.sync();
 
-            const headers = usedRange.values[0].map(header => String(header || '').toLowerCase());
+            const headers = usedRange.values[0].map(normalizeHeader);
             const colIndices = {
                 studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
                 gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
@@ -272,7 +273,6 @@ export async function transferData(event) {
             };
 
             const dataToCopy = [];
-            const hyperlinkRegex = /=HYPERLINK\("([^"]+)"/i;
 
             for (let i = 1; i < usedRange.values.length; i++) {
                 const rowValues = usedRange.values[i];
@@ -286,13 +286,8 @@ export async function transferData(event) {
                 }
 
                 if (colIndices.gradeBook !== -1 && rowValues[colIndices.gradeBook]) {
-                    const formula = rowFormulas[colIndices.gradeBook];
-                    const match = String(formula).match(hyperlinkRegex);
-                    if (match && match[1]) {
-                        rowData.GradeBook = match[1]; // Extract URL from formula
-                    } else {
-                        rowData.GradeBook = rowValues[colIndices.gradeBook]; // Fallback to value
-                    }
+                    const parsed = parseHyperlinkFormula(rowFormulas[colIndices.gradeBook]);
+                    rowData.GradeBook = parsed ? parsed.url : rowValues[colIndices.gradeBook];
                     hasData = true;
                 }
 
@@ -330,7 +325,7 @@ export async function transferData(event) {
         }
 
         Office.context.ui.displayDialogAsync(
-            'https://vsblanco.github.io/Student-Retention-Add-in/background-services/transfer-dialog.html',
+            'https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html',
             { height: 60, width: 40, displayInIframe: true },
             function (asyncResult) {
                 if (asyncResult.status === Office.AsyncResultStatus.Failed) {

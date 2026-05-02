@@ -1,5 +1,7 @@
+import { HISTORY_SHEET } from '../../../../shared/constants.js';
+
 export const Sheets = {
-  HISTORY: "Student History",
+  HISTORY: HISTORY_SHEET,
   MISSING_ASSIGNMENT: "Missing Assignments"
 };
 

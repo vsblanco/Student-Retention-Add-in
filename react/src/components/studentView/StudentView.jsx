@@ -10,7 +10,8 @@ import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChange
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 import { addComment, resolveStudentIdentity } from '../utility/EditStudentHistory.jsx';
-import chromeExtensionService from '../../services/chromeExtensionService.js';
+import chromeExtensionService from '../../../../shared/chromeExtensionService.js';
+import { HISTORY_SHEET } from '../../../../shared/constants.js';
 
 /* global Excel */
 
@@ -125,7 +126,7 @@ function StudentView({ onReady, user }) {
             await context.sync();
             const sheetNames = sheets.items.map(s => s.name);
             setAvailableTabs({
-              history: sheetNames.includes('Student History'),
+              history: sheetNames.includes(HISTORY_SHEET),
               assignments: sheetNames.some(name => ['Missing Assignments', 'Assignments'].includes(name))
             });
           });
@@ -171,7 +172,7 @@ function StudentView({ onReady, user }) {
         }
 
         // Load all history and filter by either SyStudentId or StudentNumber
-        loadSheet('Student History')
+        loadSheet(HISTORY_SHEET)
             .then((res) => {
                 if (res && res.data && Array.isArray(res.data)) {
                     console.log('=== HISTORY LOAD DEBUG ===');

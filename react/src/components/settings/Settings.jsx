@@ -8,8 +8,8 @@ import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED:
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
+import { HISTORY_SHEET, MASTER_LIST_SHEET } from '../../../../shared/constants.js';
 
-const HISTORY_SHEET = 'Student History';
 const SUMMARY_BRAND = '#145F82';
 
 function formatBytes(bytes) {
@@ -124,7 +124,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		try {
 			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
 				const result = await Excel.run(async (context) => {
-					const sheet = context.workbook.worksheets.getItemOrNullObject('Master List');
+					const sheet = context.workbook.worksheets.getItemOrNullObject(MASTER_LIST_SHEET);
 					await context.sync();
 					if (sheet.isNullObject) return null;
 					const used = sheet.getUsedRangeOrNullObject();
@@ -242,9 +242,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				throw new Error('Excel API not available');
 			}
 			const csvContent = await Excel.run(async (context) => {
-				const sheet = context.workbook.worksheets.getItemOrNullObject('Student History');
+				const sheet = context.workbook.worksheets.getItemOrNullObject(HISTORY_SHEET);
 				await context.sync();
-				if (sheet.isNullObject) throw new Error('Student History sheet not found');
+				if (sheet.isNullObject) throw new Error(`${HISTORY_SHEET} sheet not found`);
 				const used = sheet.getUsedRangeOrNullObject();
 				used.load('values');
 				await context.sync();
