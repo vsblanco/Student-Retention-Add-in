@@ -83,6 +83,7 @@ const SortableRow = ({
 	label,
 	isMissing,
 	isBlank,
+	isAdded,
 	onRequestDelete,
 }) => {
 	const {
@@ -236,6 +237,25 @@ const SortableRow = ({
 				</span>
 			)}
 
+			{/* added badge (this session) */}
+			{!isMissing && isAdded && (
+				<span
+					title="You added this column in this session"
+					style={{
+						padding: '2px 6px',
+						borderRadius: 4,
+						background: '#d1fae5',
+						color: '#047857',
+						fontSize: 11,
+						fontWeight: 600,
+						flexShrink: 0,
+						lineHeight: '16px',
+					}}
+				>
+					Added
+				</span>
+			)}
+
 			{/* trash icon delete button */}
 			<button
 				type="button"
@@ -278,6 +298,8 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// columns the user removed during this modal session (cleared on reopen)
 	// Map<columnName, originalIndex> so re-adding restores the original position
 	const [recentlyRemoved, setRecentlyRemoved] = React.useState(() => new Map());
+	// columns the user added during this modal session (cleared on reopen)
+	const [recentlyAdded, setRecentlyAdded] = React.useState(() => new Set());
 
 	// build quick lookup of workbookColumns by key (name/label)
 	const workbookLookup = React.useMemo(() => {
@@ -382,6 +404,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 		setOrderList(order);
 		setViewMode('choices');
 		setRecentlyRemoved(new Map());
+		setRecentlyAdded(new Set());
 
 		// capture initial snapshot for dirty tracking whenever modal/setting opens or array changes
 		try {
@@ -474,13 +497,17 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 	// add a column from the master list (or blank)
 	const addColumn = (name) => {
 		if (orderList.includes(name)) return;
-		const restoreIdx = recentlyRemoved.has(name) ? recentlyRemoved.get(name) : -1;
+		const isRestore = recentlyRemoved.has(name);
+		const restoreIdx = isRestore ? recentlyRemoved.get(name) : -1;
 		setOrderList(prev => {
-			if (restoreIdx < 0) return [...prev, name];
-			const insertAt = Math.max(0, Math.min(prev.length, restoreIdx));
-			const next = [...prev];
-			next.splice(insertAt, 0, name);
-			return next;
+			if (isRestore) {
+				const insertAt = Math.max(0, Math.min(prev.length, restoreIdx));
+				const next = [...prev];
+				next.splice(insertAt, 0, name);
+				return next;
+			}
+			// brand-new addition: drop in at the top so it's easy to find
+			return [name, ...prev];
 		});
 		const wbEntry = workbookLookup[name];
 		const seed = {};
@@ -498,22 +525,40 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 			next.delete(name);
 			return next;
 		});
+		// brand-new additions get the "Added" pill until the modal closes
+		if (!isRestore) {
+			setRecentlyAdded(prev => {
+				if (prev.has(name)) return prev;
+				const next = new Set(prev);
+				next.add(name);
+				return next;
+			});
+		}
 	};
 
 	// delete a column locally (Save persists)
 	const deleteColumn = (key) => {
 		if (!key) return;
 		const originalIdx = orderList.indexOf(key);
+		const wasJustAdded = recentlyAdded.has(key);
 		setEditableMap(prev => {
 			const copy = { ...(prev || {}) };
 			delete copy[key];
 			return copy;
 		});
 		setOrderList(prev => prev.filter(k => k !== key));
-		setRecentlyRemoved(prev => {
-			const next = new Map(prev);
-			// keep the first-recorded original index so multiple delete/re-add cycles still snap back
-			if (!next.has(key)) next.set(key, originalIdx);
+		// only track as "recently removed" if it wasn't something the user just added in this session
+		if (!wasJustAdded) {
+			setRecentlyRemoved(prev => {
+				const next = new Map(prev);
+				if (!next.has(key)) next.set(key, originalIdx);
+				return next;
+			});
+		}
+		setRecentlyAdded(prev => {
+			if (!prev.has(key)) return prev;
+			const next = new Set(prev);
+			next.delete(key);
 			return next;
 		});
 	};
@@ -817,6 +862,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, save
 									label={label}
 									isMissing={missingColumns.has(key)}
 									isBlank={blankVisibleColumns.has(key)}
+									isAdded={recentlyAdded.has(key)}
 									onRequestDelete={deleteColumn}
 								/>
 							);
