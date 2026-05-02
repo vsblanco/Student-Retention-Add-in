@@ -330,7 +330,7 @@ export async function transferData(event) {
         }
 
         Office.context.ui.displayDialogAsync(
-            'https://vsblanco.github.io/Student-Retention-Add-in/background-services/transfer-dialog.html',
+            'https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html',
             { height: 60, width: 40, displayInIframe: true },
             function (asyncResult) {
                 if (asyncResult.status === Office.AsyncResultStatus.Failed) {

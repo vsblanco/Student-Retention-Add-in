@@ -199,7 +199,7 @@ async function importMissingAssignments(studentsWithAssignments) {
  * @param {object} payload - The original import payload to retry after sheet creation.
  */
 function showMissingMasterListDialog(payload) {
-    const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/background-services/missing-masterlist-dialog.html';
+    const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/commands/missing-masterlist-dialog.html';
 
     Office.context.ui.displayDialogAsync(
         dialogUrl,
