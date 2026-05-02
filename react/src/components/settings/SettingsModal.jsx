@@ -1,6 +1,22 @@
 import React from 'react';
-import { X } from 'lucide-react';
-import DeleteConfirmModal from './DeleteConfirmModal'; // <-- added
+import { X, GripVertical, Trash2 } from 'lucide-react';
+import {
+	DndContext,
+	closestCenter,
+	KeyboardSensor,
+	PointerSensor,
+	useSensor,
+	useSensors,
+} from '@dnd-kit/core';
+import {
+	arrayMove,
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+	verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import DeleteConfirmModal from './DeleteConfirmModal';
 
 const SettingsModal = ({
 	// array modal props
@@ -46,9 +62,7 @@ const SettingsModal = ({
 							modalSetting={modalSetting}
 							modalArray={modalArray}
 							setModalArray={setModalArray}
-							closeModal={closeModal}
 							saveModal={saveModal}
-							// pass workbook columns so the modal uses the workbook's columns array when available
 							workbookColumns={workbookColumns}
 							masterListHeaders={masterListHeaders}
 							newMasterListHeaders={newMasterListHeaders}
@@ -63,22 +77,203 @@ const SettingsModal = ({
 
 export default SettingsModal;
 
-// Replace the existing EditableArrayInner component with this updated version
-const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, closeModal, saveModal, workbookColumns = [], masterListHeaders = null, newMasterListHeaders = null, blankColumns = null }) => {
-	const [selectedIdx, setSelectedIdx] = React.useState(0);
-	const [viewMode, setViewMode] = React.useState('choices'); // 'choices' | 'options' | 'add'
+// Sortable row used inside the visible-columns list
+const SortableRow = ({
+	id,
+	idx,
+	label,
+	isMissing,
+	isBlank,
+	onRequestDelete,
+}) => {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id, disabled: isMissing });
+
+	const [trashHover, setTrashHover] = React.useState(false);
+	const [rowHover, setRowHover] = React.useState(false);
+
+	const style = {
+		transform: CSS.Transform.toString(transform),
+		transition,
+		display: 'flex',
+		alignItems: 'center',
+		width: '100%',
+		padding: '6px 8px',
+		marginBottom: 4,
+		borderRadius: 6,
+		background: isMissing
+			? '#f9fafb'
+			: (rowHover || isDragging) ? '#eef2ff' : 'transparent',
+		border: isMissing
+			? '1px solid #e5e7eb'
+			: (rowHover || isDragging) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
+		gap: 4,
+		opacity: isDragging ? 0.6 : (isMissing ? 0.5 : 1),
+		boxShadow: isDragging ? '0 4px 12px rgba(0,0,0,0.12)' : 'none',
+		zIndex: isDragging ? 1 : 'auto',
+	};
+
+	const num = idx + 1;
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={style}
+			onMouseEnter={() => setRowHover(true)}
+			onMouseLeave={() => setRowHover(false)}
+		>
+			{/* drag handle */}
+			<button
+				type="button"
+				{...attributes}
+				{...listeners}
+				disabled={isMissing}
+				aria-label={isMissing ? `${label} (missing, cannot reorder)` : `Drag to reorder ${label}`}
+				title={isMissing ? 'Missing column cannot be reordered' : 'Drag to reorder'}
+				style={{
+					padding: 0,
+					width: 22,
+					height: 28,
+					display: 'inline-flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					border: 'none',
+					background: 'transparent',
+					cursor: isMissing ? 'not-allowed' : (isDragging ? 'grabbing' : 'grab'),
+					color: isMissing ? '#d1d5db' : '#9ca3af',
+					flexShrink: 0,
+					touchAction: 'none',
+				}}
+			>
+				<GripVertical size={16} />
+			</button>
+
+			{/* position badge */}
+			<div
+				aria-hidden="true"
+				style={{
+					width: 28,
+					height: 28,
+					display: 'inline-flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					borderRadius: 6,
+					background: isMissing ? '#f3f4f6' : (rowHover ? '#eef2ff' : '#f3f4f6'),
+					color: isMissing ? '#9ca3af' : '#374151',
+					fontWeight: 700,
+					flexShrink: 0,
+					userSelect: 'none',
+					fontSize: 13,
+				}}
+				title={isMissing ? `Position ${num} (missing from Master List)` : `Position ${num}`}
+			>
+				{isMissing ? (
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+						<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6"/>
+						<line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+						<circle cx="12" cy="16" r="0.5" fill="currentColor" stroke="currentColor" strokeWidth="1"/>
+					</svg>
+				) : num}
+			</div>
+
+			{/* label */}
+			<div
+				style={{
+					flex: 1,
+					padding: '4px 0',
+					overflow: 'hidden',
+					textOverflow: 'ellipsis',
+					whiteSpace: 'nowrap',
+					fontSize: 14,
+					color: isMissing ? '#9ca3af' : 'inherit',
+				}}
+			>
+				{label}
+			</div>
+
+			{/* missing badge */}
+			{isMissing && (
+				<span
+					title="This column was not found in the Master List and will be skipped"
+					style={{
+						padding: '2px 6px',
+						borderRadius: 4,
+						background: '#fef3c7',
+						color: '#92400e',
+						fontSize: 11,
+						fontWeight: 600,
+						flexShrink: 0,
+						lineHeight: '16px',
+					}}
+				>
+					Missing
+				</span>
+			)}
+
+			{/* blank badge */}
+			{!isMissing && isBlank && (
+				<span
+					title="This column exists in the Master List but contains no data values"
+					style={{
+						padding: '2px 6px',
+						borderRadius: 4,
+						background: '#e0e7ff',
+						color: '#3730a3',
+						fontSize: 11,
+						fontWeight: 600,
+						flexShrink: 0,
+						lineHeight: '16px',
+					}}
+				>
+					Blank
+				</span>
+			)}
+
+			{/* trash icon delete button */}
+			<button
+				type="button"
+				onClick={(e) => { e.stopPropagation(); onRequestDelete(id); }}
+				onMouseEnter={() => setTrashHover(true)}
+				onMouseLeave={() => setTrashHover(false)}
+				aria-label={`Delete ${label}`}
+				title={`Delete ${label}`}
+				style={{
+					padding: 0,
+					width: 28,
+					height: 28,
+					display: 'inline-flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					border: 'none',
+					background: trashHover ? '#fee2e2' : 'transparent',
+					borderRadius: 6,
+					cursor: 'pointer',
+					color: trashHover ? '#ef4444' : '#9ca3af',
+					transition: 'background-color 120ms ease, color 120ms ease',
+					flexShrink: 0,
+				}}
+			>
+				<Trash2 size={15} />
+			</button>
+		</div>
+	);
+};
+
+const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, saveModal, workbookColumns = [], masterListHeaders = null, newMasterListHeaders = null, blankColumns = null }) => {
+	const [viewMode, setViewMode] = React.useState('choices'); // 'choices' | 'add'
 	const [editableMap, setEditableMap] = React.useState({});
-	const [hoverIdx, setHoverIdx] = React.useState(null);
-	const [orderMap, setOrderMap] = React.useState({});
 	const [orderList, setOrderList] = React.useState([]);
-	// editing state for the "Options for:" title
-	const [editingTitle, setEditingTitle] = React.useState(false);
-	const [titleInput, setTitleInput] = React.useState('');
 	// dirty tracking: initial snapshot + current dirty flag
 	const initialSnapshotRef = React.useRef(null);
 	const [isDirty, setIsDirty] = React.useState(false);
 	// state to control delete confirmation modal
-	const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+	const [deleteConfirmKey, setDeleteConfirmKey] = React.useState(null);
 	// preview state
 	const [previewBusy, setPreviewBusy] = React.useState(false);
 
@@ -98,7 +293,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 	function modalOpenOrSettingMarker() {
 		return JSON.stringify({
 			choices: (Array.isArray(workbookColumns) ? workbookColumns.length : 0),
-			// include a small signature of workbook options so effect runs when options change
 			workbookSignature: (Array.isArray(workbookColumns) ? workbookColumns.map(e => {
 				const n = String(e?.name ?? e?.label ?? e).trim();
 				const oLen = Array.isArray(e?.options) ? e.options.length : (e?.options && typeof e.options === 'object' ? Object.keys(e.options).length : 0);
@@ -109,67 +303,53 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		});
 	}
 
-	// initialize editableMap, orderMap, orderList and selected index whenever the modal/setting/array changes
+	// initialize editableMap, orderList whenever the modal/setting/array changes
 	React.useEffect(() => {
 		const map = {};
-		const order = {};
-		let orderCounter = 0;
+		const order = [];
 		let hasSavedEntries = false;
 		// 1) seed map from modalArray (what was previously saved via Save)
-		// Filter out columns that were previously hidden — they are now implicitly hidden by not being in the list
 		if (Array.isArray(modalArray) && modalArray.length) {
 			modalArray.forEach((entry) => {
-				// support both {column: ...} (modal save format) and {name: ...} (workbook save format)
 				const rawKey = entry?.column ?? entry?.name;
 				if (entry && rawKey) {
 					const key = String(rawKey).trim();
-					// entry.options may be an object with the per-column settings
 					const fromOptions = (entry.options && typeof entry.options === 'object') ? { ...entry.options } : {};
-					// also preserve top-level properties that may have been saved (alias/static/etc)
 					const extra = {};
 					['alias', 'static', 'format', 'label', 'name', 'identifier'].forEach(k => {
 						if (entry[k] !== undefined) extra[k] = entry[k];
 					});
 					const merged = { ...fromOptions, ...extra };
-					// Skip columns that were marked hidden — they belong in the "Add" bank now
 					if (merged.hidden) return;
-					delete merged.hidden; // clean up any residual hidden flag
+					delete merged.hidden;
 					map[key] = merged;
-					orderCounter++;
-					order[key] = orderCounter;
+					order.push(key);
 					hasSavedEntries = true;
 				}
 			});
 		}
 
 		// 2) Only seed from choices source on FIRST-TIME setup (no saved entries).
-		// Once the user has saved, the visible list is driven entirely by what was saved.
 		if (!hasSavedEntries) {
 			const choicesSource = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
-			// helper to extract non-name/label properties from a workbook entry
 			const seedFromWorkbookEntry = wbEntry => {
 				const seed = {};
 				if (!wbEntry || typeof wbEntry !== 'object') return seed;
 				Object.keys(wbEntry).forEach(k => {
 					if (k === 'name' || k === 'label') return;
-					// copy everything else (alias, static, format, options, etc) but NOT hidden
 					if (k === 'hidden') return;
 					seed[k] = wbEntry[k];
 				});
 				return seed;
 			};
 
-			choicesSource.forEach((choice, i) => {
+			choicesSource.forEach((choice) => {
 				const key = String(choice.name ?? choice.label ?? choice).trim();
-				// Skip hidden defaults — they go to the "Add" bank
 				if (choice.hidden) return;
 				if (!map[key]) {
-					// prefer seeding from the current workbook mapping if available
 					const wbEntry = workbookLookup[key];
 					if (wbEntry) {
-						// skip if the workbook entry is hidden
 						if (wbEntry.hidden) return;
-						// if workbook provided an .options object/structure use it, otherwise seed from other properties
 						if (wbEntry.options && typeof wbEntry.options === 'object' && !Array.isArray(wbEntry.options)) {
 							map[key] = { ...(wbEntry.options) };
 						} else {
@@ -179,19 +359,14 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 						map[key] = {};
 					}
 				}
-				if (!order[key]) {
-					orderCounter++;
-					order[key] = orderCounter;
-				}
+				if (!order.includes(key)) order.push(key);
 			});
 		} else {
-			// Even with saved entries, enrich map with workbook metadata (alias, static, format, etc.)
-			// that may not have been persisted in the modal save format
+			// Even with saved entries, enrich map with workbook metadata
 			Object.keys(map).forEach(key => {
 				const wbEntry = workbookLookup[key];
 				if (wbEntry && typeof wbEntry === 'object') {
 					const existing = map[key];
-					// fill in any missing metadata from the workbook entry
 					['alias', 'static', 'format', 'identifier'].forEach(k => {
 						if (existing[k] === undefined && wbEntry[k] !== undefined) {
 							existing[k] = wbEntry[k];
@@ -202,17 +377,12 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		}
 
 		setEditableMap(map);
-		setOrderMap(order);
-		const orderedKeys = Object.keys(order).sort((a, b) => (order[a] || 0) - (order[b] || 0));
-		setOrderList(orderedKeys);
-		// reset title input when selection or order changes
-		setTitleInput(orderedKeys[0] || '');
-		setSelectedIdx(prev => (orderedKeys[prev] ? prev : 0));
+		setOrderList(order);
 		setViewMode('choices');
 
 		// capture initial snapshot for dirty tracking whenever modal/setting opens or array changes
 		try {
-			initialSnapshotRef.current = JSON.stringify({ editableMap: map, orderList: orderedKeys });
+			initialSnapshotRef.current = JSON.stringify({ editableMap: map, orderList: order });
 			setIsDirty(false);
 		} catch (e) {
 			initialSnapshotRef.current = null;
@@ -231,167 +401,11 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		}
 	}, [editableMap, orderList]);
 
-	if (!modalSetting) return null;
-
-	// prefer workbookColumns when available for the choice list shown in the UI
-	const choices = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting.choices || []);
-	// prefer options descriptors from the workbook entry for the currently selected key (if provided) else fall back to modalSetting.options
-	const currentKey = orderList[selectedIdx] || '';
-	const workbookEntryForCurrent = workbookLookup[currentKey];
-	let options = Array.isArray(modalSetting?.options) ? modalSetting.options : [];
-	if (workbookEntryForCurrent && Array.isArray(workbookEntryForCurrent.options) && workbookEntryForCurrent.options.length) {
-		options = workbookEntryForCurrent.options;
-	}
-
-	const getChoiceByKey = key => {
-		return (choices.find(c => {
-			const k = String(c?.name ?? c?.label ?? c).trim();
-			return k === key;
-		}) || null);
-	};
-
-	const currentChoice = getChoiceByKey(currentKey);
-
-	// helper: rename the current key (avoid duplicates)
-	const renameCurrentKey = newLabel => {
-		const newKey = String(newLabel || '').trim();
-		if (!newKey || newKey === currentKey) return;
-		if (orderList.includes(newKey)) {
-			// duplicate - ignore rename
-			return;
-		}
-		const next = [...orderList];
-		next[selectedIdx] = newKey;
-		const newOrderMap = {};
-		next.forEach((k, i) => { newOrderMap[k] = i + 1; });
-		setOrderList(next);
-		setOrderMap(newOrderMap);
-		setEditableMap(prev => {
-			const copy = { ...prev };
-			copy[newKey] = copy[currentKey] || {};
-			delete copy[currentKey];
-			return copy;
-		});
-		// keep selection on the renamed item
-		setSelectedIdx(selectedIdx);
-	};
-
-	// when entering edit mode, prepare input
-	React.useEffect(() => {
-		if (editingTitle) {
-			setTitleInput(currentKey || '');
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [editingTitle]);
-
-	const updateOption = (optionName, value) => {
-		setEditableMap(prev => {
-			const copy = { ...prev };
-			copy[currentKey] = { ...(copy[currentKey] || {}) };
-			if (value === '' || value == null) {
-				delete copy[currentKey][optionName];
-			} else {
-				copy[currentKey][optionName] = value;
-			}
-			return copy;
-		});
-	};
-
-	const onSave = () => {
-		const out = (orderList.length ? orderList : Object.keys(editableMap)).map(col => ({
-			column: col,
-			options: { ...(editableMap[col] || {}) }
-		}));
-		// update parent array state
-		try {
-			setModalArray(out);
-		} catch (e) {
-			// ignore
-		}
-		if (typeof saveModal === 'function') {
-			try {
-				saveModal(out);
-			} catch (e) {
-				// swallow errors, fallback already setModalArray
-			}
-		}
-
-		// Do NOT close the modal. Instead go back to the choices list.
-		setViewMode('choices');
-
-		// update snapshot so Save becomes disabled until further edits
-		try {
-			initialSnapshotRef.current = JSON.stringify({ editableMap, orderList });
-			setIsDirty(false);
-		} catch (e) {
-			// ignore
-			setIsDirty(false);
-		}
-	};
-
-	// OLD deleteCurrent replaced: open confirm modal instead of immediate confirm
-	const deleteCurrent = () => {
-		if (!currentKey) return;
-		// open confirm modal — actual deletion is done in performDeleteCurrent
-		setDeleteConfirmOpen(true);
-	};
-
-	// perform actual deletion when user confirms
-	const performDeleteCurrent = () => {
-		const keyToDelete = currentKey;
-		if (!keyToDelete) {
-			setDeleteConfirmOpen(false);
-			return;
-		}
-
-		// Build new editable map & order list locally (synchronously) so we can persist immediately
-		const newEditableMap = { ...(editableMap || {}) };
-		delete newEditableMap[keyToDelete];
-
-		const nextOrderList = orderList.filter(k => k !== keyToDelete);
-		const newOrderMap = {};
-		nextOrderList.forEach((k, i) => { newOrderMap[k] = i + 1; });
-
-		// Update local UI state
-		setEditableMap(newEditableMap);
-		setOrderList(nextOrderList);
-		setOrderMap(newOrderMap);
-		const newIdx = Math.max(0, Math.min(nextOrderList.length - 1, selectedIdx));
-		setSelectedIdx(newIdx);
-		setTitleInput(nextOrderList[newIdx] || '');
-		if (nextOrderList.length === 0) setViewMode('choices');
-
-		// Build the array shape expected by the parent and persist immediately.
-		const out = (nextOrderList.length ? nextOrderList : Object.keys(newEditableMap || {})).map(col => ({
-			column: col,
-			options: { ...(newEditableMap[col] || {}) }
-		}));
-
-		// Persist to parent if available; do NOT close the modal.
-		if (typeof saveModal === 'function') {
-			try {
-				saveModal(out);
-			} catch (e) {
-				// fallback: update parent's modalArray locally
-				try { setModalArray(out); } catch (_) {}
-			}
-		} else {
-			// fallback local behavior
-			setModalArray(out);
-		}
-
-		// update snapshot so Save becomes disabled until further edits
-		try {
-			initialSnapshotRef.current = JSON.stringify({ editableMap: newEditableMap, orderList: nextOrderList });
-			setIsDirty(false);
-		} catch (e) {
-			setIsDirty(false);
-		}
-
-		// close the confirm dialog but keep the main modal open and show the list
-		setDeleteConfirmOpen(false);
-		setViewMode('choices');
-	};
+	// dnd-kit sensors
+	const sensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+	);
 
 	// detect which columns in the visible list are missing from the current Master List
 	const missingColumns = React.useMemo(() => {
@@ -401,9 +415,7 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		const mlStripped = masterListHeaders.map(h => stripStr(h));
 		orderList.forEach(key => {
 			const keyStripped = stripStr(key);
-			// check column name itself
 			if (mlStripped.includes(keyStripped)) return;
-			// check aliases from workbook entry or editableMap
 			const wbEntry = workbookLookup[key];
 			const aliases = [];
 			if (wbEntry && Array.isArray(wbEntry.alias)) aliases.push(...wbEntry.alias);
@@ -418,22 +430,18 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		return missing;
 	}, [orderList, masterListHeaders, workbookLookup, editableMap]);
 
-	// detect which columns in the visible list are blank (exist in ML but have no data values)
+	// detect which columns in the visible list are blank
 	const blankVisibleColumns = React.useMemo(() => {
 		const blank = new Set();
 		if (!blankColumns || blankColumns.size === 0) return blank;
 		if (!Array.isArray(masterListHeaders) || masterListHeaders.length === 0) return blank;
 		const stripStr = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '');
-		// build a stripped set from blankColumns for lookup
 		const blankStripped = new Set();
 		blankColumns.forEach(h => blankStripped.add(stripStr(h)));
 		orderList.forEach(key => {
-			// skip columns already detected as missing — they can't be blank
 			if (missingColumns.has(key)) return;
 			const keyStripped = stripStr(key);
-			// check column name itself
 			if (blankStripped.has(keyStripped)) { blank.add(key); return; }
-			// check aliases
 			const wbEntry = workbookLookup[key];
 			const aliases = [];
 			if (wbEntry && Array.isArray(wbEntry.alias)) aliases.push(...wbEntry.alias);
@@ -448,27 +456,22 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		return blank;
 	}, [orderList, blankColumns, masterListHeaders, missingColumns, workbookLookup, editableMap]);
 
-	// move an item up/down within orderList
-	const moveItem = (idx, direction) => {
-		const targetIdx = idx + direction;
-		if (targetIdx < 0 || targetIdx >= orderList.length) return;
-		const next = [...orderList];
-		[next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
-		const newOrder = {};
-		next.forEach((k, i) => { newOrder[k] = i + 1; });
-		setOrderList(next);
-		setOrderMap(newOrder);
+	// drag-end handler: reorder the list
+	const handleDragEnd = (event) => {
+		const { active, over } = event;
+		if (!over || active.id === over.id) return;
+		setOrderList((items) => {
+			const oldIndex = items.indexOf(active.id);
+			const newIndex = items.indexOf(over.id);
+			if (oldIndex === -1 || newIndex === -1) return items;
+			return arrayMove(items, oldIndex, newIndex);
+		});
 	};
 
 	// add a column from the master list (or blank)
 	const addColumn = (name) => {
 		if (orderList.includes(name)) return;
-		const next = [...orderList, name];
-		const newOrderMap = {};
-		next.forEach((k, i) => { newOrderMap[k] = i + 1; });
-		setOrderList(next);
-		setOrderMap(newOrderMap);
-		// seed from workbook column definition if available
+		setOrderList(prev => [...prev, name]);
 		const wbEntry = workbookLookup[name];
 		const seed = {};
 		if (wbEntry && typeof wbEntry === 'object') {
@@ -476,17 +479,54 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 				if (k !== 'name' && k !== 'label') seed[k] = wbEntry[k];
 			});
 		}
-		// new columns added from picker are visible by default
 		delete seed.hidden;
 		setEditableMap(prev => ({ ...(prev || {}), [name]: seed }));
-		setIsDirty(true);
+	};
+
+	// request deletion (opens confirm modal)
+	const requestDelete = (key) => {
+		setDeleteConfirmKey(key);
+	};
+
+	// perform actual deletion locally (Save persists)
+	const performDelete = () => {
+		const keyToDelete = deleteConfirmKey;
+		if (!keyToDelete) {
+			setDeleteConfirmKey(null);
+			return;
+		}
+		setEditableMap(prev => {
+			const copy = { ...(prev || {}) };
+			delete copy[keyToDelete];
+			return copy;
+		});
+		setOrderList(prev => prev.filter(k => k !== keyToDelete));
+		setDeleteConfirmKey(null);
+	};
+
+	const onSave = () => {
+		const out = (orderList.length ? orderList : Object.keys(editableMap)).map(col => ({
+			column: col,
+			options: { ...(editableMap[col] || {}) }
+		}));
+		try {
+			setModalArray(out);
+		} catch (e) {
+			// ignore
+		}
+		if (typeof saveModal === 'function') {
+			try {
+				saveModal(out);
+			} catch (e) {
+				// fallback already setModalArray
+			}
+		}
 	};
 
 	// compute master list columns not already configured (for the add picker)
 	const availableToAdd = React.useMemo(() => {
 		if (!Array.isArray(masterListHeaders)) return [];
 		const existing = new Set(orderList.map(k => k.toLowerCase()));
-		// also check aliases
 		orderList.forEach(k => {
 			const wbEntry = workbookLookup[k];
 			if (wbEntry && Array.isArray(wbEntry.alias)) {
@@ -501,8 +541,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		if (previewBusy) return;
 		setPreviewBusy(true);
 		try {
-			// first save current state
-			onSave();
 			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
 				await Excel.run(async (context) => {
 					const sheets = context.workbook.worksheets;
@@ -519,7 +557,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 					}
 
 					const newSheet = sheets.add(sheetName);
-					// write visible column headers (skip missing columns)
 					const previewHeaders = orderList.filter(key => !missingColumns.has(key));
 
 					if (previewHeaders.length > 0) {
@@ -540,9 +577,16 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		}
 	};
 
+	const getChoiceByKey = key => {
+		const choices = (Array.isArray(workbookColumns) && workbookColumns.length) ? workbookColumns : (modalSetting?.choices || []);
+		return (choices.find(c => {
+			const k = String(c?.name ?? c?.label ?? c).trim();
+			return k === key;
+		}) || null);
+	};
+
 	// Render: add view (pick from master list)
 	if (viewMode === 'add') {
-		// sort new columns to the top for easy discovery
 		const sortedAvailable = [...availableToAdd].sort((a, b) => {
 			const aNew = newMasterListHeaders && newMasterListHeaders.has(a);
 			const bNew = newMasterListHeaders && newMasterListHeaders.has(b);
@@ -633,9 +677,11 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 		);
 	}
 
-	// Render: choices view (visible columns with missing detection)
-	if (viewMode === 'choices') {
-		return (
+	// Render: choices view (visible columns with drag-and-drop reordering)
+	const deleteConfirmLabel = deleteConfirmKey || '';
+
+	return (
+		<div>
 			<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 8, background: '#fafafa', maxHeight: '56vh', overflowY: 'auto', position: 'relative' }}>
 				{/* header: Visible on LDA + add/preview buttons */}
 				<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -671,7 +717,6 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 								if (Array.isArray(masterListHeaders) && masterListHeaders.length > 0) {
 									setViewMode('add');
 								} else {
-									// no master list, add blank column
 									const base = 'New Column';
 									let counter = 1;
 									let key = base;
@@ -705,346 +750,42 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 					<div style={{ color: '#6b7280', fontSize: 13, marginBottom: 8 }}>No visible columns. Click Add to include columns from the Master List.</div>
 				)}
 
-				{orderList.map((key, idx) => {
-					const choiceObj = getChoiceByKey(key);
-					const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
-					const num = idx + 1;
-					const hoverKey = 'col-' + idx;
-					const isMissing = missingColumns.has(key);
-
-					return (
-						<div
-							key={key + idx}
-							onMouseEnter={() => setHoverIdx(hoverKey)}
-							onMouseLeave={() => setHoverIdx(null)}
-							style={{
-								display: 'flex',
-								alignItems: 'center',
-								width: '100%',
-								padding: '6px 8px',
-								marginBottom: 4,
-								borderRadius: 6,
-								background: isMissing
-									? '#f9fafb'
-									: (hoverIdx === hoverKey) ? '#eef2ff' : 'transparent',
-								border: isMissing
-									? '1px solid #e5e7eb'
-									: (hoverIdx === hoverKey) ? '1px solid rgba(79,70,229,0.12)' : '1px solid transparent',
-								transition: 'background-color 120ms ease',
-								gap: 4,
-								opacity: isMissing ? 0.5 : 1
-							}}
-						>
-							{/* position badge */}
-							<div
-								aria-hidden="true"
-								style={{
-									width: 28,
-									height: 28,
-									display: 'inline-flex',
-									alignItems: 'center',
-									justifyContent: 'center',
-									borderRadius: 6,
-									background: isMissing ? '#f3f4f6' : (hoverIdx === hoverKey) ? '#eef2ff' : '#f3f4f6',
-									color: isMissing ? '#9ca3af' : '#374151',
-									fontWeight: 700,
-									flexShrink: 0,
-									userSelect: 'none',
-									fontSize: 13
-								}}
-								title={isMissing ? `Position ${num} (missing from Master List)` : `Position ${num}`}
-							>
-								{isMissing ? (
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-										<circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.6"/>
-										<line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-										<circle cx="12" cy="16" r="0.5" fill="currentColor" stroke="currentColor" strokeWidth="1"/>
-									</svg>
-								) : num}
-							</div>
-
-							{/* label - clickable to open options */}
-							<button
-								onClick={() => { if (!isMissing) { setSelectedIdx(idx); setViewMode('options'); } }}
-								style={{
-									flex: 1,
-									background: 'none',
-									border: 'none',
-									textAlign: 'left',
-									cursor: isMissing ? 'default' : 'pointer',
-									padding: '4px 0',
-									overflow: 'hidden',
-									textOverflow: 'ellipsis',
-									whiteSpace: 'nowrap',
-									fontSize: 14,
-									color: isMissing ? '#9ca3af' : 'inherit'
-								}}
-							>
-								{label}
-							</button>
-
-							{/* missing badge */}
-							{isMissing && (
-								<span
-									title="This column was not found in the Master List and will be skipped"
-									style={{
-										padding: '2px 6px',
-										borderRadius: 4,
-										background: '#fef3c7',
-										color: '#92400e',
-										fontSize: 11,
-										fontWeight: 600,
-										flexShrink: 0,
-										lineHeight: '16px'
-									}}
-								>
-									Missing
-								</span>
-							)}
-
-							{/* blank badge */}
-							{!isMissing && blankVisibleColumns.has(key) && (
-								<span
-									title="This column exists in the Master List but contains no data values"
-									style={{
-										padding: '2px 6px',
-										borderRadius: 4,
-										background: '#e0e7ff',
-										color: '#3730a3',
-										fontSize: 11,
-										fontWeight: 600,
-										flexShrink: 0,
-										lineHeight: '16px'
-									}}
-								>
-									Blank
-								</span>
-							)}
-
-							{/* up/down arrow buttons */}
-							{!isMissing && (
-								<div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
-									<button
-										type="button"
-										onClick={(e) => { e.stopPropagation(); moveItem(idx, -1); }}
-										disabled={idx === 0}
-										aria-label={`Move ${label} up`}
-										title="Move up"
-										style={{
-											padding: 0,
-											width: 22,
-											height: 16,
-											display: 'inline-flex',
-											alignItems: 'center',
-											justifyContent: 'center',
-											border: '1px solid #e6e7eb',
-											borderRadius: '4px 4px 0 0',
-											background: idx === 0 ? '#f9fafb' : '#f3f4f6',
-											cursor: idx === 0 ? 'not-allowed' : 'pointer',
-											color: idx === 0 ? '#d1d5db' : '#374151',
-											transition: 'background-color 120ms ease'
-										}}
-									>
-										<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-											<path d="M18 15l-6-6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-									</button>
-									<button
-										type="button"
-										onClick={(e) => { e.stopPropagation(); moveItem(idx, 1); }}
-										disabled={idx === orderList.length - 1}
-										aria-label={`Move ${label} down`}
-										title="Move down"
-										style={{
-											padding: 0,
-											width: 22,
-											height: 16,
-											display: 'inline-flex',
-											alignItems: 'center',
-											justifyContent: 'center',
-											border: '1px solid #e6e7eb',
-											borderRadius: '0 0 4px 4px',
-											background: idx === orderList.length - 1 ? '#f9fafb' : '#f3f4f6',
-											cursor: idx === orderList.length - 1 ? 'not-allowed' : 'pointer',
-											color: idx === orderList.length - 1 ? '#d1d5db' : '#374151',
-											transition: 'background-color 120ms ease'
-										}}
-									>
-										<svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-											<path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-									</button>
-								</div>
-							)}
-						</div>
-					);
-				})}
-			</div>
-		);
-	}
-
-	// options view
-	return (
-		<div style={{ border: '1px solid #e6e7eb', borderRadius: 6, padding: 12, background: '#fff', maxHeight: '56vh', overflowY: 'auto' }}>
-			{/* Header: show back button to return to choices-only view */}
-			<div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-				<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-					<button
-						onClick={() => setViewMode('choices')}
-						style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', background: '#f8fafc', cursor: 'pointer' }}
-						aria-label="Back to columns"
-					>
-						Back
-					</button>
-					<div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-						<span>Options for:</span>
-						{editingTitle ? (
-							<input
-								autoFocus
-								value={titleInput}
-								onChange={e => setTitleInput(e.target.value)}
-								onBlur={() => {
-									renameCurrentKey(titleInput);
-									setEditingTitle(false);
-								}}
-								onKeyDown={e => {
-									if (e.key === 'Enter') {
-										renameCurrentKey(titleInput);
-										setEditingTitle(false);
-									} else if (e.key === 'Escape') {
-										setEditingTitle(false);
-									}
-								}}
-								style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
-								aria-label="Rename column"
-							/>
-						) : (
-							<span
-								onClick={() => { setEditingTitle(true); }}
-								style={{ fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}
-								title="Click to rename"
-								role="button"
-								tabIndex={0}
-								onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { setEditingTitle(true); } }}
-							>
-								{currentKey}
-							</span>
-						)}
-					</div>
-				</div>
-				<div style={{ fontSize: 13, color: '#6b7280' }}>{Object.keys(editableMap[currentKey] || {}).length} set</div>
-			</div>
-
-			<div style={{ display: 'grid', gap: 8 }}>
-				{options.length === 0 && <div style={{ color: '#6b7280', fontSize: 13 }}>No options available</div>}
-				{options.map(opt => {
-					// use opt.option / opt.name as the internal key, but use opt.label (if provided) for display
-					const optKey = opt.option || opt.name || String(opt);
-					const optLabel = opt.label || optKey;
-					const values = Array.isArray(opt.values) ? opt.values : (Array.isArray(opt.type) ? opt.type : []);
-					const value = (editableMap[currentKey] && editableMap[currentKey][optKey]) || '';
-					return (
-						<div key={optKey} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-							<div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{optLabel}</div>
-
-							{values && values.length > 0 ? (
-								<select
-									value={value}
-									onChange={e => updateOption(optKey, e.target.value)}
-									style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
-									aria-label={`Select ${optLabel} for ${currentKey}`}
-								>
-									<option value=''>None</option>
-									{values.map(v => (
-										<option key={v} value={v}>{v}</option>
-									))}
-								</select>
-							) : opt.type === 'boolean' ? (
-								(() => {
-									const checked = value === true || value === 'Yes' || value === 'On' || String(value).toLowerCase() === 'true' || String(value).toLowerCase() === 'yes' || String(value).toLowerCase() === 'on';
-									return (
-										<label style={{ display: 'inline-flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
-											<span style={{ position: 'relative', width: 44, height: 24, display: 'inline-block' }}>
-												<input
-													type="checkbox"
-													checked={checked}
-													onChange={e => updateOption(optKey, e.target.checked)}
-													aria-label={optLabel}
-													style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }}
-												/>
-												<span style={{
-													position: 'absolute',
-													inset: 0,
-													borderRadius: 9999,
-													background: checked ? '#4f46e5' : '#e5e7eb',
-													transition: 'background-color 160ms linear',
-													padding: 2,
-													boxSizing: 'border-box'
-												}} />
-												<span style={{
-													position: 'absolute',
-													top: 2,
-													left: checked ? 22 : 2,
-													width: 20,
-													height: 20,
-													borderRadius: '50%',
-													background: '#fff',
-													boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-													transition: 'left 160ms linear',
-												}} />
-											</span>
-											<span style={{ fontSize: 13 }}>{checked ? 'On' : 'Off'}</span>
-										</label>
-									);
-								})()
-							) : (
-								<input
-									type="text"
-									value={value}
-									onChange={e => updateOption(optKey, e.target.value)}
-									style={{ padding: '6px 8px', borderRadius: 6, border: '1px solid #e6e7eb', minWidth: 160 }}
-									aria-label={`Enter ${optLabel} for ${currentKey}`}
-									placeholder="Enter value"
+				<DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+					<SortableContext items={orderList} strategy={verticalListSortingStrategy}>
+						{orderList.map((key, idx) => {
+							const choiceObj = getChoiceByKey(key);
+							const label = String(choiceObj?.name ?? choiceObj?.label ?? key).trim();
+							return (
+								<SortableRow
+									key={key}
+									id={key}
+									idx={idx}
+									label={label}
+									isMissing={missingColumns.has(key)}
+									isBlank={blankVisibleColumns.has(key)}
+									onRequestDelete={requestDelete}
 								/>
-							)}
-						</div>
-					);
-				})}
+							);
+						})}
+					</SortableContext>
+				</DndContext>
 			</div>
 
-			{/* Actions */}
-			<div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-				{/* Delete current column (left) */}
-				<button
-					onClick={deleteCurrent}
-					disabled={!currentKey}
-					aria-disabled={!currentKey}
-					title={currentKey ? `Delete ${currentKey}` : 'No column selected'}
-					style={{
-						padding: '8px 10px',
-						borderRadius: 6,
-						background: '#fff',
-						color: '#ef4444',
-						border: '1px solid rgba(239,68,68,0.12)',
-						cursor: currentKey ? 'pointer' : 'not-allowed',
-						opacity: currentKey ? 1 : 0.6
-					}}
-				>
-					Delete
-				</button>
-
+			{/* Footer: Save button */}
+			<div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
 				<button
 					onClick={onSave}
 					disabled={!isDirty}
 					aria-disabled={!isDirty}
 					style={{
-						padding: '8px 10px',
+						padding: '8px 14px',
 						borderRadius: 6,
 						background: isDirty ? '#4f46e5' : '#9ca3af',
 						color: '#fff',
 						border: 'none',
 						cursor: isDirty ? 'pointer' : 'not-allowed',
-						opacity: isDirty ? 1 : 0.9
+						opacity: isDirty ? 1 : 0.9,
+						fontSize: 14
 					}}
 					title={isDirty ? 'Save changes' : 'No changes to save'}
 				>
@@ -1054,12 +795,12 @@ const EditableArrayInner = ({ modalSetting, modalArray = [], setModalArray, clos
 
 			{/* Delete confirmation modal */}
 			<DeleteConfirmModal
-				isOpen={deleteConfirmOpen}
+				isOpen={!!deleteConfirmKey}
 				title="Delete column"
-				message={`Delete column "${currentKey}"? This cannot be undone.`}
+				message={`Delete column "${deleteConfirmLabel}"? This cannot be undone.`}
 				confirmLabel="Delete"
-				onConfirm={performDeleteCurrent}
-				onCancel={() => setDeleteConfirmOpen(false)}
+				onConfirm={performDelete}
+				onCancel={() => setDeleteConfirmKey(null)}
 			/>
 		</div>
 	);
