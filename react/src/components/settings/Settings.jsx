@@ -704,7 +704,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										aria-label="Open workbook debug view"
 										style={{
 											display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-											margin: '8px 0 0 0', padding: '6px 8px',
+											margin: 0, padding: '6px 8px',
 											backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
 											cursor: 'pointer', width: '100%', textAlign: 'left',
 											fontSize: 15, fontWeight: 700, color: 'inherit'

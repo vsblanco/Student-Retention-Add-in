@@ -381,22 +381,32 @@ export default function WorkbookSettingsModal({ isOpen, onClose, docKey = 'workb
 					display: 'flex', justifyContent: 'space-between', alignItems: 'center',
 					gap: 12, padding: '12px 16px',
 					borderBottom: '1px solid #e5e7eb', flex: '0 0 auto',
+					flexWrap: 'wrap',
 				}}>
-					<h3 style={{ margin: 0, fontSize: 16, lineHeight: '32px' }}>Workbook Debug</h3>
-					<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+					<h3 style={{ margin: 0, fontSize: 16, lineHeight: '32px', flexShrink: 0 }}>Workbook Debug</h3>
+					<div style={{
+						display: 'flex',
+						alignItems: 'center',
+						gap: 8,
+						flexWrap: 'wrap',
+						justifyContent: 'flex-end',
+						marginLeft: 'auto',
+					}}>
 						<SegmentedToggle />
-						<button onClick={loadSettings} style={modalIconBtn} title="Refresh" aria-label="Refresh workbook debug view">
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-								<path d="M21 12a9 9 0 1 1-2.36-6.36" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-								<path d="M21 3v6h-6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-							</svg>
-						</button>
-						<button ref={closeBtnRef} onClick={close} style={modalIconBtn} title="Close" aria-label="Close workbook debug view">
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-								<path d="M18 6L6 18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-								<path d="M6 6l12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-							</svg>
-						</button>
+						<div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+							<button onClick={loadSettings} style={modalIconBtn} title="Refresh" aria-label="Refresh workbook debug view">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+									<path d="M21 12a9 9 0 1 1-2.36-6.36" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+									<path d="M21 3v6h-6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+								</svg>
+							</button>
+							<button ref={closeBtnRef} onClick={close} style={modalIconBtn} title="Close" aria-label="Close workbook debug view">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+									<path d="M18 6L6 18" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+									<path d="M6 6l12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+								</svg>
+							</button>
+						</div>
 					</div>
 				</div>
 
