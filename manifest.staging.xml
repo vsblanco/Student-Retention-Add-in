@@ -7,17 +7,17 @@
   <DisplayName DefaultValue="Student Retention Add-in"/>
   <Description DefaultValue="An add-in for tracking student retention tasks."/>
   
-  <IconUrl DefaultValue="https://student-retention-kit.vercel.app/assets/icon-32.png"/>
+  <IconUrl DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-32.png"/>
   
   <SupportUrl DefaultValue="https://github.com/vsblanco/Student-Retention-Add-in"/>
   <AppDomains>
-    <AppDomain>https://student-retention-kit.vercel.app</AppDomain>
+    <AppDomain>https://student-retention-kit-git-staging-vsblanco.vercel.app</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html"/>
+    <SourceLocation DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html"/>
     <RequestedWidth>450</RequestedWidth>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
@@ -184,37 +184,37 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-80.png"/>
-        <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/create-lda-icon.png"/>
-        <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/create-lda-icon.png"/>
-        <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/create-lda-icon.png"/>
-        <bt:Image id="DetailsIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/details-icon.png"/>
-        <bt:Image id="DetailsIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/details-icon.png"/>
-        <bt:Image id="DetailsIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/details-icon.png"/>
-        <bt:Image id="SettingsIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/settings-icon.png"/>
-        <bt:Image id="SettingsIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/settings-icon.png"/>
-        <bt:Image id="SettingsIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/settings-icon.png"/>
-        <bt:Image id="EmailIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/email-icon.png"/>
-        <bt:Image id="EmailIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/email-icon.png"/>
-        <bt:Image id="EmailIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/email-icon.png"/>
-        <bt:Image id="CallIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/call-icon.png"/>
-        <bt:Image id="CallIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/call-icon.png"/>
-        <bt:Image id="CallIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/call-icon.png"/>
-        <bt:Image id="ReportIcon.16x16" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-16.png"/>
-        <bt:Image id="ReportIcon.32x32" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-32.png"/>
-        <bt:Image id="ReportIcon.80x80" DefaultValue="https://student-retention-kit.vercel.app/assets/icon-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-80.png"/>
+        <bt:Image id="CreateLdaIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/create-lda-icon.png"/>
+        <bt:Image id="CreateLdaIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/create-lda-icon.png"/>
+        <bt:Image id="DetailsIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/details-icon.png"/>
+        <bt:Image id="DetailsIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/details-icon.png"/>
+        <bt:Image id="DetailsIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/details-icon.png"/>
+        <bt:Image id="SettingsIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/settings-icon.png"/>
+        <bt:Image id="SettingsIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/settings-icon.png"/>
+        <bt:Image id="SettingsIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/settings-icon.png"/>
+        <bt:Image id="EmailIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/email-icon.png"/>
+        <bt:Image id="EmailIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/email-icon.png"/>
+        <bt:Image id="EmailIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/email-icon.png"/>
+        <bt:Image id="CallIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/call-icon.png"/>
+        <bt:Image id="CallIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/call-icon.png"/>
+        <bt:Image id="CallIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/call-icon.png"/>
+        <bt:Image id="ReportIcon.16x16" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-16.png"/>
+        <bt:Image id="ReportIcon.32x32" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-32.png"/>
+        <bt:Image id="ReportIcon.80x80" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://go.microsoft.com/fwlink/?LinkId=276812"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://student-retention-kit.vercel.app/commands/commands.html"/>
-        <bt:Url id="StudentView.Url" DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html?page=student-view"/>
-        <bt:Url id="Settings.Url" DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html?page=settings"/>
-        <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html?page=create-lda"/>
-        <bt:Url id="WelcomeDialog.Url" DefaultValue="https://student-retention-kit.vercel.app/welcome-dialog.html"/>
-        <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html?page=personalized-email"/>
-        <bt:Url id="ReportGeneration.Url" DefaultValue="https://student-retention-kit.vercel.app/react/dist/index.html?page=report-generation"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/commands/commands.html"/>
+        <bt:Url id="StudentView.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html?page=student-view"/>
+        <bt:Url id="Settings.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html?page=settings"/>
+        <bt:Url id="CreateLdaDialog.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html?page=create-lda"/>
+        <bt:Url id="WelcomeDialog.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/welcome-dialog.html"/>
+        <bt:Url id="PersonalizedEmail.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html?page=personalized-email"/>
+        <bt:Url id="ReportGeneration.Url" DefaultValue="https://student-retention-kit-git-staging-vsblanco.vercel.app/react/dist/index.html?page=report-generation"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Get started with the Retention Add-in!"/>
@@ -251,11 +251,11 @@
     -->
     <WebApplicationInfo>
       <Id>71f37f39-a330-413a-be61-0baa5ce03ea3</Id>
-      <Resource>api://student-retention-kit.vercel.app/71f37f39-a330-413a-be61-0baa5ce03ea3</Resource>
+      <Resource>api://student-retention-kit-git-staging-vsblanco.vercel.app/71f37f39-a330-413a-be61-0baa5ce03ea3</Resource>
       <Scopes>
         <Scope>openid</Scope>
         <Scope>profile</Scope>
-        <Scope>api://student-retention-kit.vercel.app/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user</Scope>
+        <Scope>api://student-retention-kit-git-staging-vsblanco.vercel.app/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user</Scope>
       </Scopes>
     </WebApplicationInfo>
   </VersionOverrides>
