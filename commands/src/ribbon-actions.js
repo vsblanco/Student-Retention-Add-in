@@ -5,7 +5,7 @@
  * Implements the "Contacted" (toggle highlight) and "Transfer Data" button functionality.
  */
 import { CONSTANTS } from './constants.js';
-import { findColumnIndex, parseHyperlinkFormula, normalizeHeader } from '../../shared/excel-helpers.js';
+import { findColumnIndex, normalizeHeader } from '../../shared/excel-helpers.js';
 
 /**
  * Creates a sendToCallQueue ribbon action bound to the given chromeExtensionService.
@@ -190,8 +190,6 @@ export function createSendToCallQueue(extensionService) {
   };
 }
 
-let transferDialog = null;
-
 /**
  * Finds the row of the current selection, and toggles a yellow highlight on the cells
  * in that row between the "StudentName" and "Outreach" columns.
@@ -247,113 +245,4 @@ export async function toggleHighlight(event) {
       event.completed();
     }
   }
-}
-
-/**
- * Opens a dialog to transfer data to the clipboard.
- */
-export async function transferData(event) {
-    let jsonDataString = "";
-    try {
-        await Excel.run(async (context) => {
-            const sheet = context.workbook.worksheets.getActiveWorksheet();
-            const usedRange = sheet.getUsedRange();
-            // Load both values and formulas to inspect hyperlinks
-            usedRange.load("values, formulas");
-            await context.sync();
-
-            const headers = usedRange.values[0].map(normalizeHeader);
-            const colIndices = {
-                studentName: findColumnIndex(headers, CONSTANTS.STUDENT_NAME_COLS),
-                gradeBook: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.gradeBook),
-                daysOut: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.daysOut),
-                lastLda: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.lastLda),
-                grade: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.grade),
-                primaryPhone: findColumnIndex(headers, CONSTANTS.COLUMN_MAPPINGS.primaryPhone) // Added
-            };
-
-            const dataToCopy = [];
-
-            for (let i = 1; i < usedRange.values.length; i++) {
-                const rowValues = usedRange.values[i];
-                const rowFormulas = usedRange.formulas[i];
-                const rowData = {};
-                let hasData = false;
-
-                if (colIndices.studentName !== -1 && rowValues[colIndices.studentName]) {
-                    rowData.StudentName = rowValues[colIndices.studentName];
-                    hasData = true;
-                }
-
-                if (colIndices.gradeBook !== -1 && rowValues[colIndices.gradeBook]) {
-                    const parsed = parseHyperlinkFormula(rowFormulas[colIndices.gradeBook]);
-                    rowData.GradeBook = parsed ? parsed.url : rowValues[colIndices.gradeBook];
-                    hasData = true;
-                }
-
-                if (colIndices.daysOut !== -1 && rowValues[colIndices.daysOut]) {
-                    rowData.DaysOut = rowValues[colIndices.daysOut];
-                    hasData = true;
-                }
-                if (colIndices.lastLda !== -1 && rowValues[colIndices.lastLda]) {
-                    rowData.LDA = rowValues[colIndices.lastLda];
-                    hasData = true;
-                }
-                if (colIndices.grade !== -1 && rowValues[colIndices.grade]) {
-                    rowData.Grade = rowValues[colIndices.grade];
-                    hasData = true;
-                }
-                if (colIndices.primaryPhone !== -1 && rowValues[colIndices.primaryPhone]) {
-                    rowData.PrimaryPhone = rowValues[colIndices.primaryPhone];
-                    hasData = true;
-                }
-
-                if (hasData) {
-                    dataToCopy.push(rowData);
-                }
-            }
-
-            if (dataToCopy.length > 0) {
-                jsonDataString = JSON.stringify(dataToCopy, null, 2);
-            }
-        });
-
-        if (!jsonDataString) {
-            console.log("No data found to copy.");
-            event.completed();
-            return;
-        }
-
-        Office.context.ui.displayDialogAsync(
-            'https://vsblanco.github.io/Student-Retention-Add-in/commands/transfer-dialog.html',
-            { height: 60, width: 40, displayInIframe: true },
-            function (asyncResult) {
-                if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                    console.error("Transfer dialog failed to open: " + asyncResult.error.message);
-                    event.completed();
-                    return;
-                }
-                transferDialog = asyncResult.value;
-                transferDialog.addEventHandler(Office.EventType.DialogMessageReceived, (arg) => {
-                    const message = JSON.parse(arg.message);
-                    if (message.type === 'dialogReady') {
-                        transferDialog.messageChild(JSON.stringify({
-                            type: 'dataForTransfer',
-                            data: jsonDataString
-                        }));
-                    } else if (message.type === 'closeDialog') {
-                        transferDialog.close();
-                        transferDialog = null;
-                    }
-                });
-                event.completed();
-            }
-        );
-    } catch (error) {
-        console.error("Error in transferData: " + error);
-        if (error instanceof OfficeExtension.Error) {
-            console.error("Debug info: " + JSON.stringify(error.debugInfo));
-        }
-        event.completed();
-    }
 }
