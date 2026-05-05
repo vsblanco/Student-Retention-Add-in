@@ -98,15 +98,43 @@ flows by sideloading the manifest into Excel.
 
 ## Deploy
 
-Two environments, two manifests, both served from the same repo:
+Three environments, three manifests, all served from the same repo via Vercel's
+per-branch deploy model:
 
-- **Dev — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
-  served from this repo's `gh-pages` setup. Use `manifest.xml` to sideload.
-- **Prod — Vercel.** `https://student-retention-kit.vercel.app/` auto-deployed
-  from `main` via Vercel's GitHub integration (config in `vercel.json`). Use
-  `manifest.prod.xml` to sideload.
+- **Prod — `main` branch.** `https://student-retention-kit.vercel.app/`
+  Auto-deployed by Vercel on every push to `main`. Sideload `manifest.prod.xml`.
+- **Staging — `staging` branch.** `https://student-retention-kit-git-staging-vsblanco.vercel.app/`
+  Auto-deployed by Vercel on every push to `staging`. Sideload
+  `manifest.staging.xml`. Use this for "real deploy" testing before promoting
+  to prod (`staging` → PR → `main`).
+- **Legacy — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
+  Still works as a fallback mirror; updated when `react/dist/` is committed
+  on `main`. Sideload `manifest.xml`.
 
-Both manifests serve identical add-in functionality; only the host URLs
-differ. The Azure AD App ID URI (`api://vsblanco.github.io/...`) is a
-logical identifier registered in Azure AD and stays the same in both
-manifests — it does NOT need to match the hosting domain.
+All manifests serve identical add-in functionality — only the host URLs
+differ. Vercel build config lives in `vercel.json`.
+
+### Branch model
+
+```
+feature-branch → staging (test deployed) → main (prod)
+```
+
+Feature branches off `staging` get their own automatic Vercel preview URLs but
+are NOT registered in Azure AD; they're only useful via local dev or by
+sideloading a one-off manifest. For full-stack testing, merge into `staging`
+and use `manifest.staging.xml`.
+
+### Azure AD configuration
+
+Each environment's host needs **two** entries on the Azure AD app registration
+(client id `71f37f39-a330-413a-be61-0baa5ce03ea3`):
+
+1. An **Application ID URI** (`api://<host>/<client-id>`) under "Expose an API"
+2. A **redirect URI** (`https://<host>/react/dist/index.html`) of type SPA under
+   "Authentication"
+
+These are already registered for `vsblanco.github.io`,
+`student-retention-kit.vercel.app`, and
+`student-retention-kit-git-staging-vsblanco.vercel.app`. New environments
+require the same two-entry add.
