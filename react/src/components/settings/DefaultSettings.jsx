@@ -122,6 +122,14 @@ export const defaultWorkbookSettings = [
 		description: 'Import or export saved email templates as JSON.'
 	},
 	{
+		id: 'customEmailParameters',
+		label: 'Custom Parameters',
+		type: 'parameters',
+		defaultValue: null,
+		section: 'Send Emails',
+		description: 'Import or export custom email parameters as JSON.'
+	},
+	{
 		id: 'downloadHistoryCsv',
 		label: 'Download Copy',
 		type: 'action',

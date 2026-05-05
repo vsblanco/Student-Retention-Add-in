@@ -6,6 +6,7 @@ import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED: Power Automate config modal
 import TemplateImportExportModal from './TemplateImportExportModal'; // <-- ADDED: Template import/export modal
+import ParameterImportExportModal from './ParameterImportExportModal'; // <-- ADDED: Custom parameter import/export modal
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
@@ -109,6 +110,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 	// Template import/export modal state
 	const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
+	// Custom parameter import/export modal state
+	const [parameterModalOpen, setParameterModalOpen] = useState(false);
 
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
@@ -615,6 +619,18 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								);
 							}
 
+							if (setting.type === 'parameters') {
+								return (
+									<button
+										onClick={() => setParameterModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure custom parameters import/export`}
+									>
+										Configure
+									</button>
+								);
+							}
+
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
 								return (
@@ -948,6 +964,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 			{/* Email Templates import/export modal */}
 			<TemplateImportExportModal isOpen={templateModalOpen} onClose={() => setTemplateModalOpen(false)} />
+
+			{/* Custom Parameters import/export modal */}
+			<ParameterImportExportModal isOpen={parameterModalOpen} onClose={() => setParameterModalOpen(false)} />
 		</div>
 	);
 };
