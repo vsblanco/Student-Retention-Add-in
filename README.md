@@ -98,15 +98,55 @@ flows by sideloading the manifest into Excel.
 
 ## Deploy
 
-Two environments, two manifests, both served from the same repo:
+Two environments:
 
-- **Dev — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
-  served from this repo's `gh-pages` setup. Use `manifest.xml` to sideload.
-- **Prod — Vercel.** `https://student-retention-kit.vercel.app/` auto-deployed
-  from `main` via Vercel's GitHub integration (config in `vercel.json`). Use
-  `manifest.prod.xml` to sideload.
+- **Prod — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
+  Serves the `react/dist/` committed on `main`. Sideload `manifest.xml`.
+- **Staging — `staging` branch via Vercel.**
+  `https://student-retention-kit-git-staging-vsblanco.vercel.app/`
+  Auto-deployed by Vercel on every push to `staging` (build config in
+  `vercel.json`). Sideload `manifest.staging.xml`. Use this for full-deploy
+  testing before promoting to prod.
 
-Both manifests serve identical add-in functionality; only the host URLs
-differ. The Azure AD App ID URI (`api://vsblanco.github.io/...`) is a
-logical identifier registered in Azure AD and stays the same in both
-manifests — it does NOT need to match the hosting domain.
+Both manifests serve identical add-in functionality — only the host URLs
+differ.
+
+### Branch model
+
+```
+feature-branch → staging (test on Vercel) → main (prod on GitHub Pages)
+```
+
+Feature branches pushed to GitHub also get automatic Vercel preview URLs
+(pattern: `student-retention-kit-git-<branch>-vsblanco.vercel.app`), but those
+hosts aren't registered in Azure AD by default — for full SSO-enabled testing,
+merge into `staging` and use `manifest.staging.xml`.
+
+### Promoting to prod
+
+Prod is whatever's committed in `react/dist/` on `main`. To ship:
+
+```bash
+cd react
+npm run build           # rebuilds dist/ with the GitHub Pages base path
+git add react/dist
+git commit -m "chore: rebuild dist for prod"
+git checkout main
+git merge staging       # or open a PR
+git push
+```
+
+GitHub Pages picks up the new `dist/` within a few minutes.
+
+### Azure AD configuration
+
+Each environment's host needs **two** entries on the Azure AD app registration
+(client id `71f37f39-a330-413a-be61-0baa5ce03ea3`):
+
+1. An **Application ID URI** (`api://<host>/<client-id>`) under "Expose an API"
+2. A **redirect URI** (`https://<host>/react/dist/index.html`) of type SPA under
+   "Authentication"
+
+Currently registered: `vsblanco.github.io` (prod) and
+`student-retention-kit-git-staging-vsblanco.vercel.app` (staging). New
+environments require the same two-entry add.
