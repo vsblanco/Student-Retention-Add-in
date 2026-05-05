@@ -98,32 +98,45 @@ flows by sideloading the manifest into Excel.
 
 ## Deploy
 
-Three environments, three manifests, all served from the same repo via Vercel's
-per-branch deploy model:
+Two environments:
 
-- **Prod — `main` branch.** `https://student-retention-kit.vercel.app/`
-  Auto-deployed by Vercel on every push to `main`. Sideload `manifest.prod.xml`.
-- **Staging — `staging` branch.** `https://student-retention-kit-git-staging-vsblanco.vercel.app/`
-  Auto-deployed by Vercel on every push to `staging`. Sideload
-  `manifest.staging.xml`. Use this for "real deploy" testing before promoting
-  to prod (`staging` → PR → `main`).
-- **Legacy — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
-  Still works as a fallback mirror; updated when `react/dist/` is committed
-  on `main`. Sideload `manifest.xml`.
+- **Prod — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
+  Serves the `react/dist/` committed on `main`. Sideload `manifest.xml`.
+- **Staging — `staging` branch via Vercel.**
+  `https://student-retention-kit-git-staging-vsblanco.vercel.app/`
+  Auto-deployed by Vercel on every push to `staging` (build config in
+  `vercel.json`). Sideload `manifest.staging.xml`. Use this for full-deploy
+  testing before promoting to prod.
 
-All manifests serve identical add-in functionality — only the host URLs
-differ. Vercel build config lives in `vercel.json`.
+Both manifests serve identical add-in functionality — only the host URLs
+differ.
 
 ### Branch model
 
 ```
-feature-branch → staging (test deployed) → main (prod)
+feature-branch → staging (test on Vercel) → main (prod on GitHub Pages)
 ```
 
-Feature branches off `staging` get their own automatic Vercel preview URLs but
-are NOT registered in Azure AD; they're only useful via local dev or by
-sideloading a one-off manifest. For full-stack testing, merge into `staging`
-and use `manifest.staging.xml`.
+Feature branches pushed to GitHub also get automatic Vercel preview URLs
+(pattern: `student-retention-kit-git-<branch>-vsblanco.vercel.app`), but those
+hosts aren't registered in Azure AD by default — for full SSO-enabled testing,
+merge into `staging` and use `manifest.staging.xml`.
+
+### Promoting to prod
+
+Prod is whatever's committed in `react/dist/` on `main`. To ship:
+
+```bash
+cd react
+npm run build           # rebuilds dist/ with the GitHub Pages base path
+git add react/dist
+git commit -m "chore: rebuild dist for prod"
+git checkout main
+git merge staging       # or open a PR
+git push
+```
+
+GitHub Pages picks up the new `dist/` within a few minutes.
 
 ### Azure AD configuration
 
@@ -134,7 +147,6 @@ Each environment's host needs **two** entries on the Azure AD app registration
 2. A **redirect URI** (`https://<host>/react/dist/index.html`) of type SPA under
    "Authentication"
 
-These are already registered for `vsblanco.github.io`,
-`student-retention-kit.vercel.app`, and
-`student-retention-kit-git-staging-vsblanco.vercel.app`. New environments
-require the same two-entry add.
+Currently registered: `vsblanco.github.io` (prod) and
+`student-retention-kit-git-staging-vsblanco.vercel.app` (staging). New
+environments require the same two-entry add.
