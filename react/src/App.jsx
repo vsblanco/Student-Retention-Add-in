@@ -7,7 +7,7 @@ import LDAManager from './components/createLDA/LDAManager.jsx';
 import PersonalizedEmail from './components/personalizedEmail/PersonalizedEmail.jsx';
 import ReportGeneration from './components/reportGeneration/ReportGeneration.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
-import chromeExtensionService from './services/chromeExtensionService.js'; // Chrome Extension Service
+import chromeExtensionService from '../../shared/chromeExtensionService.js';
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 

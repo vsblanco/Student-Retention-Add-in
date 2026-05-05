@@ -6,13 +6,9 @@
 // This is a guardrail against accidents, not a security boundary — the
 // Excel author property is editable by anyone with write access.
 
-export function normalizeName(n) {
-	return String(n ?? '').trim().toLowerCase();
-}
-
 export function isAuthorMatch(author, currentUserName) {
-	const a = normalizeName(author);
-	const u = normalizeName(currentUserName);
+	const a = String(author ?? '').trim().toLowerCase();
+	const u = String(currentUserName ?? '').trim().toLowerCase();
 	if (!a || !u) return false;
 	return a === u;
 }

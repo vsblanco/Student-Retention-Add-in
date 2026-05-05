@@ -1,6 +1,6 @@
 // Multi-Student Selection View Component
 import React, { useMemo, useState } from 'react';
-import chromeExtensionService from '../../services/chromeExtensionService';
+import chromeExtensionService from '../../../../shared/chromeExtensionService.js';
 
 // Helper to parse grade strings into numbers
 const parseGrade = (grade) => {
