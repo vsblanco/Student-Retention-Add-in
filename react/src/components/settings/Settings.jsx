@@ -5,6 +5,7 @@ import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIc
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED: Power Automate config modal
+import TemplateImportExportModal from './TemplateImportExportModal'; // <-- ADDED: Template import/export modal
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
@@ -105,6 +106,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 	// Power Automate config modal state
 	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
+
+	// Template import/export modal state
+	const [templateModalOpen, setTemplateModalOpen] = useState(false);
 
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
@@ -599,6 +603,18 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								);
 							}
 
+							if (setting.type === 'templates') {
+								return (
+									<button
+										onClick={() => setTemplateModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure email templates import/export`}
+									>
+										Configure
+									</button>
+								);
+							}
+
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
 								return (
@@ -929,6 +945,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 			{/* Power Automate configuration modal */}
 			<PowerAutomateConfigModal isOpen={powerAutomateModalOpen} onClose={() => setPowerAutomateModalOpen(false)} />
+
+			{/* Email Templates import/export modal */}
+			<TemplateImportExportModal isOpen={templateModalOpen} onClose={() => setTemplateModalOpen(false)} />
 		</div>
 	);
 };

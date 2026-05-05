@@ -114,6 +114,14 @@ export const defaultWorkbookSettings = [
 		description: 'Default state for the "No Missing Assignments" exclusion toggle (only excludes rows with an explicit 0).'
 	},
 	{
+		id: 'emailTemplates',
+		label: 'Templates',
+		type: 'templates',
+		defaultValue: null,
+		section: 'Send Emails',
+		description: 'Import or export saved email templates as JSON.'
+	},
+	{
 		id: 'downloadHistoryCsv',
 		label: 'Download Copy',
 		type: 'action',
