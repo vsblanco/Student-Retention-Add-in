@@ -98,7 +98,15 @@ flows by sideloading the manifest into Excel.
 
 ## Deploy
 
-The add-in's HTML/JS is hosted at `https://vsblanco.github.io/Student-Retention-Add-in/`.
-Pushing the built `react/dist/` contents along with `commands/`, `shared/`,
-and `assets/` updates the live add-in. The manifest URLs (in `manifest.xml`)
-all point at that base URL.
+Two environments, two manifests, both served from the same repo:
+
+- **Dev — GitHub Pages.** `https://vsblanco.github.io/Student-Retention-Add-in/`
+  served from this repo's `gh-pages` setup. Use `manifest.xml` to sideload.
+- **Prod — Vercel.** `https://student-retention-kit.vercel.app/` auto-deployed
+  from `main` via Vercel's GitHub integration (config in `vercel.json`). Use
+  `manifest.prod.xml` to sideload.
+
+Both manifests serve identical add-in functionality; only the host URLs
+differ. The Azure AD App ID URI (`api://vsblanco.github.io/...`) is a
+logical identifier registered in Azure AD and stays the same in both
+manifests — it does NOT need to match the hosting domain.
