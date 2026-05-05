@@ -5,13 +5,25 @@
  */
 
 /**
- * Canonicalizes a column header / alias for matching. Trims, lowercases,
- * and strips ALL whitespace, so "Grade Book", "  GRADEBOOK  ", and
- * "grade book" all collapse to "gradebook". This means alias lists do
- * NOT need to enumerate case or whitespace variants.
+ * Canonicalizes a column header / alias for matching. NFKC-normalizes
+ * Unicode (so fullwidth and ligature characters collapse to their basic
+ * forms), lowercases, and strips ALL whitespace (including non-breaking
+ * space and other Unicode whitespace).
+ *
+ *   "Grade Book", "  GRADEBOOK  ", "grade book", "Ｇｒａｄｅ Ｂｏｏｋ"
+ *   → all collapse to "gradebook"
+ *
+ * This means alias lists do NOT need to enumerate case, whitespace, or
+ * Unicode-form variants.
  */
 export function normalizeHeader(s) {
-    return String(s ?? '').trim().toLowerCase().replace(/\s+/g, '');
+    const str = String(s ?? '');
+    try {
+        return str.normalize('NFKC').toLowerCase().replace(/\p{White_Space}+/gu, '');
+    } catch (_) {
+        // Fallback for runtimes without Unicode property escapes
+        return str.toLowerCase().replace(/\s+/g, '');
+    }
 }
 
 /**

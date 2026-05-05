@@ -28,6 +28,20 @@ describe('normalizeHeader', () => {
         expect(normalizeHeader(undefined)).toBe('');
         expect(normalizeHeader(42)).toBe('42'); // String() coerces, then lowercase / whitespace-strip pass through
     });
+
+    it('NFKC-normalizes Unicode (fullwidth, ligatures)', () => {
+        // Fullwidth Latin → basic Latin
+        expect(normalizeHeader('Ｇｒａｄｅ Ｂｏｏｋ')).toBe('gradebook');
+        // Ligature "ﬁ" → "fi"
+        expect(normalizeHeader('eﬃcient')).toBe('efficient');
+    });
+
+    it('strips Unicode whitespace beyond \\s (non-breaking space, em space)', () => {
+        // U+00A0 NO-BREAK SPACE between words
+        expect(normalizeHeader('grade book')).toBe('gradebook');
+        // U+2003 EM SPACE
+        expect(normalizeHeader('a b')).toBe('ab');
+    });
 });
 
 describe('findColumnIndex', () => {

@@ -1,16 +1,7 @@
 import { COLUMN_ALIASES, COLUMN_ALIASES_ASSIGNMENTS, COLUMN_ALIASES_HISTORY } from './ColumnMapping.jsx';
+import { normalizeHeader } from '../../../../shared/excel-helpers.js';
 
-export const normalizeHeader = (value = '') => {
-  // Normalize Unicode (NFKC) to collapse equivalent characters (e.g., fullwidth)
-  // and remove all Unicode whitespace. If the runtime doesn't support
-  // Unicode property escapes, fall back to \s.
-  try {
-    const s = String(value ?? '').normalize('NFKC');
-    return s.toLowerCase().replace(/\p{White_Space}+/gu, '');
-  } catch (err) {
-    return String(value ?? '').toLowerCase().replace(/\s+/g, '');
-  }
-};
+export { normalizeHeader };
 
 const createCanonicalMap = (aliasesRecord) => {
   const map = {};
