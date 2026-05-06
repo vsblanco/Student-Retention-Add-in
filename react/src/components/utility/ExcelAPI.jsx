@@ -1,5 +1,6 @@
 // [2025-12-03] Version 2.2 - Advanced debounce with stale-request cancellation to prevent backlog
 import { getCanonicalColIdx, canonicalHeaderMap } from './CanonicalMap.jsx';
+import { findColumnIndex, normalizeHeader } from '../../../../shared/excel-helpers.js';
 
 export function normalize(val) {
     if (val === undefined || val === null) return "";
@@ -602,6 +603,68 @@ export async function clearRowFill(rowIndex, startCol, colCount) {
       if (actualColCount <= 0) return;
       const targetRange = sheet.getRangeByIndexes(rowIndex, leftStartCol, 1, actualColCount);
       targetRange.format.fill.clear();
+      await context.sync();
+    });
+  } catch (_) { }
+}
+
+/**
+ * Sets (or clears) the cell fill for a row from column 0 through endColIdx
+ * inclusive, optionally skipping columns whose header matches any of the
+ * provided alias arrays. Used by the Outreach auto-highlight to span the
+ * full row left of Outreach without recoloring the Assigned column.
+ *
+ * @param {number} rowIndex - Absolute zero-based row index
+ * @param {number} endColIdx - Rightmost column index to include (inclusive)
+ * @param {string|null} color - Fill color (e.g. 'yellow'); pass null to clear
+ * @param {string[][]} skipAliasGroups - Arrays of header aliases (e.g.
+ *        [ASSIGNED_ALIASES]) — any matching column is left untouched
+ */
+export async function setRowSegmentFill(rowIndex, endColIdx, color, skipAliasGroups = []) {
+  if (typeof window.Excel === 'undefined') return;
+  if (typeof rowIndex !== 'number' || typeof endColIdx !== 'number') return;
+  if (rowIndex < 0 || endColIdx < 0) return;
+
+  try {
+    await Excel.run(async (context) => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+
+      let skipIndices = [];
+      if (Array.isArray(skipAliasGroups) && skipAliasGroups.length > 0) {
+        const usedRange = sheet.getUsedRangeOrNullObject();
+        usedRange.load(['values', 'columnIndex', 'isNullObject']);
+        await context.sync();
+        if (!usedRange.isNullObject && usedRange.values && usedRange.values[0]) {
+          const headers = usedRange.values[0].map(h => (h == null ? '' : String(h)));
+          const normalized = headers.map(normalizeHeader);
+          const baseCol = typeof usedRange.columnIndex === 'number' ? usedRange.columnIndex : 0;
+          for (const aliasArr of skipAliasGroups) {
+            if (!Array.isArray(aliasArr)) continue;
+            const relIdx = findColumnIndex(normalized, aliasArr);
+            if (relIdx >= 0) skipIndices.push(baseCol + relIdx);
+          }
+        }
+      }
+
+      const skipSet = new Set(skipIndices.filter(i => i >= 0 && i <= endColIdx));
+      const segments = [];
+      let segStart = 0;
+      for (let i = 0; i <= endColIdx; i++) {
+        if (skipSet.has(i)) {
+          if (i > segStart) segments.push([segStart, i - segStart]);
+          segStart = i + 1;
+        }
+      }
+      if (segStart <= endColIdx) segments.push([segStart, endColIdx - segStart + 1]);
+
+      for (const [start, count] of segments) {
+        const rng = sheet.getRangeByIndexes(rowIndex, start, 1, count);
+        if (color === null || color === undefined) {
+          rng.format.fill.clear();
+        } else {
+          rng.format.fill.color = color;
+        }
+      }
       await context.sync();
     });
   } catch (_) { }

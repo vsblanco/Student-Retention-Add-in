@@ -6,12 +6,13 @@ import StudentDetails from './Tabs/Details.jsx';
 import StudentHistory, { setHistoryLoading } from './Tabs/History.jsx';
 import StudentAssignments from './Tabs/Assignments.jsx';
 import MultiStudentView from './MultiStudentView.jsx';
-import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
+import { onSelectionChanged, setRowSegmentFill, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
 import { addComment, resolveStudentIdentity } from '../utility/EditStudentHistory.jsx';
 import chromeExtensionService from '../../../../shared/chromeExtensionService.js';
 import { HISTORY_SHEET } from '../../../../shared/constants.js';
+import { ASSIGNED_ALIASES } from '../../../../shared/columnAliases.js';
 
 /* global Excel */
 
@@ -333,15 +334,17 @@ function StudentView({ onReady, user }) {
               try {
                 const { studentId, studentName } = resolveStudentIdentity(change.otherValues);
                 const tagString = match && tag ? `${tag}, Outreach` : 'Outreach';
-                if (match) {
-                  highlightRow(change.rowIndex, change.colIndex, 9);
-                }
+                // Highlight (or clear) the row from column A through the
+                // Outreach column, skipping the Assigned column so its own
+                // formatting is preserved.
+                const fillColor = match ? 'yellow' : null;
+                setRowSegmentFill(change.rowIndex, change.colIndex, fillColor, [ASSIGNED_ALIASES]);
                 // Auto Outreach handler opts into dedupe: a single advisor edit can
                 // produce repeated change events, and co-editing advisors update the
                 // same cell during the day. Manual comments do NOT pass this flag.
                 addComment(String(text), tagString, undefined, studentId, studentName, { dedupeOutreach: true });
               } catch (e) {
-                console.warn('highlightRow/addComment failed', e);
+                console.warn('setRowSegmentFill/addComment failed', e);
               }
             });
             const anyMatch = matches.some(m => m.match);
