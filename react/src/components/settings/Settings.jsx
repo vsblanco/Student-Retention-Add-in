@@ -6,6 +6,7 @@ import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED: Power Automate config modal
 import TemplateImportExportModal from './TemplateImportExportModal'; // <-- ADDED: Template import/export modal
+import CustomParamImportExportModal from './CustomParamImportExportModal'; // <-- ADDED: Custom parameters import/export modal
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
@@ -109,6 +110,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 	// Template import/export modal state
 	const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
+	// Custom parameters import/export modal state
+	const [customParamModalOpen, setCustomParamModalOpen] = useState(false);
 
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
@@ -505,7 +509,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 							if (setting.type === 'boolean') {
 								// Tailwind-like toggle: accessible hidden checkbox + visual track & knob
 								return (
-									<label style={{ display: 'inline-flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
+									<label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
 										<span style={{ position: 'relative', width: 44, height: 24, display: 'inline-block' }}>
 											<input
 												type="checkbox"
@@ -537,7 +541,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 												transition: 'left 160ms linear',
 											}} />
 										</span>
-										<span style={{ fontSize: 13 }}>{cur ? 'On' : 'Off'}</span>
 									</label>
 								);
 							}
@@ -609,6 +612,18 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										onClick={() => setTemplateModalOpen(true)}
 										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
 										aria-label={`Configure email templates import/export`}
+									>
+										Configure
+									</button>
+								);
+							}
+
+							if (setting.type === 'customparameters') {
+								return (
+									<button
+										onClick={() => setCustomParamModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure custom parameters import/export`}
 									>
 										Configure
 									</button>
@@ -948,6 +963,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 			{/* Email Templates import/export modal */}
 			<TemplateImportExportModal isOpen={templateModalOpen} onClose={() => setTemplateModalOpen(false)} />
+
+			{/* Custom Parameters import/export modal */}
+			<CustomParamImportExportModal isOpen={customParamModalOpen} onClose={() => setCustomParamModalOpen(false)} />
 		</div>
 	);
 };
