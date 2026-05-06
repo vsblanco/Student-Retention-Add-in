@@ -541,7 +541,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 												transition: 'left 160ms linear',
 											}} />
 										</span>
-										<span style={{ fontSize: 13 }}>{cur ? 'On' : 'Off'}</span>
 									</label>
 								);
 							}

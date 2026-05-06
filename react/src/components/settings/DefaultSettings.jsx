@@ -91,7 +91,7 @@ export const defaultWorkbookSettings = [
 	},
 	{
 		id: 'excludeDNCDefault',
-		label: 'Exclude DNC by default',
+		label: 'Exclude DNC',
 		type: 'boolean',
 		defaultValue: true,
 		section: 'Send Emails',
@@ -99,7 +99,7 @@ export const defaultWorkbookSettings = [
 	},
 	{
 		id: 'excludeFillColorDefault',
-		label: 'Exclude Outreach Color by default',
+		label: 'Exclude Outreach Color',
 		type: 'boolean',
 		defaultValue: true,
 		section: 'Send Emails',
@@ -107,7 +107,7 @@ export const defaultWorkbookSettings = [
 	},
 	{
 		id: 'excludeNoMissingAssignmentsDefault',
-		label: 'Exclude 0 Missing Assignments by default',
+		label: 'Exclude 0 Missing Assignments',
 		type: 'boolean',
 		defaultValue: true,
 		section: 'Send Emails',
