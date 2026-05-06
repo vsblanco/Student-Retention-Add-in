@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Info, ChevronRight, ArrowLeft, Layers, HardDrive, MessageSquare } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
+import { Info, ChevronRight, ArrowLeft } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
 import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
@@ -8,63 +8,6 @@ import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED:
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
-import { HISTORY_SHEET, MASTER_LIST_SHEET } from '../../../../shared/constants.js';
-
-const SUMMARY_BRAND = '#145F82';
-
-function formatBytes(bytes) {
-	if (bytes == null || Number.isNaN(bytes)) return '—';
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function SummaryCard({ icon, title, value, hint, accent = SUMMARY_BRAND }) {
-	return (
-		<div style={{
-			background: '#fff',
-			border: '1px solid #e5e7eb',
-			borderRadius: 10,
-			padding: '14px 16px',
-			display: 'flex',
-			flexDirection: 'column',
-			gap: 6,
-			minWidth: 0,
-			boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
-		}}>
-			<div style={{
-				display: 'flex',
-				alignItems: 'center',
-				gap: 8,
-				fontSize: 11,
-				fontWeight: 600,
-				textTransform: 'uppercase',
-				letterSpacing: '0.04em',
-				color: '#6b7280',
-			}}>
-				<span style={{
-					width: 24,
-					height: 24,
-					borderRadius: 6,
-					background: `${accent}14`,
-					color: accent,
-					display: 'inline-flex',
-					alignItems: 'center',
-					justifyContent: 'center',
-					flexShrink: 0,
-				}}>
-					{icon}
-				</span>
-				<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-			</div>
-			<div style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-				{value}
-			</div>
-			{hint && <div style={{ fontSize: 12, color: '#6b7280' }}>{hint}</div>}
-		</div>
-	);
-}
 
 const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken and onReady props
 	const [activeTab, setActiveTab] = useState('workbook');
@@ -96,13 +39,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// new: workbook inspector modal state
 	const [workbookModalOpen, setWorkbookModalOpen] = useState(false);
 
-	// workbook summary card state (sheet count, file size, comment count)
-	const [sheetCount, setSheetCount] = useState(null);
-	const [historyCommentCount, setHistoryCommentCount] = useState(null);
-	const [fileSizeBytes, setFileSizeBytes] = useState(null);
-	const [summaryLoading, setSummaryLoading] = useState(false);
-	const [fileSizeLoading, setFileSizeLoading] = useState(false);
-
 	// Power Automate config modal state
 	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
 
@@ -124,7 +60,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		try {
 			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
 				const result = await Excel.run(async (context) => {
-					const sheet = context.workbook.worksheets.getItemOrNullObject(MASTER_LIST_SHEET);
+					const sheet = context.workbook.worksheets.getItemOrNullObject('Master List');
 					await context.sync();
 					if (sheet.isNullObject) return null;
 					const used = sheet.getUsedRangeOrNullObject();
@@ -159,80 +95,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		return null;
 	};
 
-	// load workbook summary stats: sheet count + Student History row count
-	const loadWorkbookSummary = async () => {
-		if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
-			setSheetCount(null);
-			setHistoryCommentCount(null);
-			return;
-		}
-		setSummaryLoading(true);
-		try {
-			await Excel.run(async (context) => {
-				const sheets = context.workbook.worksheets;
-				sheets.load('items/name');
-				await context.sync();
-
-				const names = sheets.items.map(s => s.name);
-				setSheetCount(names.length);
-
-				if (names.includes(HISTORY_SHEET)) {
-					const histSheet = context.workbook.worksheets.getItem(HISTORY_SHEET);
-					const histRange = histSheet.getUsedRangeOrNullObject();
-					histRange.load('rowCount, isNullObject');
-					await context.sync();
-					setHistoryCommentCount(histRange.isNullObject ? 0 : Math.max(0, (histRange.rowCount || 0) - 1));
-				} else {
-					setHistoryCommentCount(null);
-				}
-			});
-		} catch (err) {
-			console.warn('Failed to load workbook summary', err);
-		} finally {
-			setSummaryLoading(false);
-		}
-	};
-
-	// load workbook file size via Office.js (compressed xlsx); closes immediately so we don't hold slices
-	const loadFileSize = () => {
-		if (!(typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && typeof Office.context.document.getFileAsync === 'function')) {
-			setFileSizeBytes(null);
-			return;
-		}
-		setFileSizeLoading(true);
-		try {
-			Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize: 65536 }, (asyncResult) => {
-				try {
-					if (asyncResult && asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-						const file = asyncResult.value;
-						setFileSizeBytes(typeof file?.size === 'number' ? file.size : null);
-						try { file && typeof file.closeAsync === 'function' && file.closeAsync(() => {}); } catch { /* ignore */ }
-					} else {
-						setFileSizeBytes(null);
-					}
-				} finally {
-					setFileSizeLoading(false);
-				}
-			});
-		} catch {
-			setFileSizeLoading(false);
-			setFileSizeBytes(null);
-		}
-	};
-
-	// refresh summaries when the workbook tab becomes active and on initial mount
-	useEffect(() => {
-		if (activeTab !== 'workbook' || workbookSectionView !== 'main') return;
-		loadWorkbookSummary();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [activeTab, workbookSectionView]);
-
-	// file size is expensive (Office.getFileAsync streams the workbook), so load it once when Settings mounts
-	useEffect(() => {
-		loadFileSize();
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
-
 	// Download "Student History" sheet as CSV
 	const downloadHistoryCsv = async () => {
 		if (downloadingCsv) return;
@@ -242,9 +104,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				throw new Error('Excel API not available');
 			}
 			const csvContent = await Excel.run(async (context) => {
-				const sheet = context.workbook.worksheets.getItemOrNullObject(HISTORY_SHEET);
+				const sheet = context.workbook.worksheets.getItemOrNullObject('Student History');
 				await context.sync();
-				if (sheet.isNullObject) throw new Error(`${HISTORY_SHEET} sheet not found`);
+				if (sheet.isNullObject) throw new Error('Student History sheet not found');
 				const used = sheet.getUsedRangeOrNullObject();
 				used.load('values');
 				await context.sync();
@@ -835,56 +697,28 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 							<div style={{ display: 'grid', gap: 8 }}>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
 								{workbookSectionView === 'main' && (
-									<>
-										<button
-											type="button"
-											onClick={() => setWorkbookModalOpen(true)}
-											title="Open workbook debug view"
-											aria-label="Open workbook debug view"
-											style={{
-												display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-												margin: 0, padding: '6px 8px',
-												backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
-												cursor: 'pointer', width: '100%', textAlign: 'left',
-												fontSize: 15, fontWeight: 700, color: 'inherit'
-											}}
-										>
-											<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-													<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-												</svg>
-												<span>Workbook Debug</span>
-											</span>
-											<ChevronRight size={16} style={{ color: '#94a3b8' }} />
-										</button>
-
-										<div style={{
-											display: 'grid',
-											gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-											gap: 12,
-											marginTop: 4,
-										}}>
-											<SummaryCard
-												icon={<Layers size={14} />}
-												title="Sheets in Workbook"
-												value={summaryLoading && sheetCount == null ? '…' : (sheetCount == null ? '—' : sheetCount.toLocaleString())}
-												hint={sheetCount === 1 ? 'sheet' : 'sheets'}
-											/>
-											<SummaryCard
-												icon={<HardDrive size={14} />}
-												title="File Size"
-												value={fileSizeLoading ? '…' : formatBytes(fileSizeBytes)}
-												hint={fileSizeLoading ? 'Loading…' : (fileSizeBytes == null ? 'Unavailable' : 'Compressed (.xlsx)')}
-											/>
-											<SummaryCard
-												icon={<MessageSquare size={14} />}
-												title="Student History Comments"
-												value={summaryLoading && historyCommentCount == null ? '…' : (historyCommentCount == null ? '—' : historyCommentCount.toLocaleString())}
-												hint={historyCommentCount == null ? `No "${HISTORY_SHEET}" sheet` : 'Rows excluding header'}
-											/>
-										</div>
-									</>
+									<button
+										type="button"
+										onClick={() => setWorkbookModalOpen(true)}
+										title="Open workbook debug view"
+										aria-label="Open workbook debug view"
+										style={{
+											display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+											margin: '8px 0 0 0', padding: '6px 8px',
+											backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
+											cursor: 'pointer', width: '100%', textAlign: 'left',
+											fontSize: 15, fontWeight: 700, color: 'inherit'
+										}}
+									>
+										<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+												<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+											<span>Workbook Debug</span>
+										</span>
+										<ChevronRight size={16} style={{ color: '#94a3b8' }} />
+									</button>
 								)}
 							</div>
 						) : activeTab === 'user' ? (

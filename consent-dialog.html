@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Consent Required</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2563eb;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: #dc2626;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Requesting Permissions...</h2>
+    <div class="spinner"></div>
+    <p>Please wait while we redirect you to Microsoft login.</p>
+    <div id="error" class="error"></div>
+
+    <script>
+        Office.onReady(() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const clientId = '71f37f39-a330-413a-be61-0baa5ce03ea3';
+            const redirectUri = encodeURIComponent('https://vsblanco.github.io/Student-Retention-Add-in/consent-callback.html');
+
+            // Request BOTH scopes: access_as_user AND Graph API Mail.Send
+            const scopes = [
+                'openid',
+                'api://vsblanco.github.io/71f37f39-a330-413a-be61-0baa5ce03ea3/access_as_user',
+                'https://graph.microsoft.com/Mail.Send'
+            ].join(' ');
+
+            // Build Microsoft OAuth URL - using id_token (implicit flow) just to trigger consent
+            // We don't actually use the token - we just need the user to consent to ALL scopes
+            const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+                `client_id=${clientId}` +
+                `&response_type=id_token` +
+                `&redirect_uri=${redirectUri}` +
+                `&response_mode=fragment` +
+                `&scope=${encodeURIComponent(scopes)}` +
+                `&prompt=consent` +
+                `&nonce=${Math.random().toString(36)}`;
+
+            // Redirect to Microsoft consent page
+            window.location.href = authUrl;
+        });
+    </script>
+</body>
+</html>

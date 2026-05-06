@@ -9,9 +9,8 @@ import MultiStudentView from './MultiStudentView.jsx';
 import { onSelectionChanged, highlightRow, loadSheet, getSelectedRange, onChanged } from '../utility/ExcelAPI.jsx';
 import { loadCache, loadSheetCache } from '../utility/Cache.jsx';
 import { isOutreachTrigger } from './Tag';
-import { addComment, resolveStudentIdentity } from '../utility/EditStudentHistory.jsx';
-import chromeExtensionService from '../../../../shared/chromeExtensionService.js';
-import { HISTORY_SHEET } from '../../../../shared/constants.js';
+import { addComment } from '../utility/EditStudentHistory.jsx';
+import chromeExtensionService from '../../services/chromeExtensionService.js';
 
 /* global Excel */
 
@@ -126,7 +125,7 @@ function StudentView({ onReady, user }) {
             await context.sync();
             const sheetNames = sheets.items.map(s => s.name);
             setAvailableTabs({
-              history: sheetNames.includes(HISTORY_SHEET),
+              history: sheetNames.includes('Student History'),
               assignments: sheetNames.some(name => ['Missing Assignments', 'Assignments'].includes(name))
             });
           });
@@ -146,6 +145,11 @@ function StudentView({ onReady, user }) {
     const loadHistory = () => {
         if (!activeStudentState) return;
         if (!availableTabs.history) return;
+
+        // Debug: log the entire activeStudentState to see what columns we have
+        console.log('=== ACTIVE STUDENT STATE ===');
+        console.log('Full activeStudentState:', activeStudentState);
+        console.log('Available keys:', Object.keys(activeStudentState));
 
         // Prefer SyStudentId (ID), fallback to StudentNumber for backwards compatibility
         const studentId = activeStudentState.ID;
@@ -167,9 +171,15 @@ function StudentView({ onReady, user }) {
         }
 
         // Load all history and filter by either SyStudentId or StudentNumber
-        loadSheet(HISTORY_SHEET)
+        loadSheet('Student History')
             .then((res) => {
                 if (res && res.data && Array.isArray(res.data)) {
+                    console.log('=== HISTORY LOAD DEBUG ===');
+                    console.log('Raw history data count:', res.data.length);
+                    console.log('Sample entry keys:', res.data[0] ? Object.keys(res.data[0]) : 'no entries');
+                    console.log('Sample entry values:', res.data[0]);
+                    console.log('Looking for studentId:', studentId, 'or studentNumber:', studentNumber);
+
                     // Filter to match either SyStudentId (preferred) or StudentNumber (fallback)
                     const filtered = res.data.filter(entry => {
                         // Get the identifier value from the history entry
@@ -188,10 +198,18 @@ function StudentView({ onReady, user }) {
 
                         // Match if the entry's identifier matches EITHER the student's SyStudentId OR StudentNumber
                         // This ensures we find entries regardless of which column name is used in the History sheet
-                        return (studentId && entryIdValue == studentId) ||
-                               (studentNumber && entryIdValue == studentNumber);
+                        const matches = (studentId && entryIdValue == studentId) ||
+                                       (studentNumber && entryIdValue == studentNumber);
+
+                        if (matches) {
+                            console.log('MATCH FOUND:', { entryIdValue, studentId, studentNumber });
+                        }
+
+                        return matches;
                     });
 
+                    console.log('Filtered history count:', filtered.length);
+                    console.log('=== END DEBUG ===');
                     setHistory(filtered);
                 }
             })
@@ -331,15 +349,13 @@ function StudentView({ onReady, user }) {
             });
             matches.forEach(({ change, text, match, tag }) => {
               try {
-                const { studentId, studentName } = resolveStudentIdentity(change.otherValues);
-                const tagString = match && tag ? `${tag}, Outreach` : 'Outreach';
                 if (match) {
                   highlightRow(change.rowIndex, change.colIndex, 9);
+                  const tagString = tag ? `${tag}, Outreach` : 'Outreach';
+                  addComment(String(text), tagString, undefined, change.otherValues?.ID, change.otherValues?.StudentName);
+                } else {
+                  addComment(String(text), 'Outreach', undefined, change.otherValues?.ID, change.otherValues?.StudentName);
                 }
-                // Auto Outreach handler opts into dedupe: a single advisor edit can
-                // produce repeated change events, and co-editing advisors update the
-                // same cell during the day. Manual comments do NOT pass this flag.
-                addComment(String(text), tagString, undefined, studentId, studentName, { dedupeOutreach: true });
               } catch (e) {
                 console.warn('highlightRow/addComment failed', e);
               }

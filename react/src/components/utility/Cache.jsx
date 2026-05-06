@@ -1,5 +1,4 @@
 import { loadSheet } from "./ExcelAPI";
-import { HISTORY_SHEET } from "../../../../shared/constants.js";
 
 export async function loadCache(options = {}) {
 	// Log start of cache load
@@ -11,7 +10,7 @@ export async function loadCache(options = {}) {
 	const activeStudentId = options.ID;
 	if (activeStudentId) {
 		try {
-			const res = await loadSheet(HISTORY_SHEET, 'Student identifier');
+			const res = await loadSheet('Student History', 'Student identifier');
 			historyData = res?.data ?? [];
 
 			// --- NEW: persist studentHistory inside a sheetCache object in localStorage ---

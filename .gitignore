@@ -1,14 +1,1 @@
-# Dependencies
-node_modules/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Editors
-.vscode/
-.idea/
-
-# Logs
-*.log
-npm-debug.log*
+azure-function-deploy.zip

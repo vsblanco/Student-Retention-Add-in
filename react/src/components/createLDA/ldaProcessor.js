@@ -10,12 +10,16 @@
 
 import { getWorkbookSettings } from '../utility/getSettings';
 import { defaultColumns } from '../settings/DefaultSettings';
-import { MASTER_LIST_SHEET, HISTORY_SHEET, BATCH_SIZE } from '../../../../shared/constants.js';
 
+// Hardcoded sheet names (unless these are also settings, usually they are static)
 const SHEET_NAMES = {
-    MASTER_LIST: MASTER_LIST_SHEET,
-    HISTORY: HISTORY_SHEET
+    MASTER_LIST: "Master List",
+    HISTORY: "Student History"
 };
+
+// Batch size for chunked operations to avoid payload size limits
+// Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size for data
+const BATCH_SIZE = 500;
 
 // Row-count ceiling for formatting batches. Set modestly so typical data
 // stays under the ~5MB per-sync payload cap. For high-density rows (lots of
