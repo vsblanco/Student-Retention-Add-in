@@ -204,7 +204,10 @@ async function importMissingAssignments(studentsWithAssignments) {
  * @param {object} payload - The original import payload to retry after sheet creation.
  */
 function showMissingMasterListDialog(payload) {
-    const dialogUrl = 'https://vsblanco.github.io/Student-Retention-Add-in/commands/missing-masterlist-dialog.html';
+    // Resolve relative to the runtime page (commands.html) so the dialog works
+    // on both prod (vsblanco.github.io) and staging (Vercel) without needing a
+    // host-specific URL — both AppDomains lists allow same-origin URLs.
+    const dialogUrl = new URL('missing-masterlist-dialog.html', window.location.href).href;
 
     Office.context.ui.displayDialogAsync(
         dialogUrl,
