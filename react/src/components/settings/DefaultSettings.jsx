@@ -144,6 +144,14 @@ export const defaultWorkbookSettings = [
 		defaultValue: null,
 		section: 'Student History',
 		description: 'Download the Student History sheet as a CSV file.'
+	},
+	{
+		id: 'workbookUsers',
+		label: 'Registered Users',
+		type: 'userslist',
+		defaultValue: null,
+		section: 'Users',
+		description: 'Users on file who have opened this workbook with the Student Retention Kit.'
 	}
 ];
 
@@ -172,6 +180,14 @@ export const sectionIcons = {
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 			<path d="M12 8v4l3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
 			<circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6"/>
+		</svg>
+	),
+	'Users': (
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+			<path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+			<circle cx="10" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.6"/>
+			<path d="M21 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+			<path d="M16.5 4.13a3.5 3.5 0 0 1 0 6.74" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
 		</svg>
 	)
 };

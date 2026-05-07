@@ -8,6 +8,7 @@ import PersonalizedEmail from './components/personalizedEmail/PersonalizedEmail.
 import ReportGeneration from './components/reportGeneration/ReportGeneration.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
 import chromeExtensionService from '../../shared/chromeExtensionService.js';
+import { registerWorkbookUser } from './services/workbookUsers.js';
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -107,6 +108,20 @@ function App() {
     // Mark as seen so it doesn't appear again
     localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
   };
+
+  // Register the signed-in user in workbook settings once per session, in the
+  // background. Office.context.document.settings may not be ready on first
+  // mount, so wait for Office.onReady before upserting. The helper itself
+  // dedupes by name, so calling it on every currentUser change is safe.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (typeof window === 'undefined' || !window.Office || !Office.onReady) return;
+    Office.onReady(() => {
+      registerWorkbookUser(currentUser).catch(err => {
+        console.warn('App: failed to register workbook user', err);
+      });
+    });
+  }, [currentUser]);
 
   // --- CHROME EXTENSION MASTER RELAY ---
   // App.jsx manages the Chrome extension connection for all child components
