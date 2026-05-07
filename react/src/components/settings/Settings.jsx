@@ -85,10 +85,10 @@ function UsersList() {
 				<ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
 					{sorted.map((u, i) => (
 						<li
-							key={`${u.name}-${u.dateJoined || i}`}
+							key={`${u.email || u.name}-${u.dateJoined || i}`}
 							style={{
 								display: 'grid',
-								gridTemplateColumns: '24px 1fr auto',
+								gridTemplateColumns: '28px 1fr auto',
 								alignItems: 'center',
 								gap: 10,
 								padding: '8px 12px',
@@ -98,15 +98,25 @@ function UsersList() {
 							}}
 						>
 							<div style={{
-								width: 24, height: 24, borderRadius: '50%',
+								width: 28, height: 28, borderRadius: '50%',
 								background: '#eef2ff', color: '#4338ca',
 								display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-								fontSize: 11, fontWeight: 700,
+								fontSize: 12, fontWeight: 700,
 							}}>
-								{(u.name || '?').slice(0, 1).toUpperCase()}
+								{(u.name || u.email || '?').slice(0, 1).toUpperCase()}
 							</div>
-							<div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
-								{u.name || 'Unknown'}
+							<div style={{ minWidth: 0, display: 'grid', gap: 1 }}>
+								<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
+									{u.name || 'Unknown'}
+								</div>
+								{u.email && (
+									<div
+										style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#6b7280' }}
+										title={u.email}
+									>
+										{u.email}
+									</div>
+								)}
 							</div>
 							<div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }} title={u.dateJoined ? new Date(u.dateJoined).toLocaleString() : undefined}>
 								Joined {formatJoinDate(u.dateJoined) || '—'}

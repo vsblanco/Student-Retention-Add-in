@@ -111,13 +111,32 @@ function App() {
 
   // Register the signed-in user in workbook settings once per session, in the
   // background. Office.context.document.settings may not be ready on first
-  // mount, so wait for Office.onReady before upserting. The helper itself
-  // dedupes by name, so calling it on every currentUser change is safe.
+  // mount, so wait for Office.onReady before upserting. Pull email from the
+  // SSO_USER_INFO cache that SSO.jsx writes during login; fall back to the
+  // bare name if it isn't available (e.g. guest mode). The helper dedupes
+  // (email-first, then name), so calling it on every currentUser change is safe.
   useEffect(() => {
     if (!currentUser) return;
     if (typeof window === 'undefined' || !window.Office || !Office.onReady) return;
+
+    let userInfo = { name: currentUser };
+    try {
+      const cached = localStorage.getItem('SSO_USER_INFO');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === 'object') {
+          userInfo = {
+            name: parsed.name || currentUser,
+            email: typeof parsed.email === 'string' ? parsed.email : undefined,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('App: failed to parse SSO_USER_INFO for workbook user registration', e);
+    }
+
     Office.onReady(() => {
-      registerWorkbookUser(currentUser).catch(err => {
+      registerWorkbookUser(userInfo).catch(err => {
         console.warn('App: failed to register workbook user', err);
       });
     });
