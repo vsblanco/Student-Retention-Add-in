@@ -11,6 +11,7 @@ import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
 import { HISTORY_SHEET, MASTER_LIST_SHEET } from '../../../../shared/constants.js';
+import { getWorkbookUsers } from '../../services/workbookUsers.js';
 
 const SUMMARY_BRAND = '#145F82';
 
@@ -20,6 +21,112 @@ function formatBytes(bytes) {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Format an ISO timestamp as a short, readable join date.
+function formatJoinDate(iso) {
+	if (!iso) return '';
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return '';
+	return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// Renders the workbook's registered-users roster on the Users sub-page.
+// Reads directly from document settings (not the parent Settings state) so a
+// fresh registration written by App.jsx still shows up if it lands while this
+// component is mounted, and re-reads on Office's SettingsChanged event.
+function UsersList() {
+	const [users, setUsers] = useState(() => getWorkbookUsers());
+
+	useEffect(() => {
+		const refresh = () => setUsers(getWorkbookUsers());
+		refresh();
+
+		const settings = (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document)
+			? Office.context.document.settings
+			: null;
+		if (!settings || typeof settings.addHandlerAsync !== 'function') return;
+
+		const handler = () => refresh();
+		settings.addHandlerAsync(Office.EventType.SettingsChanged, handler);
+		return () => {
+			try { settings.removeHandlerAsync(Office.EventType.SettingsChanged, handler); } catch { /* ignore */ }
+		};
+	}, []);
+
+	// Newest joins first so a user can spot themselves quickly after registering.
+	const sorted = [...users].sort((a, b) => {
+		const aTime = a && a.dateJoined ? Date.parse(a.dateJoined) : 0;
+		const bTime = b && b.dateJoined ? Date.parse(b.dateJoined) : 0;
+		return bTime - aTime;
+	});
+
+	return (
+		<div style={{ display: 'grid', gap: 8, width: '100%' }}>
+			<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 2px' }}>
+				<div style={{ fontSize: 14, fontWeight: 600 }}>Registered Users</div>
+				<div style={{ fontSize: 12, color: '#6b7280' }}>
+					{sorted.length} {sorted.length === 1 ? 'user' : 'users'}
+				</div>
+			</div>
+			{sorted.length === 0 ? (
+				<div style={{
+					padding: '12px 14px',
+					border: '1px dashed #e5e7eb',
+					borderRadius: 8,
+					background: '#fff',
+					color: '#6b7280',
+					fontSize: 13,
+					textAlign: 'center',
+				}}>
+					No users registered yet. Users are added automatically when they open this workbook with the Student Retention Kit signed in.
+				</div>
+			) : (
+				<ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+					{sorted.map((u, i) => (
+						<li
+							key={`${u.email || u.name}-${u.dateJoined || i}`}
+							style={{
+								display: 'grid',
+								gridTemplateColumns: '28px 1fr auto',
+								alignItems: 'center',
+								gap: 10,
+								padding: '8px 12px',
+								background: '#fff',
+								border: '1px solid #e5e7eb',
+								borderRadius: 8,
+							}}
+						>
+							<div style={{
+								width: 28, height: 28, borderRadius: '50%',
+								background: '#eef2ff', color: '#4338ca',
+								display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+								fontSize: 12, fontWeight: 700,
+							}}>
+								{(u.name || u.email || '?').slice(0, 1).toUpperCase()}
+							</div>
+							<div style={{ minWidth: 0, display: 'grid', gap: 1 }}>
+								<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
+									{u.name || 'Unknown'}
+								</div>
+								{u.email && (
+									<div
+										style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#6b7280' }}
+										title={u.email}
+									>
+										{u.email}
+									</div>
+								)}
+							</div>
+							<div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }} title={u.dateJoined ? new Date(u.dateJoined).toLocaleString() : undefined}>
+								Joined {formatJoinDate(u.dateJoined) || '—'}
+							</div>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	);
 }
 
 function SummaryCard({ icon, title, value, hint, accent = SUMMARY_BRAND }) {
@@ -116,6 +223,14 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
+
+	// Create Student History sheet state
+	const [creatingHistorySheet, setCreatingHistorySheet] = useState(false);
+
+	// Default headers for a freshly-created Student History sheet. Each name is
+	// a canonical alias from shared/columnAliases.js so the existing add/edit/
+	// delete-comment flows resolve them via canonicalHeaderMap.
+	const HISTORY_SHEET_HEADERS = ['SyStudentId', 'Student', 'Comment', 'Timestamp', 'Created By', 'Tag', 'Comment ID'];
 
 	// master list headers read from the active workbook (populated when columns modal opens)
 	const [masterListHeaders, setMasterListHeaders] = useState(null);
@@ -286,6 +401,42 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			alert(err.message || 'Failed to download Student History');
 		} finally {
 			setDownloadingCsv(false);
+		}
+	};
+
+	// Create the "Student History" sheet with the default header row.
+	// Headers come from shared/columnAliases.js — see HISTORY_SHEET_HEADERS above.
+	const createHistorySheet = async () => {
+		if (creatingHistorySheet) return;
+		setCreatingHistorySheet(true);
+		try {
+			if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
+				throw new Error('Excel API not available');
+			}
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				const existing = sheets.getItemOrNullObject(HISTORY_SHEET);
+				await context.sync();
+				if (!existing.isNullObject) {
+					// Concurrent create raced us — bail without touching the existing sheet.
+					return;
+				}
+				const sheet = sheets.add(HISTORY_SHEET);
+				const headerRange = sheet.getRangeByIndexes(0, 0, 1, HISTORY_SHEET_HEADERS.length);
+				headerRange.values = [HISTORY_SHEET_HEADERS];
+				headerRange.format.font.bold = true;
+				sheet.getUsedRange().format.autofitColumns();
+				await context.sync();
+			});
+			// Optimistically reflect the new (header-only) sheet in the summary so the
+			// Create button greys out and the Download button enables without a refresh.
+			setHistoryCommentCount(0);
+			setSheetCount(prev => (typeof prev === 'number' ? prev + 1 : prev));
+		} catch (err) {
+			console.error('Failed to create Student History sheet:', err);
+			alert(err.message || 'Failed to create Student History sheet');
+		} finally {
+			setCreatingHistorySheet(false);
 		}
 	};
 
@@ -474,6 +625,10 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		const renderRow = setting => {
 			const cur = state[setting.id];
 			const inputId = `${idPrefix}${setting.id}`;
+			// Custom full-width row for the workbook user roster.
+			if (setting.type === 'userslist') {
+				return <UsersList key={setting.id} />;
+			}
 			return (
 				<div key={setting.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box' }}>
 					{/* label area: stays in the left column and truncates if too long */}
@@ -632,18 +787,37 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
+								const isCreating = setting.id === 'createHistorySheet' && creatingHistorySheet;
+								// historyCommentCount is null both before the workbook summary loads and
+								// when the History sheet doesn't exist — either way, there's nothing to
+								// download yet, so disable the button.
+								const noHistorySheet = setting.id === 'downloadHistoryCsv' && historyCommentCount == null;
+								// Inverse for Create: greyed out when the sheet already exists, or while
+								// the workbook summary is still resolving so we don't race a duplicate.
+								const historySheetExists = setting.id === 'createHistorySheet' && (historyCommentCount != null || summaryLoading);
+								const isDisabled = isDownloading || isCreating || noHistorySheet || historySheetExists;
+								const isCreate = setting.id === 'createHistorySheet';
+								const greyedReason = noHistorySheet
+									? `No "${HISTORY_SHEET}" sheet found — nothing to download`
+									: (historySheetExists && historyCommentCount != null
+										? `"${HISTORY_SHEET}" sheet already exists`
+										: undefined);
 								return (
 									<button
 										onClick={() => {
+											if (isDisabled) return;
 											if (setting.id === 'downloadHistoryCsv') downloadHistoryCsv();
+											else if (setting.id === 'createHistorySheet') createHistorySheet();
 										}}
-										disabled={isDownloading}
+										disabled={isDisabled}
+										title={greyedReason}
 										style={{
 											padding: '6px 10px',
 											borderRadius: 6,
-											background: isDownloading ? '#e5e7eb' : '#f3f4f6',
+											background: isDisabled ? '#e5e7eb' : '#f3f4f6',
 											border: '1px solid #e6e7eb',
-											cursor: isDownloading ? 'not-allowed' : 'pointer',
+											cursor: isDisabled ? 'not-allowed' : 'pointer',
+											color: (noHistorySheet || historySheetExists) ? '#9ca3af' : undefined,
 											display: 'inline-flex',
 											alignItems: 'center',
 											gap: 6,
@@ -651,13 +825,23 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										}}
 										aria-label={setting.label}
 									>
-										{/* download icon */}
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-											<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-										{isDownloading ? 'Downloading...' : 'Download'}
+										{isCreate ? (
+											/* plus icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+												<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+											</svg>
+										) : (
+											/* download icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+										)}
+										{isCreate
+											? (isCreating ? 'Creating...' : 'Create')
+											: (isDownloading ? 'Downloading...' : 'Download')}
 									</button>
 								);
 							}
