@@ -1857,6 +1857,30 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
 }
 
 /**
+ * Checks whether the Master List sheet exists in the active workbook.
+ * Used by LDAManager to short-circuit to a "missing master list" status
+ * page before showing the settings form, since LDA cannot be generated
+ * without a Master List.
+ * @returns {Promise<boolean>} True if the Master List sheet is present.
+ */
+export async function checkMasterListExists() {
+    try {
+        let exists = false;
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+            exists = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+        });
+        return exists;
+    } catch (e) {
+        console.warn('checkMasterListExists failed, assuming present:', e);
+        // Fail open: don't trap users behind the status page if the check itself errors.
+        return true;
+    }
+}
+
+/**
  * Checks if key LDA columns (Outreach, Assigned) are missing from the Master List headers.
  * Uses the same space-insensitive matching as the main LDA processor.
  * @returns {Promise<{outreach: boolean, assigned: boolean}>} Object indicating which columns are missing.
