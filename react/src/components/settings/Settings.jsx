@@ -117,6 +117,14 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
 
+	// Create Student History sheet state
+	const [creatingHistorySheet, setCreatingHistorySheet] = useState(false);
+
+	// Default headers for a freshly-created Student History sheet. Each name is
+	// a canonical alias from shared/columnAliases.js so the existing add/edit/
+	// delete-comment flows resolve them via canonicalHeaderMap.
+	const HISTORY_SHEET_HEADERS = ['SyStudentId', 'Student', 'Comment', 'Timestamp', 'Created By', 'Tag', 'Comment ID'];
+
 	// master list headers read from the active workbook (populated when columns modal opens)
 	const [masterListHeaders, setMasterListHeaders] = useState(null);
 
@@ -286,6 +294,42 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			alert(err.message || 'Failed to download Student History');
 		} finally {
 			setDownloadingCsv(false);
+		}
+	};
+
+	// Create the "Student History" sheet with the default header row.
+	// Headers come from shared/columnAliases.js — see HISTORY_SHEET_HEADERS above.
+	const createHistorySheet = async () => {
+		if (creatingHistorySheet) return;
+		setCreatingHistorySheet(true);
+		try {
+			if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
+				throw new Error('Excel API not available');
+			}
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				const existing = sheets.getItemOrNullObject(HISTORY_SHEET);
+				await context.sync();
+				if (!existing.isNullObject) {
+					// Concurrent create raced us — bail without touching the existing sheet.
+					return;
+				}
+				const sheet = sheets.add(HISTORY_SHEET);
+				const headerRange = sheet.getRangeByIndexes(0, 0, 1, HISTORY_SHEET_HEADERS.length);
+				headerRange.values = [HISTORY_SHEET_HEADERS];
+				headerRange.format.font.bold = true;
+				sheet.getUsedRange().format.autofitColumns();
+				await context.sync();
+			});
+			// Optimistically reflect the new (header-only) sheet in the summary so the
+			// Create button greys out and the Download button enables without a refresh.
+			setHistoryCommentCount(0);
+			setSheetCount(prev => (typeof prev === 'number' ? prev + 1 : prev));
+		} catch (err) {
+			console.error('Failed to create Student History sheet:', err);
+			alert(err.message || 'Failed to create Student History sheet');
+		} finally {
+			setCreatingHistorySheet(false);
 		}
 	};
 
@@ -632,26 +676,37 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
+								const isCreating = setting.id === 'createHistorySheet' && creatingHistorySheet;
 								// historyCommentCount is null both before the workbook summary loads and
 								// when the History sheet doesn't exist — either way, there's nothing to
 								// download yet, so disable the button.
 								const noHistorySheet = setting.id === 'downloadHistoryCsv' && historyCommentCount == null;
-								const isDisabled = isDownloading || noHistorySheet;
+								// Inverse for Create: greyed out when the sheet already exists, or while
+								// the workbook summary is still resolving so we don't race a duplicate.
+								const historySheetExists = setting.id === 'createHistorySheet' && (historyCommentCount != null || summaryLoading);
+								const isDisabled = isDownloading || isCreating || noHistorySheet || historySheetExists;
+								const isCreate = setting.id === 'createHistorySheet';
+								const greyedReason = noHistorySheet
+									? `No "${HISTORY_SHEET}" sheet found — nothing to download`
+									: (historySheetExists && historyCommentCount != null
+										? `"${HISTORY_SHEET}" sheet already exists`
+										: undefined);
 								return (
 									<button
 										onClick={() => {
 											if (isDisabled) return;
 											if (setting.id === 'downloadHistoryCsv') downloadHistoryCsv();
+											else if (setting.id === 'createHistorySheet') createHistorySheet();
 										}}
 										disabled={isDisabled}
-										title={noHistorySheet ? `No "${HISTORY_SHEET}" sheet found — nothing to download` : undefined}
+										title={greyedReason}
 										style={{
 											padding: '6px 10px',
 											borderRadius: 6,
 											background: isDisabled ? '#e5e7eb' : '#f3f4f6',
 											border: '1px solid #e6e7eb',
 											cursor: isDisabled ? 'not-allowed' : 'pointer',
-											color: noHistorySheet ? '#9ca3af' : undefined,
+											color: (noHistorySheet || historySheetExists) ? '#9ca3af' : undefined,
 											display: 'inline-flex',
 											alignItems: 'center',
 											gap: 6,
@@ -659,13 +714,23 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										}}
 										aria-label={setting.label}
 									>
-										{/* download icon */}
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-											<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-										{isDownloading ? 'Downloading...' : 'Download'}
+										{isCreate ? (
+											/* plus icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+												<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+											</svg>
+										) : (
+											/* download icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+										)}
+										{isCreate
+											? (isCreating ? 'Creating...' : 'Create')
+											: (isDownloading ? 'Downloading...' : 'Download')}
 									</button>
 								);
 							}

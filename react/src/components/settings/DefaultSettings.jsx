@@ -130,6 +130,14 @@ export const defaultWorkbookSettings = [
 		description: 'Import or export saved custom parameters as JSON.'
 	},
 	{
+		id: 'createHistorySheet',
+		label: 'Create Sheet',
+		type: 'action',
+		defaultValue: null,
+		section: 'Student History',
+		description: 'Create the Student History sheet with the standard column headers.'
+	},
+	{
 		id: 'downloadHistoryCsv',
 		label: 'Download Copy',
 		type: 'action',
