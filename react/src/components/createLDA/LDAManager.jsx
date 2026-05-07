@@ -621,8 +621,8 @@ function MissingMasterListStatus() {
           data to build the report from.
         </p>
         <div className="text-left text-xs text-slate-500 leading-relaxed bg-slate-50/80 border border-slate-100 rounded-xl px-4 py-3">
-          Use the <strong className="text-slate-700">Student Retention Kit</strong> Chrome
-          extension to send your roster into Excel, then reopen
+          Use the Student Retention Kit <strong className="text-slate-700">Chrome
+          extension</strong> to send your roster into Excel, then reopen
           <strong className="text-slate-700"> Create LDA</strong> to continue.
         </div>
       </div>

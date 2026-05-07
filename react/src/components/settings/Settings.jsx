@@ -632,18 +632,26 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
+								// historyCommentCount is null both before the workbook summary loads and
+								// when the History sheet doesn't exist — either way, there's nothing to
+								// download yet, so disable the button.
+								const noHistorySheet = setting.id === 'downloadHistoryCsv' && historyCommentCount == null;
+								const isDisabled = isDownloading || noHistorySheet;
 								return (
 									<button
 										onClick={() => {
+											if (isDisabled) return;
 											if (setting.id === 'downloadHistoryCsv') downloadHistoryCsv();
 										}}
-										disabled={isDownloading}
+										disabled={isDisabled}
+										title={noHistorySheet ? `No "${HISTORY_SHEET}" sheet found — nothing to download` : undefined}
 										style={{
 											padding: '6px 10px',
 											borderRadius: 6,
-											background: isDownloading ? '#e5e7eb' : '#f3f4f6',
+											background: isDisabled ? '#e5e7eb' : '#f3f4f6',
 											border: '1px solid #e6e7eb',
-											cursor: isDownloading ? 'not-allowed' : 'pointer',
+											cursor: isDisabled ? 'not-allowed' : 'pointer',
+											color: noHistorySheet ? '#9ca3af' : undefined,
 											display: 'inline-flex',
 											alignItems: 'center',
 											gap: 6,
