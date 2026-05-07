@@ -209,12 +209,15 @@ function showMissingMasterListDialog(payload) {
     // host-specific URL — both AppDomains lists allow same-origin URLs.
     const dialogUrl = new URL('missing-masterlist-dialog.html', window.location.href).href;
 
+    sendImportStatus('awaiting_confirmation', 'Master List sheet not found — waiting for your confirmation in Excel...');
+
     Office.context.ui.displayDialogAsync(
         dialogUrl,
         { height: 40, width: 35, displayInIframe: true },
         function (asyncResult) {
             if (asyncResult.status === Office.AsyncResultStatus.Failed) {
                 console.error("MissingMasterList: Dialog failed to open:", asyncResult.error.message);
+                sendImportStatus('error', 'Could not show confirmation dialog', 0, asyncResult.error.message);
                 return;
             }
             const dialog = asyncResult.value;
@@ -226,6 +229,7 @@ function showMissingMasterListDialog(payload) {
                     await createMasterListAndImport(payload);
                 } else {
                     console.log("MissingMasterList: User cancelled. Import aborted.");
+                    sendImportStatus('cancelled', 'Import cancelled — no Master List sheet was created');
                 }
             });
         }
@@ -282,6 +286,12 @@ export async function importMasterListFromExtension(payload) {
 
         sendImportStatus('received', `Received ${incomingData.length} students, validating data...`);
 
+        // Set when the user must first confirm sheet creation. The dialog drives
+        // its own status updates and triggers a re-entrant import on confirm, so
+        // the rest of this run must short-circuit instead of falsely reporting
+        // 'complete' while the dialog is still open.
+        let awaitingDialogConfirmation = false;
+
         await Excel.run(async (context) => {
             // Check if Master List sheet exists
             const sheets = context.workbook.worksheets;
@@ -291,6 +301,7 @@ export async function importMasterListFromExtension(payload) {
             const masterListSheet = sheets.items.find(s => s.name === CONSTANTS.MASTER_LIST_SHEET);
             if (!masterListSheet) {
                 console.log("ImportFromExtension: Master List sheet not found. Prompting user to create one.");
+                awaitingDialogConfirmation = true;
                 showMissingMasterListDialog(payload);
                 return;
             }
@@ -794,6 +805,13 @@ export async function importMasterListFromExtension(payload) {
             await context.sync();
             console.log("ImportFromExtension: Master List import completed successfully");
         });
+
+        if (awaitingDialogConfirmation) {
+            // The dialog is still open; status updates resume from the dialog
+            // handler (createMasterListAndImport recurses into this function on
+            // confirm, or sends 'cancelled' on cancel).
+            return;
+        }
 
         // Check if the payload includes student objects with missing assignments
         if (payload.students && Array.isArray(payload.students)) {
