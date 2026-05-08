@@ -11,6 +11,7 @@
 import { getWorkbookSettings } from '../utility/getSettings';
 import { defaultColumns } from '../settings/DefaultSettings';
 import { MASTER_LIST_SHEET, HISTORY_SHEET, BATCH_SIZE } from '../../../../shared/constants.js';
+import { STUDENT_ID_ALIASES, STUDENT_NUMBER_ALIASES } from '../../../../shared/columnAliases.js';
 
 const SHEET_NAMES = {
     MASTER_LIST: MASTER_LIST_SHEET,
@@ -387,7 +388,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- Retrieve Key Indices ---
             const daysOutIdx = getColIndex('Days Out');
             const gradeIdx = getColIndex('Grade');
-            const studentIdIdx = getColIndex('Student Number');
+            // Prefer SyStudentId (the modern identifier); fall back to Student
+            // Number for legacy workbooks. Without this fallback the DNC and
+            // LDA-followup tag maps stay empty whenever the Master List uses
+            // SyStudentId instead of Student Number.
+            let studentIdIdx = -1;
+            for (const candidate of [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES]) {
+                studentIdIdx = getColIndex(candidate);
+                if (studentIdIdx !== -1) break;
+            }
 
             // --- ProgramVersion index for advisor assignment ---
             const pvAliases = ['programversion', 'program', 'progversdescrip'];
