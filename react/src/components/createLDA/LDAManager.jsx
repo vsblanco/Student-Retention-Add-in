@@ -6,8 +6,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X } from 'lucide-react';
-import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution, checkMissingLDAColumns, addColumnsToMasterList } from './ldaProcessor';
+import { Info, CheckCircle2, Circle, Loader2, ArrowLeft, AlertCircle, ChevronRight, Plus, Pencil, Trash2, X, ClipboardList } from 'lucide-react';
+import { createLDA, detectCampuses, detectProgramVersions, predictAdvisorDistribution, checkMissingLDAColumns, addColumnsToMasterList, checkMasterListExists } from './ldaProcessor';
 
 // --- CONFIGURATION: Steps matching the processor logic ---
 const PROCESS_STEPS = [
@@ -67,6 +67,28 @@ export default function CreateLDAManager({ onReady } = {}) {
   // app-level loading state until the toggles reflect saved values.
   const [initialSettingsLoaded, setInitialSettingsLoaded] = useState(false);
 
+  // 'checking' until the Master List sheet check resolves; 'present' lets the
+  // normal settings UI render; 'missing' swaps to the status page.
+  const [masterListStatus, setMasterListStatus] = useState('checking');
+
+  // Probe for the Master List sheet on mount. Without it there's nothing for
+  // the LDA processor to read, so the status page replaces the settings form.
+  // Importing data is the chrome extension's job, so this page is informational
+  // only — no "create master list" button.
+  useEffect(() => {
+    let isMounted = true;
+    checkMasterListExists()
+      .then(exists => {
+        if (!isMounted) return;
+        setMasterListStatus(exists ? 'present' : 'missing');
+      })
+      .catch(() => {
+        // Match the helper's fail-open behavior: don't block on a check failure.
+        if (isMounted) setMasterListStatus('present');
+      });
+    return () => { isMounted = false; };
+  }, []);
+
   // Load workbook settings on mount
   useEffect(() => {
     let isMounted = true;
@@ -119,13 +141,14 @@ export default function CreateLDAManager({ onReady } = {}) {
     };
   }, []);
 
-  // Signal ready only after the initial settings load completes so the parent
-  // loading screen stays up until toggles/badges reflect saved values.
+  // Signal ready only after both the initial settings load and the Master List
+  // check resolve, so the parent loading screen stays up until we know which
+  // view to render (status page vs. settings form).
   useEffect(() => {
-    if (initialSettingsLoaded && onReady) {
+    if (initialSettingsLoaded && masterListStatus !== 'checking' && onReady) {
       onReady();
     }
-  }, [initialSettingsLoaded, onReady]);
+  }, [initialSettingsLoaded, masterListStatus, onReady]);
 
   // Detect campuses when campus mode is toggled on
   useEffect(() => {
@@ -276,15 +299,19 @@ export default function CreateLDAManager({ onReady } = {}) {
     setIsMultiCampus(false);
   };
 
+  if (masterListStatus === 'missing') {
+    return <MissingMasterListStatus />;
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-white overflow-hidden p-6 transition-all duration-300 min-h-[400px]">
-      
+
       {/* Header Area */}
       <div className="mb-6 flex items-center justify-between">
         <div>
             <h2 className={`text-2xl font-bold tracking-tight ${view === 'error' ? 'text-red-600' : 'text-slate-800'}`}>
-              {view === 'settings' ? 'Create LDA' : 
-               view === 'done' ? 'Complete' : 
+              {view === 'settings' ? 'Create LDA' :
+               view === 'done' ? 'Complete' :
                view === 'error' ? 'Error' :
                'Processing...'}
             </h2>
@@ -577,6 +604,31 @@ export default function CreateLDAManager({ onReady } = {}) {
 }
 
 // --- Sub-Components ---
+
+function MissingMasterListStatus() {
+  return (
+    <div className="w-full max-w-2xl mx-auto bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-white overflow-hidden p-6 min-h-[400px] flex items-center justify-center">
+      <div className="text-center max-w-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+          <ClipboardList className="w-8 h-8 text-amber-500" strokeWidth={1.75} />
+        </div>
+        <h2 className="text-xl font-bold tracking-tight text-slate-800 mb-2">
+          Missing Master List Sheet
+        </h2>
+        <p className="text-sm text-slate-500 leading-relaxed mb-4">
+          Create LDA reads from a <strong className="text-slate-700">Master List</strong> sheet
+          in this workbook, and one wasn't found. Without it there's no student
+          data to build the report from.
+        </p>
+        <div className="text-left text-xs text-slate-500 leading-relaxed bg-slate-50/80 border border-slate-100 rounded-xl px-4 py-3">
+          Use the Student Retention Kit <strong className="text-slate-700">Chrome
+          extension</strong> to send your roster into Excel, then reopen
+          <strong className="text-slate-700"> Create LDA</strong> to continue.
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LDASettings({ settings, onSettingChange, settingsView, setSettingsView }) {
 

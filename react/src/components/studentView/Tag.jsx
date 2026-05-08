@@ -2,28 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../utility/Modal';
 import Calendar from '../utility/Calendar';
 import { formatExcelDate } from '../utility/Conversion';
-// Outreach trigger phrases (case-insensitive substring match)
-const Contacted_Keywords = [
-  "hung up",
-  "hanged up",
-  "promise",
-  "requested",
-  "up to date",
-  "will catch up",
-  "will come",
-  "will complete",
-  "will engage",
-  "will pass",
-  "will submit",
-  "will work",
-  "will be in class",
-  "waiting for instructor",
-  "waiting for professor",
-  "waiting for teacher",
-  "waiting on instructor",
-  "waiting on professor",
-  "waiting on teacher"
-];
+import { CONTACTED_KEYWORDS } from '../../../../shared/highlightKeywords.js';
 
 export const isOutreachTrigger = (text) => {
   if (!text || typeof text !== 'string') return { matched: false, tag: null, lda: { dates: [], keywords: [] } };
@@ -31,7 +10,7 @@ export const isOutreachTrigger = (text) => {
   const lower = text.toLowerCase();
 
   // Check Contacted keywords
-  const contactedMatched = Contacted_Keywords.some(k => lower.includes(k.toLowerCase()));
+  const contactedMatched = CONTACTED_KEYWORDS.some(k => lower.includes(k));
 
   // Check LDA date-like keywords (now returns { dates: [], keywords: [] })
   let ldaResult = ldaKeywords(text || '');

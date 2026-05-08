@@ -1,13 +1,179 @@
 import React, { useState, useEffect } from 'react';
-import { Info, ChevronRight, ArrowLeft } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
+import { Info, ChevronRight, ArrowLeft, Layers, HardDrive, MessageSquare } from 'lucide-react'; // removed X + Plus imports (moved to SettingsModal)
 import '../studentView/Styling/StudentView.css'; // add StudentView tab styles
 import { defaultUserSettings, defaultWorkbookSettings, defaultColumns, sectionIcons } from './DefaultSettings'; // added: import defaults + defaultColumns
 import SettingsModal from './SettingsModal'; // new: modal component
 import WorkbookSettingsModal from './WorkbookSettingsModal'; // <-- ADDED
 import PowerAutomateConfigModal from './PowerAutomateConfigModal'; // <-- ADDED: Power Automate config modal
+import TemplateImportExportModal from './TemplateImportExportModal'; // <-- ADDED: Template import/export modal
+import CustomParamImportExportModal from './CustomParamImportExportModal'; // <-- ADDED: Custom parameters import/export modal
 import LicenseChecker from '../utility/LicenseChecker'; // <-- License checker (requires Graph API)
 import UserInfoDisplay from '../utility/UserInfoDisplay'; // <-- User info from token (no API needed)
 import About from '../about/About'; // <-- ADDED: Import About component for Help tab
+import { HISTORY_SHEET, MASTER_LIST_SHEET } from '../../../../shared/constants.js';
+import { getWorkbookUsers } from '../../services/workbookUsers.js';
+
+const SUMMARY_BRAND = '#145F82';
+
+function formatBytes(bytes) {
+	if (bytes == null || Number.isNaN(bytes)) return '—';
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+// Format an ISO timestamp as a short, readable join date.
+function formatJoinDate(iso) {
+	if (!iso) return '';
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return '';
+	return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// Renders the workbook's registered-users roster on the Users sub-page.
+// Reads directly from document settings (not the parent Settings state) so a
+// fresh registration written by App.jsx still shows up if it lands while this
+// component is mounted, and re-reads on Office's SettingsChanged event.
+function UsersList() {
+	const [users, setUsers] = useState(() => getWorkbookUsers());
+
+	useEffect(() => {
+		const refresh = () => setUsers(getWorkbookUsers());
+		refresh();
+
+		const settings = (typeof window !== 'undefined' && window.Office && Office.context && Office.context.document)
+			? Office.context.document.settings
+			: null;
+		if (!settings || typeof settings.addHandlerAsync !== 'function') return;
+
+		const handler = () => refresh();
+		settings.addHandlerAsync(Office.EventType.SettingsChanged, handler);
+		return () => {
+			try { settings.removeHandlerAsync(Office.EventType.SettingsChanged, handler); } catch { /* ignore */ }
+		};
+	}, []);
+
+	// Newest joins first so a user can spot themselves quickly after registering.
+	const sorted = [...users].sort((a, b) => {
+		const aTime = a && a.dateJoined ? Date.parse(a.dateJoined) : 0;
+		const bTime = b && b.dateJoined ? Date.parse(b.dateJoined) : 0;
+		return bTime - aTime;
+	});
+
+	return (
+		<div style={{ display: 'grid', gap: 8, width: '100%' }}>
+			<div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 2px' }}>
+				<div style={{ fontSize: 14, fontWeight: 600 }}>Registered Users</div>
+				<div style={{ fontSize: 12, color: '#6b7280' }}>
+					{sorted.length} {sorted.length === 1 ? 'user' : 'users'}
+				</div>
+			</div>
+			{sorted.length === 0 ? (
+				<div style={{
+					padding: '12px 14px',
+					border: '1px dashed #e5e7eb',
+					borderRadius: 8,
+					background: '#fff',
+					color: '#6b7280',
+					fontSize: 13,
+					textAlign: 'center',
+				}}>
+					No users registered yet. Users are added automatically when they open this workbook with the Student Retention Kit signed in.
+				</div>
+			) : (
+				<ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+					{sorted.map((u, i) => (
+						<li
+							key={`${u.email || u.name}-${u.dateJoined || i}`}
+							style={{
+								display: 'grid',
+								gridTemplateColumns: '28px 1fr auto',
+								alignItems: 'center',
+								gap: 10,
+								padding: '8px 12px',
+								background: '#fff',
+								border: '1px solid #e5e7eb',
+								borderRadius: 8,
+							}}
+						>
+							<div style={{
+								width: 28, height: 28, borderRadius: '50%',
+								background: '#eef2ff', color: '#4338ca',
+								display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+								fontSize: 12, fontWeight: 700,
+							}}>
+								{(u.name || u.email || '?').slice(0, 1).toUpperCase()}
+							</div>
+							<div style={{ minWidth: 0, display: 'grid', gap: 1 }}>
+								<div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
+									{u.name || 'Unknown'}
+								</div>
+								{u.email && (
+									<div
+										style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: '#6b7280' }}
+										title={u.email}
+									>
+										{u.email}
+									</div>
+								)}
+							</div>
+							<div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }} title={u.dateJoined ? new Date(u.dateJoined).toLocaleString() : undefined}>
+								Joined {formatJoinDate(u.dateJoined) || '—'}
+							</div>
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
+	);
+}
+
+function SummaryCard({ icon, title, value, hint, accent = SUMMARY_BRAND }) {
+	return (
+		<div style={{
+			background: '#fff',
+			border: '1px solid #e5e7eb',
+			borderRadius: 10,
+			padding: '14px 16px',
+			display: 'flex',
+			flexDirection: 'column',
+			gap: 6,
+			minWidth: 0,
+			boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+		}}>
+			<div style={{
+				display: 'flex',
+				alignItems: 'center',
+				gap: 8,
+				fontSize: 11,
+				fontWeight: 600,
+				textTransform: 'uppercase',
+				letterSpacing: '0.04em',
+				color: '#6b7280',
+			}}>
+				<span style={{
+					width: 24,
+					height: 24,
+					borderRadius: 6,
+					background: `${accent}14`,
+					color: accent,
+					display: 'inline-flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					flexShrink: 0,
+				}}>
+					{icon}
+				</span>
+				<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
+			</div>
+			<div style={{ fontSize: 24, fontWeight: 700, color: '#0f172a', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+				{value}
+			</div>
+			{hint && <div style={{ fontSize: 12, color: '#6b7280' }}>{hint}</div>}
+		</div>
+	);
+}
 
 const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken and onReady props
 	const [activeTab, setActiveTab] = useState('workbook');
@@ -39,11 +205,32 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 	// new: workbook inspector modal state
 	const [workbookModalOpen, setWorkbookModalOpen] = useState(false);
 
+	// workbook summary card state (sheet count, file size, comment count)
+	const [sheetCount, setSheetCount] = useState(null);
+	const [historyCommentCount, setHistoryCommentCount] = useState(null);
+	const [fileSizeBytes, setFileSizeBytes] = useState(null);
+	const [summaryLoading, setSummaryLoading] = useState(false);
+	const [fileSizeLoading, setFileSizeLoading] = useState(false);
+
 	// Power Automate config modal state
 	const [powerAutomateModalOpen, setPowerAutomateModalOpen] = useState(false);
 
+	// Template import/export modal state
+	const [templateModalOpen, setTemplateModalOpen] = useState(false);
+
+	// Custom parameters import/export modal state
+	const [customParamModalOpen, setCustomParamModalOpen] = useState(false);
+
 	// Download CSV state
 	const [downloadingCsv, setDownloadingCsv] = useState(false);
+
+	// Create Student History sheet state
+	const [creatingHistorySheet, setCreatingHistorySheet] = useState(false);
+
+	// Default headers for a freshly-created Student History sheet. Each name is
+	// a canonical alias from shared/columnAliases.js so the existing add/edit/
+	// delete-comment flows resolve them via canonicalHeaderMap.
+	const HISTORY_SHEET_HEADERS = ['SyStudentId', 'Student', 'Comment', 'Timestamp', 'Created By', 'Tag', 'Comment ID'];
 
 	// master list headers read from the active workbook (populated when columns modal opens)
 	const [masterListHeaders, setMasterListHeaders] = useState(null);
@@ -60,7 +247,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		try {
 			if (typeof window !== 'undefined' && window.Excel && Excel.run) {
 				const result = await Excel.run(async (context) => {
-					const sheet = context.workbook.worksheets.getItemOrNullObject('Master List');
+					const sheet = context.workbook.worksheets.getItemOrNullObject(MASTER_LIST_SHEET);
 					await context.sync();
 					if (sheet.isNullObject) return null;
 					const used = sheet.getUsedRangeOrNullObject();
@@ -95,6 +282,80 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		return null;
 	};
 
+	// load workbook summary stats: sheet count + Student History row count
+	const loadWorkbookSummary = async () => {
+		if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
+			setSheetCount(null);
+			setHistoryCommentCount(null);
+			return;
+		}
+		setSummaryLoading(true);
+		try {
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				sheets.load('items/name');
+				await context.sync();
+
+				const names = sheets.items.map(s => s.name);
+				setSheetCount(names.length);
+
+				if (names.includes(HISTORY_SHEET)) {
+					const histSheet = context.workbook.worksheets.getItem(HISTORY_SHEET);
+					const histRange = histSheet.getUsedRangeOrNullObject();
+					histRange.load('rowCount, isNullObject');
+					await context.sync();
+					setHistoryCommentCount(histRange.isNullObject ? 0 : Math.max(0, (histRange.rowCount || 0) - 1));
+				} else {
+					setHistoryCommentCount(null);
+				}
+			});
+		} catch (err) {
+			console.warn('Failed to load workbook summary', err);
+		} finally {
+			setSummaryLoading(false);
+		}
+	};
+
+	// load workbook file size via Office.js (compressed xlsx); closes immediately so we don't hold slices
+	const loadFileSize = () => {
+		if (!(typeof window !== 'undefined' && window.Office && Office.context && Office.context.document && typeof Office.context.document.getFileAsync === 'function')) {
+			setFileSizeBytes(null);
+			return;
+		}
+		setFileSizeLoading(true);
+		try {
+			Office.context.document.getFileAsync(Office.FileType.Compressed, { sliceSize: 65536 }, (asyncResult) => {
+				try {
+					if (asyncResult && asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+						const file = asyncResult.value;
+						setFileSizeBytes(typeof file?.size === 'number' ? file.size : null);
+						try { file && typeof file.closeAsync === 'function' && file.closeAsync(() => {}); } catch { /* ignore */ }
+					} else {
+						setFileSizeBytes(null);
+					}
+				} finally {
+					setFileSizeLoading(false);
+				}
+			});
+		} catch {
+			setFileSizeLoading(false);
+			setFileSizeBytes(null);
+		}
+	};
+
+	// refresh summaries when the workbook tab becomes active and on initial mount
+	useEffect(() => {
+		if (activeTab !== 'workbook' || workbookSectionView !== 'main') return;
+		loadWorkbookSummary();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [activeTab, workbookSectionView]);
+
+	// file size is expensive (Office.getFileAsync streams the workbook), so load it once when Settings mounts
+	useEffect(() => {
+		loadFileSize();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
 	// Download "Student History" sheet as CSV
 	const downloadHistoryCsv = async () => {
 		if (downloadingCsv) return;
@@ -104,9 +365,9 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 				throw new Error('Excel API not available');
 			}
 			const csvContent = await Excel.run(async (context) => {
-				const sheet = context.workbook.worksheets.getItemOrNullObject('Student History');
+				const sheet = context.workbook.worksheets.getItemOrNullObject(HISTORY_SHEET);
 				await context.sync();
-				if (sheet.isNullObject) throw new Error('Student History sheet not found');
+				if (sheet.isNullObject) throw new Error(`${HISTORY_SHEET} sheet not found`);
 				const used = sheet.getUsedRangeOrNullObject();
 				used.load('values');
 				await context.sync();
@@ -140,6 +401,42 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 			alert(err.message || 'Failed to download Student History');
 		} finally {
 			setDownloadingCsv(false);
+		}
+	};
+
+	// Create the "Student History" sheet with the default header row.
+	// Headers come from shared/columnAliases.js — see HISTORY_SHEET_HEADERS above.
+	const createHistorySheet = async () => {
+		if (creatingHistorySheet) return;
+		setCreatingHistorySheet(true);
+		try {
+			if (typeof window === 'undefined' || !window.Excel || !Excel.run) {
+				throw new Error('Excel API not available');
+			}
+			await Excel.run(async (context) => {
+				const sheets = context.workbook.worksheets;
+				const existing = sheets.getItemOrNullObject(HISTORY_SHEET);
+				await context.sync();
+				if (!existing.isNullObject) {
+					// Concurrent create raced us — bail without touching the existing sheet.
+					return;
+				}
+				const sheet = sheets.add(HISTORY_SHEET);
+				const headerRange = sheet.getRangeByIndexes(0, 0, 1, HISTORY_SHEET_HEADERS.length);
+				headerRange.values = [HISTORY_SHEET_HEADERS];
+				headerRange.format.font.bold = true;
+				sheet.getUsedRange().format.autofitColumns();
+				await context.sync();
+			});
+			// Optimistically reflect the new (header-only) sheet in the summary so the
+			// Create button greys out and the Download button enables without a refresh.
+			setHistoryCommentCount(0);
+			setSheetCount(prev => (typeof prev === 'number' ? prev + 1 : prev));
+		} catch (err) {
+			console.error('Failed to create Student History sheet:', err);
+			alert(err.message || 'Failed to create Student History sheet');
+		} finally {
+			setCreatingHistorySheet(false);
 		}
 	};
 
@@ -328,6 +625,10 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 		const renderRow = setting => {
 			const cur = state[setting.id];
 			const inputId = `${idPrefix}${setting.id}`;
+			// Custom full-width row for the workbook user roster.
+			if (setting.type === 'userslist') {
+				return <UsersList key={setting.id} />;
+			}
 			return (
 				<div key={setting.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: 8, width: '100%', boxSizing: 'border-box' }}>
 					{/* label area: stays in the left column and truncates if too long */}
@@ -363,7 +664,7 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 							if (setting.type === 'boolean') {
 								// Tailwind-like toggle: accessible hidden checkbox + visual track & knob
 								return (
-									<label style={{ display: 'inline-flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
+									<label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
 										<span style={{ position: 'relative', width: 44, height: 24, display: 'inline-block' }}>
 											<input
 												type="checkbox"
@@ -395,7 +696,6 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 												transition: 'left 160ms linear',
 											}} />
 										</span>
-										<span style={{ fontSize: 13 }}>{cur ? 'On' : 'Off'}</span>
 									</label>
 								);
 							}
@@ -461,20 +761,63 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 								);
 							}
 
+							if (setting.type === 'templates') {
+								return (
+									<button
+										onClick={() => setTemplateModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure email templates import/export`}
+									>
+										Configure
+									</button>
+								);
+							}
+
+							if (setting.type === 'customparameters') {
+								return (
+									<button
+										onClick={() => setCustomParamModalOpen(true)}
+										style={{ padding: '6px 10px', borderRadius: 6, background: '#f3f4f6', border: '1px solid #e6e7eb', cursor: 'pointer' }}
+										aria-label={`Configure custom parameters import/export`}
+									>
+										Configure
+									</button>
+								);
+							}
+
 							if (setting.type === 'action') {
 								const isDownloading = setting.id === 'downloadHistoryCsv' && downloadingCsv;
+								const isCreating = setting.id === 'createHistorySheet' && creatingHistorySheet;
+								// historyCommentCount is null both before the workbook summary loads and
+								// when the History sheet doesn't exist — either way, there's nothing to
+								// download yet, so disable the button.
+								const noHistorySheet = setting.id === 'downloadHistoryCsv' && historyCommentCount == null;
+								// Inverse for Create: greyed out when the sheet already exists, or while
+								// the workbook summary is still resolving so we don't race a duplicate.
+								const historySheetExists = setting.id === 'createHistorySheet' && (historyCommentCount != null || summaryLoading);
+								const isDisabled = isDownloading || isCreating || noHistorySheet || historySheetExists;
+								const isCreate = setting.id === 'createHistorySheet';
+								const greyedReason = noHistorySheet
+									? `No "${HISTORY_SHEET}" sheet found — nothing to download`
+									: (historySheetExists && historyCommentCount != null
+										? `"${HISTORY_SHEET}" sheet already exists`
+										: undefined);
 								return (
 									<button
 										onClick={() => {
+											if (isDisabled) return;
 											if (setting.id === 'downloadHistoryCsv') downloadHistoryCsv();
+											else if (setting.id === 'createHistorySheet') createHistorySheet();
 										}}
-										disabled={isDownloading}
+										disabled={isDisabled}
+										title={greyedReason}
 										style={{
 											padding: '6px 10px',
 											borderRadius: 6,
-											background: isDownloading ? '#e5e7eb' : '#f3f4f6',
+											background: isDisabled ? '#e5e7eb' : '#f3f4f6',
 											border: '1px solid #e6e7eb',
-											cursor: isDownloading ? 'not-allowed' : 'pointer',
+											cursor: isDisabled ? 'not-allowed' : 'pointer',
+											color: (noHistorySheet || historySheetExists) ? '#9ca3af' : undefined,
 											display: 'inline-flex',
 											alignItems: 'center',
 											gap: 6,
@@ -482,13 +825,23 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 										}}
 										aria-label={setting.label}
 									>
-										{/* download icon */}
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-											<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-											<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-										</svg>
-										{isDownloading ? 'Downloading...' : 'Download'}
+										{isCreate ? (
+											/* plus icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+												<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+											</svg>
+										) : (
+											/* download icon */
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+												<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+												<line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+											</svg>
+										)}
+										{isCreate
+											? (isCreating ? 'Creating...' : 'Create')
+											: (isDownloading ? 'Downloading...' : 'Download')}
 									</button>
 								);
 							}
@@ -697,28 +1050,56 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 							<div style={{ display: 'grid', gap: 8 }}>
 								{renderSettingsControls(defaultWorkbookSettings, workbookSettingsState, updateWorkbookSetting, 'workbook-')}
 								{workbookSectionView === 'main' && (
-									<button
-										type="button"
-										onClick={() => setWorkbookModalOpen(true)}
-										title="Open workbook debug view"
-										aria-label="Open workbook debug view"
-										style={{
-											display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-											margin: '8px 0 0 0', padding: '6px 8px',
-											backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
-											cursor: 'pointer', width: '100%', textAlign: 'left',
-											fontSize: 15, fontWeight: 700, color: 'inherit'
-										}}
-									>
-										<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-												<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-												<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-											</svg>
-											<span>Workbook Debug</span>
-										</span>
-										<ChevronRight size={16} style={{ color: '#94a3b8' }} />
-									</button>
+									<>
+										<button
+											type="button"
+											onClick={() => setWorkbookModalOpen(true)}
+											title="Open workbook debug view"
+											aria-label="Open workbook debug view"
+											style={{
+												display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+												margin: 0, padding: '6px 8px',
+												backgroundColor: '#eaeaea', border: 'none', borderRadius: 6,
+												cursor: 'pointer', width: '100%', textAlign: 'left',
+												fontSize: 15, fontWeight: 700, color: 'inherit'
+											}}
+										>
+											<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+													<path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+												</svg>
+												<span>Workbook Debug</span>
+											</span>
+											<ChevronRight size={16} style={{ color: '#94a3b8' }} />
+										</button>
+
+										<div style={{
+											display: 'grid',
+											gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+											gap: 12,
+											marginTop: 4,
+										}}>
+											<SummaryCard
+												icon={<Layers size={14} />}
+												title="Sheets in Workbook"
+												value={summaryLoading && sheetCount == null ? '…' : (sheetCount == null ? '—' : sheetCount.toLocaleString())}
+												hint={sheetCount === 1 ? 'sheet' : 'sheets'}
+											/>
+											<SummaryCard
+												icon={<HardDrive size={14} />}
+												title="File Size"
+												value={fileSizeLoading ? '…' : formatBytes(fileSizeBytes)}
+												hint={fileSizeLoading ? 'Loading…' : (fileSizeBytes == null ? 'Unavailable' : 'Compressed (.xlsx)')}
+											/>
+											<SummaryCard
+												icon={<MessageSquare size={14} />}
+												title="Student History Comments"
+												value={summaryLoading && historyCommentCount == null ? '…' : (historyCommentCount == null ? '—' : historyCommentCount.toLocaleString())}
+												hint={historyCommentCount == null ? `No "${HISTORY_SHEET}" sheet` : 'Rows excluding header'}
+											/>
+										</div>
+									</>
 								)}
 							</div>
 						) : activeTab === 'user' ? (
@@ -763,6 +1144,12 @@ const Settings = ({ user, accessToken, onReady }) => { // <-- ADDED accessToken 
 
 			{/* Power Automate configuration modal */}
 			<PowerAutomateConfigModal isOpen={powerAutomateModalOpen} onClose={() => setPowerAutomateModalOpen(false)} />
+
+			{/* Email Templates import/export modal */}
+			<TemplateImportExportModal isOpen={templateModalOpen} onClose={() => setTemplateModalOpen(false)} />
+
+			{/* Custom Parameters import/export modal */}
+			<CustomParamImportExportModal isOpen={customParamModalOpen} onClose={() => setCustomParamModalOpen(false)} />
 		</div>
 	);
 };

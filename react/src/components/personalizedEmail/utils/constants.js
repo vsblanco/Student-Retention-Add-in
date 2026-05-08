@@ -1,4 +1,20 @@
 // Constants for personalized email feature
+import {
+    STUDENT_NAME_ALIASES,
+    STUDENT_ID_ALIASES,
+    STUDENT_NUMBER_ALIASES,
+    OUTREACH_ALIASES,
+    ASSIGNED_ALIASES,
+    GRADE_ALIASES,
+    DAYS_OUT_ALIASES,
+    GRADE_BOOK_ALIASES,
+    STUDENT_EMAIL_ALIASES,
+    PERSONAL_EMAIL_ALIASES,
+    ASSIGNMENT_ALIASES,
+    MISSING_ASSIGNMENTS_ALIASES,
+    TAGS_ALIASES,
+} from '../../../../../shared/columnAliases.js';
+
 export const EMAIL_TEMPLATES_KEY = "emailTemplates";
 export const CUSTOM_PARAMS_KEY = "customEmailParameters";
 
@@ -31,20 +47,25 @@ export const MINI_QUILL_EDITOR_CONFIG = {
     }
 };
 
-// Maps internal data keys to possible column header names in the Excel sheet
+// Maps internal data keys to possible column header names. All alias arrays
+// come from /shared/columnAliases.js — see that file to add or change a
+// column alias. Matching is case- and whitespace-insensitive.
+//
+// StudentIdentifier composes SyStudentId aliases first (preferred), then
+// Student Number aliases as fallback.
 export const COLUMN_MAPPINGS = {
-    StudentName: ["studentname", "student name", "Student Name", "StudentName"],
-    StudentEmail: ["student email", "school email", "email", "Student Email", "StudentEmail"],
-    PersonalEmail: ["personal email", "otheremail", "Personal Email", "PersonalEmail"],
-    Grade: ["grade", "course grade", "Grade", "Course Grade", "grades", "Grades"],
-    DaysOut: ["days out", "daysout", "Days Out"],
-    Assigned: ['assigned', 'advisor', 'counselor', 'assigned to', "Assigned", "Advisor"],
-    Tags: ['tag', 'tags', "Tag", "Tags", 'history'],
-    StudentIdentifier: ['student identifier', 'student id', 'studentnumber', 'studentid', 'systudentid', 'id', "Student Identifier", "Student ID", "SyStudentID", "Student Number", "StudentID"],
-    Outreach: ['outreach', "Outreach"],
-    GradeBook: ['grade book', 'gradebook', 'Grade Book', 'GradeBook'],
-    Assignment: ['assignment', 'Assignment'],
-    MissingAssignments: ['missing assignments', 'missingassignments', 'Missing Assignments', 'MissingAssignments', 'missing']
+    StudentName: STUDENT_NAME_ALIASES,
+    StudentEmail: STUDENT_EMAIL_ALIASES,
+    PersonalEmail: PERSONAL_EMAIL_ALIASES,
+    Grade: GRADE_ALIASES,
+    DaysOut: DAYS_OUT_ALIASES,
+    Assigned: ASSIGNED_ALIASES,
+    Tags: TAGS_ALIASES,
+    StudentIdentifier: [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES],
+    Outreach: OUTREACH_ALIASES,
+    GradeBook: GRADE_BOOK_ALIASES,
+    Assignment: ASSIGNMENT_ALIASES,
+    MissingAssignments: MISSING_ASSIGNMENTS_ALIASES,
 };
 
 // Defines the operators available for creating custom parameter mapping rules

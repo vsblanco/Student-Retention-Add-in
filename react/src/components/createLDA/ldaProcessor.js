@@ -10,16 +10,13 @@
 
 import { getWorkbookSettings } from '../utility/getSettings';
 import { defaultColumns } from '../settings/DefaultSettings';
+import { MASTER_LIST_SHEET, HISTORY_SHEET, BATCH_SIZE } from '../../../../shared/constants.js';
+import { STUDENT_ID_ALIASES, STUDENT_NUMBER_ALIASES } from '../../../../shared/columnAliases.js';
 
-// Hardcoded sheet names (unless these are also settings, usually they are static)
 const SHEET_NAMES = {
-    MASTER_LIST: "Master List",
-    HISTORY: "Student History"
+    MASTER_LIST: MASTER_LIST_SHEET,
+    HISTORY: HISTORY_SHEET
 };
-
-// Batch size for chunked operations to avoid payload size limits
-// Excel Add-ins have ~5MB payload limits; 500 rows is a safe batch size for data
-const BATCH_SIZE = 500;
 
 // Row-count ceiling for formatting batches. Set modestly so typical data
 // stays under the ~5MB per-sync payload cap. For high-density rows (lots of
@@ -391,7 +388,15 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- Retrieve Key Indices ---
             const daysOutIdx = getColIndex('Days Out');
             const gradeIdx = getColIndex('Grade');
-            const studentIdIdx = getColIndex('Student Number');
+            // Prefer SyStudentId (the modern identifier); fall back to Student
+            // Number for legacy workbooks. Without this fallback the DNC and
+            // LDA-followup tag maps stay empty whenever the Master List uses
+            // SyStudentId instead of Student Number.
+            let studentIdIdx = -1;
+            for (const candidate of [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES]) {
+                studentIdIdx = getColIndex(candidate);
+                if (studentIdIdx !== -1) break;
+            }
 
             // --- ProgramVersion index for advisor assignment ---
             const pvAliases = ['programversion', 'program', 'progversdescrip'];
@@ -1858,6 +1863,30 @@ async function writeTable(context, sheet, startRow, tableName, outputColumns, pr
     await applyTableHighlights(context, sheet, tableCtx, processedRows, onBatchProgress);
     await applyTableFormulas(context, sheet, tableCtx, processedRows, onBatchProgress);
     await applyTableComments(context, sheet, tableCtx, processedRows);
+}
+
+/**
+ * Checks whether the Master List sheet exists in the active workbook.
+ * Used by LDAManager to short-circuit to a "missing master list" status
+ * page before showing the settings form, since LDA cannot be generated
+ * without a Master List.
+ * @returns {Promise<boolean>} True if the Master List sheet is present.
+ */
+export async function checkMasterListExists() {
+    try {
+        let exists = false;
+        await Excel.run(async (context) => {
+            const sheets = context.workbook.worksheets;
+            sheets.load("items/name");
+            await context.sync();
+            exists = sheets.items.some(s => s.name === SHEET_NAMES.MASTER_LIST);
+        });
+        return exists;
+    } catch (e) {
+        console.warn('checkMasterListExists failed, assuming present:', e);
+        // Fail open: don't trap users behind the status page if the check itself errors.
+        return true;
+    }
 }
 
 /**

@@ -7,9 +7,14 @@
     "dev": "vite --config config/vite.config.js",
     "build": "vite build --config config/vite.config.js",
     "lint": "eslint --config config/eslint.config.js .",
-    "preview": "vite preview --config config/vite.config.js"
+    "preview": "vite preview --config config/vite.config.js",
+    "test": "vitest run --config config/vitest.config.js",
+    "test:watch": "vitest --config config/vitest.config.js"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "exceljs": "^4.4.0",
     "github-markdown-css": "^5.8.1",
     "jspdf": "^3.0.4",
