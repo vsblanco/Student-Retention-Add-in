@@ -1566,10 +1566,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
         console.error("LDA Generation Error:", error);
         throw error;
     } finally {
-        // Always restore the Outreach handler suppression flag, even on error,
-        // so that subsequent user edits to Outreach columns are handled normally.
+        // Defer clearing the Outreach handler suppression flag. Excel can
+        // dispatch onChanged events for the writes we just made AFTER this
+        // function returns; if we cleared the flag synchronously, those
+        // late events would run StudentView's Outreach handler, which
+        // would interpret each LDA row write as a user comment and call
+        // addComment for every row — which crashes the add-in. Matches
+        // the 2s grace period the Chrome extension already uses.
         if (hadWindow) {
-            window.__srkSuppressOutreachHandler = previousSuppress || false;
+            setTimeout(() => {
+                window.__srkSuppressOutreachHandler = previousSuppress || false;
+            }, 2000);
         }
     }
 }
