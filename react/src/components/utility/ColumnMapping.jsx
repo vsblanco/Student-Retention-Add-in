@@ -38,11 +38,15 @@ export const Sheets = {
 // Matching is case- and whitespace-insensitive (handled by normalizeHeader
 // in /shared/excel-helpers.js).
 //
-// "ID" composes SyStudentId aliases first (preferred), then Student Number
-// as fallback.
+// SyStudentId (canonical "ID") and Student Number are intentionally
+// distinct concepts — Student Number is the legacy identifier kept for
+// backwards-compatible reads. Writes that use canonical "ID" resolve to
+// SyStudentId columns only; callers that need Student Number as a
+// fallback should look up canonical "StudentNumber" separately.
 export const COLUMN_ALIASES = {
   StudentName: STUDENT_NAME_ALIASES,
-  ID: [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES],
+  ID: STUDENT_ID_ALIASES,
+  StudentNumber: STUDENT_NUMBER_ALIASES,
   Gender: GENDER_ALIASES,
   Phone: PRIMARY_PHONE_ALIASES,
   CreatedBy: CREATED_BY_ALIASES,
@@ -74,6 +78,7 @@ export const COLUMN_ALIASES_HISTORY = {
   comment: COMMENT_ALIASES,
   createdBy: CREATED_BY_ALIASES,
   tag: TAGS_ALIASES,
-  StudentID: [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES],
+  StudentID: STUDENT_ID_ALIASES,
+  StudentNumber: STUDENT_NUMBER_ALIASES,
   commentID: COMMENT_ID_ALIASES,
 };
