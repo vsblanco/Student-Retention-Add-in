@@ -8,6 +8,10 @@ import { Sheets } from './ColumnMapping';
 // StudentView, or the raw active-student state). Both the auto Outreach handler
 // and the manual NewComment flow must use this so comments end up keyed against
 // the same identity regardless of which path created them.
+//
+// Prefers SyStudentId (canonical `ID`) over Student Number — Student Number is
+// the legacy identifier and is only used as a fallback when no SyStudentId
+// column is present on the source sheet.
 export function resolveStudentIdentity(obj) {
   if (!obj || typeof obj !== 'object') {
     return { studentId: null, studentName: null };
@@ -15,6 +19,7 @@ export function resolveStudentIdentity(obj) {
   const studentId =
     obj.ID ?? obj.Id ?? obj.id ??
     obj.StudentID ?? obj.studentID ?? obj.studentId ??
+    obj.StudentNumber ?? obj.studentNumber ?? obj['Student Number'] ??
     null;
   const studentName =
     obj.Student ?? obj.StudentName ?? obj.studentName ??

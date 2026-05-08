@@ -350,10 +350,10 @@ function StudentView({ onReady, user }) {
             const anyMatch = matches.some(m => m.match);
             return anyMatch;
           },
-          null,               
-          'Outreach',               
-          COLUMN_ALIASES,     
-          ['StudentName','ID'] 
+          null,
+          'Outreach',
+          COLUMN_ALIASES,
+          ['StudentName','ID','StudentNumber']
         );
       } catch (err) {
         console.error('Failed to register Excel cell-change handler:', err);
