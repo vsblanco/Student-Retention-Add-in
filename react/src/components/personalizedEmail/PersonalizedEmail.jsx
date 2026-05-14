@@ -5,7 +5,9 @@ import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
 import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
-import { downloadEmailsDocx } from './utils/docxGenerator';
+import { downloadMailMergeTemplate, extractFieldNames } from './utils/docxGenerator';
+import { downloadRecipientsXlsx } from './utils/recipientsGenerator';
+import MailMergeInstructionsModal from './modals/MailMergeInstructionsModal';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
 import CustomParamModal from './modals/CustomParamModal';
@@ -66,6 +68,8 @@ export default function PersonalizedEmail({ user, onReady }) {
     const [showRecipientModal, setShowRecipientModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showMailMergeModal, setShowMailMergeModal] = useState(false);
+    const [mailMergeInfo, setMailMergeInfo] = useState(null);
     const [lastSentPayload, setLastSentPayload] = useState([]);
     const [lastSentInfo, setLastSentInfo] = useState(() => {
         try {
@@ -951,35 +955,54 @@ export default function PersonalizedEmail({ user, onReady }) {
         if (mode === 'powerautomate') {
             await sendEmailsViaPowerAutomate();
         } else if (mode === 'individual') {
-            await downloadEmailsAsDocx();
+            await downloadMailMergePackage();
         } else {
             setStatus('Invalid sending mode. Please refresh and try again.');
         }
     };
 
-    const downloadEmailsAsDocx = async () => {
-        setShowConfirmModal(false);
+    const downloadMailMergePackage = async () => {
         await ensureStudentDataLoaded();
 
-        const payload = generatePayload();
-        if (payload.emails.length === 0) {
+        if (!body || !body.trim()) {
+            setStatus('Please write an email body first.');
+            return;
+        }
+
+        const cleanBodyHtml = stripParameterBackgrounds(body);
+        const fieldNames = extractFieldNames(`${cleanBodyHtml} ${subject || ''}`);
+        const recipients = studentDataCache.filter(s => isValidEmail(s.StudentEmail));
+
+        if (recipients.length === 0) {
             setStatus('No students with valid email addresses found.');
             return;
         }
 
-        setStatus(`Generating Word document for ${payload.emails.length} ${payload.emails.length === 1 ? 'letter' : 'letters'}...`);
+        setStatus(`Generating mail merge files for ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}...`);
 
         try {
             const stamp = new Date().toISOString().slice(0, 10);
-            await downloadEmailsDocx(payload.emails, `personalized-emails-${stamp}.docx`);
-            const info = { count: payload.emails.length, timestamp: new Date().toISOString(), action: 'download' };
+            const templateFilename = `email-template-${stamp}.docx`;
+            const recipientsFilename = `email-recipients-${stamp}.xlsx`;
+
+            await downloadMailMergeTemplate(cleanBodyHtml, templateFilename);
+            await downloadRecipientsXlsx(recipients, fieldNames, recipientsFilename);
+
+            const info = { count: recipients.length, timestamp: new Date().toISOString(), action: 'download' };
             setLastSentInfo(info);
             try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
-            setLastSentPayload(payload);
-            setStatus(`Downloaded ${payload.emails.length} ${payload.emails.length === 1 ? 'letter' : 'letters'}.`);
+
+            setMailMergeInfo({
+                count: recipients.length,
+                templateFilename,
+                recipientsFilename,
+                subject: subject || '',
+            });
+            setShowMailMergeModal(true);
+            setStatus(`Downloaded mail merge files for ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}.`);
         } catch (error) {
-            setStatus(`Failed to generate document: ${error.message}`);
-            console.error('Error generating .docx:', error);
+            setStatus(`Failed to generate files: ${error.message}`);
+            console.error('Error generating mail merge package:', error);
         }
     };
 
@@ -1348,7 +1371,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                     <div className="relative w-1/2">
                         <button
                             ref={sendButtonRef}
-                            onClick={mode === 'individual' ? downloadEmailsAsDocx : handleOpenConfirmModal}
+                            onClick={mode === 'individual' ? downloadMailMergePackage : handleOpenConfirmModal}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 if (mode === 'powerautomate') setShowSendContextMenu(true);
@@ -1358,7 +1381,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                             disabled={!isFormValid()}
                             className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
-                            {mode === 'individual' ? 'Download Emails' : 'Send Email'}
+                            {mode === 'individual' ? 'Download for Mail Merge' : 'Send Email'}
                         </button>
                         {!isFormValid() && showSendTooltip && (
                             <span
@@ -1385,7 +1408,7 @@ export default function PersonalizedEmail({ user, onReady }) {
             </div>
             {mode === 'individual' && user !== 'Guest' && (
                 <p className="text-xs text-gray-600 mt-2 text-center">
-                    Personalized letters will download as a single Word document, one page per student.
+                    Downloads a Word template + recipient list so you can email them via Word&apos;s Mailings tab.
                 </p>
             )}
             {mode === 'powerautomate' && user !== 'Guest' && (
@@ -1458,6 +1481,15 @@ export default function PersonalizedEmail({ user, onReady }) {
                 payload={lastSentPayload}
                 bodyTemplate={body}
                 initiator={{ name: user, email: userEmail }}
+            />
+
+            <MailMergeInstructionsModal
+                isOpen={showMailMergeModal}
+                onClose={() => setShowMailMergeModal(false)}
+                templateFilename={mailMergeInfo?.templateFilename || ''}
+                recipientsFilename={mailMergeInfo?.recipientsFilename || ''}
+                subject={mailMergeInfo?.subject || ''}
+                count={mailMergeInfo?.count || 0}
             />
         </div>
     );

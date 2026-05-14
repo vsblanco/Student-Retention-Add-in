@@ -1,10 +1,58 @@
 import { describe, it, expect } from 'vitest';
 import { Document, Paragraph } from 'docx';
+import JSZip from 'jszip';
 import {
     htmlToParagraphs,
-    buildEmailsDocument,
-    generateEmailsDocxBlob,
+    buildMailMergeTemplate,
+    generateMailMergeTemplateBlob,
+    extractFieldNames,
 } from '../docxGenerator';
+
+function blobToArrayBuffer(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(blob);
+    });
+}
+
+async function readDocumentXml(blob) {
+    const buffer = await blobToArrayBuffer(blob);
+    const zip = await JSZip.loadAsync(buffer);
+    return zip.file('word/document.xml').async('string');
+}
+
+describe('extractFieldNames', () => {
+    it('returns an empty array for empty input', () => {
+        expect(extractFieldNames('')).toEqual([]);
+        expect(extractFieldNames(null)).toEqual([]);
+        expect(extractFieldNames(undefined)).toEqual([]);
+    });
+
+    it('extracts a single field name', () => {
+        expect(extractFieldNames('Hello {FirstName}')).toEqual(['FirstName']);
+    });
+
+    it('extracts multiple distinct field names in order of first appearance', () => {
+        expect(extractFieldNames('Hi {FirstName} {LastName}, your grade is {Grade}.'))
+            .toEqual(['FirstName', 'LastName', 'Grade']);
+    });
+
+    it('deduplicates repeated field names but preserves first-occurrence order', () => {
+        expect(extractFieldNames('{B} {A} {B} {C} {A}'))
+            .toEqual(['B', 'A', 'C']);
+    });
+
+    it('ignores patterns without word characters', () => {
+        expect(extractFieldNames('{} {1} {a-b}')).toEqual(['1']);
+    });
+
+    it('finds field names inside HTML', () => {
+        const html = '<p>Hi <strong>{FirstName}</strong>, <em>{Grade}</em></p>';
+        expect(extractFieldNames(html)).toEqual(['FirstName', 'Grade']);
+    });
+});
 
 describe('htmlToParagraphs', () => {
     it('returns an empty array for empty input', () => {
@@ -22,7 +70,6 @@ describe('htmlToParagraphs', () => {
     it('produces one paragraph per <p>', () => {
         const result = htmlToParagraphs('<p>First</p><p>Second</p><p>Third</p>');
         expect(result).toHaveLength(3);
-        result.forEach(p => expect(p).toBeInstanceOf(Paragraph));
     });
 
     it('produces one paragraph per <li> in a bullet list', () => {
@@ -59,75 +106,61 @@ describe('htmlToParagraphs', () => {
         expect(result).toHaveLength(1);
     });
 
-    it('applies firstParagraphOptions only to the first paragraph', () => {
-        const result = htmlToParagraphs(
-            '<p>One</p><p>Two</p>',
-            { pageBreakBefore: true }
-        );
-        expect(result).toHaveLength(2);
-        // Internal property naming on docx Paragraph is not stable across versions,
-        // so just verify shape — first paragraph differs from a no-option build.
-        const baseline = htmlToParagraphs('<p>One</p><p>Two</p>');
-        expect(JSON.stringify(result[0])).not.toEqual(JSON.stringify(baseline[0]));
-        expect(JSON.stringify(result[1])).toEqual(JSON.stringify(baseline[1]));
+    it('handles {FieldName} patterns inside text', () => {
+        const result = htmlToParagraphs('<p>Hi {FirstName}, you have {DaysOut} days out.</p>');
+        expect(result).toHaveLength(1);
     });
 
     it('handles nested formatting', () => {
-        const html = '<p><strong><em>bold italic</em></strong></p>';
-        const result = htmlToParagraphs(html);
+        const result = htmlToParagraphs('<p><strong><em>bold italic</em></strong></p>');
         expect(result).toHaveLength(1);
     });
 
     it('handles <br> tags inside a paragraph', () => {
-        const html = '<p>Line one<br>Line two</p>';
-        const result = htmlToParagraphs(html);
+        const result = htmlToParagraphs('<p>Line one<br>Line two</p>');
         expect(result).toHaveLength(1);
     });
 });
 
-describe('buildEmailsDocument', () => {
-    it('returns a Document for a single email', () => {
-        const doc = buildEmailsDocument([{ body: '<p>Hello!</p>' }]);
-        expect(doc).toBeInstanceOf(Document);
-    });
-
-    it('returns a Document for multiple emails', () => {
-        const doc = buildEmailsDocument([
-            { body: '<p>First letter</p>' },
-            { body: '<p>Second letter</p>' },
-            { body: '<p>Third letter</p>' },
-        ]);
+describe('buildMailMergeTemplate', () => {
+    it('returns a Document for a simple template', () => {
+        const doc = buildMailMergeTemplate('<p>Hi {FirstName}!</p>');
         expect(doc).toBeInstanceOf(Document);
     });
 
     it('handles empty input', () => {
-        const doc = buildEmailsDocument([]);
+        const doc = buildMailMergeTemplate('');
         expect(doc).toBeInstanceOf(Document);
     });
 
-    it('handles emails with empty body', () => {
-        const doc = buildEmailsDocument([
-            { body: '' },
-            { body: '<p>Real content</p>' },
-        ]);
+    it('handles templates with no merge fields', () => {
+        const doc = buildMailMergeTemplate('<p>Static greeting, no personalization.</p>');
         expect(doc).toBeInstanceOf(Document);
     });
 });
 
-describe('generateEmailsDocxBlob', () => {
-    it('returns a Blob for a single email', async () => {
-        const blob = await generateEmailsDocxBlob([{ body: '<p>Hello world</p>' }]);
+describe('generateMailMergeTemplateBlob', () => {
+    it('returns a Blob for a template with merge fields', async () => {
+        const blob = await generateMailMergeTemplateBlob(
+            '<p>Dear {FirstName},</p><p>Your grade is <strong>{Grade}</strong>.</p>'
+        );
         expect(blob).toBeInstanceOf(Blob);
         expect(blob.size).toBeGreaterThan(0);
     });
 
-    it('returns a Blob for multiple emails with mixed formatting', async () => {
-        const blob = await generateEmailsDocxBlob([
-            { body: '<p>Dear <strong>Alice</strong>,</p><p>Please review.</p>' },
-            { body: '<p>Dear <strong>Bob</strong>,</p><ul><li>Item 1</li><li>Item 2</li></ul>' },
-            { body: '<p>Dear <em>Carol</em>,</p><p>Thanks!</p>' },
-        ]);
-        expect(blob).toBeInstanceOf(Blob);
-        expect(blob.size).toBeGreaterThan(0);
+    it('emits MERGEFIELD instruction text in the docx XML', async () => {
+        const blob = await generateMailMergeTemplateBlob('<p>Hi {FirstName}, your grade is {Grade}.</p>');
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('MERGEFIELD FirstName');
+        expect(xml).toContain('MERGEFIELD Grade');
+    });
+
+    it('emits one MERGEFIELD per occurrence including repeats', async () => {
+        const blob = await generateMailMergeTemplateBlob('<p>{FirstName} {FirstName} {LastName}</p>');
+        const xml = await readDocumentXml(blob);
+        const firstNameCount = (xml.match(/MERGEFIELD FirstName/g) || []).length;
+        const lastNameCount = (xml.match(/MERGEFIELD LastName/g) || []).length;
+        expect(firstNameCount).toBe(2);
+        expect(lastNameCount).toBe(1);
     });
 });

@@ -1,0 +1,65 @@
+import ExcelJS from 'exceljs';
+import { renderTemplate } from './helpers';
+
+const HTML_TAG_RE = /<[a-z][\s\S]*?>/i;
+
+function htmlToPlainText(value) {
+    if (value === null || value === undefined) return '';
+    const str = String(value);
+    if (!HTML_TAG_RE.test(str)) return str;
+
+    const doc = new DOMParser().parseFromString(`<div>${str}</div>`, 'text/html');
+    doc.querySelectorAll('li').forEach(li => {
+        const line = doc.createTextNode(`• ${li.textContent || ''}\n`);
+        li.replaceWith(line);
+    });
+    doc.querySelectorAll('br').forEach(br => {
+        br.replaceWith(doc.createTextNode('\n'));
+    });
+    return (doc.body.textContent || '').trim();
+}
+
+export function buildRecipientRows(students, fieldNames) {
+    return (students || []).map(student => {
+        const row = { Email: student.StudentEmail || '' };
+        for (const field of fieldNames) {
+            const resolved = renderTemplate(`{${field}}`, student);
+            row[field] = htmlToPlainText(resolved);
+        }
+        return row;
+    }).filter(row => row.Email);
+}
+
+export async function generateRecipientsXlsxBlob(students, fieldNames) {
+    const rows = buildRecipientRows(students, fieldNames);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Recipients');
+
+    const headers = ['Email', ...fieldNames];
+    sheet.columns = headers.map(h => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
+
+    for (const row of rows) {
+        sheet.addRow(row);
+    }
+
+    sheet.getRow(1).font = { bold: true };
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+}
+
+export async function downloadRecipientsXlsx(students, fieldNames, filename = 'email-recipients.xlsx') {
+    const blob = await generateRecipientsXlsxBlob(students, fieldNames);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
