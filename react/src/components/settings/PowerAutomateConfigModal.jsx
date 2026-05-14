@@ -4,6 +4,7 @@ export default function PowerAutomateConfigModal({ isOpen, onClose }) {
     const [url, setUrl] = useState('');
     const [status, setStatus] = useState('');
     const [currentConnection, setCurrentConnection] = useState(null);
+    const [enabled, setEnabled] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
@@ -26,10 +27,12 @@ export default function PowerAutomateConfigModal({ isOpen, onClose }) {
 
                 if (connection) {
                     setCurrentConnection(connection);
+                    setEnabled(connection.enabled !== false);
                     setUrl(''); // Don't expose the URL for security
                     setStatus('Connection configured');
                 } else {
                     setCurrentConnection(null);
+                    setEnabled(true);
                     setUrl('');
                     setStatus('No connection configured');
                 }
@@ -48,6 +51,38 @@ export default function PowerAutomateConfigModal({ isOpen, onClose }) {
             return url.protocol === "http:" || url.protocol === "https:";
         } catch {
             return false;
+        }
+    };
+
+    const handleToggleEnabled = async (newEnabled) => {
+        if (!currentConnection) return;
+        setEnabled(newEnabled);
+
+        try {
+            await Excel.run(async (context) => {
+                const settings = context.workbook.settings;
+                const connectionsSetting = settings.getItemOrNullObject("connections");
+                connectionsSetting.load("value");
+                await context.sync();
+
+                const connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
+                const updated = connections.map(c =>
+                    (c.type === 'power-automate' && c.name === 'Send Personalized Email')
+                        ? { ...c, enabled: newEnabled }
+                        : c
+                );
+                settings.add("connections", JSON.stringify(updated));
+                await context.sync();
+
+                setCurrentConnection(prev => prev ? { ...prev, enabled: newEnabled } : prev);
+                setStatus(newEnabled
+                    ? 'Power Automate enabled — Send mode active.'
+                    : 'Power Automate paused — Download mode active.');
+            });
+        } catch (error) {
+            console.error('Error toggling enabled state:', error);
+            setStatus('Error saving toggle');
+            setEnabled(!newEnabled);
         }
     };
 
@@ -77,12 +112,13 @@ export default function PowerAutomateConfigModal({ isOpen, onClose }) {
                 // Remove existing connection if any
                 connections = connections.filter(c => !(c.type === 'power-automate' && c.name === 'Send Personalized Email'));
 
-                // Add new connection
+                // Add new connection (preserve enabled flag from current state)
                 const newConnection = {
                     id: currentConnection?.id || ('pa-' + Math.random().toString(36).substr(2, 9)),
                     name: 'Send Personalized Email',
                     type: 'power-automate',
                     url: url,
+                    enabled: enabled,
                     actions: [],
                     history: []
                 };
@@ -158,7 +194,32 @@ export default function PowerAutomateConfigModal({ isOpen, onClose }) {
                     </div>
                 ) : (
                     <>
-                        <div className="mb-4">
+                        {currentConnection && (
+                            <div className="mb-4 p-3 rounded-md bg-gray-50 border border-gray-200">
+                                <label htmlFor="pa-enabled-toggle" className="flex items-center justify-between cursor-pointer">
+                                    <span className="text-sm">
+                                        <span className="font-medium text-gray-700 block">Use Power Automate</span>
+                                        <span className="text-xs text-gray-500">
+                                            {enabled
+                                                ? 'Send Email button is active.'
+                                                : 'Paused — the composer shows the Download button instead.'}
+                                        </span>
+                                    </span>
+                                    <div className="relative inline-flex items-center flex-shrink-0 ml-3">
+                                        <input
+                                            id="pa-enabled-toggle"
+                                            type="checkbox"
+                                            checked={enabled}
+                                            onChange={(e) => handleToggleEnabled(e.target.checked)}
+                                            className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </div>
+                                </label>
+                            </div>
+                        )}
+
+                        <div className={`mb-4 transition-opacity ${currentConnection && !enabled ? 'opacity-60' : ''}`}>
                             <label htmlFor="pa-url" className="block text-sm font-medium text-gray-700 mb-2">
                                 Power Automate HTTP URL
                             </label>

@@ -219,11 +219,12 @@ export default function PersonalizedEmail({ user, onReady }) {
             const connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
             const connection = connections.find(c => c.type === 'power-automate' && c.name === 'Send Personalized Email');
 
-            if (connection) {
+            if (connection && connection.enabled !== false) {
                 setPowerAutomateConnection(connection);
                 setIsConnected(true);
                 setMode('powerautomate');
             } else {
+                setPowerAutomateConnection(connection || null);
                 setIsConnected(false);
                 setMode('individual');
             }

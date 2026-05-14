@@ -171,6 +171,20 @@ describe('assignment slot expansion', () => {
         expect(xml).toContain('MERGEFIELD A2_Title');
     });
 
+    it('emits well-formed OOXML with namespaced attributes (regression: BuilderElement attribute payload format)', async () => {
+        const html = '<p>{MissingAssignmentsList}</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 1 });
+        const xml = await readDocumentXml(blob);
+        // Word rejects the doc if these attributes are stripped; previous version
+        // produced bare <w:fldChar/> and <w:rStyle/> elements.
+        expect(xml).toMatch(/<w:fldChar\s+w:fldCharType="begin"/);
+        expect(xml).toMatch(/<w:fldChar\s+w:fldCharType="end"/);
+        expect(xml).toMatch(/<w:rStyle\s+w:val="Hyperlink"/);
+        expect(xml).toMatch(/<w:instrText\s+xml:space="preserve"/);
+        // No stray <undefined> wrapper from a previous ImportedXmlComponent attempt.
+        expect(xml).not.toContain('<undefined');
+    });
+
     it('emits IF guards so empty slots collapse', async () => {
         const html = '<p>{MissingAssignmentsList}</p>';
         const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 3 });

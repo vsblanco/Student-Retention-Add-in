@@ -6,7 +6,7 @@ import {
     ExternalHyperlink,
     AlignmentType,
     SimpleMailMergeField,
-    ImportedXmlComponent,
+    BuilderElement,
     ImageRun,
 } from 'docx';
 
@@ -349,39 +349,79 @@ function isAssignmentsPlaceholderParagraph(node) {
     return text === `{${ASSIGNMENTS_PLACEHOLDER}}`;
 }
 
-function buildAssignmentSlotXml(n) {
+// BuilderElement's `attributes` payload uses { propName: { key, value } } so the
+// docx library knows how to emit namespaced XML attribute names like w:fldCharType.
+class InstrTextElement extends BuilderElement {
+    constructor(text) {
+        super({
+            name: 'w:instrText',
+            attributes: { space: { key: 'xml:space', value: 'preserve' } },
+        });
+        this.root.push(text);
+    }
+}
+
+const fldChar = (type) => new BuilderElement({
+    name: 'w:fldChar',
+    attributes: { type: { key: 'w:fldCharType', value: type } },
+});
+
+const wRun = (...children) => new BuilderElement({ name: 'w:r', children });
+
+const hyperlinkRPr = () => new BuilderElement({
+    name: 'w:rPr',
+    children: [new BuilderElement({
+        name: 'w:rStyle',
+        attributes: { val: { key: 'w:val', value: 'Hyperlink' } },
+    })],
+});
+
+const linkRun = (...children) => new BuilderElement({
+    name: 'w:r',
+    children: [hyperlinkRPr(), ...children],
+});
+
+function buildAssignmentSlotParagraph(n) {
     const title = `A${n}_Title`;
     const url = `A${n}_Url`;
-    return [
-        '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
-        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
-        '<w:r><w:instrText xml:space="preserve"> IF "</w:instrText></w:r>',
-        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
-        `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${title} </w:instrText></w:r>`,
-        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
-        '<w:r><w:instrText xml:space="preserve">" &lt;&gt; "" "• </w:instrText></w:r>',
-        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
-        '<w:r><w:instrText xml:space="preserve"> HYPERLINK "</w:instrText></w:r>',
-        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
-        `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${url} </w:instrText></w:r>`,
-        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
-        '<w:r><w:instrText xml:space="preserve">" </w:instrText></w:r>',
-        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
-        '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>',
-        `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:instrText xml:space="preserve"> MERGEFIELD ${title} </w:instrText></w:r>`,
-        '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>',
-        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
-        '<w:r><w:instrText xml:space="preserve">" ""</w:instrText></w:r>',
-        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
-        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
-        '</w:p>',
-    ].join('');
+    return new BuilderElement({
+        name: 'w:p',
+        children: [
+            // BEGIN IF
+            wRun(fldChar('begin')),
+            wRun(new InstrTextElement(' IF "')),
+            // Nested MERGEFIELD Title (used as IF expression)
+            wRun(fldChar('begin')),
+            wRun(new InstrTextElement(` MERGEFIELD ${title} `)),
+            wRun(fldChar('end')),
+            wRun(new InstrTextElement('" <> "" "• ')),
+            // BEGIN HYPERLINK (truetext)
+            wRun(fldChar('begin')),
+            wRun(new InstrTextElement(' HYPERLINK "')),
+            // Nested MERGEFIELD Url for the hyperlink target
+            wRun(fldChar('begin')),
+            wRun(new InstrTextElement(` MERGEFIELD ${url} `)),
+            wRun(fldChar('end')),
+            wRun(new InstrTextElement('" ')),
+            wRun(fldChar('separate')),
+            // Display text inside the hyperlink: MERGEFIELD Title with Hyperlink style
+            linkRun(fldChar('begin')),
+            linkRun(new InstrTextElement(` MERGEFIELD ${title} `)),
+            linkRun(fldChar('end')),
+            wRun(fldChar('end')),
+            // END HYPERLINK
+            wRun(new InstrTextElement('" ""')),
+            wRun(fldChar('separate')),
+            wRun(fldChar('end')),
+            // END IF
+        ],
+    });
 }
 
 function buildAssignmentSlotParagraphs(slotCount) {
     const slots = [];
     for (let i = 1; i <= slotCount; i++) {
-        slots.push(ImportedXmlComponent.fromXmlString(buildAssignmentSlotXml(i)));
+        slots.push(buildAssignmentSlotParagraph(i));
     }
     return slots;
 }
