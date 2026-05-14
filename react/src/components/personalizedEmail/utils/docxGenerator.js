@@ -6,14 +6,11 @@ import {
     ExternalHyperlink,
     AlignmentType,
     SimpleMailMergeField,
-    BuilderElement,
     ImageRun,
 } from 'docx';
 
 const BULLET_REF = 'email-bullet';
 const ORDERED_REF = 'email-ordered';
-export const MAX_ASSIGNMENT_SLOTS = 20;
-export const ASSIGNMENTS_PLACEHOLDER = 'MissingAssignmentsList';
 
 const NUMBERING_CONFIG = {
     config: [
@@ -60,10 +57,6 @@ export function extractFieldNames(html) {
         }
     }
     return names;
-}
-
-export function bodyReferencesAssignments(html) {
-    return typeof html === 'string' && html.includes(`{${ASSIGNMENTS_PLACEHOLDER}}`);
 }
 
 function normalizeImageType(rawType) {
@@ -338,98 +331,7 @@ function buildParagraphsFromList(listEl, baseFormat, reference, level, imageMap)
     return paragraphs;
 }
 
-function isAssignmentsPlaceholderParagraph(node) {
-    if (node.nodeType !== 1) return false;
-    const tag = node.tagName.toLowerCase();
-    if (tag !== 'p' && tag !== 'div') return false;
-    const text = (node.textContent || '')
-        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-        .replace(/\u00A0/g, ' ')
-        .trim();
-    return text === `{${ASSIGNMENTS_PLACEHOLDER}}`;
-}
-
-// BuilderElement's `attributes` payload uses { propName: { key, value } } so the
-// docx library knows how to emit namespaced XML attribute names like w:fldCharType.
-class InstrTextElement extends BuilderElement {
-    constructor(text) {
-        super({
-            name: 'w:instrText',
-            attributes: { space: { key: 'xml:space', value: 'preserve' } },
-        });
-        this.root.push(text);
-    }
-}
-
-const fldChar = (type) => new BuilderElement({
-    name: 'w:fldChar',
-    attributes: { type: { key: 'w:fldCharType', value: type } },
-});
-
-const wRun = (...children) => new BuilderElement({ name: 'w:r', children });
-
-const hyperlinkRPr = () => new BuilderElement({
-    name: 'w:rPr',
-    children: [new BuilderElement({
-        name: 'w:rStyle',
-        attributes: { val: { key: 'w:val', value: 'Hyperlink' } },
-    })],
-});
-
-const linkRun = (...children) => new BuilderElement({
-    name: 'w:r',
-    children: [hyperlinkRPr(), ...children],
-});
-
-function buildAssignmentSlotParagraph(n) {
-    const title = `A${n}_Title`;
-    const url = `A${n}_Url`;
-    return new BuilderElement({
-        name: 'w:p',
-        children: [
-            // BEGIN IF
-            wRun(fldChar('begin')),
-            wRun(new InstrTextElement(' IF "')),
-            // Nested MERGEFIELD Title (used as IF expression)
-            wRun(fldChar('begin')),
-            wRun(new InstrTextElement(` MERGEFIELD ${title} `)),
-            wRun(fldChar('end')),
-            wRun(new InstrTextElement('" <> "" "• ')),
-            // BEGIN HYPERLINK (truetext)
-            wRun(fldChar('begin')),
-            wRun(new InstrTextElement(' HYPERLINK "')),
-            // Nested MERGEFIELD Url for the hyperlink target
-            wRun(fldChar('begin')),
-            wRun(new InstrTextElement(` MERGEFIELD ${url} `)),
-            wRun(fldChar('end')),
-            wRun(new InstrTextElement('" ')),
-            wRun(fldChar('separate')),
-            // Display text inside the hyperlink: MERGEFIELD Title with Hyperlink style
-            linkRun(fldChar('begin')),
-            linkRun(new InstrTextElement(` MERGEFIELD ${title} `)),
-            linkRun(fldChar('end')),
-            wRun(fldChar('end')),
-            // END HYPERLINK
-            wRun(new InstrTextElement('" ""')),
-            wRun(fldChar('separate')),
-            wRun(fldChar('end')),
-            // END IF
-        ],
-    });
-}
-
-function buildAssignmentSlotParagraphs(slotCount) {
-    const slots = [];
-    for (let i = 1; i <= slotCount; i++) {
-        slots.push(buildAssignmentSlotParagraph(i));
-    }
-    return slots;
-}
-
 function buildParagraphsFromNode(node, baseFormat, options) {
-    if (options.assignmentSlotCount > 0 && isAssignmentsPlaceholderParagraph(node)) {
-        return buildAssignmentSlotParagraphs(options.assignmentSlotCount);
-    }
 
     if (node.nodeType === 3) {
         const text = node.textContent;
@@ -464,8 +366,7 @@ export function htmlToParagraphs(html, options = {}) {
     if (!root) return [];
 
     const opts = {
-        imageMap: options.imageMap || new Map(),
-        assignmentSlotCount: options.assignmentSlotCount || 0,
+        imageMap: options.imageMap || new Map()
     };
 
     const paragraphs = [];
@@ -489,8 +390,7 @@ export function buildMailMergeTemplate(bodyHtml, options = {}) {
 export async function generateMailMergeTemplateBlob(bodyHtml, options = {}) {
     const imageMap = options.imageMap || await prepareImageMap(bodyHtml);
     const doc = buildMailMergeTemplate(bodyHtml, {
-        imageMap,
-        assignmentSlotCount: options.assignmentSlotCount || 0,
+        imageMap
     });
     return Packer.toBlob(doc);
 }

@@ -5,8 +5,8 @@ import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
 import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
-import { downloadMailMergeTemplate, extractFieldNames, bodyReferencesAssignments } from './utils/docxGenerator';
-import { downloadRecipientsXlsx, computeAssignmentSlotCount } from './utils/recipientsGenerator';
+import { downloadMailMergeTemplate, extractFieldNames } from './utils/docxGenerator';
+import { downloadRecipientsXlsx } from './utils/recipientsGenerator';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
 import CustomParamModal from './modals/CustomParamModal';
@@ -976,10 +976,6 @@ export default function PersonalizedEmail({ user, onReady }) {
             return;
         }
 
-        const assignmentSlotCount = bodyReferencesAssignments(cleanBodyHtml)
-            ? computeAssignmentSlotCount(recipients)
-            : 0;
-
         setStatus(`Generating mail merge files for ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}...`);
 
         try {
@@ -987,8 +983,8 @@ export default function PersonalizedEmail({ user, onReady }) {
             const templateFilename = `email-template-${stamp}.docx`;
             const recipientsFilename = `email-recipients-${stamp}.xlsx`;
 
-            await downloadMailMergeTemplate(cleanBodyHtml, templateFilename, { assignmentSlotCount });
-            await downloadRecipientsXlsx(recipients, fieldNames, recipientsFilename, { assignmentSlotCount });
+            await downloadMailMergeTemplate(cleanBodyHtml, templateFilename);
+            await downloadRecipientsXlsx(recipients, fieldNames, recipientsFilename);
 
             const info = { count: recipients.length, timestamp: new Date().toISOString(), action: 'download' };
             setLastSentInfo(info);
