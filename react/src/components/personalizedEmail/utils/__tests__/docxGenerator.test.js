@@ -6,6 +6,7 @@ import {
     buildMailMergeTemplate,
     generateMailMergeTemplateBlob,
     extractFieldNames,
+    bodyReferencesAssignments,
 } from '../docxGenerator';
 
 function blobToArrayBuffer(blob) {
@@ -136,6 +137,73 @@ describe('buildMailMergeTemplate', () => {
     it('handles templates with no merge fields', () => {
         const doc = buildMailMergeTemplate('<p>Static greeting, no personalization.</p>');
         expect(doc).toBeInstanceOf(Document);
+    });
+});
+
+describe('bodyReferencesAssignments', () => {
+    it('returns true when the body contains the MissingAssignmentsList placeholder', () => {
+        expect(bodyReferencesAssignments('<p>Hi {MissingAssignmentsList}</p>')).toBe(true);
+    });
+    it('returns false otherwise', () => {
+        expect(bodyReferencesAssignments('<p>Hi {FirstName}</p>')).toBe(false);
+        expect(bodyReferencesAssignments('')).toBe(false);
+        expect(bodyReferencesAssignments(null)).toBe(false);
+    });
+});
+
+describe('assignment slot expansion', () => {
+    it('produces N paragraphs for N slots when body has placeholder on its own line', async () => {
+        const html = '<p>Hi {FirstName}!</p><p>{MissingAssignmentsList}</p><p>Bye!</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 5 });
+        const xml = await readDocumentXml(blob);
+        const ifCount = (xml.match(/MERGEFIELD A\d+_Title/g) || []).length;
+        expect(ifCount).toBeGreaterThanOrEqual(10);
+    });
+
+    it('emits HYPERLINK + MERGEFIELD URL pairs', async () => {
+        const html = '<p>{MissingAssignmentsList}</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 2 });
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('HYPERLINK');
+        expect(xml).toContain('MERGEFIELD A1_Url');
+        expect(xml).toContain('MERGEFIELD A2_Url');
+        expect(xml).toContain('MERGEFIELD A1_Title');
+        expect(xml).toContain('MERGEFIELD A2_Title');
+    });
+
+    it('emits IF guards so empty slots collapse', async () => {
+        const html = '<p>{MissingAssignmentsList}</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 3 });
+        const xml = await readDocumentXml(blob);
+        const ifCount = (xml.match(/\sIF\s/g) || []).length;
+        expect(ifCount).toBeGreaterThanOrEqual(3);
+    });
+
+    it('does not expand when assignmentSlotCount is 0', async () => {
+        const html = '<p>{MissingAssignmentsList}</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 0 });
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('MERGEFIELD MissingAssignmentsList');
+        expect(xml).not.toContain('A1_Url');
+    });
+});
+
+describe('image handling', () => {
+    it('handles <img> with a data URL', async () => {
+        // 1x1 transparent PNG
+        const onePxPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+        const html = `<p>Logo: <img src="data:image/png;base64,${onePxPng}" width="50" height="50"/></p>`;
+        const blob = await generateMailMergeTemplateBlob(html);
+        const buffer = await blobToArrayBuffer(blob);
+        const zip = await JSZip.loadAsync(buffer);
+        const mediaFiles = Object.keys(zip.files).filter(f => f.startsWith('word/media/'));
+        expect(mediaFiles.length).toBeGreaterThan(0);
+    });
+
+    it('skips <img> tags whose data could not be fetched', async () => {
+        const html = '<p>Logo: <img src="https://example.invalid/missing.png" width="50" height="50"/></p>';
+        const blob = await generateMailMergeTemplateBlob(html);
+        expect(blob.size).toBeGreaterThan(0);
     });
 });
 

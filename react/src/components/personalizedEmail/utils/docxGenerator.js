@@ -6,10 +6,14 @@ import {
     ExternalHyperlink,
     AlignmentType,
     SimpleMailMergeField,
+    ImportedXmlComponent,
+    ImageRun,
 } from 'docx';
 
 const BULLET_REF = 'email-bullet';
 const ORDERED_REF = 'email-ordered';
+export const MAX_ASSIGNMENT_SLOTS = 20;
+export const ASSIGNMENTS_PLACEHOLDER = 'MissingAssignmentsList';
 
 const NUMBERING_CONFIG = {
     config: [
@@ -43,6 +47,7 @@ const ALIGNMENT_MAP = {
     center: AlignmentType.CENTER,
     justify: AlignmentType.JUSTIFIED,
 };
+const SUPPORTED_IMAGE_TYPES = ['png', 'jpg', 'gif', 'bmp'];
 
 export function extractFieldNames(html) {
     if (!html || typeof html !== 'string') return [];
@@ -55,6 +60,108 @@ export function extractFieldNames(html) {
         }
     }
     return names;
+}
+
+export function bodyReferencesAssignments(html) {
+    return typeof html === 'string' && html.includes(`{${ASSIGNMENTS_PLACEHOLDER}}`);
+}
+
+function normalizeImageType(rawType) {
+    if (!rawType) return null;
+    const t = rawType.toLowerCase();
+    if (t === 'jpeg') return 'jpg';
+    return SUPPORTED_IMAGE_TYPES.includes(t) ? t : null;
+}
+
+function parseDataUrl(src) {
+    const match = src.match(/^data:image\/([\w+-]+)(?:;charset=[^;,]+)?;base64,(.+)$/i);
+    if (!match) return null;
+    const type = normalizeImageType(match[1]);
+    if (!type) return null;
+    try {
+        const bin = atob(match[2]);
+        const data = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
+        return { type, data };
+    } catch {
+        return null;
+    }
+}
+
+function blobToArrayBuffer(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(blob);
+    });
+}
+
+async function fetchRemoteImage(src) {
+    try {
+        const resp = await fetch(src);
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        const buffer = await blobToArrayBuffer(blob);
+
+        let type = normalizeImageType((blob.type.match(/^image\/([\w+-]+)/) || [])[1]);
+        if (!type) {
+            const ext = (src.split('?')[0].split('#')[0].split('.').pop() || '').toLowerCase();
+            type = normalizeImageType(ext);
+        }
+        if (!type) return null;
+        return { type, data: new Uint8Array(buffer) };
+    } catch (err) {
+        console.warn(`[docxGenerator] failed to fetch image ${src}:`, err);
+        return null;
+    }
+}
+
+function measureImage(src, fallback) {
+    return new Promise(resolve => {
+        if (typeof Image === 'undefined') {
+            resolve(fallback);
+            return;
+        }
+        const img = new Image();
+        const done = (w, h) => resolve({ width: w || fallback.width, height: h || fallback.height });
+        img.onload = () => done(img.naturalWidth, img.naturalHeight);
+        img.onerror = () => done(0, 0);
+        img.src = src;
+    });
+}
+
+async function prepareImageMap(html) {
+    if (!html || typeof html !== 'string' || !html.includes('<img')) return new Map();
+    const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+    const imgs = Array.from(doc.querySelectorAll('img'));
+    const map = new Map();
+
+    await Promise.all(imgs.map(async img => {
+        const src = img.getAttribute('src');
+        if (!src || map.has(src)) return;
+
+        const imgData = src.startsWith('data:')
+            ? parseDataUrl(src)
+            : await fetchRemoteImage(src);
+        if (!imgData) return;
+
+        const attrW = parseInt(img.getAttribute('width'), 10);
+        const attrH = parseInt(img.getAttribute('height'), 10);
+        let width = Number.isFinite(attrW) && attrW > 0 ? attrW : 0;
+        let height = Number.isFinite(attrH) && attrH > 0 ? attrH : 0;
+
+        if (!width || !height) {
+            const fallback = { width: width || 300, height: height || 150 };
+            const measured = await measureImage(src, fallback);
+            width = width || measured.width;
+            height = height || measured.height;
+        }
+
+        map.set(src, { ...imgData, width, height });
+    }));
+
+    return map;
 }
 
 function parseColor(value) {
@@ -133,7 +240,18 @@ function pushTextSegment(text, format, runs) {
     }
 }
 
-function buildRunsFromInline(node, format, runs) {
+function buildImageRun(node, imageMap) {
+    const src = node.getAttribute('src');
+    const data = src && imageMap?.get(src);
+    if (!data) return null;
+    return new ImageRun({
+        data: data.data,
+        type: data.type,
+        transformation: { width: data.width, height: data.height },
+    });
+}
+
+function buildRunsFromInline(node, format, runs, imageMap) {
     if (node.nodeType === 3) {
         pushTextSegment(node.textContent, format, runs);
         return;
@@ -147,12 +265,18 @@ function buildRunsFromInline(node, format, runs) {
         return;
     }
 
+    if (tag === 'img') {
+        const run = buildImageRun(node, imageMap);
+        if (run) runs.push(run);
+        return;
+    }
+
     if (tag === 'a') {
         const href = node.getAttribute('href');
         const linkFormat = inheritFormat({ ...format, underline: true, color: format.color || '0563C1' }, node);
         const linkRuns = [];
         for (const child of node.childNodes) {
-            buildRunsFromInline(child, linkFormat, linkRuns);
+            buildRunsFromInline(child, linkFormat, linkRuns, imageMap);
         }
         if (href && linkRuns.length > 0) {
             runs.push(new ExternalHyperlink({ link: href, children: linkRuns }));
@@ -164,15 +288,15 @@ function buildRunsFromInline(node, format, runs) {
 
     const childFormat = inheritFormat(format, node);
     for (const child of node.childNodes) {
-        buildRunsFromInline(child, childFormat, runs);
+        buildRunsFromInline(child, childFormat, runs, imageMap);
     }
 }
 
-function collectRuns(blockEl, baseFormat) {
+function collectRuns(blockEl, baseFormat, imageMap) {
     const runs = [];
     const fmt = inheritFormat(baseFormat, blockEl);
     for (const child of blockEl.childNodes) {
-        buildRunsFromInline(child, fmt, runs);
+        buildRunsFromInline(child, fmt, runs, imageMap);
     }
     if (runs.length === 0) runs.push(new TextRun({ text: '' }));
     return runs;
@@ -183,7 +307,7 @@ function getAlignment(blockEl) {
     return align ? ALIGNMENT_MAP[align] : undefined;
 }
 
-function buildParagraphsFromList(listEl, baseFormat, reference, level) {
+function buildParagraphsFromList(listEl, baseFormat, reference, level, imageMap) {
     const paragraphs = [];
     for (const child of listEl.children) {
         if (child.tagName.toLowerCase() !== 'li') continue;
@@ -201,20 +325,68 @@ function buildParagraphsFromList(listEl, baseFormat, reference, level) {
         const runs = [];
         const fmt = inheritFormat(baseFormat, child);
         for (const node of inlineNodes) {
-            buildRunsFromInline(node, fmt, runs);
+            buildRunsFromInline(node, fmt, runs, imageMap);
         }
         if (runs.length === 0) runs.push(new TextRun({ text: '' }));
         paragraphs.push(new Paragraph({ children: runs, numbering: { reference, level } }));
 
         for (const nested of nestedLists) {
             const nestedRef = nested.tagName.toLowerCase() === 'ol' ? ORDERED_REF : BULLET_REF;
-            paragraphs.push(...buildParagraphsFromList(nested, baseFormat, nestedRef, Math.min(level + 1, 1)));
+            paragraphs.push(...buildParagraphsFromList(nested, baseFormat, nestedRef, Math.min(level + 1, 1), imageMap));
         }
     }
     return paragraphs;
 }
 
-function buildParagraphsFromNode(node, baseFormat) {
+function isAssignmentsPlaceholderParagraph(node) {
+    if (node.nodeType !== 1) return false;
+    const tag = node.tagName.toLowerCase();
+    if (tag !== 'p' && tag !== 'div') return false;
+    return (node.textContent || '').trim() === `{${ASSIGNMENTS_PLACEHOLDER}}`;
+}
+
+function buildAssignmentSlotXml(n) {
+    const title = `A${n}_Title`;
+    const url = `A${n}_Url`;
+    return [
+        '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
+        '<w:r><w:instrText xml:space="preserve"> IF "</w:instrText></w:r>',
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
+        `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${title} </w:instrText></w:r>`,
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
+        '<w:r><w:instrText xml:space="preserve">" &lt;&gt; "" "• </w:instrText></w:r>',
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
+        '<w:r><w:instrText xml:space="preserve"> HYPERLINK "</w:instrText></w:r>',
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
+        `<w:r><w:instrText xml:space="preserve"> MERGEFIELD ${url} </w:instrText></w:r>`,
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
+        '<w:r><w:instrText xml:space="preserve">" </w:instrText></w:r>',
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
+        '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>',
+        `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:instrText xml:space="preserve"> MERGEFIELD ${title} </w:instrText></w:r>`,
+        '<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>',
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
+        '<w:r><w:instrText xml:space="preserve">" ""</w:instrText></w:r>',
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
+        '</w:p>',
+    ].join('');
+}
+
+function buildAssignmentSlotParagraphs(slotCount) {
+    const slots = [];
+    for (let i = 1; i <= slotCount; i++) {
+        slots.push(ImportedXmlComponent.fromXmlString(buildAssignmentSlotXml(i)));
+    }
+    return slots;
+}
+
+function buildParagraphsFromNode(node, baseFormat, options) {
+    if (options.assignmentSlotCount > 0 && isAssignmentsPlaceholderParagraph(node)) {
+        return buildAssignmentSlotParagraphs(options.assignmentSlotCount);
+    }
+
     if (node.nodeType === 3) {
         const text = node.textContent;
         if (!text || !text.trim()) return [];
@@ -226,14 +398,14 @@ function buildParagraphsFromNode(node, baseFormat) {
 
     const tag = node.tagName.toLowerCase();
 
-    if (tag === 'ul') return buildParagraphsFromList(node, baseFormat, BULLET_REF, 0);
-    if (tag === 'ol') return buildParagraphsFromList(node, baseFormat, ORDERED_REF, 0);
+    if (tag === 'ul') return buildParagraphsFromList(node, baseFormat, BULLET_REF, 0, options.imageMap);
+    if (tag === 'ol') return buildParagraphsFromList(node, baseFormat, ORDERED_REF, 0, options.imageMap);
 
     if (tag === 'br') {
         return [new Paragraph({ children: [new TextRun({ text: '' })] })];
     }
 
-    const runs = collectRuns(node, baseFormat);
+    const runs = collectRuns(node, baseFormat, options.imageMap);
     const alignment = getAlignment(node);
     return [new Paragraph({
         children: runs,
@@ -241,21 +413,26 @@ function buildParagraphsFromNode(node, baseFormat) {
     })];
 }
 
-export function htmlToParagraphs(html) {
+export function htmlToParagraphs(html, options = {}) {
     if (!html || typeof html !== 'string') return [];
     const doc = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html');
     const root = doc.getElementById('root');
     if (!root) return [];
 
+    const opts = {
+        imageMap: options.imageMap || new Map(),
+        assignmentSlotCount: options.assignmentSlotCount || 0,
+    };
+
     const paragraphs = [];
     for (const child of root.childNodes) {
-        paragraphs.push(...buildParagraphsFromNode(child, {}));
+        paragraphs.push(...buildParagraphsFromNode(child, {}, opts));
     }
     return paragraphs;
 }
 
-export function buildMailMergeTemplate(bodyHtml) {
-    const paragraphs = htmlToParagraphs(bodyHtml || '');
+export function buildMailMergeTemplate(bodyHtml, options = {}) {
+    const paragraphs = htmlToParagraphs(bodyHtml || '', options);
     if (paragraphs.length === 0) {
         paragraphs.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
@@ -265,13 +442,17 @@ export function buildMailMergeTemplate(bodyHtml) {
     });
 }
 
-export async function generateMailMergeTemplateBlob(bodyHtml) {
-    const doc = buildMailMergeTemplate(bodyHtml);
+export async function generateMailMergeTemplateBlob(bodyHtml, options = {}) {
+    const imageMap = options.imageMap || await prepareImageMap(bodyHtml);
+    const doc = buildMailMergeTemplate(bodyHtml, {
+        imageMap,
+        assignmentSlotCount: options.assignmentSlotCount || 0,
+    });
     return Packer.toBlob(doc);
 }
 
-export async function downloadMailMergeTemplate(bodyHtml, filename = 'email-template.docx') {
-    const blob = await generateMailMergeTemplateBlob(bodyHtml);
+export async function downloadMailMergeTemplate(bodyHtml, filename = 'email-template.docx', options = {}) {
+    const blob = await generateMailMergeTemplateBlob(bodyHtml, options);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
