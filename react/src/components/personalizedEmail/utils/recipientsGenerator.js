@@ -27,15 +27,28 @@ function htmlToPlainText(value) {
     return (doc.body.textContent || '').trim();
 }
 
+// StudentEmail and PersonalEmail are first-class columns so the user can pick
+// whichever in Word's Send Email Messages dialog. Field name collisions (i.e. if
+// the body uses {StudentEmail} or {PersonalEmail}) are deduplicated.
+const FIXED_EMAIL_COLUMNS = ['StudentEmail', 'PersonalEmail'];
+
+function uniqueFieldNames(fieldNames) {
+    return fieldNames.filter(f => !FIXED_EMAIL_COLUMNS.includes(f));
+}
+
 export function buildRecipientRows(students, fieldNames) {
+    const extras = uniqueFieldNames(fieldNames);
     return (students || []).map(student => {
-        const row = { Email: student.StudentEmail || '' };
-        for (const field of fieldNames) {
+        const row = {
+            StudentEmail: student.StudentEmail || '',
+            PersonalEmail: student.PersonalEmail || '',
+        };
+        for (const field of extras) {
             const resolved = renderTemplate(`{${field}}`, student);
             row[field] = htmlToPlainText(resolved);
         }
         return row;
-    }).filter(row => row.Email);
+    }).filter(row => row.StudentEmail);
 }
 
 export async function generateRecipientsXlsxBlob(students, fieldNames) {
@@ -44,7 +57,7 @@ export async function generateRecipientsXlsxBlob(students, fieldNames) {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Recipients');
 
-    const headers = ['Email', ...fieldNames];
+    const headers = [...FIXED_EMAIL_COLUMNS, ...uniqueFieldNames(fieldNames)];
     sheet.columns = headers.map(h => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
 
     for (const row of rows) {
