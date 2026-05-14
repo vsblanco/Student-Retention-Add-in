@@ -53,7 +53,6 @@ export default function PersonalizedEmail({ user, onReady }) {
     const [showMoreParams, setShowMoreParams] = useState(false);
     const [showParameters, setShowParameters] = useState(false);
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
-    const [lowerSectionDimmed, setLowerSectionDimmed] = useState(true);
     const [showSendContextMenu, setShowSendContextMenu] = useState(false);
     const [showSendTooltip, setShowSendTooltip] = useState(false);
     const quillRef = useRef(null);
@@ -692,7 +691,6 @@ export default function PersonalizedEmail({ user, onReady }) {
     const handleRecipientUpdate = (newSelection, count) => {
         setRecipientSelection({ ...newSelection, hasBeenSet: true });
         setRecipientCount(count);
-        setLowerSectionDimmed(false);
         // Clear cache to ensure fresh data is fetched when needed
         setStudentDataCache([]);
         setCachedSpecialParams([]);
@@ -1239,26 +1237,8 @@ export default function PersonalizedEmail({ user, onReady }) {
 
             </div>
 
-            {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
-            <div className="relative">
-            {lowerSectionDimmed && lastSentInfo && (
-                <div
-                    className="absolute inset-0 z-10 flex items-start justify-center pt-6 cursor-pointer"
-                    onClick={() => setLowerSectionDimmed(false)}
-                >
-                    <p className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full shadow-sm">
-                        Last {lastSentInfo.action === 'download' ? 'downloaded' : 'sent'} {lastSentInfo.count}{' '}
-                        {lastSentInfo.action === 'download'
-                            ? (lastSentInfo.count === 1 ? 'letter' : 'letters')
-                            : (lastSentInfo.count === 1 ? 'email' : 'emails')}{' '}
-                        {formatLastSent(lastSentInfo.timestamp)}
-                    </p>
-                </div>
-            )}
-            <div
-                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-[2px]' : ''}`}
-                onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
-            >
+            {/* Lower section */}
+            <div>
             <div className="space-y-4 mt-4">
                 {/* CC Field — hidden in individual/download mode because Word's mail-merge
                     Send Email dialog has no CC option, so CC values would be silently dropped. */}
@@ -1448,7 +1428,6 @@ export default function PersonalizedEmail({ user, onReady }) {
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
             </div>
-            </div>
 
             {/* Modals */}
             <ExampleModal
@@ -1477,7 +1456,6 @@ export default function PersonalizedEmail({ user, onReady }) {
                     setSubject(template.subject);
                     setBody(template.body);
                     setCcPills(template.cc || []);
-                    setLowerSectionDimmed(false);
                 }}
             />
 
