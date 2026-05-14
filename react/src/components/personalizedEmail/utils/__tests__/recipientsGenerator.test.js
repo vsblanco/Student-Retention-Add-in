@@ -127,7 +127,7 @@ describe('computeAssignmentSlotCount', () => {
 });
 
 describe('assignment slot expansion in rows', () => {
-    it('replaces MissingAssignmentsList field with A1..AN slot columns', async () => {
+    it('adds A1..AN slot columns alongside a fallback MissingAssignmentsList column', async () => {
         const students = [
             {
                 StudentEmail: 'a@x.com',
@@ -149,7 +149,8 @@ describe('assignment slot expansion in rows', () => {
         expect(headers).toContain('A1_Url');
         expect(headers).toContain('A2_Title');
         expect(headers).toContain('A2_Url');
-        expect(headers).not.toContain('MissingAssignmentsList');
+        // Fallback column always present — protects against placeholder-detection misses.
+        expect(headers).toContain('MissingAssignmentsList');
 
         const row = sheet.getRow(2).values;
         const headerIdx = (name) => headers.indexOf(name);
@@ -157,6 +158,9 @@ describe('assignment slot expansion in rows', () => {
         expect(row[headerIdx('A1_Url')]).toBe('https://canvas/e1');
         expect(row[headerIdx('A2_Title')]).toBe('Quiz 2');
         expect(row[headerIdx('A2_Url')]).toBe('https://canvas/q2');
+        // Fallback column includes URLs alongside titles so Outlook autolinks.
+        expect(row[headerIdx('MissingAssignmentsList')]).toContain('Essay 1');
+        expect(row[headerIdx('MissingAssignmentsList')]).toContain('https://canvas/e1');
     });
 
     it('leaves later slots empty for students with fewer assignments', async () => {

@@ -186,6 +186,24 @@ describe('assignment slot expansion', () => {
         expect(xml).toContain('MERGEFIELD MissingAssignmentsList');
         expect(xml).not.toContain('A1_Url');
     });
+
+    it('expands placeholder even when Quill adds a trailing zero-width space', async () => {
+        // Reproduces the real-world Quill output: parameter wrapped in a span,
+        // followed by a zero-width space "buffer" character that Quill inserts
+        // so the cursor doesn't pick up the highlight style.
+        const html = '<p><span>{MissingAssignmentsList}</span>​</p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 2 });
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('MERGEFIELD A1_Title');
+        expect(xml).toContain('MERGEFIELD A2_Title');
+    });
+
+    it('expands placeholder when wrapped in a styled span (Quill default)', async () => {
+        const html = '<p><span style="background-color: rgb(254, 215, 170);">{MissingAssignmentsList}</span></p>';
+        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 3 });
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('MERGEFIELD A1_Title');
+    });
 });
 
 describe('image handling', () => {

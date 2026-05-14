@@ -342,7 +342,11 @@ function isAssignmentsPlaceholderParagraph(node) {
     if (node.nodeType !== 1) return false;
     const tag = node.tagName.toLowerCase();
     if (tag !== 'p' && tag !== 'div') return false;
-    return (node.textContent || '').trim() === `{${ASSIGNMENTS_PLACEHOLDER}}`;
+    const text = (node.textContent || '')
+        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+        .replace(/\u00A0/g, ' ')
+        .trim();
+    return text === `{${ASSIGNMENTS_PLACEHOLDER}}`;
 }
 
 function buildAssignmentSlotXml(n) {
