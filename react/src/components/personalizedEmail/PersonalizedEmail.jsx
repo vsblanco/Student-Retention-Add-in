@@ -703,14 +703,15 @@ export default function PersonalizedEmail({ user, onReady }) {
     };
 
     const ensureStudentDataLoaded = async () => {
-        if (!recipientSelection.hasBeenSet) return;
+        if (!recipientSelection.hasBeenSet) return studentDataCache;
         // Re-fetch when cache is empty, or when the template now references a
         // special parameter that wasn't resolved the last time we fetched.
         const needed = specialParameters.filter(p => isParameterUsedInTemplate(p));
         const missingSpecial = needed.some(p => !cachedSpecialParams.includes(p));
         if (studentDataCache.length === 0 || missingSpecial) {
-            await getStudentDataWithUI();
+            return await getStudentDataWithUI();
         }
+        return studentDataCache;
     };
 
     const handleOpenExampleModal = async () => {
@@ -964,7 +965,10 @@ export default function PersonalizedEmail({ user, onReady }) {
     };
 
     const downloadMailMergePackage = async () => {
-        await ensureStudentDataLoaded();
+        // Use the returned data directly — reading studentDataCache here would see
+        // the stale closure value (empty array) on the first click because React's
+        // setState is async, so the awaited fetch's result hasn't been re-rendered yet.
+        const students = await ensureStudentDataLoaded();
 
         if (!body || !body.trim()) {
             setStatus('Please write an email body first.');
@@ -973,7 +977,7 @@ export default function PersonalizedEmail({ user, onReady }) {
 
         const cleanBodyHtml = stripParameterBackgrounds(body);
         const fieldNames = extractFieldNames(`${cleanBodyHtml} ${subject || ''}`);
-        const recipients = studentDataCache.filter(s => isValidEmail(s.StudentEmail));
+        const recipients = (students || []).filter(s => isValidEmail(s.StudentEmail));
 
         if (recipients.length === 0) {
             setStatus('No students with valid email addresses found.');
