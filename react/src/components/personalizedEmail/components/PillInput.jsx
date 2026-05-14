@@ -7,7 +7,8 @@ export default function PillInput({
     singleValue = false,
     onFocus,
     readOnly = false,
-    noWrap = false
+    noWrap = false,
+    getPillColor
 }) {
     const inputRef = useRef(null);
     const containerRef = useRef(null);
@@ -56,13 +57,17 @@ export default function PillInput({
         >
             {pills.map((pill, index) => {
                 const isParam = pill.startsWith('{') && pill.endsWith('}');
+                const customColor = isParam && getPillColor ? getPillColor(pill.slice(1, -1)) : null;
                 return (
                     <span
                         key={index}
+                        style={customColor ? { backgroundColor: customColor.background, color: customColor.color } : undefined}
                         className={`flex items-center rounded-full px-2 py-0.5 text-sm ${
-                            isParam
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-gray-200 text-gray-700'
+                            customColor
+                                ? ''
+                                : isParam
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-gray-200 text-gray-700'
                         }`}
                     >
                         {pill}

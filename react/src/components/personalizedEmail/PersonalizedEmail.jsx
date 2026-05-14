@@ -1213,6 +1213,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('from')}
                         readOnly={mode === 'individual'}
                         noWrap={true}
+                        getPillColor={getParameterColor}
                     />
                 </div>
 
@@ -1270,6 +1271,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                             placeholder="Add an additional email"
                             onFocus={() => setLastFocusedInput('cc')}
                             noWrap={true}
+                            getPillColor={getParameterColor}
                         />
                     </div>
                 )}
