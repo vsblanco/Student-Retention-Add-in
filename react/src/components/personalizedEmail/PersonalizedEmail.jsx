@@ -1341,36 +1341,44 @@ export default function PersonalizedEmail({ user, onReady }) {
                                 </div>
                             )}
 
-                            {customParameters.length > 0 && (
-                                <div className="mt-3">
-                                    <label className="block text-xs font-medium text-gray-600 mb-2">Custom Parameters</label>
-                                    <div className="flex flex-wrap gap-2">
-                                        {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
-                                    </div>
-                                    {customParameters.length > 5 && (
-                                        <>
-                                            {showMoreParams && (
-                                                <div className="flex flex-wrap gap-2 mt-2">
-                                                    {customParameters.slice(5).map(param => renderParameterButton(param))}
-                                                </div>
-                                            )}
-                                            <button
-                                                onClick={() => setShowMoreParams(!showMoreParams)}
-                                                className="mt-2 text-xs text-blue-600 hover:underline"
-                                            >
-                                                {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
-                                            </button>
-                                        </>
-                                    )}
+                            <div className="mt-3">
+                                <div className="flex items-center gap-1 mb-2">
+                                    <label className="text-xs font-medium text-gray-600">Custom Parameters</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCustomParamModal(true)}
+                                        aria-label="Create or edit custom parameters"
+                                        title="Create or edit custom parameters"
+                                        className="p-0.5 text-gray-400 hover:text-blue-600"
+                                    >
+                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
                                 </div>
-                            )}
-
-                            <button
-                                onClick={() => setShowCustomParamModal(true)}
-                                className="mt-2 text-xs text-blue-600 hover:underline"
-                            >
-                                + Create Custom Parameter
-                            </button>
+                                {customParameters.length > 0 && (
+                                    <>
+                                        <div className="flex flex-wrap gap-2">
+                                            {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
+                                        </div>
+                                        {customParameters.length > 5 && (
+                                            <>
+                                                {showMoreParams && (
+                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                        {customParameters.slice(5).map(param => renderParameterButton(param))}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={() => setShowMoreParams(!showMoreParams)}
+                                                    className="mt-2 text-xs text-blue-600 hover:underline"
+                                                >
+                                                    {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
+                                                </button>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </>
                     )}
                 </div>
