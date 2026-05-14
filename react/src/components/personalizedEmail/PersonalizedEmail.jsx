@@ -738,15 +738,15 @@ export default function PersonalizedEmail({ user, onReady }) {
     };
 
     const getParameterColor = (paramName) => {
-        // Check if it's a special parameter
+        // Color palette is intentionally aligned with PARAMETER_BUTTON_STYLES so a
+        // parameter looks the same in the button row, the body editor, and pill inputs.
         if (specialParameters.includes(paramName)) {
             return {
-                background: '#fed7aa', // orange-200
+                background: '#ffedd5', // orange-100
                 color: '#9a3412'       // orange-800
             };
         }
 
-        // Check if it's a custom parameter
         const customParam = customParameters.find(p => p.name === paramName);
         if (customParam) {
             const hasMappings = customParam.mappings && customParam.mappings.length > 0;
@@ -754,18 +754,18 @@ export default function PersonalizedEmail({ user, onReady }) {
 
             if (hasNested) {
                 return {
-                    background: '#fecdd3', // rose-200
+                    background: '#ffe4e6', // rose-100
                     color: '#881337'       // rose-800
                 };
             }
             if (hasMappings) {
                 return {
-                    background: '#e9d5ff', // purple-200
+                    background: '#f3e8ff', // purple-100
                     color: '#581c87'       // purple-800
                 };
             }
             return {
-                background: '#bfdbfe', // blue-200
+                background: '#dbeafe', // blue-100
                 color: '#1e3a8a'       // blue-800
             };
         }
