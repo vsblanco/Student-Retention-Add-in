@@ -11,8 +11,16 @@ function htmlToPlainText(value) {
 
     const doc = new DOMParser().parseFromString(`<div>${str}</div>`, 'text/html');
     doc.querySelectorAll('li').forEach(li => {
-        const line = doc.createTextNode(`• ${li.textContent || ''}\n`);
-        li.replaceWith(line);
+        const anchor = li.querySelector('a');
+        let line;
+        if (anchor) {
+            const title = (anchor.textContent || '').trim();
+            const url = (anchor.getAttribute('href') || '').trim();
+            line = url ? `• ${title} — ${url}\n` : `• ${title}\n`;
+        } else {
+            line = `• ${li.textContent || ''}\n`;
+        }
+        li.replaceWith(doc.createTextNode(line));
     });
     doc.querySelectorAll('br').forEach(br => {
         br.replaceWith(doc.createTextNode('\n'));
@@ -66,11 +74,12 @@ function fillAssignmentSlots(row, student, slotCount) {
 
 export function buildRecipientRows(students, fieldNames, options = {}) {
     const slotCount = options.assignmentSlotCount || 0;
-    const fields = fieldNames.filter(f => slotCount === 0 || f !== ASSIGNMENTS_PLACEHOLDER);
-
+    // Always keep MissingAssignmentsList as a fallback column — if the docx didn't
+    // expand the placeholder into slots (inline use, Quill quirks, etc.), the
+    // MERGEFIELD still needs something to substitute. Slot columns are additive.
     return (students || []).map(student => {
         const row = { Email: student.StudentEmail || '' };
-        for (const field of fields) {
+        for (const field of fieldNames) {
             const resolved = renderTemplate(`{${field}}`, student);
             row[field] = htmlToPlainText(resolved);
         }
@@ -83,13 +92,12 @@ export function buildRecipientRows(students, fieldNames, options = {}) {
 
 export async function generateRecipientsXlsxBlob(students, fieldNames, options = {}) {
     const slotCount = options.assignmentSlotCount || 0;
-    const fields = fieldNames.filter(f => slotCount === 0 || f !== ASSIGNMENTS_PLACEHOLDER);
     const rows = buildRecipientRows(students, fieldNames, options);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Recipients');
 
-    const headers = ['Email', ...fields, ...(slotCount > 0 ? slotColumnNames(slotCount) : [])];
+    const headers = ['Email', ...fieldNames, ...(slotCount > 0 ? slotColumnNames(slotCount) : [])];
     sheet.columns = headers.map(h => ({ header: h, key: h, width: Math.max(12, h.length + 2) }));
 
     for (const row of rows) {
