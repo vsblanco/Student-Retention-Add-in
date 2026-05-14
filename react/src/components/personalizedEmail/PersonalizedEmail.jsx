@@ -1296,12 +1296,12 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('quill')}
                         modules={QUILL_EDITOR_CONFIG.modules}
                         className="mt-1 bg-white"
-                        style={{ height: '192px', marginBottom: '80px' }}
+                        style={{ height: '192px', marginBottom: '48px' }}
                     />
                 </div>
 
                 {/* Parameters — collapsed by default so users with saved templates have more space */}
-                <div className="mt-8">
+                <div className="mt-3">
                     <button
                         type="button"
                         onClick={() => setShowParameters(prev => !prev)}
