@@ -203,12 +203,17 @@ export default function PersonalizedEmail({ user, onReady }) {
         }
     }, [isConnected]);
 
-    // Auto-populate From field with user's email
+    // Auto-populate From field with user's email — only on initial load. Without
+    // the ref guard, removing the pill (length → 0) would re-trigger this effect
+    // and immediately re-add the email, making it impossible to clear.
+    const fromAutofilledRef = useRef(false);
     useEffect(() => {
-        if (userEmail && fromPills.length === 0) {
+        if (userEmail && !fromAutofilledRef.current && fromPills.length === 0) {
             setFromPills([userEmail]);
+            fromAutofilledRef.current = true;
         }
-    }, [userEmail, fromPills.length]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userEmail]);
 
     const checkConnection = async () => {
         await Excel.run(async (context) => {
