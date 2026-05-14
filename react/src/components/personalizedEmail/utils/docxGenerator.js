@@ -5,6 +5,7 @@ import {
     TextRun,
     ExternalHyperlink,
     AlignmentType,
+    SimpleMailMergeField,
 } from 'docx';
 
 const BULLET_REF = 'email-bullet';
@@ -35,12 +36,26 @@ const NUMBERING_CONFIG = {
 
 const HEX_RE = /^#?([0-9a-fA-F]{6})$/;
 const RGB_RE = /^rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/;
+const FIELD_RE = /\{(\w+)\}/g;
 const ALIGNMENT_MAP = {
     left: AlignmentType.LEFT,
     right: AlignmentType.RIGHT,
     center: AlignmentType.CENTER,
     justify: AlignmentType.JUSTIFIED,
 };
+
+export function extractFieldNames(html) {
+    if (!html || typeof html !== 'string') return [];
+    const seen = new Set();
+    const names = [];
+    for (const match of html.matchAll(FIELD_RE)) {
+        if (!seen.has(match[1])) {
+            seen.add(match[1]);
+            names.push(match[1]);
+        }
+    }
+    return names;
+}
 
 function parseColor(value) {
     if (!value) return undefined;
@@ -100,10 +115,27 @@ function toRunOptions(fmt) {
     return opts;
 }
 
+function pushTextSegment(text, format, runs) {
+    if (!text) return;
+    const runOpts = toRunOptions(format);
+    FIELD_RE.lastIndex = 0;
+    let lastIdx = 0;
+    let match;
+    while ((match = FIELD_RE.exec(text)) !== null) {
+        if (match.index > lastIdx) {
+            runs.push(new TextRun({ text: text.slice(lastIdx, match.index), ...runOpts }));
+        }
+        runs.push(new SimpleMailMergeField(match[1]));
+        lastIdx = FIELD_RE.lastIndex;
+    }
+    if (lastIdx < text.length) {
+        runs.push(new TextRun({ text: text.slice(lastIdx), ...runOpts }));
+    }
+}
+
 function buildRunsFromInline(node, format, runs) {
     if (node.nodeType === 3) {
-        const text = node.textContent;
-        if (text) runs.push(new TextRun({ text, ...toRunOptions(format) }));
+        pushTextSegment(node.textContent, format, runs);
         return;
     }
     if (node.nodeType !== 1) return;
@@ -151,9 +183,8 @@ function getAlignment(blockEl) {
     return align ? ALIGNMENT_MAP[align] : undefined;
 }
 
-function buildParagraphsFromList(listEl, baseFormat, reference, level, extraFirstOptions) {
+function buildParagraphsFromList(listEl, baseFormat, reference, level) {
     const paragraphs = [];
-    let firstItemConsumed = false;
     for (const child of listEl.children) {
         if (child.tagName.toLowerCase() !== 'li') continue;
 
@@ -173,14 +204,7 @@ function buildParagraphsFromList(listEl, baseFormat, reference, level, extraFirs
             buildRunsFromInline(node, fmt, runs);
         }
         if (runs.length === 0) runs.push(new TextRun({ text: '' }));
-
-        const isFirst = !firstItemConsumed && extraFirstOptions;
-        firstItemConsumed = true;
-        paragraphs.push(new Paragraph({
-            children: runs,
-            numbering: { reference, level },
-            ...(isFirst ? extraFirstOptions : {}),
-        }));
+        paragraphs.push(new Paragraph({ children: runs, numbering: { reference, level } }));
 
         for (const nested of nestedLists) {
             const nestedRef = nested.tagName.toLowerCase() === 'ol' ? ORDERED_REF : BULLET_REF;
@@ -190,24 +214,23 @@ function buildParagraphsFromList(listEl, baseFormat, reference, level, extraFirs
     return paragraphs;
 }
 
-function buildParagraphsFromNode(node, baseFormat, extraFirstOptions) {
+function buildParagraphsFromNode(node, baseFormat) {
     if (node.nodeType === 3) {
         const text = node.textContent;
         if (!text || !text.trim()) return [];
-        return [new Paragraph({
-            children: [new TextRun({ text, ...toRunOptions(baseFormat) })],
-            ...(extraFirstOptions || {}),
-        })];
+        const runs = [];
+        pushTextSegment(text, baseFormat, runs);
+        return [new Paragraph({ children: runs })];
     }
     if (node.nodeType !== 1) return [];
 
     const tag = node.tagName.toLowerCase();
 
-    if (tag === 'ul') return buildParagraphsFromList(node, baseFormat, BULLET_REF, 0, extraFirstOptions);
-    if (tag === 'ol') return buildParagraphsFromList(node, baseFormat, ORDERED_REF, 0, extraFirstOptions);
+    if (tag === 'ul') return buildParagraphsFromList(node, baseFormat, BULLET_REF, 0);
+    if (tag === 'ol') return buildParagraphsFromList(node, baseFormat, ORDERED_REF, 0);
 
     if (tag === 'br') {
-        return [new Paragraph({ children: [new TextRun({ text: '' })], ...(extraFirstOptions || {}) })];
+        return [new Paragraph({ children: [new TextRun({ text: '' })] })];
     }
 
     const runs = collectRuns(node, baseFormat);
@@ -215,60 +238,40 @@ function buildParagraphsFromNode(node, baseFormat, extraFirstOptions) {
     return [new Paragraph({
         children: runs,
         ...(alignment ? { alignment } : {}),
-        ...(extraFirstOptions || {}),
     })];
 }
 
-export function htmlToParagraphs(html, firstParagraphOptions) {
+export function htmlToParagraphs(html) {
     if (!html || typeof html !== 'string') return [];
     const doc = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html');
     const root = doc.getElementById('root');
     if (!root) return [];
 
     const paragraphs = [];
-    let firstApplied = !firstParagraphOptions;
     for (const child of root.childNodes) {
-        const opts = firstApplied ? undefined : firstParagraphOptions;
-        const built = buildParagraphsFromNode(child, {}, opts);
-        if (built.length > 0) {
-            paragraphs.push(...built);
-            firstApplied = true;
-        }
+        paragraphs.push(...buildParagraphsFromNode(child, {}));
     }
     return paragraphs;
 }
 
-export function buildEmailsDocument(emails) {
-    const allParagraphs = [];
-    (emails || []).forEach((email, idx) => {
-        const firstOptions = idx > 0 ? { pageBreakBefore: true } : undefined;
-        const paragraphs = htmlToParagraphs(email?.body || '', firstOptions);
-        if (paragraphs.length === 0) {
-            allParagraphs.push(new Paragraph({
-                children: [new TextRun({ text: '' })],
-                ...(firstOptions || {}),
-            }));
-        } else {
-            allParagraphs.push(...paragraphs);
-        }
-    });
-    if (allParagraphs.length === 0) {
-        allParagraphs.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
+export function buildMailMergeTemplate(bodyHtml) {
+    const paragraphs = htmlToParagraphs(bodyHtml || '');
+    if (paragraphs.length === 0) {
+        paragraphs.push(new Paragraph({ children: [new TextRun({ text: '' })] }));
     }
-
     return new Document({
         numbering: NUMBERING_CONFIG,
-        sections: [{ children: allParagraphs }],
+        sections: [{ children: paragraphs }],
     });
 }
 
-export async function generateEmailsDocxBlob(emails) {
-    const doc = buildEmailsDocument(emails || []);
+export async function generateMailMergeTemplateBlob(bodyHtml) {
+    const doc = buildMailMergeTemplate(bodyHtml);
     return Packer.toBlob(doc);
 }
 
-export async function downloadEmailsDocx(emails, filename = 'personalized-emails.docx') {
-    const blob = await generateEmailsDocxBlob(emails);
+export async function downloadMailMergeTemplate(bodyHtml, filename = 'email-template.docx') {
+    const blob = await generateMailMergeTemplateBlob(bodyHtml);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
