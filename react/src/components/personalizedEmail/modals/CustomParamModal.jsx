@@ -119,32 +119,38 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                         {customParameters.length === 0 ? (
                             <p className="text-center text-gray-500 text-sm">No custom parameters created yet.</p>
                         ) : (
-                            customParameters.map(param => (
-                                <div key={param.name} className="flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50">
-                                    <div>
-                                        <span className="text-sm font-medium text-gray-800">{`{${param.name}}`}</span>
-                                        <span className="text-xs text-gray-500 ml-2">(from: {param.sourceColumn})</span>
+                            customParameters.map(param => {
+                                const hasMappings = param.mappings && param.mappings.length > 0;
+                                const hasNested = hasMappings && param.mappings.some(m => /\{(\w+)\}/.test(m.then));
+                                let chipClass = 'bg-blue-100 text-blue-800';
+                                if (hasNested) chipClass = 'bg-rose-100 text-rose-800';
+                                else if (hasMappings) chipClass = 'bg-purple-100 text-purple-800';
+                                return (
+                                    <div key={param.name} className="flex items-center justify-between p-2 my-1 rounded-md hover:bg-gray-50">
+                                        <span className={`px-2 py-1 text-sm font-medium rounded ${chipClass}`}>
+                                            {`{${param.name}}`}
+                                        </span>
+                                        <div className="flex space-x-2">
+                                            <button
+                                                onClick={() => handleEditParam(param)}
+                                                className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteParam(param.name)}
+                                                aria-label={`Delete ${param.name}`}
+                                                title={`Delete ${param.name}`}
+                                                className="p-1 text-red-600 rounded-md hover:bg-red-50"
+                                            >
+                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="flex space-x-2">
-                                        <button
-                                            onClick={() => handleEditParam(param)}
-                                            className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-200"
-                                        >
-                                            Edit
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteParam(param.name)}
-                                            aria-label={`Delete ${param.name}`}
-                                            title={`Delete ${param.name}`}
-                                            className="p-1 text-red-600 rounded-md hover:bg-red-50"
-                                        >
-                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                     <div className="flex justify-end mt-4">
