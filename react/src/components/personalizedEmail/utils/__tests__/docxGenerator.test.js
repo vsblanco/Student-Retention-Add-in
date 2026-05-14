@@ -6,7 +6,6 @@ import {
     buildMailMergeTemplate,
     generateMailMergeTemplateBlob,
     extractFieldNames,
-    bodyReferencesAssignments,
 } from '../docxGenerator';
 
 function blobToArrayBuffer(blob) {
@@ -69,160 +68,59 @@ describe('htmlToParagraphs', () => {
     });
 
     it('produces one paragraph per <p>', () => {
-        const result = htmlToParagraphs('<p>First</p><p>Second</p><p>Third</p>');
-        expect(result).toHaveLength(3);
+        expect(htmlToParagraphs('<p>First</p><p>Second</p><p>Third</p>')).toHaveLength(3);
     });
 
     it('produces one paragraph per <li> in a bullet list', () => {
-        const result = htmlToParagraphs('<ul><li>One</li><li>Two</li><li>Three</li></ul>');
-        expect(result).toHaveLength(3);
+        expect(htmlToParagraphs('<ul><li>One</li><li>Two</li><li>Three</li></ul>')).toHaveLength(3);
     });
 
     it('produces one paragraph per <li> in an ordered list', () => {
-        const result = htmlToParagraphs('<ol><li>One</li><li>Two</li></ol>');
-        expect(result).toHaveLength(2);
+        expect(htmlToParagraphs('<ol><li>One</li><li>Two</li></ol>')).toHaveLength(2);
     });
 
     it('handles inline formatting without crashing', () => {
         const html = '<p>Hi <strong>bold</strong> and <em>italic</em> and <u>underline</u>.</p>';
-        const result = htmlToParagraphs(html);
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs(html)).toHaveLength(1);
     });
 
     it('handles hyperlinks', () => {
-        const html = '<p>Visit <a href="https://example.com">our site</a> today.</p>';
-        const result = htmlToParagraphs(html);
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p>Visit <a href="https://example.com">our site</a> today.</p>')).toHaveLength(1);
     });
 
     it('handles colored text via inline style', () => {
-        const html = '<p>Notice: <span style="color: #ff0000;">red text</span> here.</p>';
-        const result = htmlToParagraphs(html);
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p>Notice: <span style="color: #ff0000;">red</span> here.</p>')).toHaveLength(1);
     });
 
     it('handles background-color highlights', () => {
-        const html = '<p>This is <span style="background-color: rgb(255, 255, 0);">highlighted</span>.</p>';
-        const result = htmlToParagraphs(html);
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p><span style="background-color: rgb(255, 255, 0);">hi</span></p>')).toHaveLength(1);
     });
 
     it('handles {FieldName} patterns inside text', () => {
-        const result = htmlToParagraphs('<p>Hi {FirstName}, you have {DaysOut} days out.</p>');
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p>Hi {FirstName}, you have {DaysOut} days out.</p>')).toHaveLength(1);
     });
 
     it('handles nested formatting', () => {
-        const result = htmlToParagraphs('<p><strong><em>bold italic</em></strong></p>');
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p><strong><em>bold italic</em></strong></p>')).toHaveLength(1);
     });
 
     it('handles <br> tags inside a paragraph', () => {
-        const result = htmlToParagraphs('<p>Line one<br>Line two</p>');
-        expect(result).toHaveLength(1);
+        expect(htmlToParagraphs('<p>Line one<br>Line two</p>')).toHaveLength(1);
     });
 });
 
 describe('buildMailMergeTemplate', () => {
     it('returns a Document for a simple template', () => {
-        const doc = buildMailMergeTemplate('<p>Hi {FirstName}!</p>');
-        expect(doc).toBeInstanceOf(Document);
+        expect(buildMailMergeTemplate('<p>Hi {FirstName}!</p>')).toBeInstanceOf(Document);
     });
 
     it('handles empty input', () => {
-        const doc = buildMailMergeTemplate('');
-        expect(doc).toBeInstanceOf(Document);
-    });
-
-    it('handles templates with no merge fields', () => {
-        const doc = buildMailMergeTemplate('<p>Static greeting, no personalization.</p>');
-        expect(doc).toBeInstanceOf(Document);
-    });
-});
-
-describe('bodyReferencesAssignments', () => {
-    it('returns true when the body contains the MissingAssignmentsList placeholder', () => {
-        expect(bodyReferencesAssignments('<p>Hi {MissingAssignmentsList}</p>')).toBe(true);
-    });
-    it('returns false otherwise', () => {
-        expect(bodyReferencesAssignments('<p>Hi {FirstName}</p>')).toBe(false);
-        expect(bodyReferencesAssignments('')).toBe(false);
-        expect(bodyReferencesAssignments(null)).toBe(false);
-    });
-});
-
-describe('assignment slot expansion', () => {
-    it('produces N paragraphs for N slots when body has placeholder on its own line', async () => {
-        const html = '<p>Hi {FirstName}!</p><p>{MissingAssignmentsList}</p><p>Bye!</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 5 });
-        const xml = await readDocumentXml(blob);
-        const ifCount = (xml.match(/MERGEFIELD A\d+_Title/g) || []).length;
-        expect(ifCount).toBeGreaterThanOrEqual(10);
-    });
-
-    it('emits HYPERLINK + MERGEFIELD URL pairs', async () => {
-        const html = '<p>{MissingAssignmentsList}</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 2 });
-        const xml = await readDocumentXml(blob);
-        expect(xml).toContain('HYPERLINK');
-        expect(xml).toContain('MERGEFIELD A1_Url');
-        expect(xml).toContain('MERGEFIELD A2_Url');
-        expect(xml).toContain('MERGEFIELD A1_Title');
-        expect(xml).toContain('MERGEFIELD A2_Title');
-    });
-
-    it('emits well-formed OOXML with namespaced attributes (regression: BuilderElement attribute payload format)', async () => {
-        const html = '<p>{MissingAssignmentsList}</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 1 });
-        const xml = await readDocumentXml(blob);
-        // Word rejects the doc if these attributes are stripped; previous version
-        // produced bare <w:fldChar/> and <w:rStyle/> elements.
-        expect(xml).toMatch(/<w:fldChar\s+w:fldCharType="begin"/);
-        expect(xml).toMatch(/<w:fldChar\s+w:fldCharType="end"/);
-        expect(xml).toMatch(/<w:rStyle\s+w:val="Hyperlink"/);
-        expect(xml).toMatch(/<w:instrText\s+xml:space="preserve"/);
-        // No stray <undefined> wrapper from a previous ImportedXmlComponent attempt.
-        expect(xml).not.toContain('<undefined');
-    });
-
-    it('emits IF guards so empty slots collapse', async () => {
-        const html = '<p>{MissingAssignmentsList}</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 3 });
-        const xml = await readDocumentXml(blob);
-        const ifCount = (xml.match(/\sIF\s/g) || []).length;
-        expect(ifCount).toBeGreaterThanOrEqual(3);
-    });
-
-    it('does not expand when assignmentSlotCount is 0', async () => {
-        const html = '<p>{MissingAssignmentsList}</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 0 });
-        const xml = await readDocumentXml(blob);
-        expect(xml).toContain('MERGEFIELD MissingAssignmentsList');
-        expect(xml).not.toContain('A1_Url');
-    });
-
-    it('expands placeholder even when Quill adds a trailing zero-width space', async () => {
-        // Reproduces the real-world Quill output: parameter wrapped in a span,
-        // followed by a zero-width space "buffer" character that Quill inserts
-        // so the cursor doesn't pick up the highlight style.
-        const html = '<p><span>{MissingAssignmentsList}</span>​</p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 2 });
-        const xml = await readDocumentXml(blob);
-        expect(xml).toContain('MERGEFIELD A1_Title');
-        expect(xml).toContain('MERGEFIELD A2_Title');
-    });
-
-    it('expands placeholder when wrapped in a styled span (Quill default)', async () => {
-        const html = '<p><span style="background-color: rgb(254, 215, 170);">{MissingAssignmentsList}</span></p>';
-        const blob = await generateMailMergeTemplateBlob(html, { assignmentSlotCount: 3 });
-        const xml = await readDocumentXml(blob);
-        expect(xml).toContain('MERGEFIELD A1_Title');
+        expect(buildMailMergeTemplate('')).toBeInstanceOf(Document);
     });
 });
 
 describe('image handling', () => {
     it('handles <img> with a data URL', async () => {
-        // 1x1 transparent PNG
         const onePxPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
         const html = `<p>Logo: <img src="data:image/png;base64,${onePxPng}" width="50" height="50"/></p>`;
         const blob = await generateMailMergeTemplateBlob(html);
@@ -262,5 +160,11 @@ describe('generateMailMergeTemplateBlob', () => {
         const lastNameCount = (xml.match(/MERGEFIELD LastName/g) || []).length;
         expect(firstNameCount).toBe(2);
         expect(lastNameCount).toBe(1);
+    });
+
+    it('keeps MissingAssignmentsList as a plain MERGEFIELD (no slot expansion)', async () => {
+        const blob = await generateMailMergeTemplateBlob('<p>{MissingAssignmentsList}</p>');
+        const xml = await readDocumentXml(blob);
+        expect(xml).toContain('MERGEFIELD MissingAssignmentsList');
     });
 });

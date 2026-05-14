@@ -3,8 +3,6 @@ import ExcelJS from 'exceljs';
 import {
     buildRecipientRows,
     generateRecipientsXlsxBlob,
-    parseAssignmentList,
-    computeAssignmentSlotCount,
 } from '../recipientsGenerator';
 
 function blobToArrayBuffer(blob) {
@@ -48,20 +46,23 @@ describe('buildRecipientRows', () => {
         expect(rows[0].Greeting).toBe('Hi Alice');
     });
 
-    it('strips HTML from field values', () => {
+    it('strips HTML from field values and keeps URLs visible for autolinking', () => {
         const students = [
             {
                 StudentEmail: 'a@x.com',
-                MissingAssignmentsList: '<ul><li>Essay 1</li><li>Quiz 2</li></ul>',
+                MissingAssignmentsList: '<ul><li><a href="https://canvas/e1">Essay 1</a></li><li><a href="https://canvas/q2">Quiz 2</a></li></ul>',
             },
         ];
         const rows = buildRecipientRows(students, ['MissingAssignmentsList']);
-        expect(rows[0].MissingAssignmentsList).toContain('Essay 1');
-        expect(rows[0].MissingAssignmentsList).toContain('Quiz 2');
-        expect(rows[0].MissingAssignmentsList).not.toMatch(/<\w+/);
+        const text = rows[0].MissingAssignmentsList;
+        expect(text).toContain('Essay 1');
+        expect(text).toContain('https://canvas/e1');
+        expect(text).toContain('Quiz 2');
+        expect(text).toContain('https://canvas/q2');
+        expect(text).not.toMatch(/<\w+/);
     });
 
-    it('uses empty string when a field is missing on a student', () => {
+    it('uses the unrendered placeholder when a field is missing on a student', () => {
         const students = [{ StudentEmail: 'a@x.com', FirstName: 'Alice' }];
         const rows = buildRecipientRows(students, ['FirstName', 'LastName']);
         expect(rows[0].FirstName).toBe('Alice');
@@ -77,112 +78,6 @@ describe('buildRecipientRows', () => {
         const students = [{ StudentEmail: 'a@x.com', Note: 'hello world' }];
         const rows = buildRecipientRows(students, ['Note']);
         expect(rows[0].Note).toBe('hello world');
-    });
-});
-
-describe('parseAssignmentList', () => {
-    it('returns empty array for non-HTML input', () => {
-        expect(parseAssignmentList('')).toEqual([]);
-        expect(parseAssignmentList(null)).toEqual([]);
-        expect(parseAssignmentList('plain text')).toEqual([]);
-    });
-
-    it('extracts title + url from anchor-wrapped list items', () => {
-        const html = '<ul><li><a href="https://x.com/1">Essay 1</a></li><li><a href="https://x.com/2">Quiz 2</a></li></ul>';
-        expect(parseAssignmentList(html)).toEqual([
-            { title: 'Essay 1', url: 'https://x.com/1' },
-            { title: 'Quiz 2', url: 'https://x.com/2' },
-        ]);
-    });
-
-    it('handles list items without anchors by leaving url empty', () => {
-        const html = '<ul><li>Plain Item</li><li><a href="https://x.com/1">Linked</a></li></ul>';
-        expect(parseAssignmentList(html)).toEqual([
-            { title: 'Plain Item', url: '' },
-            { title: 'Linked', url: 'https://x.com/1' },
-        ]);
-    });
-});
-
-describe('computeAssignmentSlotCount', () => {
-    it('returns 0 when no students have assignments', () => {
-        expect(computeAssignmentSlotCount([])).toBe(0);
-        expect(computeAssignmentSlotCount([{ MissingAssignmentsList: '' }])).toBe(0);
-    });
-
-    it('returns the max number of assignments across all students', () => {
-        const students = [
-            { MissingAssignmentsList: '<ul><li><a href="u1">a</a></li></ul>' },
-            { MissingAssignmentsList: '<ul><li><a href="u1">a</a></li><li><a href="u2">b</a></li><li><a href="u3">c</a></li></ul>' },
-            { MissingAssignmentsList: '<ul><li><a href="u1">a</a></li><li><a href="u2">b</a></li></ul>' },
-        ];
-        expect(computeAssignmentSlotCount(students)).toBe(3);
-    });
-
-    it('caps at MAX_ASSIGNMENT_SLOTS', () => {
-        const items = Array.from({ length: 30 }, (_, i) => `<li><a href="u${i}">Item ${i}</a></li>`).join('');
-        const students = [{ MissingAssignmentsList: `<ul>${items}</ul>` }];
-        expect(computeAssignmentSlotCount(students)).toBe(20);
-    });
-});
-
-describe('assignment slot expansion in rows', () => {
-    it('adds A1..AN slot columns alongside a fallback MissingAssignmentsList column', async () => {
-        const students = [
-            {
-                StudentEmail: 'a@x.com',
-                FirstName: 'Alice',
-                MissingAssignmentsList: '<ul><li><a href="https://canvas/e1">Essay 1</a></li><li><a href="https://canvas/q2">Quiz 2</a></li></ul>',
-            },
-        ];
-        const blob = await generateRecipientsXlsxBlob(students, ['FirstName', 'MissingAssignmentsList'], { assignmentSlotCount: 2 });
-        const buffer = await blobToArrayBuffer(blob);
-
-        const wb = new ExcelJS.Workbook();
-        await wb.xlsx.load(buffer);
-        const sheet = wb.getWorksheet('Recipients');
-        const headers = sheet.getRow(1).values;
-
-        expect(headers).toContain('Email');
-        expect(headers).toContain('FirstName');
-        expect(headers).toContain('A1_Title');
-        expect(headers).toContain('A1_Url');
-        expect(headers).toContain('A2_Title');
-        expect(headers).toContain('A2_Url');
-        // Fallback column always present — protects against placeholder-detection misses.
-        expect(headers).toContain('MissingAssignmentsList');
-
-        const row = sheet.getRow(2).values;
-        const headerIdx = (name) => headers.indexOf(name);
-        expect(row[headerIdx('A1_Title')]).toBe('Essay 1');
-        expect(row[headerIdx('A1_Url')]).toBe('https://canvas/e1');
-        expect(row[headerIdx('A2_Title')]).toBe('Quiz 2');
-        expect(row[headerIdx('A2_Url')]).toBe('https://canvas/q2');
-        // Fallback column includes URLs alongside titles so Outlook autolinks.
-        expect(row[headerIdx('MissingAssignmentsList')]).toContain('Essay 1');
-        expect(row[headerIdx('MissingAssignmentsList')]).toContain('https://canvas/e1');
-    });
-
-    it('leaves later slots empty for students with fewer assignments', async () => {
-        const students = [
-            {
-                StudentEmail: 'a@x.com',
-                MissingAssignmentsList: '<ul><li><a href="u1">One</a></li></ul>',
-            },
-        ];
-        const blob = await generateRecipientsXlsxBlob(students, ['MissingAssignmentsList'], { assignmentSlotCount: 3 });
-        const buffer = await blobToArrayBuffer(blob);
-
-        const wb = new ExcelJS.Workbook();
-        await wb.xlsx.load(buffer);
-        const sheet = wb.getWorksheet('Recipients');
-        const headers = sheet.getRow(1).values;
-        const row = sheet.getRow(2).values;
-        const headerIdx = (name) => headers.indexOf(name);
-
-        expect(row[headerIdx('A1_Title')]).toBe('One');
-        expect(row[headerIdx('A2_Title')] || '').toBe('');
-        expect(row[headerIdx('A3_Title')] || '').toBe('');
     });
 });
 
