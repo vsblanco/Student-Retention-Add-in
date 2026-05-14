@@ -51,6 +51,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     // UI state
     const [lastFocusedInput, setLastFocusedInput] = useState(null);
     const [showMoreParams, setShowMoreParams] = useState(false);
+    const [showParameters, setShowParameters] = useState(false);
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
     const [lowerSectionDimmed, setLowerSectionDimmed] = useState(true);
     const [showSendContextMenu, setShowSendContextMenu] = useState(false);
@@ -1182,7 +1183,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     // Show work-in-progress screen when no Power Automate connection is configured.
     // Email Composer View — shared by powerautomate (send) and individual (download as .docx) modes
     return (
-        <div className="max-w-md mx-auto p-4 bg-gray-50">
+        <div className="max-w-md mx-auto p-4 bg-gray-50 select-none">
             <div className="flex justify-between items-center mb-4">
                 <h1 className="text-xl font-bold text-gray-800">Personalized Email</h1>
                 <button
@@ -1284,9 +1285,9 @@ export default function PersonalizedEmail({ user, onReady }) {
                     />
                 </div>
 
-                {/* Body (Quill Editor) */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Body</label>
+                {/* Body (Quill Editor) — selectable; the outer container disables selection elsewhere */}
+                <div className="select-text">
+                    <label className="block text-sm font-medium text-gray-700 select-none">Body</label>
                     <ReactQuill
                         ref={quillRef}
                         theme="snow"
@@ -1299,52 +1300,72 @@ export default function PersonalizedEmail({ user, onReady }) {
                     />
                 </div>
 
-                {/* Parameters */}
+                {/* Parameters — collapsed by default so users with saved templates have more space */}
                 <div className="mt-8">
-                    <label className="block text-sm font-medium text-gray-700">Insert Parameter</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {standardParameters.map(param => renderParameterButton(param))}
-                    </div>
-
-                    {specialParameters.length > 0 && (
-                        <div className="mt-3">
-                            <label className="block text-xs font-medium text-gray-600 mb-2">Special Parameters</label>
-                            <div className="flex flex-wrap gap-2">
-                                {specialParameters.map(param => renderParameterButton(param))}
-                            </div>
-                        </div>
-                    )}
-
-                    {customParameters.length > 0 && (
-                        <div className="mt-3">
-                            <label className="block text-xs font-medium text-gray-600 mb-2">Custom Parameters</label>
-                            <div className="flex flex-wrap gap-2">
-                                {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
-                            </div>
-                            {customParameters.length > 5 && (
-                                <>
-                                    {showMoreParams && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {customParameters.slice(5).map(param => renderParameterButton(param))}
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => setShowMoreParams(!showMoreParams)}
-                                        className="mt-2 text-xs text-blue-600 hover:underline"
-                                    >
-                                        {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    )}
-
                     <button
-                        onClick={() => setShowCustomParamModal(true)}
-                        className="mt-2 text-xs text-blue-600 hover:underline"
+                        type="button"
+                        onClick={() => setShowParameters(prev => !prev)}
+                        aria-expanded={showParameters}
+                        className="flex items-center w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900"
                     >
-                        + Create Custom Parameter
+                        <svg
+                            className={`h-4 w-4 mr-1 transition-transform ${showParameters ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Insert Parameter
                     </button>
+
+                    {showParameters && (
+                        <>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {standardParameters.map(param => renderParameterButton(param))}
+                            </div>
+
+                            {specialParameters.length > 0 && (
+                                <div className="mt-3">
+                                    <label className="block text-xs font-medium text-gray-600 mb-2">Special Parameters</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {specialParameters.map(param => renderParameterButton(param))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {customParameters.length > 0 && (
+                                <div className="mt-3">
+                                    <label className="block text-xs font-medium text-gray-600 mb-2">Custom Parameters</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
+                                    </div>
+                                    {customParameters.length > 5 && (
+                                        <>
+                                            {showMoreParams && (
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    {customParameters.slice(5).map(param => renderParameterButton(param))}
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={() => setShowMoreParams(!showMoreParams)}
+                                                className="mt-2 text-xs text-blue-600 hover:underline"
+                                            >
+                                                {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => setShowCustomParamModal(true)}
+                                className="mt-2 text-xs text-blue-600 hover:underline"
+                            >
+                                + Create Custom Parameter
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
