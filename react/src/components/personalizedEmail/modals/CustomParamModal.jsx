@@ -134,9 +134,13 @@ export default function CustomParamModal({ isOpen, onClose, customParameters, on
                                         </button>
                                         <button
                                             onClick={() => handleDeleteParam(param.name)}
-                                            className="px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded-md hover:bg-red-200"
+                                            aria-label={`Delete ${param.name}`}
+                                            title={`Delete ${param.name}`}
+                                            className="p-1 text-red-600 rounded-md hover:bg-red-50"
                                         >
-                                            Delete
+                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+                                            </svg>
                                         </button>
                                     </div>
                                 </div>
