@@ -8,7 +8,7 @@ import PersonalizedEmail from './components/personalizedEmail/PersonalizedEmail.
 import ReportGeneration from './components/reportGeneration/ReportGeneration.jsx';
 import Welcome from './components/welcomeScreen/Welcome.jsx'; // Import the Welcome component
 import chromeExtensionService from '../../shared/chromeExtensionService.js';
-import { registerWorkbookUser } from './services/workbookUsers.js';
+import { registerWorkbookUser, isUserRegistered } from './services/workbookUsers.js';
 import { ToastContainer, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -109,37 +109,108 @@ function App() {
     localStorage.setItem('SRK_HAS_SEEN_WELCOME', 'true');
   };
 
-  // Register the signed-in user in workbook settings once per session, in the
-  // background. Office.context.document.settings may not be ready on first
-  // mount, so wait for Office.onReady before upserting. Pull email from the
-  // SSO_USER_INFO cache that SSO.jsx writes during login; fall back to the
-  // bare name if it isn't available (e.g. guest mode). The helper dedupes
-  // (email-first, then name), so calling it on every currentUser change is safe.
+  // Detect whether the signed-in user is new to this workbook and register
+  // them if so. Runs on Office.onReady (covers fresh loads + cached auto-login),
+  // re-runs on SettingsChanged (co-author updates the list) and on
+  // visibilitychange (covers Excel Online cases where the task pane persists
+  // across workbook switches without remounting React). Pulls email from the
+  // SSO_USER_INFO cache SSO.jsx writes during login; falls back to the bare
+  // name. registerWorkbookUser is idempotent, so repeated calls are safe.
   useEffect(() => {
     if (!currentUser) return;
     if (typeof window === 'undefined' || !window.Office || !Office.onReady) return;
 
-    let userInfo = { name: currentUser };
-    try {
-      const cached = localStorage.getItem('SSO_USER_INFO');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (parsed && typeof parsed === 'object') {
-          userInfo = {
-            name: parsed.name || currentUser,
-            email: typeof parsed.email === 'string' ? parsed.email : undefined,
-          };
+    const resolveUserInfo = () => {
+      let userInfo = { name: currentUser };
+      try {
+        const cached = localStorage.getItem('SSO_USER_INFO');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === 'object') {
+            userInfo = {
+              name: parsed.name || currentUser,
+              email: typeof parsed.email === 'string' ? parsed.email : undefined,
+            };
+          }
         }
+      } catch (e) {
+        console.warn('App: failed to parse SSO_USER_INFO for workbook user registration', e);
       }
-    } catch (e) {
-      console.warn('App: failed to parse SSO_USER_INFO for workbook user registration', e);
-    }
+      return userInfo;
+    };
 
-    Office.onReady(() => {
+    const detectAndRegister = () => {
+      const userInfo = resolveUserInfo();
+      let isNew = false;
+      try {
+        isNew = !isUserRegistered(userInfo);
+      } catch (e) {
+        // If the membership check fails (e.g. settings unavailable), fall
+        // through to registerWorkbookUser — it's idempotent and will no-op
+        // if the user is already present.
+        console.warn('App: workbook user membership check failed', e);
+      }
+      console.log(
+        `App: ${isNew ? 'new' : 'returning'} user "${userInfo.name}" — ${isNew ? 'registering in' : 'already in'} workbook`
+      );
       registerWorkbookUser(userInfo).catch(err => {
         console.warn('App: failed to register workbook user', err);
       });
+    };
+
+    let unmounted = false;
+    let settingsHandler = null;
+    let visibilityHandler = null;
+
+    Office.onReady(() => {
+      if (unmounted) return;
+
+      // Initial check on app load (or login).
+      detectAndRegister();
+
+      // SettingsChanged only fires when a co-author saves settings in Excel
+      // on the web, so refresh the in-memory copy before re-checking.
+      try {
+        const settings = Office.context && Office.context.document && Office.context.document.settings;
+        if (settings && typeof settings.addHandlerAsync === 'function' &&
+            Office.EventType && Office.EventType.SettingsChanged) {
+          settingsHandler = () => {
+            if (typeof settings.refreshAsync === 'function') {
+              settings.refreshAsync(() => { if (!unmounted) detectAndRegister(); });
+            } else {
+              detectAndRegister();
+            }
+          };
+          settings.addHandlerAsync(Office.EventType.SettingsChanged, settingsHandler);
+        }
+      } catch (e) {
+        console.warn('App: failed to attach SettingsChanged listener', e);
+      }
+
+      // Visibility change covers the Excel Online workbook-switch case where
+      // the task pane persists and Office.onReady doesn't re-fire.
+      if (typeof document !== 'undefined' && document.addEventListener) {
+        visibilityHandler = () => {
+          if (document.visibilityState === 'visible') detectAndRegister();
+        };
+        document.addEventListener('visibilitychange', visibilityHandler);
+      }
     });
+
+    return () => {
+      unmounted = true;
+      if (settingsHandler) {
+        try {
+          Office.context.document.settings.removeHandlerAsync(
+            Office.EventType.SettingsChanged,
+            settingsHandler
+          );
+        } catch { /* ignore */ }
+      }
+      if (visibilityHandler && typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', visibilityHandler);
+      }
+    };
   }, [currentUser]);
 
   // --- CHROME EXTENSION MASTER RELAY ---

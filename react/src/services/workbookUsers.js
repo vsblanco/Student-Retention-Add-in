@@ -68,6 +68,32 @@ export function getWorkbookUsers() {
 }
 
 /**
+ * Returns true if the given user already appears in the workbook's users list.
+ * Uses the same email-first, name-fallback dedupe logic as registerWorkbookUser
+ * so callers can branch on "new vs returning" before triggering the upsert.
+ * @param {{name: string, email?: string} | string} userInfo - User to check.
+ * @returns {boolean} True if a matching record exists.
+ */
+export function isUserRegistered(userInfo) {
+    const input = typeof userInfo === 'string' ? { name: userInfo } : (userInfo || {});
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    const email = typeof input.email === 'string' ? input.email.trim() : '';
+    if (!name && !email) return false;
+
+    const users = getWorkbookUsers();
+    const lcEmail = email.toLowerCase();
+    const lcName = name.toLowerCase();
+    if (lcEmail) {
+        const byEmail = users.some(u => u && typeof u.email === 'string' && u.email.toLowerCase() === lcEmail);
+        if (byEmail) return true;
+    }
+    if (lcName) {
+        return users.some(u => u && typeof u.name === 'string' && u.name.toLowerCase() === lcName);
+    }
+    return false;
+}
+
+/**
  * Upserts the given user into the workbook's users list. If the user is
  * already registered, the existing record is preserved (original dateJoined
  * stays intact); if the new info adds an email that was previously missing,
