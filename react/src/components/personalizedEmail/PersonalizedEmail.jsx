@@ -203,12 +203,17 @@ export default function PersonalizedEmail({ user, onReady }) {
         }
     }, [isConnected]);
 
-    // Auto-populate From field with user's email
+    // Auto-populate From field with user's email — only on initial load. Without
+    // the ref guard, removing the pill (length → 0) would re-trigger this effect
+    // and immediately re-add the email, making it impossible to clear.
+    const fromAutofilledRef = useRef(false);
     useEffect(() => {
-        if (userEmail && fromPills.length === 0) {
+        if (userEmail && !fromAutofilledRef.current && fromPills.length === 0) {
             setFromPills([userEmail]);
+            fromAutofilledRef.current = true;
         }
-    }, [userEmail, fromPills.length]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userEmail]);
 
     const checkConnection = async () => {
         await Excel.run(async (context) => {
@@ -1208,6 +1213,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('from')}
                         readOnly={mode === 'individual'}
                         noWrap={true}
+                        getPillColor={getParameterColor}
                     />
                 </div>
 
@@ -1265,6 +1271,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                             placeholder="Add an additional email"
                             onFocus={() => setLastFocusedInput('cc')}
                             noWrap={true}
+                            getPillColor={getParameterColor}
                         />
                     </div>
                 )}
@@ -1296,12 +1303,12 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('quill')}
                         modules={QUILL_EDITOR_CONFIG.modules}
                         className="mt-1 bg-white"
-                        style={{ height: '192px', marginBottom: '80px' }}
+                        style={{ height: '192px', marginBottom: '48px' }}
                     />
                 </div>
 
                 {/* Parameters — collapsed by default so users with saved templates have more space */}
-                <div className="mt-8">
+                <div className="mt-3">
                     <button
                         type="button"
                         onClick={() => setShowParameters(prev => !prev)}
