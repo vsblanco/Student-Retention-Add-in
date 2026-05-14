@@ -5,6 +5,7 @@ import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
 import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
+import { downloadEmailsDocx } from './utils/docxGenerator';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
 import CustomParamModal from './modals/CustomParamModal';
@@ -949,8 +950,36 @@ export default function PersonalizedEmail({ user, onReady }) {
     const executeSend = async () => {
         if (mode === 'powerautomate') {
             await sendEmailsViaPowerAutomate();
+        } else if (mode === 'individual') {
+            await downloadEmailsAsDocx();
         } else {
             setStatus('Invalid sending mode. Please refresh and try again.');
+        }
+    };
+
+    const downloadEmailsAsDocx = async () => {
+        setShowConfirmModal(false);
+        await ensureStudentDataLoaded();
+
+        const payload = generatePayload();
+        if (payload.emails.length === 0) {
+            setStatus('No students with valid email addresses found.');
+            return;
+        }
+
+        setStatus(`Generating Word document for ${payload.emails.length} ${payload.emails.length === 1 ? 'letter' : 'letters'}...`);
+
+        try {
+            const stamp = new Date().toISOString().slice(0, 10);
+            await downloadEmailsDocx(payload.emails, `personalized-emails-${stamp}.docx`);
+            const info = { count: payload.emails.length, timestamp: new Date().toISOString(), action: 'download' };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
+            setLastSentPayload(payload);
+            setStatus(`Downloaded ${payload.emails.length} ${payload.emails.length === 1 ? 'letter' : 'letters'}.`);
+        } catch (error) {
+            setStatus(`Failed to generate document: ${error.message}`);
+            console.error('Error generating .docx:', error);
         }
     };
 
@@ -1137,26 +1166,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     }
 
     // Show work-in-progress screen when no Power Automate connection is configured.
-    // Direct Outlook/Graph sending is not yet implemented; configure a Power Automate URL to unlock.
-    if (mode === 'individual') {
-        return (
-            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
-                <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg">
-                    <div className="text-center">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
-                            <svg className="h-8 w-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-xl font-semibold text-gray-700">This feature is still being worked on.</h2>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Email Composer View
+    // Email Composer View — shared by powerautomate (send) and individual (download as .docx) modes
     return (
         <div className="max-w-md mx-auto p-4 bg-gray-50">
             <div className="flex justify-between items-center mb-4">
@@ -1216,7 +1226,10 @@ export default function PersonalizedEmail({ user, onReady }) {
                     onClick={() => setLowerSectionDimmed(false)}
                 >
                     <p className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full shadow-sm">
-                        Last sent {lastSentInfo.count} {lastSentInfo.count === 1 ? 'email' : 'emails'}{' '}
+                        Last {lastSentInfo.action === 'download' ? 'downloaded' : 'sent'} {lastSentInfo.count}{' '}
+                        {lastSentInfo.action === 'download'
+                            ? (lastSentInfo.count === 1 ? 'letter' : 'letters')
+                            : (lastSentInfo.count === 1 ? 'email' : 'emails')}{' '}
                         {formatLastSent(lastSentInfo.timestamp)}
                     </p>
                 </div>
@@ -1335,17 +1348,17 @@ export default function PersonalizedEmail({ user, onReady }) {
                     <div className="relative w-1/2">
                         <button
                             ref={sendButtonRef}
-                            onClick={handleOpenConfirmModal}
+                            onClick={mode === 'individual' ? downloadEmailsAsDocx : handleOpenConfirmModal}
                             onContextMenu={(e) => {
                                 e.preventDefault();
-                                setShowSendContextMenu(true);
+                                if (mode === 'powerautomate') setShowSendContextMenu(true);
                             }}
                             onMouseEnter={() => { if (!isFormValid()) setShowSendTooltip(true); }}
                             onMouseLeave={() => setShowSendTooltip(false)}
                             disabled={!isFormValid()}
                             className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
-                            Send Email
+                            {mode === 'individual' ? 'Download Emails' : 'Send Email'}
                         </button>
                         {!isFormValid() && showSendTooltip && (
                             <span
@@ -1372,7 +1385,7 @@ export default function PersonalizedEmail({ user, onReady }) {
             </div>
             {mode === 'individual' && user !== 'Guest' && (
                 <p className="text-xs text-gray-600 mt-2 text-center">
-                    Emails will be sent from your mailbox using Microsoft Graph API
+                    Personalized letters will download as a single Word document, one page per student.
                 </p>
             )}
             {mode === 'powerautomate' && user !== 'Guest' && (
