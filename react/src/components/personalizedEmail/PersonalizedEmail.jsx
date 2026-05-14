@@ -1253,17 +1253,20 @@ export default function PersonalizedEmail({ user, onReady }) {
                 onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
             >
             <div className="space-y-4 mt-4">
-                {/* CC Field */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">CC</label>
-                    <PillInput
-                        pills={ccPills}
-                        onPillsChange={setCcPills}
-                        placeholder="Add an additional email"
-                        onFocus={() => setLastFocusedInput('cc')}
-                        noWrap={true}
-                    />
-                </div>
+                {/* CC Field — hidden in individual/download mode because Word's mail-merge
+                    Send Email dialog has no CC option, so CC values would be silently dropped. */}
+                {mode !== 'individual' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">CC</label>
+                        <PillInput
+                            pills={ccPills}
+                            onPillsChange={setCcPills}
+                            placeholder="Add an additional email"
+                            onFocus={() => setLastFocusedInput('cc')}
+                            noWrap={true}
+                        />
+                    </div>
+                )}
 
                 {/* Subject */}
                 <div>

@@ -15,27 +15,37 @@ function blobToArrayBuffer(blob) {
 }
 
 describe('buildRecipientRows', () => {
-    it('returns one row per student with valid email', () => {
+    it('returns one row per student with both StudentEmail and PersonalEmail columns', () => {
         const students = [
-            { StudentEmail: 'alice@example.com', FirstName: 'Alice', Grade: 'A' },
-            { StudentEmail: 'bob@example.com', FirstName: 'Bob', Grade: 'B' },
+            { StudentEmail: 'alice@school.edu', PersonalEmail: 'alice@home.com', FirstName: 'Alice', Grade: 'A' },
+            { StudentEmail: 'bob@school.edu', PersonalEmail: '', FirstName: 'Bob', Grade: 'B' },
         ];
         const rows = buildRecipientRows(students, ['FirstName', 'Grade']);
         expect(rows).toEqual([
-            { Email: 'alice@example.com', FirstName: 'Alice', Grade: 'A' },
-            { Email: 'bob@example.com', FirstName: 'Bob', Grade: 'B' },
+            { StudentEmail: 'alice@school.edu', PersonalEmail: 'alice@home.com', FirstName: 'Alice', Grade: 'A' },
+            { StudentEmail: 'bob@school.edu', PersonalEmail: '', FirstName: 'Bob', Grade: 'B' },
         ]);
     });
 
-    it('filters out students with no email', () => {
+    it('filters out students with no StudentEmail', () => {
         const students = [
-            { StudentEmail: 'alice@example.com', FirstName: 'Alice' },
-            { StudentEmail: '', FirstName: 'Nobody' },
+            { StudentEmail: 'alice@school.edu', PersonalEmail: 'a@home.com', FirstName: 'Alice' },
+            { StudentEmail: '', PersonalEmail: 'someone@home.com', FirstName: 'Nobody' },
             { FirstName: 'NoEmail' },
         ];
         const rows = buildRecipientRows(students, ['FirstName']);
         expect(rows).toHaveLength(1);
-        expect(rows[0].Email).toBe('alice@example.com');
+        expect(rows[0].StudentEmail).toBe('alice@school.edu');
+    });
+
+    it('does not duplicate StudentEmail/PersonalEmail when also in fieldNames', () => {
+        const students = [
+            { StudentEmail: 'a@x.com', PersonalEmail: 'a@home.com', FirstName: 'A' },
+        ];
+        const rows = buildRecipientRows(students, ['StudentEmail', 'PersonalEmail', 'FirstName']);
+        expect(Object.keys(rows[0])).toEqual(['StudentEmail', 'PersonalEmail', 'FirstName']);
+        expect(rows[0].StudentEmail).toBe('a@x.com');
+        expect(rows[0].PersonalEmail).toBe('a@home.com');
     });
 
     it('resolves nested template references in field values', () => {
@@ -91,10 +101,10 @@ describe('generateRecipientsXlsxBlob', () => {
         expect(blob.size).toBeGreaterThan(0);
     });
 
-    it('produces a workbook with Email as the first column followed by the field columns', async () => {
+    it('produces a workbook with StudentEmail and PersonalEmail columns first', async () => {
         const students = [
-            { StudentEmail: 'alice@example.com', FirstName: 'Alice', Grade: 'A' },
-            { StudentEmail: 'bob@example.com', FirstName: 'Bob', Grade: 'B' },
+            { StudentEmail: 'alice@school.edu', PersonalEmail: 'alice@home.com', FirstName: 'Alice', Grade: 'A' },
+            { StudentEmail: 'bob@school.edu', PersonalEmail: '', FirstName: 'Bob', Grade: 'B' },
         ];
         const blob = await generateRecipientsXlsxBlob(students, ['FirstName', 'Grade']);
         const buffer = await blobToArrayBuffer(blob);
@@ -105,13 +115,20 @@ describe('generateRecipientsXlsxBlob', () => {
         expect(sheet).toBeDefined();
 
         const headerRow = sheet.getRow(1).values;
-        expect(headerRow[1]).toBe('Email');
-        expect(headerRow[2]).toBe('FirstName');
-        expect(headerRow[3]).toBe('Grade');
+        expect(headerRow[1]).toBe('StudentEmail');
+        expect(headerRow[2]).toBe('PersonalEmail');
+        expect(headerRow[3]).toBe('FirstName');
+        expect(headerRow[4]).toBe('Grade');
 
         const aliceRow = sheet.getRow(2).values;
-        expect(aliceRow[1]).toBe('alice@example.com');
-        expect(aliceRow[2]).toBe('Alice');
-        expect(aliceRow[3]).toBe('A');
+        expect(aliceRow[1]).toBe('alice@school.edu');
+        expect(aliceRow[2]).toBe('alice@home.com');
+        expect(aliceRow[3]).toBe('Alice');
+        expect(aliceRow[4]).toBe('A');
+
+        const bobRow = sheet.getRow(3).values;
+        expect(bobRow[1]).toBe('bob@school.edu');
+        // PersonalEmail can be empty in ExcelJS — accept '' or undefined.
+        expect(bobRow[2] || '').toBe('');
     });
 });
