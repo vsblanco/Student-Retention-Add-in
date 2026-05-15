@@ -1203,7 +1203,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     return (
         <div className="max-w-md mx-auto p-4 bg-gray-50 select-none">
             <div className="flex justify-between items-center mb-4">
-                <h1 className="text-xl font-bold text-gray-800">Personalized Email</h1>
+                <h1 className="text-xl font-bold text-gray-800">Send Emails</h1>
                 <button
                     onClick={() => setShowTemplatesModal(true)}
                     className="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300"
