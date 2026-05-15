@@ -5,6 +5,9 @@ import PillInput from './components/PillInput';
 import { EMAIL_TEMPLATES_KEY, CUSTOM_PARAMS_KEY, standardParameters, specialParameters, QUILL_EDITOR_CONFIG, PARAMETER_BUTTON_STYLES, COLUMN_MAPPINGS } from './utils/constants';
 import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, isValidEmail, isValidHttpUrl, evaluateMapping, renderTemplate, renderCCTemplate, generateMissingAssignmentsList, buildMissingAssignmentsCache } from './utils/helpers';
 import { generatePdfReceipt } from './utils/receiptGenerator';
+import { downloadMailMergeTemplate, extractFieldNames } from './utils/docxGenerator';
+import { downloadRecipientsXlsx } from './utils/recipientsGenerator';
+import DownloadModal from './modals/DownloadModal';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
 import CustomParamModal from './modals/CustomParamModal';
@@ -49,8 +52,8 @@ export default function PersonalizedEmail({ user, onReady }) {
     // UI state
     const [lastFocusedInput, setLastFocusedInput] = useState(null);
     const [showMoreParams, setShowMoreParams] = useState(false);
+    const [showParameters, setShowParameters] = useState(false);
     const [showRecipientHighlight, setShowRecipientHighlight] = useState(false);
-    const [lowerSectionDimmed, setLowerSectionDimmed] = useState(true);
     const [showSendContextMenu, setShowSendContextMenu] = useState(false);
     const [showSendTooltip, setShowSendTooltip] = useState(false);
     const quillRef = useRef(null);
@@ -65,6 +68,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     const [showRecipientModal, setShowRecipientModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
     const [lastSentInfo, setLastSentInfo] = useState(() => {
         try {
@@ -200,12 +204,17 @@ export default function PersonalizedEmail({ user, onReady }) {
         }
     }, [isConnected]);
 
-    // Auto-populate From field with user's email
+    // Auto-populate From field with user's email — only on initial load. Without
+    // the ref guard, removing the pill (length → 0) would re-trigger this effect
+    // and immediately re-add the email, making it impossible to clear.
+    const fromAutofilledRef = useRef(false);
     useEffect(() => {
-        if (userEmail && fromPills.length === 0) {
+        if (userEmail && !fromAutofilledRef.current && fromPills.length === 0) {
             setFromPills([userEmail]);
+            fromAutofilledRef.current = true;
         }
-    }, [userEmail, fromPills.length]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [userEmail]);
 
     const checkConnection = async () => {
         await Excel.run(async (context) => {
@@ -217,11 +226,12 @@ export default function PersonalizedEmail({ user, onReady }) {
             const connections = connectionsSetting.value ? JSON.parse(connectionsSetting.value) : [];
             const connection = connections.find(c => c.type === 'power-automate' && c.name === 'Send Personalized Email');
 
-            if (connection) {
+            if (connection && connection.enabled !== false) {
                 setPowerAutomateConnection(connection);
                 setIsConnected(true);
                 setMode('powerautomate');
             } else {
+                setPowerAutomateConnection(connection || null);
                 setIsConnected(false);
                 setMode('individual');
             }
@@ -683,7 +693,6 @@ export default function PersonalizedEmail({ user, onReady }) {
     const handleRecipientUpdate = (newSelection, count) => {
         setRecipientSelection({ ...newSelection, hasBeenSet: true });
         setRecipientCount(count);
-        setLowerSectionDimmed(false);
         // Clear cache to ensure fresh data is fetched when needed
         setStudentDataCache([]);
         setCachedSpecialParams([]);
@@ -696,14 +705,15 @@ export default function PersonalizedEmail({ user, onReady }) {
     };
 
     const ensureStudentDataLoaded = async () => {
-        if (!recipientSelection.hasBeenSet) return;
+        if (!recipientSelection.hasBeenSet) return studentDataCache;
         // Re-fetch when cache is empty, or when the template now references a
         // special parameter that wasn't resolved the last time we fetched.
         const needed = specialParameters.filter(p => isParameterUsedInTemplate(p));
         const missingSpecial = needed.some(p => !cachedSpecialParams.includes(p));
         if (studentDataCache.length === 0 || missingSpecial) {
-            await getStudentDataWithUI();
+            return await getStudentDataWithUI();
         }
+        return studentDataCache;
     };
 
     const handleOpenExampleModal = async () => {
@@ -729,15 +739,15 @@ export default function PersonalizedEmail({ user, onReady }) {
     };
 
     const getParameterColor = (paramName) => {
-        // Check if it's a special parameter
+        // Color palette is intentionally aligned with PARAMETER_BUTTON_STYLES so a
+        // parameter looks the same in the button row, the body editor, and pill inputs.
         if (specialParameters.includes(paramName)) {
             return {
-                background: '#fed7aa', // orange-200
+                background: '#ffedd5', // orange-100
                 color: '#9a3412'       // orange-800
             };
         }
 
-        // Check if it's a custom parameter
         const customParam = customParameters.find(p => p.name === paramName);
         if (customParam) {
             const hasMappings = customParam.mappings && customParam.mappings.length > 0;
@@ -745,18 +755,18 @@ export default function PersonalizedEmail({ user, onReady }) {
 
             if (hasNested) {
                 return {
-                    background: '#fecdd3', // rose-200
+                    background: '#ffe4e6', // rose-100
                     color: '#881337'       // rose-800
                 };
             }
             if (hasMappings) {
                 return {
-                    background: '#e9d5ff', // purple-200
+                    background: '#f3e8ff', // purple-100
                     color: '#581c87'       // purple-800
                 };
             }
             return {
-                background: '#bfdbfe', // blue-200
+                background: '#dbeafe', // blue-100
                 color: '#1e3a8a'       // blue-800
             };
         }
@@ -949,8 +959,60 @@ export default function PersonalizedEmail({ user, onReady }) {
     const executeSend = async () => {
         if (mode === 'powerautomate') {
             await sendEmailsViaPowerAutomate();
+        } else if (mode === 'individual') {
+            openDownloadModal();
         } else {
             setStatus('Invalid sending mode. Please refresh and try again.');
+        }
+    };
+
+    const openDownloadModal = () => {
+        // Show the modal so the user can pick template, recipients, or both.
+        // Validation is per-button: template needs a body, recipients needs students.
+        setShowDownloadModal(true);
+    };
+
+    const downloadTemplateOnly = async () => {
+        if (!body || !body.trim()) {
+            setStatus('Please write an email body first.');
+            return;
+        }
+        const cleanBodyHtml = stripParameterBackgrounds(body);
+        const stamp = new Date().toISOString().slice(0, 10);
+        try {
+            await downloadMailMergeTemplate(cleanBodyHtml, `email-template-${stamp}.docx`);
+            setStatus('Downloaded Word template.');
+        } catch (error) {
+            setStatus(`Failed to generate template: ${error.message}`);
+            console.error('Error generating template:', error);
+            throw error;
+        }
+    };
+
+    const downloadRecipientsOnly = async () => {
+        // Use the returned data directly — reading studentDataCache here would see
+        // the stale closure value on the first call because setStudentDataCache is async.
+        const students = await ensureStudentDataLoaded();
+        const cleanBodyHtml = body ? stripParameterBackgrounds(body) : '';
+        const fieldNames = extractFieldNames(`${cleanBodyHtml} ${subject || ''}`);
+        const recipients = (students || []).filter(s => isValidEmail(s.StudentEmail));
+
+        if (recipients.length === 0) {
+            setStatus('No students with valid email addresses found.');
+            return;
+        }
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        try {
+            await downloadRecipientsXlsx(recipients, fieldNames, `email-recipients-${stamp}.xlsx`);
+            const info = { count: recipients.length, timestamp: new Date().toISOString(), action: 'download' };
+            setLastSentInfo(info);
+            try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
+            setStatus(`Downloaded recipient list (${recipients.length} ${recipients.length === 1 ? 'row' : 'rows'}).`);
+        } catch (error) {
+            setStatus(`Failed to generate recipient list: ${error.message}`);
+            console.error('Error generating recipient list:', error);
+            throw error;
         }
     };
 
@@ -1137,30 +1199,11 @@ export default function PersonalizedEmail({ user, onReady }) {
     }
 
     // Show work-in-progress screen when no Power Automate connection is configured.
-    // Direct Outlook/Graph sending is not yet implemented; configure a Power Automate URL to unlock.
-    if (mode === 'individual') {
-        return (
-            <div className="max-w-md mx-auto p-4 bg-gray-50 min-h-screen flex items-center justify-center">
-                <div className="bg-white rounded-lg shadow-lg p-8 max-w-lg">
-                    <div className="text-center">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4">
-                            <svg className="h-8 w-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </div>
-                        <h2 className="text-xl font-semibold text-gray-700">This feature is still being worked on.</h2>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Email Composer View
+    // Email Composer View — shared by powerautomate (send) and individual (download as .docx) modes
     return (
-        <div className="max-w-md mx-auto p-4 bg-gray-50">
+        <div className="max-w-md mx-auto p-4 bg-gray-50 select-none">
             <div className="flex justify-between items-center mb-4">
-                <h1 className="text-xl font-bold text-gray-800">Personalized Email</h1>
+                <h1 className="text-xl font-bold text-gray-800">Send Emails</h1>
                 <button
                     onClick={() => setShowTemplatesModal(true)}
                     className="px-3 py-1 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300"
@@ -1183,6 +1226,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('from')}
                         readOnly={mode === 'individual'}
                         noWrap={true}
+                        getPillColor={getParameterColor}
                     />
                 </div>
 
@@ -1208,35 +1252,24 @@ export default function PersonalizedEmail({ user, onReady }) {
 
             </div>
 
-            {/* Lower section — dimmed until user selects students, loads a template, or clicks */}
-            <div className="relative">
-            {lowerSectionDimmed && lastSentInfo && (
-                <div
-                    className="absolute inset-0 z-10 flex items-start justify-center pt-6 cursor-pointer"
-                    onClick={() => setLowerSectionDimmed(false)}
-                >
-                    <p className="text-xs text-gray-500 bg-gray-50 px-3 py-1 rounded-full shadow-sm">
-                        Last sent {lastSentInfo.count} {lastSentInfo.count === 1 ? 'email' : 'emails'}{' '}
-                        {formatLastSent(lastSentInfo.timestamp)}
-                    </p>
-                </div>
-            )}
-            <div
-                className={`transition-all duration-500 ${lowerSectionDimmed ? 'opacity-40 grayscale blur-[2px]' : ''}`}
-                onClick={() => { if (lowerSectionDimmed) setLowerSectionDimmed(false); }}
-            >
+            {/* Lower section */}
+            <div>
             <div className="space-y-4 mt-4">
-                {/* CC Field */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">CC</label>
-                    <PillInput
-                        pills={ccPills}
-                        onPillsChange={setCcPills}
-                        placeholder="Add an additional email"
-                        onFocus={() => setLastFocusedInput('cc')}
-                        noWrap={true}
-                    />
-                </div>
+                {/* CC Field — hidden in individual/download mode because Word's mail-merge
+                    Send Email dialog has no CC option, so CC values would be silently dropped. */}
+                {mode !== 'individual' && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">CC</label>
+                        <PillInput
+                            pills={ccPills}
+                            onPillsChange={setCcPills}
+                            placeholder="Add an additional email"
+                            onFocus={() => setLastFocusedInput('cc')}
+                            noWrap={true}
+                            getPillColor={getParameterColor}
+                        />
+                    </div>
+                )}
 
                 {/* Subject */}
                 <div>
@@ -1254,9 +1287,9 @@ export default function PersonalizedEmail({ user, onReady }) {
                     />
                 </div>
 
-                {/* Body (Quill Editor) */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Body</label>
+                {/* Body (Quill Editor) — selectable; the outer container disables selection elsewhere */}
+                <div className="select-text">
+                    <label className="block text-sm font-medium text-gray-700 select-none">Body</label>
                     <ReactQuill
                         ref={quillRef}
                         theme="snow"
@@ -1265,56 +1298,84 @@ export default function PersonalizedEmail({ user, onReady }) {
                         onFocus={() => setLastFocusedInput('quill')}
                         modules={QUILL_EDITOR_CONFIG.modules}
                         className="mt-1 bg-white"
-                        style={{ height: '192px', marginBottom: '80px' }}
+                        style={{ height: '192px', marginBottom: '48px' }}
                     />
                 </div>
 
-                {/* Parameters */}
-                <div className="mt-8">
-                    <label className="block text-sm font-medium text-gray-700">Insert Parameter</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        {standardParameters.map(param => renderParameterButton(param))}
-                    </div>
-
-                    {specialParameters.length > 0 && (
-                        <div className="mt-3">
-                            <label className="block text-xs font-medium text-gray-600 mb-2">Special Parameters</label>
-                            <div className="flex flex-wrap gap-2">
-                                {specialParameters.map(param => renderParameterButton(param))}
-                            </div>
-                        </div>
-                    )}
-
-                    {customParameters.length > 0 && (
-                        <div className="mt-3">
-                            <label className="block text-xs font-medium text-gray-600 mb-2">Custom Parameters</label>
-                            <div className="flex flex-wrap gap-2">
-                                {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
-                            </div>
-                            {customParameters.length > 5 && (
-                                <>
-                                    {showMoreParams && (
-                                        <div className="flex flex-wrap gap-2 mt-2">
-                                            {customParameters.slice(5).map(param => renderParameterButton(param))}
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => setShowMoreParams(!showMoreParams)}
-                                        className="mt-2 text-xs text-blue-600 hover:underline"
-                                    >
-                                        {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
-                                    </button>
-                                </>
-                            )}
-                        </div>
-                    )}
-
+                {/* Parameters — collapsed by default so users with saved templates have more space */}
+                <div className="mt-3">
                     <button
-                        onClick={() => setShowCustomParamModal(true)}
-                        className="mt-2 text-xs text-blue-600 hover:underline"
+                        type="button"
+                        onClick={() => setShowParameters(prev => !prev)}
+                        aria-expanded={showParameters}
+                        className="flex items-center w-full text-left text-sm font-medium text-gray-700 hover:text-gray-900"
                     >
-                        + Create Custom Parameter
+                        <svg
+                            className={`h-4 w-4 mr-1 transition-transform ${showParameters ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        Insert Parameter
                     </button>
+
+                    {showParameters && (
+                        <>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {standardParameters.map(param => renderParameterButton(param))}
+                            </div>
+
+                            {specialParameters.length > 0 && (
+                                <div className="mt-3">
+                                    <label className="block text-xs font-medium text-gray-600 mb-2">Special Parameters</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {specialParameters.map(param => renderParameterButton(param))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-3">
+                                <div className="flex items-center gap-1 mb-2">
+                                    <label className="text-xs font-medium text-gray-600">Custom Parameters</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCustomParamModal(true)}
+                                        aria-label="Create or edit custom parameters"
+                                        title="Create or edit custom parameters"
+                                        className="p-0.5 text-gray-400 hover:text-blue-600"
+                                    >
+                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                {customParameters.length > 0 && (
+                                    <>
+                                        <div className="flex flex-wrap gap-2">
+                                            {customParameters.slice(0, 5).map(param => renderParameterButton(param))}
+                                        </div>
+                                        {customParameters.length > 5 && (
+                                            <>
+                                                {showMoreParams && (
+                                                    <div className="flex flex-wrap gap-2 mt-2">
+                                                        {customParameters.slice(5).map(param => renderParameterButton(param))}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={() => setShowMoreParams(!showMoreParams)}
+                                                    className="mt-2 text-xs text-blue-600 hover:underline"
+                                                >
+                                                    {showMoreParams ? 'Show Less' : `Show ${customParameters.length - 5} More...`}
+                                                </button>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1335,17 +1396,17 @@ export default function PersonalizedEmail({ user, onReady }) {
                     <div className="relative w-1/2">
                         <button
                             ref={sendButtonRef}
-                            onClick={handleOpenConfirmModal}
+                            onClick={mode === 'individual' ? openDownloadModal : handleOpenConfirmModal}
                             onContextMenu={(e) => {
                                 e.preventDefault();
-                                setShowSendContextMenu(true);
+                                if (mode === 'powerautomate') setShowSendContextMenu(true);
                             }}
                             onMouseEnter={() => { if (!isFormValid()) setShowSendTooltip(true); }}
                             onMouseLeave={() => setShowSendTooltip(false)}
                             disabled={!isFormValid()}
                             className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
                         >
-                            Send Email
+                            {mode === 'individual' ? 'Download' : 'Send Email'}
                         </button>
                         {!isFormValid() && showSendTooltip && (
                             <span
@@ -1372,7 +1433,7 @@ export default function PersonalizedEmail({ user, onReady }) {
             </div>
             {mode === 'individual' && user !== 'Guest' && (
                 <p className="text-xs text-gray-600 mt-2 text-center">
-                    Emails will be sent from your mailbox using Microsoft Graph API
+                    Downloads a Word template + recipient list so you can email them via Word&apos;s Mailings tab.
                 </p>
             )}
             {mode === 'powerautomate' && user !== 'Guest' && (
@@ -1381,7 +1442,6 @@ export default function PersonalizedEmail({ user, onReady }) {
                 </p>
             )}
             <p className="text-xs text-gray-500 mt-2 h-4 text-center">{status}</p>
-            </div>
             </div>
 
             {/* Modals */}
@@ -1411,7 +1471,6 @@ export default function PersonalizedEmail({ user, onReady }) {
                     setSubject(template.subject);
                     setBody(template.body);
                     setCcPills(template.cc || []);
-                    setLowerSectionDimmed(false);
                 }}
             />
 
@@ -1445,6 +1504,14 @@ export default function PersonalizedEmail({ user, onReady }) {
                 payload={lastSentPayload}
                 bodyTemplate={body}
                 initiator={{ name: user, email: userEmail }}
+            />
+
+            <DownloadModal
+                isOpen={showDownloadModal}
+                onClose={() => setShowDownloadModal(false)}
+                onDownloadTemplate={downloadTemplateOnly}
+                onDownloadRecipients={downloadRecipientsOnly}
+                recipientCount={recipientCount}
             />
         </div>
     );

@@ -129,29 +129,38 @@ function formatFriendlyDate(value) {
     return `${monthNames[targetDate.getMonth()]} ${day}${suffix}`;
 }
 
+// Look up a tag map under any of the candidate IDs (master rows may carry
+// both a SyStudentId and a Student Number, and history rows may have been
+// keyed under either). Returns the first matching entry, or null.
+function lookupTagEntry(map, sIds) {
+    if (!map || !Array.isArray(sIds)) return null;
+    for (const id of sIds) {
+        if (id && map.has(id)) return map.get(id);
+    }
+    return null;
+}
+
 /**
  * Helper to generate the Retention Outreach Message.
  * Centralized logic for LDA tags, Missing Assignments, and Explicit DNC.
- * @param {string} sId - Student ID
+ * @param {string[]} sIds - Candidate Student IDs (SyStudentId and Student Number)
  * @param {Map} ldaMap - The map of LDA data
  * @param {number} missingVal - The value from "Missing Assignments" column
  * @param {string} tableContext - 'LDA_Table' or 'Failing_Table'
  * @param {Map} dncMap - Map of ID -> Tag Text
  * @returns {string|null} - The formatted message or null
  */
-function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, includeNextAssignmentDue = true) {
+function getRetentionMessage(sIds, ldaMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, includeNextAssignmentDue = true) {
     // Priority 1: Explicit DNC (Highest Priority - Stop everything)
-    if (sId && dncMap.has(sId)) {
-        const dncTag = dncMap.get(sId);
-        if (dncTag) {
-            // Split comma-separated tags and check each individually
-            const individualTags = dncTag.split(',').map(t => t.trim());
-            const hasExcludableDnc = individualTags.some(tag =>
-                tag.includes('dnc') && tag !== 'dnc - phone' && tag !== 'dnc - other phone'
-            );
-            if (hasExcludableDnc) {
-                return "Do not contact";
-            }
+    const dncTag = lookupTagEntry(dncMap, sIds);
+    if (dncTag) {
+        // Split comma-separated tags and check each individually
+        const individualTags = dncTag.split(',').map(t => t.trim());
+        const hasExcludableDnc = individualTags.some(tag =>
+            tag.includes('dnc') && tag !== 'dnc - phone' && tag !== 'dnc - other phone'
+        );
+        if (hasExcludableDnc) {
+            return "Do not contact";
         }
     }
 
@@ -161,18 +170,16 @@ function getRetentionMessage(sId, ldaMap, missingVal, tableContext, dncMap, next
     //}
 
     // Priority 3: LDA Tag (Applies to any table)
-    if (sId && ldaMap.has(sId)) {
-        const ldaObj = ldaMap.get(sId);
-        if (ldaObj && ldaObj.date) {
-            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                'July', 'August', 'September', 'October', 'November', 'December'];
-            const day = ldaObj.date.getDate();
-            const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
-                : (day === 2 || day === 22) ? 'nd'
-                : (day === 3 || day === 23) ? 'rd' : 'th';
-            const friendlyDate = `${monthNames[ldaObj.date.getMonth()]} ${day}${suffix}`;
-            return `[Follow up] Student will engage on ${friendlyDate}`;
-        }
+    const ldaObj = lookupTagEntry(ldaMap, sIds);
+    if (ldaObj && ldaObj.date) {
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        const day = ldaObj.date.getDate();
+        const suffix = (day === 1 || day === 21 || day === 31) ? 'st'
+            : (day === 2 || day === 22) ? 'nd'
+            : (day === 3 || day === 23) ? 'rd' : 'th';
+        const friendlyDate = `${monthNames[ldaObj.date.getMonth()]} ${day}${suffix}`;
+        return `[Follow up] Student will engage on ${friendlyDate}`;
     }
 
     // Priority 4: Zero missing assignments with a next assignment due date
@@ -388,15 +395,24 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
             // --- Retrieve Key Indices ---
             const daysOutIdx = getColIndex('Days Out');
             const gradeIdx = getColIndex('Grade');
-            // Prefer SyStudentId (the modern identifier); fall back to Student
-            // Number for legacy workbooks. Without this fallback the DNC and
-            // LDA-followup tag maps stay empty whenever the Master List uses
-            // SyStudentId instead of Student Number.
-            let studentIdIdx = -1;
-            for (const candidate of [...STUDENT_ID_ALIASES, ...STUDENT_NUMBER_ALIASES]) {
-                studentIdIdx = getColIndex(candidate);
-                if (studentIdIdx !== -1) break;
-            }
+            // Resolve SyStudentId and Student Number as separate column
+            // indices on the Master List. We need both because Student
+            // History rows written before the SyStudentId migration are
+            // keyed under Student Number, while newer rows are keyed under
+            // SyStudentId — so a master row with both columns must be
+            // checked against the tag maps under either value.
+            const findColIdxByAliases = (aliases) => {
+                for (const candidate of aliases) {
+                    const idx = getColIndex(candidate);
+                    if (idx !== -1) return idx;
+                }
+                return -1;
+            };
+            const sySidIdx = findColIdxByAliases(STUDENT_ID_ALIASES);
+            const studentNumberIdx = findColIdxByAliases(STUDENT_NUMBER_ALIASES);
+            // Prefer SyStudentId; fall back to Student Number for legacy
+            // workbooks that don't have a SyStudentId column.
+            const studentIdIdx = sySidIdx !== -1 ? sySidIdx : studentNumberIdx;
 
             // --- ProgramVersion index for advisor assignment ---
             const pvAliases = ['programversion', 'program', 'progversdescrip'];
@@ -962,11 +978,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     // Normalize to string to match the normalized Student History keys.
                     const rawSId = rowObj.values[studentIdIdx];
                     const sId = (rawSId === null || rawSId === undefined || rawSId === '') ? rawSId : String(rawSId).trim();
+                    // Pull the master's Student Number too (when it's a distinct
+                    // column) so legacy history rows keyed under it still match.
+                    const rawSNumber = (studentNumberIdx !== -1 && studentNumberIdx !== studentIdIdx) ? rowObj.values[studentNumberIdx] : null;
+                    const sNumber = (rawSNumber === null || rawSNumber === undefined || rawSNumber === '') ? null : String(rawSNumber).trim();
+                    const sIds = [sId, sNumber].filter((v, i, a) => v && a.indexOf(v) === i);
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
+                    const retentionMsg = getRetentionMessage(sIds, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
                     const isGradeBookFlag = retentionMsg && retentionMsg.includes("Please check their Grade Book");
                     const isRetentionActive = !!retentionMsg && !isGradeBookFlag;
+                    const dncTagText = lookupTagEntry(dncMap, sIds);
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
 
                     // --- Course Start Baseline Check ---
@@ -1039,8 +1061,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         // --- DNC Highlight (Highest Priority - Phone Columns) ---
                         // Only strikethrough the specific phone column matching the DNC type.
                         // General "DNC" strikes both. "DNC - Phone" only strikes Phone, etc.
-                        if (settings.includeDNCTag && dncMap.has(sId)) {
-                            const dncTags = dncMap.get(sId).split(',').map(t => t.trim());
+                        if (settings.includeDNCTag && dncTagText) {
+                            const dncTags = dncTagText.split(',').map(t => t.trim());
                             const hasGeneralDnc = dncTags.some(t => t === 'dnc');
                             const hasPhoneDnc = dncTags.some(t => t === 'dnc - phone');
                             const hasOtherPhoneDnc = dncTags.some(t => t === 'dnc - other phone');
@@ -1306,13 +1328,19 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     // Normalize to string to match the normalized Student History keys.
                     const rawSId = rowObj.values[studentIdIdx];
                     const sId = (rawSId === null || rawSId === undefined || rawSId === '') ? rawSId : String(rawSId).trim();
+                    // Pull the master's Student Number too (when it's a distinct
+                    // column) so legacy history rows keyed under it still match.
+                    const rawSNumber = (studentNumberIdx !== -1 && studentNumberIdx !== studentIdIdx) ? rowObj.values[studentNumberIdx] : null;
+                    const sNumber = (rawSNumber === null || rawSNumber === undefined || rawSNumber === '') ? null : String(rawSNumber).trim();
+                    const sIds = [sId, sNumber].filter((v, i, a) => v && a.indexOf(v) === i);
 
                     // 1. Get critical values
                     const missingVal = (missingIdx !== -1) ? rowObj.values[missingIdx] : null;
                     const nextAssignmentDueVal = (nextAssignmentDueIdx !== -1) ? rowObj.values[nextAssignmentDueIdx] : null;
 
                     // 2. Generate Retention Message using helper
-                    const retentionMsg = getRetentionMessage(sId, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
+                    const retentionMsg = getRetentionMessage(sIds, ldaFollowUpMap, missingVal, tableContext, dncMap, nextAssignmentDueVal, nextAssignmentDueColumnAllBlank, settings.includeNextAssignmentDue);
+                    const dncTagText = lookupTagEntry(dncMap, sIds);
 
                     // 2b. Course Start Baseline Check
                     let courseStartMsg = null;
@@ -1334,7 +1362,7 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                     }
 
                     // 3. Determine Highlighting Logic
-                    const isLda = sId && ldaFollowUpMap.has(sId);
+                    const isLda = !!lookupTagEntry(ldaFollowUpMap, sIds);
                     const isGradeBookFlag = retentionMsg && retentionMsg.includes("Please check their Grade Book");
                     const isRetentionActive = !!retentionMsg && !isGradeBookFlag;
                     const isNextAssignmentDue = retentionMsg && retentionMsg.startsWith("Student's next assignment is due");
@@ -1409,8 +1437,8 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
                         // --- DNC Highlight (Highest Priority - Phone Columns) ---
                         // Only strikethrough the specific phone column matching the DNC type.
                         // General "DNC" strikes both. "DNC - Phone" only strikes Phone, etc.
-                        if (settings.includeDNCTag && dncMap.has(sId)) {
-                            const dncTags = dncMap.get(sId).split(',').map(t => t.trim());
+                        if (settings.includeDNCTag && dncTagText) {
+                            const dncTags = dncTagText.split(',').map(t => t.trim());
                             const hasGeneralDnc = dncTags.some(t => t === 'dnc');
                             const hasPhoneDnc = dncTags.some(t => t === 'dnc - phone');
                             const hasOtherPhoneDnc = dncTags.some(t => t === 'dnc - other phone');
@@ -1538,10 +1566,17 @@ export async function createLDA(userOverrides, onProgress, onBatchProgress = nul
         console.error("LDA Generation Error:", error);
         throw error;
     } finally {
-        // Always restore the Outreach handler suppression flag, even on error,
-        // so that subsequent user edits to Outreach columns are handled normally.
+        // Defer clearing the Outreach handler suppression flag. Excel can
+        // dispatch onChanged events for the writes we just made AFTER this
+        // function returns; if we cleared the flag synchronously, those
+        // late events would run StudentView's Outreach handler, which
+        // would interpret each LDA row write as a user comment and call
+        // addComment for every row — which crashes the add-in. Matches
+        // the 2s grace period the Chrome extension already uses.
         if (hadWindow) {
-            window.__srkSuppressOutreachHandler = previousSuppress || false;
+            setTimeout(() => {
+                window.__srkSuppressOutreachHandler = previousSuppress || false;
+            }, 2000);
         }
     }
 }
