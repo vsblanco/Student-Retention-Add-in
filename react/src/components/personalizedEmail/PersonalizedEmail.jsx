@@ -7,6 +7,7 @@ import { findColumnIndex, normalizeHeader, getTodaysLdaSheetName, getNameParts, 
 import { generatePdfReceipt } from './utils/receiptGenerator';
 import { downloadMailMergeTemplate, extractFieldNames } from './utils/docxGenerator';
 import { downloadRecipientsXlsx } from './utils/recipientsGenerator';
+import DownloadModal from './modals/DownloadModal';
 import ExampleModal from './modals/ExampleModal';
 import TemplatesModal from './modals/TemplatesModal';
 import CustomParamModal from './modals/CustomParamModal';
@@ -67,6 +68,7 @@ export default function PersonalizedEmail({ user, onReady }) {
     const [showRecipientModal, setShowRecipientModal] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [showDownloadModal, setShowDownloadModal] = useState(false);
     const [lastSentPayload, setLastSentPayload] = useState([]);
     const [lastSentInfo, setLastSentInfo] = useState(() => {
         try {
@@ -958,24 +960,40 @@ export default function PersonalizedEmail({ user, onReady }) {
         if (mode === 'powerautomate') {
             await sendEmailsViaPowerAutomate();
         } else if (mode === 'individual') {
-            await downloadMailMergePackage();
+            openDownloadModal();
         } else {
             setStatus('Invalid sending mode. Please refresh and try again.');
         }
     };
 
-    const downloadMailMergePackage = async () => {
-        // Use the returned data directly — reading studentDataCache here would see
-        // the stale closure value (empty array) on the first click because React's
-        // setState is async, so the awaited fetch's result hasn't been re-rendered yet.
-        const students = await ensureStudentDataLoaded();
+    const openDownloadModal = () => {
+        // Show the modal so the user can pick template, recipients, or both.
+        // Validation is per-button: template needs a body, recipients needs students.
+        setShowDownloadModal(true);
+    };
 
+    const downloadTemplateOnly = async () => {
         if (!body || !body.trim()) {
             setStatus('Please write an email body first.');
             return;
         }
-
         const cleanBodyHtml = stripParameterBackgrounds(body);
+        const stamp = new Date().toISOString().slice(0, 10);
+        try {
+            await downloadMailMergeTemplate(cleanBodyHtml, `email-template-${stamp}.docx`);
+            setStatus('Downloaded Word template.');
+        } catch (error) {
+            setStatus(`Failed to generate template: ${error.message}`);
+            console.error('Error generating template:', error);
+            throw error;
+        }
+    };
+
+    const downloadRecipientsOnly = async () => {
+        // Use the returned data directly — reading studentDataCache here would see
+        // the stale closure value on the first call because setStudentDataCache is async.
+        const students = await ensureStudentDataLoaded();
+        const cleanBodyHtml = body ? stripParameterBackgrounds(body) : '';
         const fieldNames = extractFieldNames(`${cleanBodyHtml} ${subject || ''}`);
         const recipients = (students || []).filter(s => isValidEmail(s.StudentEmail));
 
@@ -984,24 +1002,17 @@ export default function PersonalizedEmail({ user, onReady }) {
             return;
         }
 
-        setStatus(`Generating mail merge files for ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}...`);
-
+        const stamp = new Date().toISOString().slice(0, 10);
         try {
-            const stamp = new Date().toISOString().slice(0, 10);
-            const templateFilename = `email-template-${stamp}.docx`;
-            const recipientsFilename = `email-recipients-${stamp}.xlsx`;
-
-            await downloadMailMergeTemplate(cleanBodyHtml, templateFilename);
-            await downloadRecipientsXlsx(recipients, fieldNames, recipientsFilename);
-
+            await downloadRecipientsXlsx(recipients, fieldNames, `email-recipients-${stamp}.xlsx`);
             const info = { count: recipients.length, timestamp: new Date().toISOString(), action: 'download' };
             setLastSentInfo(info);
             try { localStorage.setItem('lastEmailSent', JSON.stringify(info)); } catch {}
-
-            setStatus(`Downloaded mail merge files for ${recipients.length} ${recipients.length === 1 ? 'recipient' : 'recipients'}.`);
+            setStatus(`Downloaded recipient list (${recipients.length} ${recipients.length === 1 ? 'row' : 'rows'}).`);
         } catch (error) {
-            setStatus(`Failed to generate files: ${error.message}`);
-            console.error('Error generating mail merge package:', error);
+            setStatus(`Failed to generate recipient list: ${error.message}`);
+            console.error('Error generating recipient list:', error);
+            throw error;
         }
     };
 
@@ -1385,7 +1396,7 @@ export default function PersonalizedEmail({ user, onReady }) {
                     <div className="relative w-1/2">
                         <button
                             ref={sendButtonRef}
-                            onClick={mode === 'individual' ? downloadMailMergePackage : handleOpenConfirmModal}
+                            onClick={mode === 'individual' ? openDownloadModal : handleOpenConfirmModal}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 if (mode === 'powerautomate') setShowSendContextMenu(true);
@@ -1493,6 +1504,14 @@ export default function PersonalizedEmail({ user, onReady }) {
                 payload={lastSentPayload}
                 bodyTemplate={body}
                 initiator={{ name: user, email: userEmail }}
+            />
+
+            <DownloadModal
+                isOpen={showDownloadModal}
+                onClose={() => setShowDownloadModal(false)}
+                onDownloadTemplate={downloadTemplateOnly}
+                onDownloadRecipients={downloadRecipientsOnly}
+                recipientCount={recipientCount}
             />
         </div>
     );
